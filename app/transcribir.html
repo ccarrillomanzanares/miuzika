@@ -14,7 +14,7 @@
 <audio id="preview" controls hidden></audio>
 <div class="row" style="margin-top:16px"><button id="transcribe" class="primary" disabled>Transcribir</button><a id="download" class="download" download="humseed.mid"><button class="primary">Exportar MIDI</button></a></div>
 <div id="status" class="status" role="status">Graba o selecciona un archivo de audio.</div>
-<p class="hint">La transcripción puede tardar un poco. Humseed genera un archivo MIDI para abrirlo en Ardour u otro programa.</p>
+<p class="hint">La transcripción puede tardar un poco. Humseed genera un archivo MIDI para abrirlo en OpenDAW u otro programa.</p>
 </section></main>
 <script>
 const $=id=>document.getElementById(id);let recorder=null,stream=null,chunks=[],audioBlob=null,midiUrl=null;
