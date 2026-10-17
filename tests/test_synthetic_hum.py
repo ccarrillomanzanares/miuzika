@@ -72,12 +72,27 @@ def main() -> int:
         fails.append(f"tonalidad {seed.key} != C")
     if len(seed.notes) < 6:
         fails.append(f"solo {len(seed.notes)} notas detectadas")
-    expected = [_parse(p) for p, _ in MELODY[:6]]
-    got = [n.pitch for n in seed.notes[:6]]
+
+    # Se comparan las melodias con las alturas iguales SEGUIDAS unidas: en una
+    # fuente monofonica, dos trozos consecutivos con la misma altura son una
+    # sola nota. Basic Pitch parte las notas largas (una C5 salen dos trozos)
+    # sin que eso signifique que la melodia este mal.
+    # Esta prueba mide LA MELODIA. Para la segmentacion (que las notas
+    # repetidas no se fusionen) esta tests/test_notas_repetidas.py, y ahi NO
+    # se une nada, porque alli las repeticiones son reales.
+    def juntar_iguales_seguidas(pitches):
+        salida: list[int] = []
+        for p in pitches:
+            if not salida or salida[-1] != p:
+                salida.append(p)
+        return salida
+
+    expected = juntar_iguales_seguidas([_parse(p) for p, _ in MELODY])
+    got = juntar_iguales_seguidas([n.pitch for n in seed.notes])
     if got and expected:
         off = [abs(g - e) for g, e in zip(got, expected)]
-        if max(off) > 1:
-            fails.append(f"pitch desviado: got={got} expected={expected}")
+        if len(got) != len(expected) or max(off) > 1:
+            fails.append(f"melodia desviada: got={got} expected={expected}")
 
     if fails:
         print("\nFALLOS:")

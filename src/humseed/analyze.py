@@ -55,6 +55,7 @@ class Seed:
     onset_beats: list[float] = field(default_factory=list)
     has_rhythm: bool = False
     register: str = "mid"
+    motor: str = "propio"   # "basicpitch" o "propio": quien saco las notas
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -253,14 +254,38 @@ def contour_from_notes(notes: list[Note], bins: int = 16) -> list[int]:
     return [int(round(np.mean(b))) if b else 0 for b in buckets]
 
 
-def analyse(path: str | Path) -> Seed:
+def analyse(path: str | Path, motor: str = "auto") -> Seed:
+    """Tarareo -> semilla.
+
+    motor="auto"        Basic Pitch si esta disponible, si no el analizador propio
+    motor="basicpitch"  obliga a Basic Pitch (y falla si no esta)
+    motor="propio"      fuerza el analizador interno de pyin + ataques
+
+    Basic Pitch es el que manda por defecto: saca 7 alturas donde el propio
+    sacaba 4, y conserva los deslizamientos que la mediana aplanaba.
+    """
     y = load_audio(path)
     duration = float(librosa.get_duration(y=y, sr=SR))
     tempo, onset_env, beat_times = estimate_tempo(y)
     key, mode, conf = estimate_key(y)
-    times, f0, voiced = track_pitch(y)
-    ataques = detect_onsets(y)
-    raw = f0_to_notes(times, f0, voiced, onsets=ataques)
+
+    raw: list[dict] | None = None
+    usado = "propio"
+    if motor in ("auto", "basicpitch"):
+        try:
+            from humseed import transcribir
+
+            raw = transcribir.transcribir(path)
+            usado = "basicpitch"
+        except Exception:
+            if motor == "basicpitch":
+                raise
+            raw = None
+    if raw is None:
+        times, f0, voiced = track_pitch(y)
+        ataques = detect_onsets(y)
+        raw = f0_to_notes(times, f0, voiced, onsets=ataques)
+        usado = "propio"
     notes = quantize(raw, tempo)
 
     # ¿hay componente ritmica? densidad de onsets fuera del tarareo
@@ -287,6 +312,7 @@ def analyse(path: str | Path) -> Seed:
         onset_beats=[round(float(t) / (60.0 / tempo), 3) for t in onsets[:64]],
         has_rhythm=has_rhythm,
         register=register,
+        motor=usado,
     )
 
 

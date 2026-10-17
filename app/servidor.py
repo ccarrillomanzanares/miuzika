@@ -65,6 +65,7 @@ def analizar_toma(datos: bytes, nombre: str) -> dict:
         "mode": seed.mode,
         "confianza_tonalidad": seed.confidence_key,
         "n_notas": len(seed.notes),
+        "motor": seed.motor,
         "notas": notas,
         "seed": analyze.seed_to_conditioning(seed),
         "abc": abc,
