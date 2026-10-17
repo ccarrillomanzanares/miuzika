@@ -72,7 +72,7 @@ PAGINA = r"""<!doctype html>
   <button id="bParar" disabled>Parar prueba</button>
   <span class="piloto"><span class="punto" id="punto"></span><span id="estado">PARADO</span></span>
   <span id="zona" style="color:#8b8b9c;font-size:12px">zona inactiva</span>
-  <label class="chk"><input type="checkbox" id="cursor" checked> el pad no mueve el cursor (Ctrl+Alt+T)</label>
+  <label class="chk"><input type="checkbox" id="cursor"> congelar el cursor al tocar (bloquea tambien el raton)</label>
   <label class="chk"><input type="checkbox" id="sonido" checked> sonido</label>
 </div>
 

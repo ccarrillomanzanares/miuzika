@@ -22,6 +22,7 @@ WM_INPUT = 0x00FF
 WM_HOTKEY = 0x0312
 WM_CLOSE = 0x0010
 RID_INPUT = 0x10000003
+RIM_TYPEMOUSE = 0
 RIM_TYPEHID = 2
 RIDEV_INPUTSINK = 0x00000100
 USAGE_PAGE_DIGITIZER = 0x0D
@@ -97,9 +98,23 @@ user32.CreateWindowExW.argtypes = [
     ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.HWND,
     wintypes.HMENU, wintypes.HINSTANCE, ctypes.c_void_p]
 user32.CreateWindowExW.restype = wintypes.HWND
+class PUNTO(ctypes.Structure):
+    _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+
+
+user32.GetCursorPos.argtypes = [ctypes.POINTER(PUNTO)]
+user32.GetCursorPos.restype = wintypes.BOOL
+user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
+user32.SetCursorPos.restype = wintypes.BOOL
+user32.GetRawInputDeviceInfoW.argtypes = [
+    wintypes.HANDLE, wintypes.UINT, ctypes.c_void_p, ctypes.POINTER(wintypes.UINT)]
+user32.GetRawInputDeviceInfoW.restype = wintypes.UINT
 user32.RegisterRawInputDevices.argtypes = [
     ctypes.POINTER(RAWINPUTDEVICE), wintypes.UINT, wintypes.UINT]
 user32.RegisterRawInputDevices.restype = wintypes.BOOL
+user32.CallNextHookEx.argtypes = [
+    ctypes.c_void_p, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM]
+user32.CallNextHookEx.restype = LRESULT
 user32.SetWindowsHookExW.argtypes = [
     ctypes.c_int, ctypes.c_void_p, wintypes.HINSTANCE, wintypes.DWORD]
 user32.SetWindowsHookExW.restype = wintypes.HANDLE
@@ -109,6 +124,23 @@ user32.RegisterHotKey.restype = wintypes.BOOL
 user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM,
                                 wintypes.LPARAM]
 user32.PostMessageW.restype = wintypes.BOOL
+
+
+RIDI_DEVICENAME = 0x20000007
+USAGE_PAGE_GENERIC = 0x01
+USAGE_MOUSE = 0x02
+
+
+def nombre_dispositivo(hdevice) -> str:
+    """Ojo: con el handle que llega en WM_INPUT, pedir primero el tamano devuelve 0.
+    Hay que pasar un buffer fijo o el nombre sale vacio (y el filtro no identifica al
+    pad)."""
+    buf = ctypes.create_unicode_buffer(1024)
+    tam = wintypes.UINT(1024)
+    if not user32.GetRawInputDeviceInfoW(hdevice, RIDI_DEVICENAME, buf,
+                                         ctypes.byref(tam)):
+        return ""
+    return buf.value
 
 
 def decodificar_informe(datos: bytes) -> dict:
@@ -175,7 +207,20 @@ class CapturaWin32:
         # Mientras haya un dedo en el pad, el puntero se congela: el touchpad
         # nunca arrastra el cursor fuera de la aplicacion. El raton USB queda
         # libre en cuanto se levanta el dedo.
-        self.bloquear_cursor = True
+        # El gancho WH_MOUSE_LL no dice de que dispositivo viene el movimiento, pero
+        # el raw input de raton si: el pad se identifica por su nombre (ELAN). Asi se
+        # traga SOLO el movimiento del pad y el raton USB sigue libre.
+        # Apagado por defecto: Carlos prefiere que el pad siga moviendo el cursor
+        # como siempre. Encendido, el cliente deshace ese movimiento (recoloca el
+        # puntero), pero eso solo funciona si el pad se identifica bien.
+        self.bloquear_cursor = False
+        self._ultimo_pad_mouse = 0.0
+        # Ultima posicion del cursor sin intervencion del pad: ahi se devuelve.
+        self._pos_ok: tuple[int, int] | None = None
+        self._recolocaciones = 0
+        # Diagnostico: quien manda cada informe de raton (nombre -> cuantos).
+        self._ratones: dict[str, int] = {}
+        self._nombres: dict[int, str] = {}
         self.hotkey_ok = False
         self._contactos: set[int] = set()
         self._ultimo_tip_t = 0.0
@@ -224,6 +269,8 @@ class CapturaWin32:
         return not self.en_marcha
 
     def alternar_bloquear_cursor(self) -> bool:
+        """True = el pad no mueve el cursor (se recoloca). False = se comporta como
+        raton normal. Se aplica al momento, sin ganchos ni reinicios."""
         """El gancho siempre se pone y se quita desde el bucle de captura (es el
         unico hilo con bucle de mensajes); aqui solo se cambia la intencion."""
         self.bloquear_cursor = not self.bloquear_cursor
@@ -240,6 +287,10 @@ class CapturaWin32:
             "bloquear_cursor": self.bloquear_cursor,
             "cursor_bloqueado": self._hook is not None,
             "dedos": len(self._contactos),
+            "pad_moviendo": (time.perf_counter() - self._ultimo_pad_mouse) < 0.05,
+            "recolocaciones": self._recolocaciones,
+            "ratones": dict(sorted(self._ratones.items(),
+                                   key=lambda kv: -kv[1])[:4]),
             "hotkey": self.hotkey_ok,
         }
 
@@ -260,16 +311,21 @@ class CapturaWin32:
             return
 
         self.al_aviso(f"paso: ventana {self.hwnd}, registrando raw input")
-        rd = RAWINPUTDEVICE(USAGE_PAGE_DIGITIZER, USAGE_TOUCHPAD, RIDEV_INPUTSINK,
-                            self.hwnd)
+        registros = (RAWINPUTDEVICE * 2)(
+            RAWINPUTDEVICE(USAGE_PAGE_DIGITIZER, USAGE_TOUCHPAD, RIDEV_INPUTSINK,
+                           self.hwnd),
+            RAWINPUTDEVICE(USAGE_PAGE_GENERIC, USAGE_MOUSE, RIDEV_INPUTSINK,
+                           self.hwnd),
+        )
         if not user32.RegisterRawInputDevices(
-                ctypes.byref(rd), 1, ctypes.sizeof(RAWINPUTDEVICE)):
+                registros, 2, ctypes.sizeof(RAWINPUTDEVICE)):
             self.al_aviso(
                 f"registro del touchpad fallo: {ctypes.WinError(ctypes.get_last_error())} "
                 "(¿no es un Precision Touchpad?)")
             return
 
         self.al_aviso("paso: raw input OK, registrando tecla")
+        # Sin hook de raton: el cursor se recoloca en vez de bloquearse.
         self.hotkey_ok = bool(user32.RegisterHotKey(
             self.hwnd, HOTKEY_ID, MOD_ALT | MOD_CONTROL, ord("T")))
         self._ventana_lista.set()
@@ -287,7 +343,7 @@ class CapturaWin32:
             ahora = time.perf_counter()
             if ahora - ultimo_latido > 0.02:
                 ultimo_latido = ahora
-                self._ajustar_bloqueo_cursor(ahora)
+                self._recordar_posicion(ahora)
                 self.al_latido()
             if ahora - ultimo_segundo >= 1.0:
                 self.tasa = (self.n_informes - self._informes_ultimo_segundo) / (
@@ -304,22 +360,29 @@ class CapturaWin32:
         _INSTANCIA = None
         self.al_aviso("captura parada")
 
-    def _ajustar_bloqueo_cursor(self, ahora: float):
-        """Con un dedo apoyado, el puntero no se mueve; al levantar, se suelta."""
-        quiere = self.bloquear_cursor and bool(self._contactos)
-        if quiere and self._hook is None:
-            self._instalar_hook()
-        elif (not quiere and self._hook is not None
-              and ahora - self._ultimo_tip_t > 0.12):
-            user32.UnhookWindowsHookEx(self._hook)
-            self._hook = None
-            self.al_aviso("cursor suelto")
+    def _recordar_posicion(self, ahora: float):
+        """Si el pad no ha movido nada en 150 ms, el cursor esta donde lo dejo el
+        usuario: esa es la posicion a la que se vuelve cuando el pad lo mueva."""
+        if ahora - self._ultimo_pad_mouse > 0.15:
+            p = PUNTO()
+            if user32.GetCursorPos(ctypes.byref(p)):
+                self._pos_ok = (p.x, p.y)
 
     def _instalar_hook(self):
         def proc(ncode, wparam, lparam):
-            if ncode >= 0 and wparam == WM_MOUSEMOVE:
-                return 1  # tragarse el movimiento del puntero
-            return user32.CallNextHookEx(None, ncode, wparam, lparam)
+            # Regla de oro: ante cualquier duda, DEJAR PASAR. Un hook que revienta
+            # devuelve basura y Windows lo interpreta como "bloquear": el usuario se
+            # queda sin puntero. Por eso todo va dentro de try y se devuelve 0.
+            try:
+                if (ncode >= 0 and wparam == WM_MOUSEMOVE and self.bloquear_cursor
+                        and time.perf_counter() - self._ultimo_pad_mouse < 0.05):
+                    return 1  # movimiento del pad: se traga
+            except Exception:
+                return 0
+            try:
+                return user32.CallNextHookEx(None, ncode, wparam, lparam)
+            except Exception:
+                return 0
 
         self._hook_proc = ctypes.WINFUNCTYPE(
             ctypes.c_ssize_t, ctypes.c_int, ctypes.c_ulonglong, ctypes.c_longlong)(proc)
@@ -354,6 +417,22 @@ class CapturaWin32:
                                   ctypes.sizeof(RAWINPUTHEADER)) == 0xFFFFFFFF:
             return
         cab = ctypes.cast(buf, ctypes.POINTER(RAWINPUTHEADER)).contents
+        if cab.dwType == RIM_TYPEMOUSE:
+            nombre = self._nombres.get(cab.hDevice)
+            if nombre is None:
+                nombre = nombre_dispositivo(cab.hDevice)
+                self._nombres[cab.hDevice] = nombre
+            etiqueta = (nombre or "(sin nombre)").split("#")[1] if "#" in nombre else (
+                nombre or "(sin nombre)")
+            self._ratones[etiqueta] = self._ratones.get(etiqueta, 0) + 1
+            if "ELAN" in nombre.upper():
+                self._ultimo_pad_mouse = time.perf_counter()
+                # El pad ha movido el puntero: se deshace el desplazamiento. Asi el
+                # raton USB nunca se bloquea y no hace falta ningun hook.
+                if self.bloquear_cursor and self._pos_ok is not None:
+                    user32.SetCursorPos(*self._pos_ok)
+                    self._recolocaciones += 1
+            return
         if cab.dwType != RIM_TYPEHID:
             return
         rawhid = ctypes.cast(
