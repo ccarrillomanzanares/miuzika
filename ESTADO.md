@@ -57,7 +57,7 @@ mezcla ni LLM.
    ┌─────────────────────┐               ┌──────────────────────────┐
    │ app/servidor.py     │  audio stdin  │ ~/transcribe/one_shot.py │
    │   :8770             │ ─────SSH────► │   Basic Pitch   6,7 s    │
-   │ app/index.html      │ ◄───MIDI b64──│                          │
+   │ app/transcribir.html│ ◄───MIDI b64──│                          │
    │ el micrófono        │               │ llama-server    :8091    │
    └─────────────────────┘               └──────────────────────────┘
 ```
