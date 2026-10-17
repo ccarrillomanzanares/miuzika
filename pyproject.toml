@@ -1,7 +1,7 @@
 [project]
 name = "humseed"
 version = "0.1.0"
-description = "LLM de musica que compone a partir de tarareo y ritmo capturados por microfono"
+description = "Aplicación local para transcribir tarareo a MIDI"
 requires-python = ">=3.10"
 dependencies = [
     "numpy",

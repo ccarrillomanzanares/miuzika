@@ -1,25 +1,11 @@
 #!/usr/bin/env python3
-"""Servidor local de la app de tarareo.
-
-Cero dependencias: usa http.server de la biblioteca estandar. Sirve una pagina
-que graba desde el microfono del navegador y le manda el WAV; aqui se analiza
-con pyin y se devuelve la transcripcion en ABC, MIDI y audio.
-
-La grabacion la hace el NAVEGADOR, no Python: asi no dependemos de sounddevice
-ni de los nombres raros de dispositivos de Windows.
-
-Uso:
-    python app/servidor.py            # abre en http://127.0.0.1:8770
-    python app/servidor.py --puerto 9000
-"""
-
+"""Servidor local mínimo de tarareo a MIDI."""
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import sys
-import time
+import tempfile
 import traceback
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,68 +13,25 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+from humseed import transcribir  # noqa: E402
 
-from humseed import abcmini, analyze, render  # noqa: E402
-
-TOMAS = ROOT / "cache" / "tomas"      # grabaciones y resultados
 APP = Path(__file__).resolve().parent
+MAX_BYTES = 40 * 1024 * 1024
 
-MAX_BYTES = 40 * 1024 * 1024          # tope de subida: 40 MB
 
-
-def analizar_toma(datos: bytes, nombre: str) -> dict:
-    """Guarda el WAV y devuelve el analisis completo."""
-    TOMAS.mkdir(parents=True, exist_ok=True)
-    wav_in = TOMAS / f"{nombre}_original.wav"
-    wav_in.write_bytes(datos)
-
-    midi = TOMAS / f"{nombre}.mid"
-    wav_out = TOMAS / f"{nombre}_transcrito.wav"
-
-    t0 = time.time()
-    # guardar_midi: Basic Pitch deja ahi su MIDI crudo, con los tiempos reales
-    # y los deslizamientos. Ese es el que se oye, no el que se reconstruye
-    # desde el ABC (que va cuantizado a rejilla para el LLM).
-    seed = analyze.analyse(wav_in, guardar_midi=midi)
-    t_analisis = time.time() - t0
-
-    abc = analyze.melodia_a_abc(seed, titulo=f"Transcripcion {nombre}")
-
-    if not midi.exists():
-        # motor propio: no hay MIDI crudo, se reconstruye desde el ABC
-        render.abc_to_midi(abc, midi)
-    render.midi_to_wav(midi, wav_out)
-
-    s = abcmini.parse_abc(abc)
-    notas = [{"nombre": n.name, "midi": n.pitch, "beat": n.beat,
-              "dur": n.beat_dur, "seg": round(n.start, 3)} for n in seed.notes]
-
-    return {
-        "nombre": nombre,
-        "duracion": seed.duration,
-        "bpm": round(seed.tempo_bpm, 1),
-        "key": seed.key,
-        "mode": seed.mode,
-        "confianza_tonalidad": seed.confidence_key,
-        "n_notas": len(seed.notes),
-        "motor": seed.motor,
-        "notas": notas,
-        "seed": analyze.seed_to_conditioning(seed),
-        "abc": abc,
-        "segundos_analisis": round(t_analisis, 2),
-        "midi_b64": base64.b64encode(midi.read_bytes()).decode(),
-        "wav_b64": base64.b64encode(wav_out.read_bytes()).decode(),
-        "original_b64": base64.b64encode(datos).decode(),
-        "nombre_midi": f"{nombre}.mid",
-    }
+def transcribir_audio(datos: bytes) -> bytes:
+    """Guarda el WAV de entrada temporalmente y devuelve el MIDI crudo."""
+    with tempfile.TemporaryDirectory(prefix="humseed-") as tmp:
+        wav = Path(tmp) / "tarareo.wav"
+        wav.write_bytes(datos)
+        return transcribir.transcribir(wav).midi
 
 
 class Manejador(BaseHTTPRequestHandler):
-    server_version = "humseed/0.1"
+    server_version = "humseed/0.2"
 
-    def log_message(self, fmt, *args):        # menos ruido en consola
-        if "/analizar" not in self.path:
-            sys.stderr.write("  %s\n" % (fmt % args))
+    def log_message(self, fmt, *args):
+        sys.stderr.write("  %s\n" % (fmt % args))
 
     def _enviar(self, codigo: int, cuerpo: bytes, tipo: str) -> None:
         self.send_response(codigo)
@@ -98,50 +41,45 @@ class Manejador(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(cuerpo)
 
-    def do_GET(self) -> None:                  # noqa: N802
-        if self.path in ("/", "/index.html"):
-            self._enviar(200, (APP / "index.html").read_bytes(),
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path in ("/", "/index.html", "/transcribir.html"):
+            self._enviar(200, (APP / "transcribir.html").read_bytes(),
                          "text/html; charset=utf-8")
         elif self.path == "/salud":
             self._enviar(200, b'{"ok":true}', "application/json")
         else:
             self._enviar(404, b"no encontrado", "text/plain; charset=utf-8")
 
-    def do_POST(self) -> None:                 # noqa: N802
+    def do_POST(self) -> None:  # noqa: N802
         if self.path != "/analizar":
-            self._enviar(404, b"no encontrado", "text/plain")
+            self._enviar(404, b"no encontrado", "text/plain; charset=utf-8")
             return
-
-        n = int(self.headers.get("Content-Length", 0))
-        if n <= 0 or n > MAX_BYTES:
-            self._enviar(400, b"tamano invalido", "text/plain")
-            return
-        datos = self.rfile.read(n)
-
-        nombre = time.strftime("toma_%Y%m%d_%H%M%S")
         try:
-            res = analizar_toma(datos, nombre)
+            n = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            n = 0
+        if n <= 0 or n > MAX_BYTES:
+            self._enviar(400, b'{"error":"tamano de audio invalido"}',
+                         "application/json; charset=utf-8")
+            return
+        try:
+            midi = transcribir_audio(self.rfile.read(n))
+            self._enviar(200, midi, "audio/midi")
         except Exception as e:
             traceback.print_exc()
-            self._enviar(500, json.dumps({"error": str(e)}).encode(),
-                         "application/json")
-            return
-
-        cuerpo = json.dumps(res).encode()
-        self._enviar(200, cuerpo, "application/json")
+            body = json.dumps({"error": str(e)}, ensure_ascii=False).encode()
+            self._enviar(500, body, "application/json; charset=utf-8")
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="App web de tarareo -> MIDI")
+    ap = argparse.ArgumentParser(description="Tarareo a MIDI")
     ap.add_argument("--puerto", type=int, default=8770)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--abrir", action="store_true", help="abrir el navegador")
     args = ap.parse_args()
-
     srv = ThreadingHTTPServer((args.host, args.puerto), Manejador)
     url = f"http://{args.host}:{args.puerto}"
     print(f"  escuchando en {url}")
-    print(f"  grabaciones en {TOMAS}")
     print("  Ctrl+C para parar")
     if args.abrir:
         webbrowser.open(url)

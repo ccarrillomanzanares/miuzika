@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Humseed — tarareo a MIDI</title>
+<style>
+:root{color-scheme:dark;--bg:#101216;--panel:#1a1e24;--border:#303640;--text:#edf0f4;--muted:#a2aab5;--accent:#72e0a3;--red:#ff6978}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,sans-serif}.wrap{max-width:680px;margin:8vh auto;padding:24px}.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:28px}h1{font-size:24px;margin:0 0 4px}.sub{color:var(--muted);margin:0 0 24px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}button,.filelabel{font:inherit;border:1px solid var(--border);border-radius:9px;padding:10px 15px;background:#252a32;color:var(--text);cursor:pointer}button.primary{background:var(--accent);border-color:var(--accent);color:#102116;font-weight:700}button.record{background:#812d3a;color:white}button:disabled{opacity:.45;cursor:default}input[type=file]{position:absolute;width:1px;height:1px;opacity:0}.filelabel{display:inline-block}.status{min-height:24px;margin-top:18px;color:var(--muted)}.status.error{color:var(--red)}audio{width:100%;margin-top:14px}.download{display:none;margin-top:20px}.hint{font-size:12px;color:var(--muted);margin-top:16px}@media(max-width:600px){.wrap{margin:3vh auto;padding:14px}.card{padding:20px}}
+</style>
+</head>
+<body><main class="wrap"><section class="card">
+<h1>Humseed</h1><p class="sub">Graba o carga un tarareo, transcríbelo y descarga el MIDI.</p>
+<div class="row"><button id="record" class="record">● Grabar tarareo</button><label class="filelabel" for="file">Elegir audio</label><input id="file" type="file" accept="audio/*,.wav"></div>
+<audio id="preview" controls hidden></audio>
+<div class="row" style="margin-top:16px"><button id="transcribe" class="primary" disabled>Transcribir</button><a id="download" class="download" download="humseed.mid"><button class="primary">Exportar MIDI</button></a></div>
+<div id="status" class="status" role="status">Graba o selecciona un archivo de audio.</div>
+<p class="hint">La transcripción puede tardar un poco. Humseed genera un archivo MIDI para abrirlo en Ardour u otro programa.</p>
+</section></main>
+<script>
+const $=id=>document.getElementById(id);let recorder=null,stream=null,chunks=[],audioBlob=null,midiUrl=null;
+function status(text,error=false){$('status').textContent=text;$('status').className='status'+(error?' error':'')}
+function setAudio(blob){audioBlob=blob;$('preview').src=URL.createObjectURL(blob);$('preview').hidden=false;$('transcribe').disabled=false;$('download').style.display='none';status('Audio listo. Pulsa Transcribir.')}
+$('file').addEventListener('change',()=>{const f=$('file').files[0];if(f)setAudio(f)});
+$('record').addEventListener('click',async()=>{if(recorder?.state==='recording'){recorder.stop();$('record').textContent='● Grabar tarareo';return}try{stream=await navigator.mediaDevices.getUserMedia({audio:true});chunks=[];recorder=new MediaRecorder(stream);recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};recorder.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());try{audioBlob=await toWav(new Blob(chunks,{type:recorder.mimeType}));setAudio(audioBlob)}catch(e){status('No se pudo procesar el audio: '+e.message,true)}};recorder.start();$('record').textContent='■ Terminar grabación';status('Grabando… vuelve a pulsar para terminar.')}catch(e){status('No se pudo abrir el micrófono: '+e.message,true)}});
+async function toWav(blob){const ac=new AudioContext();try{const decoded=await ac.decodeAudioData(await blob.arrayBuffer()),ch=decoded.getChannelData(0),buf=new ArrayBuffer(44+ch.length*2),v=new DataView(buf),put=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));put(0,'RIFF');v.setUint32(4,36+ch.length*2,true);put(8,'WAVE');put(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,decoded.sampleRate,true);v.setUint32(28,decoded.sampleRate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);put(36,'data');v.setUint32(40,ch.length*2,true);for(let i=0,o=44;i<ch.length;i++,o+=2){const s=Math.max(-1,Math.min(1,ch[i]));v.setInt16(o,s<0?s*32768:s*32767,true)}return new Blob([buf],{type:'audio/wav'})}finally{await ac.close()}}
+$('transcribe').addEventListener('click',async()=>{if(!audioBlob)return;$('transcribe').disabled=true;$('download').style.display='none';$('record').disabled=true;$('file').disabled=true;status('Transcribiendo…');try{const r=await fetch('/analizar',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:audioBlob});if(!r.ok){let message='Error HTTP '+r.status;try{message=(await r.json()).error||message}catch{}throw Error(message)}const midi=await r.blob();if(midiUrl)URL.revokeObjectURL(midiUrl);midiUrl=URL.createObjectURL(midi);$('download').href=midiUrl;$('download').style.display='inline-block';status('Transcripción lista. Descarga el MIDI.')}catch(e){status('Error al transcribir: '+e.message,true)}finally{$('transcribe').disabled=false}});
+</script>
+</body>
+</html>
