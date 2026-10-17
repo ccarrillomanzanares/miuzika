@@ -8,36 +8,47 @@ costaron tiempo**. No repetir lo descartado.
 
 ## 1. Qué es esto ahora
 
-Una aplicación web **local** donde tarareas al micrófono y sale una pista MIDI
-que puedes **editar a mano**, con banco de sonidos General MIDI.
+Una aplicación web **local** para **grabar o cargar un tarareo, transcribirlo y
+exportar el resultado como archivo MIDI**. Nada más por ahora; Ardour se ocupa
+de la edición musical después de importar el MIDI.
 
-El objetivo inmediato es un **multitrack sencillo**: tararear cada pista,
-editarla, copiar, pegar, duplicar, y elegirle instrumento y volumen.
+## 2. Alcance decidido
 
-## 2. La idea de fondo (por qué el editor es el centro)
+- Flujo: micrófono o archivo de audio → Basic Pitch en el VPS por SSH → MIDI
+  crudo descargable/importable en Ardour.
+- La app no edita notas, no crea pistas/instrumentos, no renderiza ni reproduce
+  mezclas, no usa metrónomo y no compone con LLM.
+- El MIDI conserva los tiempos y demás datos generados por Basic Pitch; no
+  reconstruirlo desde ABC ni cuantizarlo.
+- No cambiar el transcriptor por ahora; verificarlo con tomas reales y corregir
+  errores manualmente en Ardour.
 
-**La transcripción no va a ser nunca 100 % perfecta, y menos con tarareo.**
-Por eso el editor no es un complemento: es la pieza que hace útil al resto. El
-flujo de trabajo asumido es *tararear → el modelo propone → tú corriges*. Todo
-lo que se construya debe dar por hecho que habrá que retocar a mano.
+## 3. Estado implementado y verificación
 
-Corolario práctico: **no vale la pena seguir afinando el transcriptor a ciegas.**
-Lo que haya que arreglar, se arregla en el editor.
+Arranque: `.venv/Scripts/python.exe app/servidor.py --puerto 8770` →
+`http://127.0.0.1:8770`.
 
-## 3. Qué funciona hoy (verificado)
+- La nueva interfaz mínima está en `app/transcribir.html`: grabar del micrófono
+o cargar un archivo de audio, preescucharlo, transcribir y descargar MIDI.
+- El servidor recibe audio en `POST /analizar`, lo envía al transcriptor Basic
+  Pitch remoto y devuelve el MIDI crudo (`audio/midi`). La importación en Ardour
+  ya fue probada por Carlos y funciona.
+- `GET /` sirve la interfaz mínima. Se retiraron de las rutas activas el editor,
+  instrumentos, render y exportación de proyectos. Los archivos antiguos del
+  editor y del modelo de proyectos aún están en el repositorio como legado, pero
+  no los carga la app ni los necesita el servidor actual.
+- Pruebas en `tests/test_app_transcripcion.py` cubren transcripción, descarga
+  MIDI, audio inválido y ausencia de funciones del editor. La compatibilidad en
+  `tests/test_app_multitrack.py` confirma que la antigua API de proyecto no existe.
+- Verificación ejecutada: `python -m unittest discover -s tests -p 'test_*.py' -q`
+  — 8 pruebas OK; `node --check cache/transcribir.js` pasó; import del servidor OK.
+  No se ejerció una transcripción real en este turno porque depende del VPS.
+- No se probó en esta tarea una toma real con micrófono; Carlos confirmó antes
+  que el MIDI generado por Humseed se importa correctamente en Ardour.
 
-```bash
-.venv/Scripts/python.exe app/servidor.py --puerto 8770   # la app
-# -> http://127.0.0.1:8770
-```
-
-- **Tarareo → MIDI**: `POST /analizar` con el WAV devuelve notas, tonalidad,
-  tempo, ABC, MIDI y audio. Verificado: 68 notas, 7 alturas, E menor, 129 BPM,
-  **28 s por HTTP** de punta a punta.
-- **6 suites de tests en verde** (`tests/`).
-- **Banco de sonidos**: 128 instrumentos General MIDI, ya funcionando. Prueba:
-  `python scripts/probar_banco.py <midi> <segundos> <programa...>`
-  (escucha `cache/banco/prog_*.mp3`).
+**Alcance actual:** sólo transcribir tarareo y exportar MIDI. Sin edición de
+notas, multipista, selección de instrumentos, metrónomo, reproducción/render de
+mezcla ni LLM.
 
 ## 4. Arquitectura: dónde corre cada cosa
 
@@ -61,23 +72,16 @@ usuario pidió explícitamente **no preparar nada para eso ahora**.
 Medido con la misma toma: Basic Pitch tarda **19 s en el VPS y 100 s en el
 portátil**. Cinco veces más.
 
-## 5. Lo que hay que construir ahora: el editor multitrack
+## 5. Decisiones y límites actuales
 
-Decisiones ya tomadas con el usuario:
-
-- **Modo de grabación con botón para elegir** entre:
-  - **metrónomo + compases fijos**: suena un clic, tarareas encima, la toma se
-    corta a compás. Las pistas cuadran solas.
-  - **tarareo libre**: grabas cuando quieras y alineas después a mano.
-- **Edición obligatoria**: mover, borrar, copiar, pegar, duplicar.
-- **Instrumento por pista**: desplegable con los 128 del banco GM.
-- **Volumen por pista desde el principio**: medido, entre instrumentos GM hay
-  **hasta 18 dB de diferencia** de pico (bajo −13,7 dB contra warm pad −31,8 dB).
-  Si esto se deja para después, cada cambio de sonido descuadra la mezcla.
-- **Motor de audio**: empezar por el **render en el servidor** (fluidsynth,
-  ~1 s por cambio; lo que oyes es exactamente lo que exportas). Si la espera
-  molesta al editar, se cambia a síntesis en el navegador — es una pieza
-  intercambiable y no debe condicionar el diseño del editor.
+- Ardour es el destino para editar y trabajar el MIDI; Carlos ya importó un MIDI
+  de Humseed y confirmó que funciona.
+- La app de Humseed se mantiene local en el portátil; audio al VPS por SSH, sin
+  exponer puertos públicamente. La transcripción Basic Pitch corre con Python
+  3.11 en `ssh vps`.
+- El LLM de música y el entrenamiento están pausados. No construir editor MIDI,
+  arreglo, instrumentos, render ni otras funciones en Humseed hasta que Carlos
+  lo pida expresamente.
 
 ## 6. Descartado o en pausa (no reabrir sin motivo)
 
@@ -88,51 +92,76 @@ Decisiones ya tomadas con el usuario:
   el LLM (si algún día se retoma). **El audio sale del MIDI crudo.**
 - **Cuantizar como norma**: destruye el ritmo (ver trampas).
 
-## 7. Trampas que ya costaron tiempo (no volver a caer)
+## 7. Trampas y límites que siguen siendo relevantes
 
-1. **La cuantización a rejilla mueve los ataques 543 ms de mediana** y desplaza
-   el primer acento. Fue la causa de "no suena como la prueba que hicimos".
-   Para oír, usar el MIDI crudo de Basic Pitch; el ABC cuantizado es solo para
-   el LLM.
-2. **Segmentar notas por saltos de tono fusiona las notas repetidas**: 64 notas
-   iguales se convertían en 3. Hay que cortar por **ataques de amplitud**
-   (ver `tests/test_notas_repetidas.py`).
-3. **Afinar parámetros con el fichero en crudo y no con el audio real**: el
-   fichero era de 44.100 Hz y el analizador trabaja a 22.050, así que `hop` y
-   `wait` (que van en *frames*) significaban el doble. La misma toma pasaba de
-   64 a 23 notas. Afinar siempre con `load_audio()`.
-4. **El detector por flujo espectral se engancha al vibrato**: partía una
-   melodía legato de 9 notas en 19-23. Con envolvente de amplitud da 9.
-5. **`basic_pitch` imprime su progreso por stdout** y se mezcla con el base64
-   del MIDI. Se redirige a stderr en `vps/one_shot.py`.
-6. **Basic Pitch necesita Python 3.11**: `tensorflow<2.15` no tiene ruedas para
-   3.12. Y **NumPy 2 rompe TF 2.14** → `numpy<2`.
-7. **`setuptools>=81` ya no trae `pkg_resources`**, y `resampy` (dependencia de
-   Basic Pitch) lo necesita → `setuptools<81`.
-8. **`music21` revienta al escribir MIDI con varias voces**; para multivoz se
-   usa el motor propio (`abcmini`).
-9. **Portátil**: sin GPU y con ~1 GB de RAM libre. No entrenar ni fusionar nada
-   aquí.
-10. **VPS: no tocar sus servicios.** `aios-llama` en 8080 y ollama en 11434 son
-    suyos y tienen modelos residentes. Puertos libres: 8081, 8091, 8092, 8093.
-    El disco está al 90 % (~32 GB libres).
+- **No cuantizar el MIDI**: ya se midió una desviación mediana de 543 ms con
+  cuantización. Exportar siempre el MIDI crudo de Basic Pitch.
+- **Basic Pitch usa un entorno Python 3.11 separado** (`tensorflow<2.15`,
+  `numpy<2`, `setuptools<81`); se ejecuta en el VPS por SSH.
+- No tocar servicios del VPS: llama-server y Ollama son ajenos a esta app; no
+  abrir puertos ni enviar credenciales.
 
 ## 8. Entorno, en corto
 
 | Cosa | Dónde |
 |---|---|
 | App | `app/servidor.py --puerto 8770`, venv `.venv` (Python 3.12) |
+| Cliente touchpad | `cliente_touchpad/servidor.py --puerto 8771` (o doble clic en `cliente_touchpad/arrancar.cmd`) |
 | Transcripción | VPS `~/transcribe/.venv` (Python 3.11) + `~/transcribe/one_shot.py` |
 | Soundfont | `tools/MuseScore_General.sf3` (GM, 128 instrumentos) |
 | fluidsynth | `tools/fluidsynth-v2.6.1-win10-x64-cpp11/bin/fluidsynth.exe` |
 | Claves | `LAMBDA_API_KEY` y `HF_TOKEN` en el `.env` del perfil. **Nunca imprimirlas** |
 | Acceso VPS | `ssh vps` (clave `~/.ssh/id_rsa`) |
 
-## 9. Cómo arrancar la próxima sesión
+## 9. Cómo arrancar y continuar
 
-1. `cd ~/proyectos/llm-musica` y `git log --oneline` (el trabajo está commiteado).
-2. Levantar la app y probarla en el navegador.
-3. Empezar por el **modelo de datos de pistas** y los endpoints del servidor;
-   la interfaz después.
+1. Revisar `git status` en `C:/Users/carlos/proyectos/llm-musica`.
+2. Ejecutar `.venv/Scripts/python.exe app/servidor.py --puerto 8770` y abrir
+   `http://127.0.0.1:8770`.
+3. Probar en navegador grabar un tarareo, obtener el MIDI y descargarlo; importar
+   el archivo en Ardour.
+4. No volver a añadir características del editor ni reactivar el LLM sin una
+   petición explícita de Carlos.
 
-Nada de esto necesita al LLM. El LLM está en pausa.
+## 10. Cliente del touchpad como instrumento (nuevo, en curso)
+
+Objetivo de Carlos: tocar el pad del portátil como instrumento, sin hardware.
+Reparto: **la captura no puede ser web** (un navegador no recibe el multitáctil
+del touchpad), así que hay un proceso nativo que lee Raw Input y sirve una
+aplicación web local.
+
+- `cliente_touchpad/modelo.py` — núcleo común sin nada de Windows: contactos
+  normalizados (0..1), eventos `down/move/up/click` con duración y recorrido,
+  seguimiento de cada dedo y publicador SSE.
+- `cliente_touchpad/entrada_win32.py` — backend de captura (Raw Input, usages
+  0x0D/0x05 y 0x0D/0x22), arrancable y pararable en caliente.
+- `cliente_touchpad/servidor.py` — aplicación web en `127.0.0.1:8771` con botones
+  **Empezar prueba / Parar prueba**, dibujo en vivo de los dedos, pitido por
+  pulsación y contadores.
+- Layout de los informes verificado contra el HID report descriptor del ELAN0712
+  (report ID 4, un informe por dedo, ~100-170 informes/s, sin presión). Ver
+  `spikes/001-touchpad-win32/README.md`.
+- Conocimiento reutilizable en la skill `precision-touchpad-windows`.
+
+**Verificado**: captura real de 1452 informes; arrancar/parar varias veces sin
+morir; botones de la página funcionando; encierro del pad por zona (`/zona`)
+comprobado con informes falsos (`/_test/informe`): con la zona inactiva no pasa
+nada, con la zona armada llegan los contactos y al salir se sueltan; 142
+informes/s reales tocando el pad.
+
+**Pendiente, en este orden**:
+1. Carlos apagó el touchpad en Ajustes de Windows y hay que **volver a
+   encenderlo** (apagarlo mata el HID entero, no solo el ratón).
+2. Confirmar que al reencenderlo vuelven los informes y que el cursor se congela
+   mientras hay un dedo apoyado (congelado automático, casilla «el pad no mueve
+   el cursor», atajo Ctrl+Alt+T).
+3. Decidir el **mapeo**: qué toca cada zona del pad (notas por columna, X/Y como
+   expresión, un dedo por voz). Sin presión en el hardware: la dinámica tiene que
+   salir del mapeo.
+
+**Trampas ya pagadas**: la clase de ventana se registra una vez por proceso (si
+no, access violation al rearrancar); los volcados de faulthandler en
+`RegisterClassExW`/`CreateWindowExW` son ruido benigno; el panel de vista previa
+del chat no reenvía POST (los mandos van por GET); el servidor lanzado desde el
+agente muere con la shell, por eso `arrancar.cmd` y el log a
+`cliente_touchpad/cliente.log`.

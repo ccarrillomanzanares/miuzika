@@ -9,6 +9,8 @@ tools/
 cache/
 
 # Salidas
+*.jsonl
+*.log
 *.wav
 *.mp3
 *.mid
