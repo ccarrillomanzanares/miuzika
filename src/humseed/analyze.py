@@ -254,17 +254,25 @@ def melodia_a_abc(seed: "Seed", titulo: str = "transcripcion",
     """
     from humseed import corpus
 
+    if not seed.notes:
+        return ""
+
+    # Recortar el silencio inicial: la primera nota suena en el segundo cero.
+    # Sin esto la app mete segundos de silencio antes de la melodia (medido:
+    # 3.7 s de espera) y parece que no funciona.
+    t0 = min(n.beat for n in seed.notes)
+    notas = [(n.beat - t0, n.beat_dur, n.pitch) for n in seed.notes]
+
     # SIN cuantizar y SIN barras de compas: es exactamente como se genero la
     # transcripcion que el usuario valido. Cuantizar a rejilla cambiaba alguna
-    # duracion (0.25 -> 0.125 en la primera nota) y las barras hacian que
-    # music21 reventara al escribir el MIDI.
+    # duracion, y las barras hacian que music21 reventara al escribir el MIDI.
     lineas: list[str] = []
     pos = 0.0
-    for n in seed.notes:
-        if n.beat > pos + 0.01:
-            lineas.append("z" + corpus.dur_to_abc(n.beat - pos))
-        lineas.append(corpus.midi_to_abc_name(n.pitch) + corpus.dur_to_abc(n.beat_dur))
-        pos = n.beat + n.beat_dur
+    for b, d, p in notas:
+        if b > pos + 0.01:
+            lineas.append("z" + corpus.dur_to_abc(b - pos))
+        lineas.append(corpus.midi_to_abc_name(p) + corpus.dur_to_abc(d))
+        pos = b + d
     cuerpo = " ".join(lineas)
 
     clave = seed.key + ("m" if seed.mode == "minor" else "")
