@@ -123,13 +123,72 @@ def track_pitch(y: np.ndarray, sample_rate: int = SR) -> tuple[np.ndarray, np.nd
     return times, f0, voiced
 
 
+def _envolvente_amplitud(y, sr=None, n_fft=2048, hop_length=512, **kw):
+    """Envolvente de amplitud en una sola banda (librosa.feature.rms no acepta sr)."""
+    return librosa.feature.rms(y=y, frame_length=n_fft, hop_length=hop_length)
+
+
+def detect_onsets(y: np.ndarray, sample_rate: int = SR) -> np.ndarray:
+    """Ataques (articulaciones) del tarareo, en segundos.
+
+    Es la pieza que faltaba para las notas REPETIDAS: si cantas 16 veces la
+    misma nota, el tono no cambia y la segmentacion por pitch no ve ninguna
+    frontera, asi que las fusiona todas en una nota larguisima.
+
+    Se detecta sobre la ENVOLVENTE DE AMPLITUD, no sobre el flujo espectral.
+    Motivo medido: el vibrato mueve el espectro sin que haya articulacion, y
+    con flujo espectral una melodia legato de 9 notas se partia en 19-23. Con
+    amplitud da 9 exactas. Y la "regularidad" aparente del flujo espectral era
+    falsa: el vibrato es periodico y produce intervalos ordenados que parecen
+    un pulso limpio sin serlo (dispersion 0,11 falsa frente a 0,48 real).
+
+    Parametros (hop=128 -> 5,8 ms/frame, wait=20 -> 116 ms, delta=0.030)
+    medidos sobre dos casos con verdad conocida: una toma real de 64 notas
+    repetidas (G2/E2 alternando) y una melodia sintetica de 9 notas.
+
+    OJO: hop y wait van en FRAMES, no en milisegundos. Afinar esto leyendo el
+    fichero a 44.100 Hz cuando el analizador trabaja a 22.050 Hz fue lo que
+    hizo que la misma toma pasara de 64 notas a 23. Afinar siempre con
+    load_audio(), nunca con el fichero en crudo.
+    """
+    env = librosa.onset.onset_strength(
+        y=y, sr=sample_rate, hop_length=128, feature=_envolvente_amplitud
+    )
+    return librosa.onset.onset_detect(
+        onset_envelope=env,
+        sr=sample_rate,
+        hop_length=128,
+        delta=0.030,
+        wait=20,
+        pre_max=3,
+        post_max=3,
+        pre_avg=3,
+        post_avg=3,
+        units="time",
+    )
+
+
 def f0_to_notes(
-    times: np.ndarray, f0: np.ndarray, voiced: np.ndarray, min_dur: float = 0.06
+    times: np.ndarray,
+    f0: np.ndarray,
+    voiced: np.ndarray,
+    onsets: np.ndarray | None = None,
+    min_dur: float = 0.06,
 ) -> list[dict]:
-    """Segmenta la pista de f0 en notas discretas con mediana de pitch (anti-vibrato)."""
+    """Segmenta la pista de f0 en notas discretas con mediana de pitch (anti-vibrato).
+
+    Corta nota en tres casos: (1) hay un ATAQUE de energia -- imprescindible
+    para notas repetidas a la misma altura, (2) el tono salta >= 2 semitonos,
+    (3) se acaba la voz.
+    """
     notes: list[dict] = []
     cur: list[int] = []
     cur_t0: float | None = None
+
+    cortes: set[int] = set()
+    if onsets is not None and len(onsets):
+        for t_on in onsets:
+            cortes.add(int(np.searchsorted(times, float(t_on))))
 
     def flush(end_t: float):
         nonlocal cur, cur_t0
@@ -140,6 +199,8 @@ def f0_to_notes(
         cur_t0 = None
 
     for i, t in enumerate(times):
+        if i in cortes and cur:
+            flush(float(t))
         valid = voiced[i] and not math.isnan(f0[i])
         if valid:
             midi = int(round(librosa.hz_to_midi(float(f0[i]))))
@@ -198,7 +259,8 @@ def analyse(path: str | Path) -> Seed:
     tempo, onset_env, beat_times = estimate_tempo(y)
     key, mode, conf = estimate_key(y)
     times, f0, voiced = track_pitch(y)
-    raw = f0_to_notes(times, f0, voiced)
+    ataques = detect_onsets(y)
+    raw = f0_to_notes(times, f0, voiced, onsets=ataques)
     notes = quantize(raw, tempo)
 
     # ¿hay componente ritmica? densidad de onsets fuera del tarareo
