@@ -49,6 +49,17 @@
   <label class="chk"><input type="checkbox" id="sonido" checked> sonido</label>
 </div>
 
+<div class="barra">
+  <span class="sub">Sonido:</span>
+  <select id="motor">
+    <option value="navegador">sintetizador del navegador</option>
+    <option value="soundfont">soundfont GM (instrumentos de verdad)</option>
+  </select>
+  <span class="sub">Instrumento:</span>
+  <select id="instrumento"></select>
+  <span class="sub" id="estadoSonido"></span>
+</div>
+
 <div class="fila">
   <canvas id="pad" width="520" height="260"></canvas>
   <div class="fila">
@@ -72,6 +83,7 @@ const $ = id => document.getElementById(id);
 const pad = $('pad'), ctx = pad.getContext('2d');
 
 let contactos = {}, layout = {modo:'teclas', zonas:[]}, eventos = 0, notas = 0;
+let motorSoundfont = false;   // si el soundfont suena, la pagina no sintetiza
 let ac = null, master = null, comp = null, ruido = null;
 const voces = {};   // dedo -> nodo que esta sonando
 const sonando = {}; // indice de zona -> dedo (para pintar)
@@ -150,6 +162,7 @@ function golpe(nota, vel){   // percusion (numeros GM)
 }
 
 function tocar(nota, vel){
+  if(motorSoundfont) return null;         // ya lo toca el soundfont
   if(!$('sonido').checked) return null;
   return layout.modo === 'pads' ? golpe(nota, vel) : voz(nota, vel);
 }
@@ -233,6 +246,8 @@ async function accion(url){
 $('bEmpezar').onclick = () => accion('/iniciar');
 $('bParar').onclick = () => accion('/parar');
 $('cursor').onchange = () => accion('/cursor?bloquear=' + ($('cursor').checked ? 1 : 0));
+$('motor').onchange = () => accion('/motor?tipo=' + $('motor').value);
+$('instrumento').onchange = () => accion('/instrumento?programa=' + $('instrumento').value);
 document.querySelectorAll('button.modo').forEach(b => {
   b.onclick = () => { Object.values(voces).forEach(v => v && v.parar()); accion('/modo?nombre=' + b.dataset.modo); };
 });
@@ -253,6 +268,12 @@ async function refrescar(){
   $('nInformes').textContent = 'total ' + d.informes;
   $('nErrores').textContent = 'errores ' + d.errores;
   $('nModo').textContent = d.modo || '-';
+  if(d.motor) $('motor').value = d.motor;
+  motorSoundfont = d.motor === 'soundfont';
+  if(d.instrumento !== null && d.instrumento !== undefined)
+    $('instrumento').value = d.instrumento;
+  $('estadoSonido').textContent = motorSoundfont
+      ? 'suenan los instrumentos del banco' : '';
   $('nNotas').textContent = 'notas ' + (d.notas_sonando || 0);
   if($('cursor').checked !== !!d.bloquear_cursor) $('cursor').checked = !!d.bloquear_cursor;
   let txt = d.zona_activa ? 'ZONA ARMADA: el pad toca'
@@ -279,6 +300,15 @@ es.onmessage = e => {
     contactos = {};
     for(const c of d.contactos) contactos[c.id] = c;
     pintar();
+  } else if(d.tipo === 'instrumentos'){
+    const sel = $('instrumento');
+    if(!sel.options.length){
+      d.lista.forEach((nombre, i) => {
+        const o = document.createElement('option');
+        o.value = i; o.textContent = i + ' · ' + nombre;
+        sel.appendChild(o);
+      });
+    }
   } else if(d.tipo === 'layout'){
     layout = d.layout;
     pintar();

@@ -32,6 +32,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import modelo  # noqa: E402
 from mapeo import Mapeo  # noqa: E402
+from sonido import INSTRUMENTOS, MotorSoundfont  # noqa: E402
 from modelo import Publicador, Seguidor, evento_a_dict  # noqa: E402
 
 
@@ -40,6 +41,13 @@ ESTADO = {
     "avisos": [],
 }
 BASE_URL = "http://127.0.0.1:8771"
+
+
+def aviso(texto: str):
+    """Un aviso del cliente: a consola, al estado y a la pagina."""
+    print(f"[cliente] {texto}", flush=True)
+    ESTADO["avisos"].append(texto)
+    PUBLICADOR.publicar({"tipo": "aviso", "texto": texto})
 PAGINA_ARCHIVO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pagina.html")
 
 
@@ -57,6 +65,8 @@ INYECTAR = None  # gancho de pruebas
 PUBLICADOR = Publicador()
 SEGUIDOR: Seguidor | None = None
 MAPEO: Mapeo | None = None
+MOTOR: MotorSoundfont | None = None
+MOTOR_ELEGIDO = {"tipo": "navegador"}   # "navegador" (sintetizador de la pagina) o "soundfont"
 CAPTURA = None
 
 
@@ -88,6 +98,33 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def _mando(self, camino: str, consulta: str = "") -> bool:
+        if camino == "/motor":
+            tipo = parse_qs(consulta).get("tipo", ["navegador"])[0]
+            global MOTOR
+            if tipo not in ("navegador", "soundfont"):
+                self._json({"error": f"motor desconocido: {tipo}"}, 400)
+                return True
+            if tipo == "soundfont":
+                if MOTOR is None:
+                    MOTOR = MotorSoundfont(al_aviso=aviso)
+                if not MOTOR.arrancar():
+                    self._json({"error": "no se pudo arrancar el soundfont"}, 500)
+                    return True
+            elif MOTOR is not None:
+                MOTOR.todas_fuera()
+                MOTOR.parar()
+            MOTOR_ELEGIDO["tipo"] = tipo
+            PUBLICADOR.publicar({"tipo": "aviso", "texto": f"motor de sonido: {tipo}"})
+            self._json({"motor": tipo, **(MOTOR.estado() if MOTOR else {})})
+            return True
+        if camino == "/instrumento":
+            programa = int(parse_qs(consulta).get("programa", ["0"])[0])
+            if MOTOR is None or not MOTOR.fijar_instrumento(programa):
+                self._json({"error": "el soundfont no esta en marcha"}, 400)
+                return True
+            self._json({"instrumento": programa,
+                        "nombre": INSTRUMENTOS[programa]})
+            return True
         if camino == "/modo":
             modo = parse_qs(consulta).get("nombre", ["teclas"])[0]
             if MAPEO.fijar_modo(modo):
@@ -112,6 +149,9 @@ class Handler(BaseHTTPRequestHandler):
             return True
         if camino == "/parar":
             SEGUIDOR.soltar_todo()
+            MAPEO.soltar_todo()
+            if MOTOR is not None:
+                MOTOR.todas_fuera()
             ok = CAPTURA.parar()
             self._json({"ok": ok, "estado": CAPTURA.estado()})
             return True
@@ -125,7 +165,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         ruta = urlparse(self.path)
-        if ruta.path in ("/iniciar", "/parar", "/cursor", "/zona", "/modo"):
+        if ruta.path in ("/iniciar", "/parar", "/cursor", "/zona", "/modo",
+                         "/motor", "/instrumento"):
             self._mando(ruta.path, ruta.query)
             return
         if ruta.path == "/_test/informe":
@@ -147,6 +188,10 @@ class Handler(BaseHTTPRequestHandler):
         elif ruta.path == "/estado":
             est = CAPTURA.estado()
             est.update({
+                "motor": MOTOR_ELEGIDO["tipo"],
+                "instrumento": MOTOR.instrumento if MOTOR else None,
+                "nombre_instrumento": (INSTRUMENTOS[MOTOR.instrumento]
+                                       if MOTOR else None),
                 "modo": MAPEO.modo if MAPEO else None,
                 "notas_sonando": MAPEO.n_eventos if MAPEO else 0,
                 "zona_activa": ZONA["activa"],
@@ -230,10 +275,8 @@ def main(argv=None):
         return 2
     import entrada_win32
 
-    def aviso(texto: str):
-        print(f"[cliente] {texto}", flush=True)
-        ESTADO["avisos"].append(texto)
-        PUBLICADOR.publicar({"tipo": "aviso", "texto": texto})
+    # el aviso es una funcion de modulo (arriba): lo comparten la captura y el
+    # motor de sonido
 
     def al_evento(ev):
         PUBLICADOR.publicar({"tipo": "evento", "evento": evento_a_dict(ev)})
@@ -242,6 +285,12 @@ def main(argv=None):
 
     def al_nota(datos: dict):
         PUBLICADOR.publicar({"tipo": "nota", **datos})
+        if MOTOR_ELEGIDO["tipo"] == "soundfont" and MOTOR is not None:
+            percusion = datos["modo"] == "pads"
+            if datos["accion"] == "on":
+                MOTOR.nota_on(datos["id"], datos["nota"], datos["vel"], percusion)
+            else:
+                MOTOR.nota_off(datos["id"], datos["nota"], percusion)
 
     SEGUIDOR = Seguidor(al_evento)
 
@@ -272,6 +321,7 @@ def main(argv=None):
     global INYECTAR
     INYECTAR = al_informe
     PUBLICADOR.publicar({"tipo": "layout", "layout": MAPEO.layout()})
+    PUBLICADOR.publicar({"tipo": "instrumentos", "lista": list(INSTRUMENTOS)})
 
     global BASE_URL
     BASE_URL = f"http://127.0.0.1:{args.puerto}"
