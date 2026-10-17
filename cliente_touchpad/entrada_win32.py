@@ -210,10 +210,9 @@ class CapturaWin32:
         # El gancho WH_MOUSE_LL no dice de que dispositivo viene el movimiento, pero
         # el raw input de raton si: el pad se identifica por su nombre (ELAN). Asi se
         # traga SOLO el movimiento del pad y el raton USB sigue libre.
-        # Apagado por defecto: Carlos prefiere que el pad siga moviendo el cursor
-        # como siempre. Encendido, el cliente deshace ese movimiento (recoloca el
-        # puntero), pero eso solo funciona si el pad se identifica bien.
-        self.bloquear_cursor = False
+        # Encendido por defecto: mientras hay un dedo en el pad el puntero no se
+        # mueve (Carlos lo probo y va bien). Al levantar el dedo se suelta solo.
+        self.bloquear_cursor = True
         self._ultimo_pad_mouse = 0.0
         # Ultima posicion del cursor sin intervencion del pad: ahi se devuelve.
         self._pos_ok: tuple[int, int] | None = None
@@ -343,7 +342,7 @@ class CapturaWin32:
             ahora = time.perf_counter()
             if ahora - ultimo_latido > 0.02:
                 ultimo_latido = ahora
-                self._recordar_posicion(ahora)
+                self._ajustar_bloqueo_cursor(ahora)
                 self.al_latido()
             if ahora - ultimo_segundo >= 1.0:
                 self.tasa = (self.n_informes - self._informes_ultimo_segundo) / (
@@ -360,13 +359,26 @@ class CapturaWin32:
         _INSTANCIA = None
         self.al_aviso("captura parada")
 
-    def _recordar_posicion(self, ahora: float):
-        """Si el pad no ha movido nada en 150 ms, el cursor esta donde lo dejo el
-        usuario: esa es la posicion a la que se vuelve cuando el pad lo mueva."""
-        if ahora - self._ultimo_pad_mouse > 0.15:
+    def _ajustar_bloqueo_cursor(self, ahora: float):
+        """Con el bloqueo activo, el puntero se congela SOLO mientras hay un dedo
+        apoyado: es el unico rato en que el pad puede moverlo.
+
+        La recolocacion a posteriori no sirve: Windows aplica el movimiento despues
+        de nuestro informe, asi que llegamos tarde y el cursor se escapa. El gancho
+        de raton gana esa carrera porque el movimiento ni siquiera se genera. Se
+        instala y se quita en cada gesto, de modo que el raton USB solo se queda
+        quieto mientras el dedo esta en el pad."""
+        if ahora - self._ultimo_pad_mouse > 0.15:      # posicion buena de referencia
             p = PUNTO()
             if user32.GetCursorPos(ctypes.byref(p)):
                 self._pos_ok = (p.x, p.y)
+        quiere = self.bloquear_cursor and bool(self._contactos)
+        if quiere and self._hook is None:
+            self._instalar_hook()
+        elif (not quiere and self._hook is not None
+              and ahora - self._ultimo_tip_t > 0.15):
+            user32.UnhookWindowsHookEx(self._hook)
+            self._hook = None
 
     def _instalar_hook(self):
         def proc(ncode, wparam, lparam):
@@ -375,7 +387,7 @@ class CapturaWin32:
             # queda sin puntero. Por eso todo va dentro de try y se devuelve 0.
             try:
                 if (ncode >= 0 and wparam == WM_MOUSEMOVE and self.bloquear_cursor
-                        and time.perf_counter() - self._ultimo_pad_mouse < 0.05):
+                        and self._contactos):
                     return 1  # movimiento del pad: se traga
             except Exception:
                 return 0
@@ -425,11 +437,16 @@ class CapturaWin32:
             etiqueta = (nombre or "(sin nombre)").split("#")[1] if "#" in nombre else (
                 nombre or "(sin nombre)")
             self._ratones[etiqueta] = self._ratones.get(etiqueta, 0) + 1
-            if "ELAN" in nombre.upper():
+            # Identificar el pad por nombre no es fiable: en este equipo sus informes
+            # llegan sin nombre. La regla buena es otra: el pad SOLO puede mover el
+            # puntero mientras hay un dedo apoyado, asi que se recoloca unicamente en
+            # ese momento. El raton USB queda fuera porque no coincide con esa
+            # condicion, y ademas su nombre si se resuelve.
+            es_del_pad = ("ELAN" in nombre.upper()) or not nombre
+            if es_del_pad:
                 self._ultimo_pad_mouse = time.perf_counter()
-                # El pad ha movido el puntero: se deshace el desplazamiento. Asi el
-                # raton USB nunca se bloquea y no hace falta ningun hook.
-                if self.bloquear_cursor and self._pos_ok is not None:
+                if (self.bloquear_cursor and self._contactos
+                        and self._pos_ok is not None):
                     user32.SetCursorPos(*self._pos_ok)
                     self._recolocaciones += 1
             return
