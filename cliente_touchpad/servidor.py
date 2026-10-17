@@ -31,213 +31,32 @@ from urllib.parse import parse_qs, urlparse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import modelo  # noqa: E402
+from mapeo import Mapeo  # noqa: E402
 from modelo import Publicador, Seguidor, evento_a_dict  # noqa: E402
 
-PAGINA = r"""<!doctype html>
-<html lang="es"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Touchpad como instrumento</title>
-<style>
- :root{--fg:#e8e8ec;--bg:#14141a;--panel:#1c1c24;--borde:#33333f;--acento:#5ac8ff;--ok:#48d17a;--parado:#6b6b7a}
- *{box-sizing:border-box}
- body{margin:0;padding:18px;background:var(--bg);color:var(--fg);
-      font:14px/1.45 system-ui,-apple-system,sans-serif}
- h1{font-size:17px;margin:0 0 14px;font-weight:600}
- .barra{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
- button{font:inherit;font-weight:600;padding:9px 18px;border-radius:8px;border:1px solid var(--borde);
-        background:#262631;color:var(--fg);cursor:pointer}
- button:hover:not(:disabled){background:#31313f}
- button:disabled{opacity:.4;cursor:default}
- #bEmpezar{background:#1f4d33;border-color:#2c6b47}
- #bParar{background:#4d2a2a;border-color:#6b3838}
- .piloto{display:inline-flex;align-items:center;gap:8px;font-weight:600}
- .punto{width:11px;height:11px;border-radius:50%;background:var(--parado)}
- .punto.on{background:var(--ok);box-shadow:0 0 10px var(--ok)}
- label.chk{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
- .fila{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
- canvas{background:var(--panel);border:1px solid var(--borde);border-radius:10px;touch-action:none}
- .caja{background:var(--panel);border:1px solid var(--borde);border-radius:10px;padding:12px;min-width:190px}
- .caja h2{font-size:12px;margin:0 0 8px;color:#9a9aab;text-transform:uppercase;letter-spacing:.06em}
- .num{font-family:ui-monospace,SFMono-Regular,monospace;font-size:22px;font-weight:600}
- .sub{font-size:11px;color:#8b8b9c}
- #log{margin-top:14px;height:170px;overflow:auto;background:var(--panel);border:1px solid var(--borde);
-      border-radius:10px;padding:10px;font-family:ui-monospace,monospace;font-size:12px;white-space:pre}
- .n{color:var(--acento)} .d{color:#ffd479} .u{color:#8b8b9c} .c{color:#c88bff}
- .nota{color:#8b8b9c;font-size:12px;margin-top:10px;max-width:640px}
-</style></head><body>
-<h1>Touchpad como instrumento</h1>
-
-<div class="barra">
-  <button id="bEmpezar">Empezar prueba</button>
-  <button id="bParar" disabled>Parar prueba</button>
-  <span class="piloto"><span class="punto" id="punto"></span><span id="estado">PARADO</span></span>
-  <span id="zona" style="color:#8b8b9c;font-size:12px">zona inactiva</span>
-  <label class="chk"><input type="checkbox" id="cursor"> congelar el cursor al tocar (bloquea tambien el raton)</label>
-  <label class="chk"><input type="checkbox" id="sonido" checked> sonido</label>
-</div>
-
-<div class="fila">
-  <canvas id="pad" width="470" height="265"></canvas>
-  <div class="fila">
-    <div class="caja"><h2>Dedos activos</h2><div class="num" id="nActivos">0</div></div>
-    <div class="caja"><h2>Informes/s</h2><div class="num" id="nTasa">0</div>
-      <div class="sub" id="nInformes">total 0</div></div>
-    <div class="caja"><h2>Eventos</h2><div class="num" id="nEventos">0</div>
-      <div class="sub" id="nErrores">errores 0</div></div>
-  </div>
-</div>
-
-<div id="log">Esperando...</div>
-<div class="nota">El pad manda un informe por dedo y no tiene presion: la posicion
-es absoluta (X 0..3520, Y 0..1784). El pitido suena en cada pulsacion, con la
-altura segun X y el volumen segun Y. Si congelas el cursor, para volver a la
-pagina pulsa Ctrl+Alt+T.</div>
-
-<script>
-// BASE la inyecta el servidor: si la pagina se abre a traves de un panel o
-// proxy, las rutas relativas irian al origen equivocado.
-const BASE = "__BASE__";
-const $ = id => document.getElementById(id);
-const pad = $('pad'), ctx = pad.getContext('2d');
-let contactos = {}, ac = null, eventos = 0;
-
-function pitido(x, y){
-  if(!$('sonido').checked) return;
-  ac = ac || new (window.AudioContext || window.webkitAudioContext)();
-  if(ac.state === 'suspended') ac.resume();
-  const o = ac.createOscillator(), g = ac.createGain();
-  o.type = 'triangle';
-  o.frequency.value = 220 * Math.pow(2, x * 2);
-  g.gain.value = 0.04 + 0.22 * (1 - y);
-  o.connect(g); g.connect(ac.destination);
-  o.start();
-  g.gain.exponentialRampToValueAtTime(0.0008, ac.currentTime + 0.28);
-  o.stop(ac.currentTime + 0.29);
-}
-
-function pintar(){
-  const w = pad.width, h = pad.height;
-  ctx.fillStyle = '#1c1c24'; ctx.fillRect(0,0,w,h);
-  ctx.strokeStyle = '#2c2c38'; ctx.lineWidth = 1;
-  for(let i=1;i<8;i++){ctx.beginPath();ctx.moveTo(i*w/8,0);ctx.lineTo(i*w/8,h);ctx.stroke();}
-  for(let j=1;j<4;j++){ctx.beginPath();ctx.moveTo(0,j*h/4);ctx.lineTo(w,j*h/4);ctx.stroke();}
-  for(const c of Object.values(contactos)){
-    const px = c.x*w, py = c.y*h, col = c.id % 2 ? '#ffaa5a' : '#5ac8ff';
-    ctx.beginPath(); ctx.arc(px, py, 16, 0, 6.3);
-    ctx.fillStyle = col + '44'; ctx.fill();
-    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = '#fff'; ctx.font = '11px ui-monospace,monospace';
-    ctx.fillText('id'+c.id, px+20, py+4);
-  }
-}
-
-function traza(txt, clase){
-  const l = $('log');
-  const linea = document.createElement('div');
-  linea.className = clase || '';
-  linea.textContent = txt;
-  l.prepend(linea);
-  while(l.childElementCount > 60) l.lastChild.remove();
-}
-
-async function accion(url){
-  try {
-    const r = await fetch(BASE + url);
-    if(!r.ok) traza('el servidor respondio ' + r.status, 'u');
-    else traza('mando enviado: ' + url, 'c');
-  } catch(e) {
-    traza('no se pudo hablar con el servidor: ' + e, 'u');
-    $('estado').textContent = 'SIN CONEXION CON EL SERVIDOR';
-    refrescar();
-    return;
-  }
-  refrescar();
-}
-
-$('bEmpezar').onclick = () => accion('/iniciar');
-$('bParar').onclick = () => accion('/parar');
-$('cursor').onchange = () => accion('/cursor?bloquear=' + ($('cursor').checked ? 1 : 0));
-
-async function refrescar(){
-  let d;
-  try { d = await (await fetch(BASE + '/estado')).json(); } catch(e) {
-    $('estado').textContent = 'SIN CONEXION CON EL SERVIDOR';
-    $('punto').className = 'punto';
-    $('bEmpezar').disabled = true;
-    $('bParar').disabled = true;
-    return;
-  }
-  $('punto').className = 'punto' + (d.en_marcha ? ' on' : '');
-  $('estado').textContent = d.en_marcha ? 'EN MARCHA' : 'PARADO';
-  $('bEmpezar').disabled = d.en_marcha;
-  $('bParar').disabled = !d.en_marcha;
-  $('nTasa').textContent = d.tasa.toFixed(0);
-  $('nInformes').textContent = 'total ' + d.informes;
-  $('nErrores').textContent = 'errores ' + d.errores;
-  $('nEventos').textContent = eventos;
-  $('nActivos').textContent = Object.keys(contactos).length;
-  if($('cursor').checked !== !!d.bloquear_cursor) $('cursor').checked = !!d.bloquear_cursor;
-  let txt = d.zona_activa
-      ? 'ZONA ARMADA: el pad toca'
-      : 'zona inactiva: acerca el raton al recuadro del pad';
-  if(d.cursor_bloqueado) txt += '  ·  CURSOR CONGELADO con ' + d.dedos + ' dedo(s)';
-  else if(d.bloquear_cursor) txt += '  ·  al tocar se congela el cursor';
-  $('zona').textContent = txt;
-  $('zona').style.color = d.zona_activa ? '#48d17a' : '#8b8b9c';
-  pad.style.borderColor = d.zona_activa ? '#48d17a' : '#33333f';
-  if(!d.en_marcha && Object.keys(contactos).length){ contactos = {}; pintar(); }
-}
-
-const es = new EventSource(BASE + '/eventos');
-es.onmessage = e => {
-  const d = JSON.parse(e.data);
-  if(d.tipo === 'cuadro'){
-    contactos = {};
-    for(const c of d.contactos) contactos[c.id] = c;
-    pintar();
-  } else if(d.tipo === 'evento'){
-    const ev = d.evento;
-    eventos++;
-    if(ev.tipo === 'down') pitido(ev.x, ev.y);
-    if(ev.tipo !== 'move'){
-      traza(ev.tipo.toUpperCase().padEnd(5) + ' id' + ev.id +
-            '  x=' + ev.x.toFixed(3) + '  y=' + ev.y.toFixed(3) +
-            '  dur=' + ev.duracion.toFixed(3) + '  rec=' + ev.recorrido.toFixed(3) +
-            '  activos=' + ev.n_activos,
-            ev.tipo === 'down' ? 'd' : (ev.tipo === 'up' ? 'u' : 'c'));
-    }
-  } else if(d.tipo === 'aviso'){
-    traza('· ' + d.texto, 'u');
-  }
-};
-es.onerror = () => traza('· sin conexion con el servidor', 'u');
-
-// El pad solo cuenta como instrumento cuando el puntero esta ENCIMA del pad.
-// Asi el touchpad no se sale del contexto de la aplicacion (Carlos usa raton USB).
-function armarZona(v){
-  fetch(BASE + '/zona?activa=' + (v ? 1 : 0)).catch(() => {});
-}
-pad.addEventListener('pointerenter', () => armarZona(true));
-pad.addEventListener('pointerleave', () => armarZona(false));
-document.addEventListener('visibilitychange', () => { if(document.hidden) armarZona(false); });
-window.addEventListener('blur', () => armarZona(false));
-
-pintar();
-refrescar();
-setInterval(refrescar, 500);
-</script></body></html>
-"""
 
 ESTADO = {
     "iniciado": time.time(),
     "avisos": [],
 }
 BASE_URL = "http://127.0.0.1:8771"
+PAGINA_ARCHIVO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pagina.html")
+
+
+def pagina_html() -> str:
+    """Se lee en cada peticion: editar el HTML no obliga a reiniciar la app."""
+    try:
+        with open(PAGINA_ARCHIVO, encoding="utf-8") as f:
+            texto = f.read()
+    except OSError as exc:
+        return f"<h1>Falta cliente_touchpad/pagina.html</h1><pre>{exc}</pre>"
+    return texto.replace("__BASE__", BASE_URL)
 # El pad solo cuenta cuando el puntero esta dentro de la zona del pad.
 ZONA = {"activa": False}
 INYECTAR = None  # gancho de pruebas
 PUBLICADOR = Publicador()
 SEGUIDOR: Seguidor | None = None
+MAPEO: Mapeo | None = None
 CAPTURA = None
 
 
@@ -269,6 +88,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def _mando(self, camino: str, consulta: str = "") -> bool:
+        if camino == "/modo":
+            modo = parse_qs(consulta).get("nombre", ["teclas"])[0]
+            if MAPEO.fijar_modo(modo):
+                PUBLICADOR.publicar({"tipo": "layout", "layout": MAPEO.layout()})
+                PUBLICADOR.publicar({"tipo": "aviso", "texto": f"modo: {modo}"})
+                self._json({"modo": modo})
+            else:
+                self._json({"error": f"modo desconocido: {modo}"}, 400)
+            return True
         """Ejecuta un mando. Sirve tanto por GET como por POST: algunos paneles o
         proxies solo dejan pasar GET, y con POST el boton no llegaba."""
         if camino == "/zona":
@@ -297,7 +125,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         ruta = urlparse(self.path)
-        if ruta.path in ("/iniciar", "/parar", "/cursor", "/zona"):
+        if ruta.path in ("/iniciar", "/parar", "/cursor", "/zona", "/modo"):
             self._mando(ruta.path, ruta.query)
             return
         if ruta.path == "/_test/informe":
@@ -310,7 +138,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True})
             return
         if ruta.path in ("/", "/index.html"):
-            cuerpo = PAGINA.replace("__BASE__", BASE_URL).encode("utf-8")
+            cuerpo = pagina_html().encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(cuerpo)))
@@ -319,6 +147,8 @@ class Handler(BaseHTTPRequestHandler):
         elif ruta.path == "/estado":
             est = CAPTURA.estado()
             est.update({
+                "modo": MAPEO.modo if MAPEO else None,
+                "notas_sonando": MAPEO.n_eventos if MAPEO else 0,
                 "zona_activa": ZONA["activa"],
                 "suscriptores": PUBLICADOR.n_suscriptores,
                 "eventos": SEGUIDOR.n_eventos,
@@ -350,7 +180,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main(argv=None):
-    global SEGUIDOR, CAPTURA
+    global SEGUIDOR, CAPTURA, MAPEO
 
     # Un fallo duro del interprete (segfault) no imprime nada por si solo: dejamos
     # un volcado para saber por que se muere la aplicacion.
@@ -407,14 +237,21 @@ def main(argv=None):
 
     def al_evento(ev):
         PUBLICADOR.publicar({"tipo": "evento", "evento": evento_a_dict(ev)})
+        if ev.tipo == "up":
+            MAPEO.soltar(ev.id)  # el dedo se ha ido: que no quede nota colgada
+
+    def al_nota(datos: dict):
+        PUBLICADOR.publicar({"tipo": "nota", **datos})
 
     SEGUIDOR = Seguidor(al_evento)
 
     def al_informe(id_, x, y, tip, boton):
         if not ZONA["activa"]:
             return  # fuera de la zona del pad no se toca nada
-        SEGUIDOR.informe(id_, x, y, tip, boton)
+        MAPEO.informe(id_, x, y, tip)     # primero la nota...
+        SEGUIDOR.informe(id_, x, y, tip, boton)  # ...y luego el dibujo
 
+    MAPEO = Mapeo(al_nota=al_nota, modo="teclas")
     CAPTURA = entrada_win32.CapturaWin32(
         al_informe=al_informe, al_latido=lambda: None, al_aviso=aviso)
     if args.congelar_raton:
@@ -434,6 +271,7 @@ def main(argv=None):
     CAPTURA.al_latido = al_latido
     global INYECTAR
     INYECTAR = al_informe
+    PUBLICADOR.publicar({"tipo": "layout", "layout": MAPEO.layout()})
 
     global BASE_URL
     BASE_URL = f"http://127.0.0.1:{args.puerto}"
