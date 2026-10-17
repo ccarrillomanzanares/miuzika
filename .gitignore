@@ -1,0 +1,17 @@
+# Entorno y dependencias
+.venv/
+__pycache__/
+*.pyc
+
+# Datos pesados y descargables (se reconstruyen, no se versionan)
+data/
+tools/
+cache/
+
+# Salidas
+*.wav
+*.mp3
+*.mid
+
+# Excepto los ejemplos de partitura, que si son utiles como referencia
+!examples/*.abc
