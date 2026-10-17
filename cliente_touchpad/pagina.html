@@ -36,7 +36,6 @@
   <button class="modo" data-modo="deslizar">Deslizar</button>
   <span class="sep"></span>
   <label class="chk"><input type="checkbox" id="cursor"> el pad no mueve el cursor</label>
-  <label class="chk"><input type="checkbox" id="sonido" checked> sonido</label>
 </div>
 
 <div class="barra">
@@ -139,7 +138,6 @@ function golpe(nota, vel){   // percusion (numeros General MIDI)
 
 function tocar(nota, vel){
   if(motorSoundfont) return null;        // ya lo toca el soundfont, en el cliente
-  if(!$('sonido').checked) return null;
   return layout.modo === 'pads' ? golpe(nota, vel) : voz(nota, vel);
 }
 
