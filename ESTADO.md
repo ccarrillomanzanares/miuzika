@@ -9,19 +9,19 @@ costaron tiempo**. No repetir lo descartado.
 ## 1. Qué es esto ahora
 
 Una aplicación web **local** para **grabar o cargar un tarareo, transcribirlo y
-exportar el resultado como archivo MIDI**. Nada más por ahora; Ardour se ocupa
+exportar el resultado como archivo MIDI**. Nada más por ahora; OpenDAW se ocupa
 de la edición musical después de importar el MIDI.
 
 ## 2. Alcance decidido
 
 - Flujo: micrófono o archivo de audio → Basic Pitch en el VPS por SSH → MIDI
-  crudo descargable/importable en Ardour.
+  crudo descargable/importable en OpenDAW.
 - La app no edita notas, no crea pistas/instrumentos, no renderiza ni reproduce
   mezclas, no usa metrónomo y no compone con LLM.
 - El MIDI conserva los tiempos y demás datos generados por Basic Pitch; no
   reconstruirlo desde ABC ni cuantizarlo.
 - No cambiar el transcriptor por ahora; verificarlo con tomas reales y corregir
-  errores manualmente en Ardour.
+  errores manualmente en OpenDAW.
 
 ## 3. Estado implementado y verificación
 
@@ -31,7 +31,7 @@ Arranque: `.venv/Scripts/python.exe app/servidor.py --puerto 8770` →
 - La nueva interfaz mínima está en `app/transcribir.html`: grabar del micrófono
 o cargar un archivo de audio, preescucharlo, transcribir y descargar MIDI.
 - El servidor recibe audio en `POST /analizar`, lo envía al transcriptor Basic
-  Pitch remoto y devuelve el MIDI crudo (`audio/midi`). La importación en Ardour
+  Pitch remoto y devuelve el MIDI crudo (`audio/midi`). La importación en OpenDAW
   ya fue probada por Carlos y funciona.
 - `GET /` sirve la interfaz mínima. Se retiraron de las rutas activas el editor,
   instrumentos, render y exportación de proyectos. Los archivos antiguos del
@@ -44,7 +44,7 @@ o cargar un archivo de audio, preescucharlo, transcribir y descargar MIDI.
   — 8 pruebas OK; `node --check cache/transcribir.js` pasó; import del servidor OK.
   No se ejerció una transcripción real en este turno porque depende del VPS.
 - No se probó en esta tarea una toma real con micrófono; Carlos confirmó antes
-  que el MIDI generado por Humseed se importa correctamente en Ardour.
+  que el MIDI generado por Humseed se importa correctamente en OpenDAW.
 
 **Alcance actual:** sólo transcribir tarareo y exportar MIDI. Sin edición de
 notas, multipista, selección de instrumentos, metrónomo, reproducción/render de
@@ -74,8 +74,10 @@ portátil**. Cinco veces más.
 
 ## 5. Decisiones y límites actuales
 
-- Ardour es el destino para editar y trabajar el MIDI; Carlos ya importó un MIDI
-  de Humseed y confirmó que funciona.
+- OpenDAW es el destino para editar y trabajar el MIDI (sustituye a Ardour).
+  Vive en el VPS, en `~/proyectos/openDAW`; su vista previa solo escucha en
+  `127.0.0.1:8092`, asi que se llega por tunel SSH a `localhost:18092`. La copia
+  para Windows se borro: el DAW es el del VPS.
 - La app de Humseed se mantiene local en el portátil; audio al VPS por SSH, sin
   exponer puertos públicamente. La transcripción Basic Pitch corre con Python
   3.11 en `ssh vps`.
@@ -119,7 +121,7 @@ portátil**. Cinco veces más.
 2. Ejecutar `.venv/Scripts/python.exe app/servidor.py --puerto 8770` y abrir
    `http://127.0.0.1:8770`.
 3. Probar en navegador grabar un tarareo, obtener el MIDI y descargarlo; importar
-   el archivo en Ardour.
+   el archivo en OpenDAW.
 4. No volver a añadir características del editor ni reactivar el LLM sin una
    petición explícita de Carlos.
 
@@ -149,15 +151,28 @@ comprobado con informes falsos (`/_test/informe`): con la zona inactiva no pasa
 nada, con la zona armada llegan los contactos y al salir se sueltan; 142
 informes/s reales tocando el pad.
 
-**Pendiente, en este orden**:
-1. Carlos apagó el touchpad en Ajustes de Windows y hay que **volver a
-   encenderlo** (apagarlo mata el HID entero, no solo el ratón).
-2. Confirmar que al reencenderlo vuelven los informes y que el cursor se congela
-   mientras hay un dedo apoyado (congelado automático, casilla «el pad no mueve
-   el cursor», atajo Ctrl+Alt+T).
-3. Decidir el **mapeo**: qué toca cada zona del pad (notas por columna, X/Y como
-   expresión, un dedo por voz). Sin presión en el hardware: la dinámica tiene que
-   salir del mapeo.
+**Como queda la aplicacion** (probada por Carlos):
+
+- Arranca sola: la captura empieza al abrir y el motor de sonido es el soundfont
+  del banco. La pagina ya no tiene botones de prueba, contadores ni registro:
+  solo el pad, los mandos (modo, sonido, instrumento, grabar) y un renglon de
+  estado («pad armado: toca · Piano de cola»).
+- Modos: **teclas** (dos octavas de Do mayor, glissando), **pads** (rejilla 4x2
+  con numeros GM) y **deslizar** (altura continua pegada a la escala).
+- **Grabar / Parar y guardar** exporta lo tocado a `cache/pad/pad.mid`, que es lo
+  que se lleva a OpenDAW. Tiempo libre: sin metronomo ni compas todavia.
+- El pad solo toca con el puntero dentro de su recuadro, y mientras hay un dedo
+  apoyado el cursor no se mueve (por defecto).
+
+**Pendiente, cuando Carlos quiera**: metronomo/compas para grabar encuadrado,
+instrumento distinto por modo, y decidir si el pad se integra en la app de
+tarareo o se queda como aplicacion aparte.
+
+**No volver a intentar** (ya medido y descartado): apagar el touchpad en Ajustes
+de Windows (mata el HID: cero informes), deshabilitar la coleccion de raton del
+pad (el puntero lo sigue moviendo el driver), recolocar el cursor a posteriori
+(Windows aplica el movimiento despues de nuestro informe y el cursor se escapa) y
+bloquear el puntero con el gancho sin la condicion de dedo apoyado.
 
 **Trampas ya pagadas**: la clase de ventana se registra una vez por proceso (si
 no, access violation al rearrancar); los volcados de faulthandler en

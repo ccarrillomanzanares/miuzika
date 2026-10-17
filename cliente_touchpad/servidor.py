@@ -259,7 +259,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main(argv=None):
-    global SEGUIDOR, CAPTURA, MAPEO
+    global SEGUIDOR, CAPTURA, MAPEO, MOTOR
 
     # Un fallo duro del interprete (segfault) no imprime nada por si solo: dejamos
     # un volcado para saber por que se muere la aplicacion.
@@ -299,8 +299,8 @@ def main(argv=None):
 
     ap = argparse.ArgumentParser(description="Touchpad como instrumento (cliente local)")
     ap.add_argument("--puerto", type=int, default=8771)
-    ap.add_argument("--congelar-raton", action="store_true",
-                    help="arrancar ya con el cursor congelado al tocar")
+    ap.add_argument("--abrir", action="store_true",
+                    help="abrir la pagina en el navegador al arrancar")
     args = ap.parse_args(argv)
 
     if not sys.platform.startswith("win"):
@@ -339,8 +339,6 @@ def main(argv=None):
     MAPEO = Mapeo(al_nota=al_nota, modo="teclas")
     CAPTURA = entrada_win32.CapturaWin32(
         al_informe=al_informe, al_latido=lambda: None, al_aviso=aviso)
-    if args.congelar_raton:
-        CAPTURA.congelar_raton = True
 
     ultimo_envio = [0.0]
 
@@ -362,8 +360,24 @@ def main(argv=None):
     global BASE_URL
     BASE_URL = f"http://127.0.0.1:{args.puerto}"
     servidor = ThreadingHTTPServer(("127.0.0.1", args.puerto), Handler)
-    print(f"[cliente] abre http://127.0.0.1:{args.puerto} "
-          f"y pulsa «Empezar prueba»", flush=True)
+    print(f"[cliente] en http://127.0.0.1:{args.puerto}", flush=True)
+    # Sin botones de prueba, la captura arranca sola con la aplicacion.
+    if not CAPTURA.iniciar():
+        aviso("no se pudo arrancar la captura del pad")
+    # El motor elegido por Carlos: el soundfont del banco. Si no arranca, la
+    # pagina se queda con su propio sintetizador y la aplicacion sigue viva.
+    try:
+        motor = MotorSoundfont(al_aviso=aviso)
+        if motor.arrancar():
+            MOTOR = motor
+            MOTOR_ELEGIDO["tipo"] = "soundfont"
+        else:
+            aviso("el soundfont no arranca: la pagina usara su sintetizador")
+    except Exception as exc:
+        aviso(f"soundfont no disponible: {exc}")
+    if args.abrir:
+        import webbrowser
+        webbrowser.open(f"http://127.0.0.1:{args.puerto}")
     try:
         servidor.serve_forever()
     except KeyboardInterrupt:
