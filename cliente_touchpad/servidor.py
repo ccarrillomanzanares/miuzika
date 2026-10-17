@@ -32,6 +32,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import modelo  # noqa: E402
 from mapeo import Mapeo  # noqa: E402
+from grabador import Grabador  # noqa: E402
 from sonido import INSTRUMENTOS, MotorSoundfont  # noqa: E402
 from modelo import Publicador, Seguidor, evento_a_dict  # noqa: E402
 
@@ -67,6 +68,7 @@ SEGUIDOR: Seguidor | None = None
 MAPEO: Mapeo | None = None
 MOTOR: MotorSoundfont | None = None
 MOTOR_ELEGIDO = {"tipo": "navegador"}   # "navegador" (sintetizador de la pagina) o "soundfont"
+GRABADOR = Grabador()
 CAPTURA = None
 
 
@@ -98,9 +100,27 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def _mando(self, camino: str, consulta: str = "") -> bool:
+        """Ejecuta un mando. Sirve tanto por GET como por POST: algunos paneles o
+        proxies solo dejan pasar GET, y con POST el boton no llegaba."""
+        global MOTOR
+        if camino == "/grabar":
+            ok = GRABADOR.iniciar(GRABADOR.instrumento if MOTOR is None
+                                  else MOTOR.instrumento)
+            PUBLICADOR.publicar({"tipo": "aviso",
+                                 "texto": "grabando" if ok else "ya estaba grabando"})
+            self._json({"grabando": ok, **GRABADOR.estado()})
+            return True
+        if camino == "/grabar/parar":
+            ruta = GRABADOR.parar()
+            if ruta is None:
+                self._json({"error": "no habia nada grabado o no se estaba grabando"}, 400)
+                return True
+            PUBLICADOR.publicar({"tipo": "aviso", "texto": f"grabacion guardada: {ruta}"})
+            self._json({"archivo": os.path.basename(ruta), **GRABADOR.estado(),
+                        "descarga": "/grabacion.mid"})
+            return True
         if camino == "/motor":
             tipo = parse_qs(consulta).get("tipo", ["navegador"])[0]
-            global MOTOR
             if tipo not in ("navegador", "soundfont"):
                 self._json({"error": f"motor desconocido: {tipo}"}, 400)
                 return True
@@ -134,8 +154,6 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._json({"error": f"modo desconocido: {modo}"}, 400)
             return True
-        """Ejecuta un mando. Sirve tanto por GET como por POST: algunos paneles o
-        proxies solo dejan pasar GET, y con POST el boton no llegaba."""
         if camino == "/zona":
             activa = parse_qs(consulta).get("activa", ["0"])[0] == "1"
             ZONA["activa"] = activa
@@ -165,8 +183,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         ruta = urlparse(self.path)
+        if ruta.path == "/instrumentos":
+            self._json({"lista": list(INSTRUMENTOS)})
+            return
         if ruta.path in ("/iniciar", "/parar", "/cursor", "/zona", "/modo",
-                         "/motor", "/instrumento"):
+                         "/motor", "/instrumento", "/grabar", "/grabar/parar"):
             self._mando(ruta.path, ruta.query)
             return
         if ruta.path == "/_test/informe":
@@ -193,6 +214,7 @@ class Handler(BaseHTTPRequestHandler):
                 "nombre_instrumento": (INSTRUMENTOS[MOTOR.instrumento]
                                        if MOTOR else None),
                 "modo": MAPEO.modo if MAPEO else None,
+                **GRABADOR.estado(),
                 "notas_sonando": MAPEO.n_eventos if MAPEO else 0,
                 "zona_activa": ZONA["activa"],
                 "suscriptores": PUBLICADOR.n_suscriptores,
@@ -201,6 +223,18 @@ class Handler(BaseHTTPRequestHandler):
                 "descartados": PUBLICADOR.n_descartados,
             })
             self._json(est)
+        elif ruta.path == "/grabacion.mid":
+            if not os.path.isfile(GRABADOR.ruta):
+                self.send_error(404, "todavia no hay grabacion")
+                return
+            with open(GRABADOR.ruta, "rb") as f:
+                cuerpo = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/midi")
+            self.send_header("Content-Disposition", "attachment; filename=pad.mid")
+            self.send_header("Content-Length", str(len(cuerpo)))
+            self.end_headers()
+            self.wfile.write(cuerpo)
         elif ruta.path == "/eventos":
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -285,6 +319,8 @@ def main(argv=None):
 
     def al_nota(datos: dict):
         PUBLICADOR.publicar({"tipo": "nota", **datos})
+        GRABADOR.registrar(datos["accion"], datos["id"], datos["nota"], datos["vel"],
+                           datos["modo"])
         if MOTOR_ELEGIDO["tipo"] == "soundfont" and MOTOR is not None:
             percusion = datos["modo"] == "pads"
             if datos["accion"] == "on":

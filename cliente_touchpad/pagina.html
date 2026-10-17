@@ -60,6 +60,14 @@
   <span class="sub" id="estadoSonido"></span>
 </div>
 
+<div class="barra">
+  <span class="sub">Grabar lo que tocas:</span>
+  <button id="bGrabar">Grabar</button>
+  <button id="bPararGrabar" disabled>Parar y guardar</button>
+  <span class="sub" id="estadoGrabacion">sin grabar</span>
+  <a id="enlaceMidi" href="#" download class="sub" style="display:none">descargar el MIDI</a>
+</div>
+
 <div class="fila">
   <canvas id="pad" width="520" height="260"></canvas>
   <div class="fila">
@@ -246,6 +254,9 @@ async function accion(url){
 $('bEmpezar').onclick = () => accion('/iniciar');
 $('bParar').onclick = () => accion('/parar');
 $('cursor').onchange = () => accion('/cursor?bloquear=' + ($('cursor').checked ? 1 : 0));
+$('bGrabar').onclick = () => accion('/grabar');
+$('bPararGrabar').onclick = () => accion('/grabar/parar');
+$('enlaceMidi').href = BASE + '/grabacion.mid';
 $('motor').onchange = () => accion('/motor?tipo=' + $('motor').value);
 $('instrumento').onchange = () => accion('/instrumento?programa=' + $('instrumento').value);
 document.querySelectorAll('button.modo').forEach(b => {
@@ -268,6 +279,12 @@ async function refrescar(){
   $('nInformes').textContent = 'total ' + d.informes;
   $('nErrores').textContent = 'errores ' + d.errores;
   $('nModo').textContent = d.modo || '-';
+  $('bGrabar').disabled = !!d.grabando || !d.en_marcha;
+  $('bPararGrabar').disabled = !d.grabando;
+  $('estadoGrabacion').textContent = d.grabando
+      ? ('grabando ' + d.segundos.toFixed(0) + ' s · ' + d.notas_grabadas + ' notas')
+      : (d.archivo ? ('guardado: ' + d.archivo) : 'sin grabar');
+  $('enlaceMidi').style.display = d.archivo ? 'inline' : 'none';
   if(d.motor) $('motor').value = d.motor;
   motorSoundfont = d.motor === 'soundfont';
   if(d.instrumento !== null && d.instrumento !== undefined)
@@ -300,15 +317,6 @@ es.onmessage = e => {
     contactos = {};
     for(const c of d.contactos) contactos[c.id] = c;
     pintar();
-  } else if(d.tipo === 'instrumentos'){
-    const sel = $('instrumento');
-    if(!sel.options.length){
-      d.lista.forEach((nombre, i) => {
-        const o = document.createElement('option');
-        o.value = i; o.textContent = i + ' · ' + nombre;
-        sel.appendChild(o);
-      });
-    }
   } else if(d.tipo === 'layout'){
     layout = d.layout;
     pintar();
@@ -340,7 +348,20 @@ es.onmessage = e => {
 };
 es.onerror = () => traza('· sin conexion con el servidor', 'u');
 
+function llenarInstrumentos(){
+  fetch(BASE + '/instrumentos').then(pedir => pedir.json()).then(d => {
+    const sel = $('instrumento');
+    if(sel.options.length) return;      // la lista no se manda por SSE: si el panel
+    d.lista.forEach((nombre, i) => {    // se conecta tarde, se la pedimos nosotros
+      const o = document.createElement('option');
+      o.value = i; o.textContent = i + ' · ' + nombre;
+      sel.appendChild(o);
+    });
+  }).catch(() => {});
+}
+
 pintar();
+llenarInstrumentos();
 refrescar();
 setInterval(refrescar, 500);
 </script></body></html>
