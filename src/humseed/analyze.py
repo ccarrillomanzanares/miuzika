@@ -254,7 +254,8 @@ def contour_from_notes(notes: list[Note], bins: int = 16) -> list[int]:
     return [int(round(np.mean(b))) if b else 0 for b in buckets]
 
 
-def analyse(path: str | Path, motor: str = "auto") -> Seed:
+def analyse(path: str | Path, motor: str = "auto",
+            guardar_midi: str | Path | None = None) -> Seed:
     """Tarareo -> semilla.
 
     motor="auto"        Basic Pitch si esta disponible, si no el analizador propio
@@ -263,6 +264,11 @@ def analyse(path: str | Path, motor: str = "auto") -> Seed:
 
     Basic Pitch es el que manda por defecto: saca 7 alturas donde el propio
     sacaba 4, y conserva los deslizamientos que la mediana aplanaba.
+
+    guardar_midi: si se indica, escribe ahi el MIDI CRUDO de Basic Pitch, con
+    los tiempos reales y los deslizamientos. Es el que hay que usar para oir:
+    las notas de la semilla van cuantizadas a rejilla (lo necesita el ABC que
+    come el LLM) y eso movia los ataques 543 ms de mediana.
     """
     y = load_audio(path)
     duration = float(librosa.get_duration(y=y, sr=SR))
@@ -275,8 +281,11 @@ def analyse(path: str | Path, motor: str = "auto") -> Seed:
         try:
             from humseed import transcribir
 
-            raw = transcribir.transcribir(path)
+            res = transcribir.transcribir(path)
+            raw = res.notas
             usado = "basicpitch"
+            if guardar_midi is not None:
+                Path(guardar_midi).write_bytes(res.midi)
         except Exception:
             if motor == "basicpitch":
                 raise

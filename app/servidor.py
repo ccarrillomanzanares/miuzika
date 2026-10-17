@@ -42,15 +42,21 @@ def analizar_toma(datos: bytes, nombre: str) -> dict:
     wav_in = TOMAS / f"{nombre}_original.wav"
     wav_in.write_bytes(datos)
 
-    t0 = time.time()
-    seed = analyze.analyse(wav_in)
-    t_analisis = time.time() - t0
-
-    abc = analyze.melodia_a_abc(seed, titulo=f"Transcripcion {nombre}")
     midi = TOMAS / f"{nombre}.mid"
     wav_out = TOMAS / f"{nombre}_transcrito.wav"
 
-    render.abc_to_midi(abc, midi)
+    t0 = time.time()
+    # guardar_midi: Basic Pitch deja ahi su MIDI crudo, con los tiempos reales
+    # y los deslizamientos. Ese es el que se oye, no el que se reconstruye
+    # desde el ABC (que va cuantizado a rejilla para el LLM).
+    seed = analyze.analyse(wav_in, guardar_midi=midi)
+    t_analisis = time.time() - t0
+
+    abc = analyze.melodia_a_abc(seed, titulo=f"Transcripcion {nombre}")
+
+    if not midi.exists():
+        # motor propio: no hay MIDI crudo, se reconstruye desde el ABC
+        render.abc_to_midi(abc, midi)
     render.midi_to_wav(midi, wav_out)
 
     s = abcmini.parse_abc(abc)

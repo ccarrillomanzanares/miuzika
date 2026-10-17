@@ -21,6 +21,7 @@ import base64
 import os
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import pretty_midi
@@ -32,8 +33,22 @@ PY_REMOTO = os.environ.get("BP_PY_REMOTO", "~/transcribe/.venv/bin/python")
 SCRIPT_REMOTO = os.environ.get("BP_SCRIPT_REMOTO", "~/transcribe/one_shot.py")
 
 
-def transcribir(wav: str | Path, timeout: int = 600) -> list[dict]:
-    """Transcribe en el VPS y devuelve notas [{'pitch','start','dur'}].
+@dataclass
+class Transcripcion:
+    """Notas + el MIDI ORIGINAL de Basic Pitch.
+
+    El MIDI se guarda tal cual porque trae lo que nuestro modelo de notas no
+    representa: los tiempos reales (no cuantizados) y los deslizamientos de
+    tono. Cuantizar las notas a una rejilla movia los ataques 543 ms de
+    mediana: se oia distinto a lo tarareado. Para oir hay que usar este MIDI.
+    """
+
+    notas: list[dict]
+    midi: bytes
+
+
+def transcribir(wav: str | Path, timeout: int = 600) -> Transcripcion:
+    """Transcribe en el VPS.
 
     El WAV entra por la entrada estandar de SSH y el MIDI vuelve por la salida
     en base64: una sola peticion, sin subir ficheros ni abrir puertos.
@@ -56,7 +71,7 @@ def transcribir(wav: str | Path, timeout: int = 600) -> list[dict]:
     with tempfile.TemporaryDirectory() as tmp:
         ruta = Path(tmp) / "bp.mid"
         ruta.write_bytes(midi)
-        return leer_midi(ruta)
+        return Transcripcion(notas=leer_midi(ruta), midi=midi)
 
 
 def leer_midi(path: str | Path) -> list[dict]:
@@ -90,7 +105,7 @@ def comparar(wav: str | Path) -> dict:
     seed = analyze.analyse(wav, motor="propio")
     propias = [(n.pitch, n.start, n.dur) for n in seed.notes]
 
-    bp = transcribir(wav)
+    bp = transcribir(wav).notas
     alturas = [n["pitch"] for n in bp]
     return {
         "propias": {
