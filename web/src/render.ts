@@ -18,6 +18,8 @@ export interface RenderOptions {
   normalize?: boolean;
   targetLufs?: number;
   limiter?: boolean;
+  /** false = sin cadena de máster (para stems). */
+  master?: boolean;
 }
 
 export interface RenderResult {
@@ -33,9 +35,13 @@ export async function renderProject(project: Project, options: RenderOptions = {
   const context = new OfflineAudioContext(2, Math.ceil(duration * sampleRate), sampleRate);
   const useWorklet = await prepareSynth(context);
 
-  const master = buildMasterChain(context, project.master.gainDb, context.destination);
-  const drumBus = buildBusChain(context, master.input, "drums");
-  const musicBus = buildBusChain(context, master.input, "music");
+  const master =
+    options.master === false
+      ? null
+      : buildMasterChain(context, project.master.gainDb, context.destination);
+  const masterInput = master ? master.input : context.destination;
+  const drumBus = buildBusChain(context, masterInput, "drums");
+  const musicBus = buildBusChain(context, masterInput, "music");
   const noise = createNoiseBuffer(context);
   const soloed = project.tracks.some((track) => track.solo);
   const chains = new Map<string, TrackChain>();
@@ -97,14 +103,62 @@ export async function renderProject(project: Project, options: RenderOptions = {
 
   const rendered = await context.startRendering();
   for (const synth of synths.values()) synth.dispose();
-  const loudness =
-    options.normalize === false
-      ? measureLoudness(rendered)
-      : normalizeBuffer(rendered, options.targetLufs ?? -14, -1, options.limiter !== false);
+  const shouldNormalize = options.normalize !== false && options.master !== false;
+  const loudness = shouldNormalize
+    ? normalizeBuffer(rendered, options.targetLufs ?? -14, -1, options.limiter !== false)
+    : measureLoudness(rendered);
   return {
     blob: new Blob([audioBufferToWav(rendered)], { type: "audio/wav" }),
     loudness,
   };
+}
+
+export interface StemFile {
+  name: string;
+  blob: Blob;
+}
+
+export interface StemOptions {
+  sampleRate?: number;
+  onProgress?: (index: number, total: number, name: string) => void;
+}
+
+/**
+ * WAV por pista con sus FX, sin cadena de máster ni normalización.
+ * Así se pueden mezclar fuera sin doble procesado.
+ */
+export async function renderStems(project: Project, options: StemOptions = {}): Promise<StemFile[]> {
+  const soloed = project.tracks.some((track) => track.solo);
+  const tracks = project.tracks.filter((track) => !track.muted && (!soloed || track.solo));
+  if (tracks.length === 0) throw new Error("No hay pistas audibles para exportar");
+
+  const files: StemFile[] = [];
+  for (let index = 0; index < tracks.length; index++) {
+    const track = tracks[index]!;
+    options.onProgress?.(index + 1, tracks.length, track.name);
+    const single: Project = { ...project, tracks: [track] };
+    const { blob } = await renderProject(single, {
+      ...(options.sampleRate ? { sampleRate: options.sampleRate } : {}),
+      normalize: false,
+      master: false,
+    });
+    files.push({
+      name: `${String(index + 1).padStart(2, "0")}-${slug(track.name)}.wav`,
+      blob,
+    });
+  }
+  return files;
+}
+
+function slug(value: string): string {
+  return (
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "pista"
+  );
 }
 
 export async function renderProjectToWav(project: Project, sampleRate = 44_100): Promise<Blob> {

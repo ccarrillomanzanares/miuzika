@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@opendaw/studio-sdk": "^0.0.175",
+    "fflate": "^0.8.3",
     "zod": "^4.1.0"
   },
   "devDependencies": {

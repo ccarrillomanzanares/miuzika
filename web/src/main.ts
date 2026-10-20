@@ -319,6 +319,25 @@ $("new-song").addEventListener("click", () => {
   addMessage("assistant", "Cuéntame qué quieres crear: género, tonalidad, tempo, instrumentos o una referencia.");
 });
 
+$("export-stems").addEventListener("click", async () => {
+  if (!project || project.tracks.length === 0) return;
+  setBusy(true, "Renderizando stems…");
+  try {
+    const { renderStems } = await import("./render.ts");
+    const files = await renderStems(project, {
+      onProgress: (index, total, name) => setStatus(`Stem ${index}/${total}: ${name}…`),
+    });
+    const { zipStems } = await import("./stems-zip.ts");
+    const archive = await zipStems(files);
+    download(archive, `${slug(project.name)}-stems.zip`);
+    addMessage("assistant", `Stems listos: ${files.length} pistas (pre-máster, con sus FX).`);
+  } catch (error) {
+    addMessage("system", `No se pudieron renderizar los stems: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    setBusy(false);
+  }
+});
+
 $("export-midi").addEventListener("click", () => {
   if (!project || project.tracks.length === 0) return;
   const bytes = projectToMidi(project);
