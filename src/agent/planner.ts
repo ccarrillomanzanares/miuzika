@@ -59,11 +59,25 @@ export async function planSong(client: LlmClient, prompt: string, options: PlanO
       ],
       jsonMode: true,
       temperature: attempt === 0 ? (options.temperature ?? 0.8) : 0.4,
-      maxTokens: 4000,
+      reasoningEffort: "low",
+      // 68 compases + 7 pistas + secciones no caben en los 4k anteriores.
+      maxTokens: 12_000,
     });
 
     try {
-      const plan = normalizePlan(parseSongPlan(extractJson(response.content ?? "")));
+      const finish = (response.raw as { choices?: Array<{ finish_reason?: string }> })
+        ?.choices?.[0]?.finish_reason;
+      if (!response.content?.trim()) {
+        throw new Error(
+          finish === "length"
+            ? "El plan se cortó por límite de tokens. Reduce el detalle o sube maxTokens."
+            : "El LLM no devolvió contenido para el plan.",
+        );
+      }
+      if (finish === "length") {
+        throw new Error("El plan se cortó por límite de tokens. Reduce el detalle o sube maxTokens.");
+      }
+      const plan = normalizePlan(parseSongPlan(extractJson(response.content)));
       const issues = [
         ...validatePlan(plan),
         ...(options.constraints ? checkConstraints(plan, options.constraints) : []),
