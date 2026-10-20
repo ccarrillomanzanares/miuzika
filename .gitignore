@@ -5,3 +5,6 @@ dist-web/
 *.log
 .env
 .dist/
+
+__pycache__/
+*.pyc
