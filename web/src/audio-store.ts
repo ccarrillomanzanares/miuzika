@@ -53,7 +53,7 @@ export async function persistAudioAsset(
   durationBeats: number,
   blob: Blob,
 ): Promise<boolean> {
-  return putAudioAsset({ id, name, durationBeats, blob, savedAt: Date.now() });
+  return putAudioAsset({ id, name, durationBeats, blob });
 }
 
 export interface HydrateResult {

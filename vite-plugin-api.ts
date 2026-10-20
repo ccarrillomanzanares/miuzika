@@ -104,8 +104,7 @@ async function handler(
       const prompt = String(body.prompt ?? "").trim();
       if (!prompt) return sendJson(res, 400, { error: "Describe el sample que quieres" });
 
-      const kind =
-        body.kind === "loop" ? "loop" : body.kind === "industrial" ? "industrial" : "one_shot";
+      const kind = body.kind === "loop" ? "loop" : "one_shot";
       const rawKey = body.key as { tonic?: unknown; mode?: unknown } | undefined;
       const key =
         rawKey && typeof rawKey.tonic === "string" && typeof rawKey.mode === "string"

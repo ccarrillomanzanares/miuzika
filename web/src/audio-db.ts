@@ -6,7 +6,6 @@ export interface StoredAudioAsset {
   durationBeats: number;
   /** WAV original o bounce ya renderizado. */
   blob: Blob;
-  savedAt: number;
 }
 
 const DB_NAME = "miuzika";
@@ -91,13 +90,4 @@ export async function putAudioAsset(asset: StoredAudioAsset): Promise<boolean> {
 
 export async function getAudioAsset(id: string): Promise<StoredAudioAsset | null> {
   return readAsset((store) => store.get(id));
-}
-
-export async function deleteAudioAsset(id: string): Promise<boolean> {
-  return writeAsset((store) => store.delete(id));
-}
-
-export async function listAudioAssets(): Promise<StoredAudioAsset[]> {
-  const result = await readAsset((store) => store.getAll());
-  return Array.isArray(result) ? (result as StoredAudioAsset[]) : [];
 }

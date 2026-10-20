@@ -158,6 +158,33 @@ function setBusy(value: boolean, text = ""): void {
   sendButton.disabled = value;
   sendButton.textContent = value ? "…" : "Enviar";
   setStatus(text);
+  updateActions();
+}
+
+/** Activa solo las acciones que tienen sentido para el proyecto actual. */
+function updateActions(): void {
+  const enabled = ready && !busy;
+  const hasProject = project !== null;
+  const hasTracks = Boolean(project && project.tracks.length > 0);
+  const hasMidi = Boolean(
+    project?.tracks.some(
+      (track) => track.kind === "midi" && track.clips.some((clip) => clip.notes.length > 0),
+    ),
+  );
+
+  $<HTMLButtonElement>("export-wav").disabled = !enabled || !hasTracks;
+  $<HTMLButtonElement>("export-stems").disabled = !enabled || !hasTracks;
+  $<HTMLButtonElement>("bounce-samples").disabled = !enabled || !hasMidi;
+  $<HTMLButtonElement>("export-midi").disabled = !enabled || !hasMidi;
+  $<HTMLButtonElement>("export-opendaw").disabled = !enabled || !hasMidi;
+  $<HTMLButtonElement>("export-json").disabled = !enabled || !hasProject;
+  $<HTMLInputElement>("audio-file").disabled = !enabled || !hasProject;
+  $<HTMLInputElement>("open").disabled = !enabled;
+  $<HTMLSelectElement>("master-target").disabled = !enabled || !hasTracks;
+  $<HTMLButtonElement>("sample-lab").disabled = !enabled;
+  $<HTMLButtonElement>("new-song").disabled = !enabled;
+  playButton.disabled = !enabled || !hasTracks;
+  stopButton.disabled = !ready || !hasTracks;
 }
 
 function setPlaying(value: boolean): void {
@@ -306,6 +333,7 @@ function applyProject(next: Project | null): void {
   }
   project = next;
   persist();
+  updateActions();
   if (!next) {
     timeline.setProject({
       schemaVersion: 1,
@@ -365,22 +393,22 @@ async function api<T>(url: string, body: unknown): Promise<T> {
 const NEW_SONG = /\b(otra canci[oó]n|nueva canci[oó]n|canci[oó]n nueva|desde cero|de cero|empezar de nuevo|empieza de nuevo)\b/i;
 
 async function convertToSamples(base: Project, ids: string[]): Promise<void> {
-  setBusy(true, "Convirtiendo a samples…");
+  setBusy(true, "Congelando pistas a audio…");
   try {
     const { bounceTracks } = await import("./bounce.ts");
     const next = await bounceTracks(
       base,
       ids,
-      (index, total, name) => setStatus(`Sample ${index}/${total}: ${name}…`),
+      (index, total, name) => setStatus(`Congelando ${index}/${total}: ${name}…`),
       (message) => addMessage("system", message),
     );
     setProject(next);
     addMessage(
       "assistant",
-      `Convertidas ${ids.length} pista(s) a audio. Las no marcadas siguen en MIDI.`,
+      `Congeladas ${ids.length} pista(s) a audio. Las no marcadas siguen en MIDI.`,
     );
   } catch (error) {
-    addMessage("system", `No se pudo convertir: ${error instanceof Error ? error.message : String(error)}`);
+    addMessage("system", `No se pudo congelar: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
     setBusy(false);
   }
@@ -570,7 +598,7 @@ $("bounce-samples").addEventListener("click", () => {
   if (!ready || !project) return;
   const midiTracks = project.tracks.filter((track) => track.kind === "midi");
   if (midiTracks.length === 0) {
-    addMessage("system", "No hay pistas MIDI que convertir.");
+    addMessage("system", "No hay pistas MIDI que congelar.");
     return;
   }
   const base = project;
@@ -784,8 +812,10 @@ async function boot(): Promise<void> {
 
   setPlaying(false);
   ready = true;
+  updateActions();
 }
 
+updateActions();
 void loadDrumKit();
 void player.prepare();
 void boot();

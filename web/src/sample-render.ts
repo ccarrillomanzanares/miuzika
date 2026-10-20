@@ -369,8 +369,3 @@ export async function renderSample(
     durationBeats,
   };
 }
-
-/** Utilidad para test y para el panel: duración en beats sin renderizar. */
-export function sampleDurationBeats(spec: SampleSpec, projectBpm: number): number {
-  return spec.kind === "loop" ? spec.bars * 4 : spec.duration * (projectBpm / 60);
-}

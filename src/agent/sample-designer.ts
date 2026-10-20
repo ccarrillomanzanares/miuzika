@@ -27,7 +27,8 @@ ${SAMPLE_SCHEMA}
 export interface SampleDesignContext {
   bpm: number;
   key: { tonic: string; mode: string };
-  kind: "one_shot" | "industrial" | "loop";
+  /** Formato de salida; la macro/motor concreto es interno. */
+  kind: "one_shot" | "loop";
   bars: number;
 }
 
@@ -60,11 +61,7 @@ export async function designSample(
   let lastError: unknown;
 
   const describe =
-    context.kind === "loop"
-      ? `loop de ${context.bars} compases`
-      : context.kind === "industrial"
-        ? "one-shot industrial"
-        : "one-shot";
+    context.kind === "loop" ? `loop de ${context.bars} compases` : "one-shot";
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     const user = [
@@ -90,19 +87,14 @@ export async function designSample(
 
     try {
       let spec = SampleSpecSchema.parse(extractJson(response.content ?? ""));
-      const accepted =
-        context.kind === "loop"
-          ? spec.kind === "loop"
-          : context.kind === "industrial"
-            ? spec.kind === "industrial"
-            : spec.kind !== "loop";
+      const accepted = context.kind === "loop" ? spec.kind === "loop" : spec.kind !== "loop";
       if (!accepted) throw new Error(`Se pidió ${context.kind} y llegó ${spec.kind}`);
 
       if (spec.kind === "loop") {
         spec.bpm = context.bpm;
         validateLoopStyle(spec);
       } else if (context.kind === "one_shot" && spec.kind === "one_shot" && WANTS_INDUSTRIAL.test(prompt)) {
-        // El modelo a veces devuelve un one-shot básico aunque pidan un stab: forzamos el motor industrial.
+        // El modelo a veces devuelve un one-shot básico aunque pidan industrial: forzamos la macro.
         spec = SampleSpecSchema.parse({
           kind: "industrial",
           name: spec.name,

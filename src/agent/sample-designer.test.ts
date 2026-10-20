@@ -55,17 +55,17 @@ test("reintenta si el estilo no es válido", async () => {
   if (spec.kind === "loop") assert.equal(spec.style, "punk");
 });
 
-test("diseña un one-shot industrial", async () => {
+test("acepta la macro industrial dentro de un one-shot", async () => {
   const industrial = { kind: "industrial", name: "stab E2", duration: 2.4 };
   const client = new FakeClient([{ content: JSON.stringify(industrial), toolCalls: [], raw: {} }]);
   const spec = await designSample(client, "stab industrial en mi", {
     ...context,
-    kind: "industrial",
+    kind: "one_shot",
   });
   assert.equal(spec.kind, "industrial");
 });
 
-test("fuerza industrial si el prompt lo pide y llega un one-shot básico", async () => {
+test("fuerza la macro si el prompt pide industrial y llega un one-shot básico", async () => {
   const oneShot = {
     kind: "one_shot",
     name: "stab",

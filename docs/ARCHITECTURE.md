@@ -196,7 +196,7 @@ Implementado en el spike:
   de ruido, saturación tanh asimétrica, bitcrush, SVF TPT con barrido de cutoff, taps de delay y
   ensanchado Haas. Es una macro de ejemplo, no el único motor; `IndustrialSpec` expone sus
   parámetros y `sample-render.ts` lo convierte en `AudioBuffer`/WAV.
-- «A samples» (`web/src/bounce.ts`, `bounce-dialog.ts`): el usuario elige pistas MIDI una a una;
+- «Congelar» (`web/src/bounce.ts`, `bounce-dialog.ts`): el usuario elige pistas MIDI una a una;
   cada una se renderiza sola con sus FX, sin buses ni máster (`buses: false`), y se sustituye por
   una pista de audio con el mismo tipo de instrumento para conservar el bus. Los stems largos se
   parten en clips de 64 compases (límite de `add_audio_clip`) y se atenúan todos por igual solo

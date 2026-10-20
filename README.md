@@ -75,7 +75,7 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
 - **Chat**: si el proyecto está vacío, la primera petición planifica una canción completa; las
   siguientes editan con herramientas (`apply_ops`, `undo`, digest…).
 - **Timeline**: clic para mover el playhead, Ctrl+rueda para zoom, clic en la cabecera para mute.
-- **Sample Lab**: botón «Sample». Describes un sonido (“kick oscuro distorsionado para punk”,
+- **Sample Lab**: botón «Sample Lab». Describes un sonido (“kick oscuro distorsionado para punk”,
   “loop de bajo punk en mi menor”), el LLM diseña la receta, el motor la renderiza a WAV y la
   escuchas antes de insertarla como clip. Puedes **elegir o crear la pista de destino**
   (`Drums Samples`, `Bass Samples`…), así que cada sample va a su propia pista. También puedes
@@ -94,19 +94,26 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
   o generación guarda una versión.
 - **Reproducibilidad**: el proyecto guardado contiene las notas, la semilla y los FX; al pulsar ▶
   suena exactamente igual. Volver a generar desde el mismo prompt crea una canción nueva (el LLM
-  no es determinista); para conservar una versión concreta, exporta el JSON.
+  no es determinista); para conservar una versión concreta, exporta el JSON. Si el proyecto
+  contiene audio, exporta también WAV o stems: el JSON no embebe los bytes.
 - **Piano roll**: doble clic en un clip MIDI. Clic añade, arrastrar mueve, clic derecho borra.
   Al aplicar se emite `replace_clip_notes` (la misma validación que usa el LLM).
-- **A samples**: convierte pistas MIDI en clips de audio. Eliges **pista por pista** en el
-  diálogo (Todas/Ninguna y casillas); cada stem se renderiza con sus FX, sin buses ni máster, y
-  se reinserta en el mismo bus. Las canciones largas se parten en clips de 64 compases y los
-  stems se atenúan en bloque solo si haría falta evitar clipping.
-- **Audio persistente**: los WAV importados, los del Sample Lab y los stems de «A samples» se
+- **Congelar**: convierte pistas MIDI en clips de audio dentro del proyecto. Eliges **pista por
+  pista** en el diálogo (Todas/Ninguna y casillas); cada stem se renderiza con sus FX, sin buses
+  ni máster, y se reinserta en el mismo bus. Las canciones largas se parten en clips de 64
+  compases y los stems se atenúan en bloque solo si haría falta evitar clipping.
+- **Audio persistente**: los WAV importados, los del Sample Lab y las pistas congeladas se
   guardan en IndexedDB (`miuzika` / `audio-assets`) y se rehidratan al recargar, también al
   deshacer/rehacer. El JSON solo lleva metadatos: al abrirlo en otro navegador hay que reimportar
   los WAV.
 - **Audio**: botón «Audio» importa WAV al playhead, dibuja la forma de onda y lo reproduce.
-- **Exportar**: WAV (mixdown offline), MIDI, proyecto openDAW (`.odw`) y JSON.
+- **WAV**: mixdown final del proyecto con master, limitador y normalización de loudness.
+- **Stems**: un WAV por pista, con sus FX y sin máster; para mezclar fuera.
+- **MIDI**: solo pistas MIDI; las pistas de audio no se incluyen.
+- **openDAW**: proyecto `.odw`; por ahora exporta MIDI y avisa de que las pistas de audio
+  todavía no se incluyen (`SampleService`/`AudioFileBox` pendiente).
+- **JSON**: proyecto canónico con notas, FX, semilla y metadatos. No incluye los WAV; esos viven
+  en IndexedDB. Para mover el proyecto a otro navegador hay que reimportar el audio.
 
 Build de producción: `npm run build:web` y `npm run preview`. La API local vive en un plugin de
 Vite; para desplegar de verdad hará falta un servidor Node aparte que exponga `/api/*`.

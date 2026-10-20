@@ -22,15 +22,15 @@
             <option value="commercial">−10 LUFS</option>
             <option value="raw">Sin normalizar</option>
           </select>
-          <button id="export-wav" title="Mixdown del proyecto a WAV">WAV</button>
-          <button id="export-stems" title="WAV por pista, con sus FX y sin máster">Stems</button>
-          <button id="bounce-samples" title="Convertir pistas MIDI en clips de audio">A samples</button>
-          <button id="export-midi" title="Exportar Standard MIDI File">MIDI</button>
-          <button id="export-opendaw" title="Exportar proyecto de openDAW">openDAW</button>
-          <button id="export-json" title="Exportar el proyecto canónico">JSON</button>
+          <button id="export-wav" title="Mixdown del proyecto a WAV" disabled>WAV</button>
+          <button id="export-stems" title="WAV por pista, con sus FX y sin máster" disabled>Stems</button>
+          <button id="bounce-samples" title="Congelar pistas MIDI seleccionadas en clips de audio" disabled>Congelar</button>
+          <button id="export-midi" title="Exportar MIDI (solo pistas MIDI)" disabled>MIDI</button>
+          <button id="export-opendaw" title="Exportar a openDAW (solo pistas MIDI por ahora)" disabled>openDAW</button>
+          <button id="export-json" title="Proyecto canónico: metadatos; no incluye los WAV" disabled>JSON</button>
           <label class="file">Abrir<input id="open" type="file" accept=".json,application/json" /></label>
           <label class="file">Audio<input id="audio-file" type="file" accept="audio/*" multiple /></label>
-          <button id="sample-lab" title="Diseñar un sample con el LLM">Sample</button>
+          <button id="sample-lab" title="Diseñar un sample con el LLM">Sample Lab</button>
           <button id="new-song" title="Empezar de cero">Nueva</button>
         </div>
       </header>

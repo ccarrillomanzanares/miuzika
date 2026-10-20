@@ -40,7 +40,7 @@ export function openBounceDialog(options: BounceDialogOptions): void {
   overlay.innerHTML = `
     <div class="modal-card bounce-card">
       <header>
-        <div><strong>Convertir a samples</strong><span>Cada pista se renderiza con sus FX y se sustituye por un clip de audio.</span></div>
+        <div><strong>Congelar pistas a audio</strong><span>Cada pista se renderiza con sus FX y se sustituye por un clip de audio.</span></div>
         <button class="close" title="Cerrar">×</button>
       </header>
       <div class="bounce-body">
@@ -52,7 +52,7 @@ export function openBounceDialog(options: BounceDialogOptions): void {
         <div class="bounce-status"></div>
         <div class="bounce-actions">
           <button class="cancel">Cancelar</button>
-          <button class="convert">Convertir seleccionadas</button>
+          <button class="convert">Congelar seleccionadas</button>
         </div>
       </div>
     </div>`;
