@@ -75,7 +75,6 @@ Estructura:
 - "roles" de cada sección debe ser subconjunto de los roles de las pistas.
 - Estilos válidos: drums (gated_80s, siniestro_punk, four_on_floor, half_time, breakbeat, driving, ambient); bass (straight8, driving8, syncopated, quarters, punk, ambient, sub); chords/pad (pad, gated, stab, offbeat, power, sustained); lead y arp usan "hook" o "up".
 - No incluyas arp por defecto. Solo si el usuario lo pide o el género es techno/ambient y aporta movimiento. En synthpop puede ser una textura del estribillo, nunca en todas las secciones. En rock, punk o hip hop, no lo uses.
-- Varía la instrumentación entre canciones: no repitas siempre el mismo conjunto de pistas. Elige 4-6 pistas, deja espacio y evita capas que no aporten.
 - Octavas: bass 1-2, chords/pad 3-4, lead/arp 5.
 - La progresión debe encajar con la tonalidad pedida. Si no se pide tonalidad, elige una coherente con el género.
 - Si es un loop: UNA sola sección, solo las pistas mencionadas y la duración pedida (4 u 8 compases por defecto).

@@ -247,6 +247,7 @@ export interface PromptConstraints {
   bpmRange?: [number, number];
   bars?: number;
   minor?: boolean;
+  major?: boolean;
   noDrums?: boolean;
   loop?: boolean;
   roles?: Role[];
@@ -272,6 +273,8 @@ export function extractConstraints(prompt: string): PromptConstraints {
     constraints.key = detected.key;
   } else if (/oscur|dark|triste|melancol|sombri|siniestr/.test(text)) {
     constraints.minor = true;
+  } else if (/alegre|bright|feliz|radiante|luminos/.test(text)) {
+    constraints.major = true;
   }
 
   if (tempo.explicit) constraints.bpm = tempo.bpm;
@@ -297,6 +300,7 @@ export function describeConstraints(constraints: PromptConstraints): string {
   else if (constraints.bpmRange) lines.push(`tempo: entre ${constraints.bpmRange[0]} y ${constraints.bpmRange[1]} BPM`);
   if (constraints.bars !== undefined) lines.push(`duración exacta: ${constraints.bars} compases`);
   if (constraints.minor) lines.push("modo menor");
+  if (constraints.major) lines.push("modo mayor");
   if (constraints.noDrums) lines.push("sin pistas de batería");
   if (constraints.loop) lines.push(`loop: una sola sección de ${constraints.bars} compases`);
   if (constraints.roles) lines.push(`solo estos roles: ${constraints.roles.join(", ")}`);
@@ -332,6 +336,9 @@ export function checkConstraints(plan: SongPlan, constraints: PromptConstraints)
   }
   if (constraints.minor && !["minor", "harmonicMinor", "phrygian"].includes(plan.key.mode)) {
     issues.push(`El modo debe ser menor (recibido ${plan.key.mode})`);
+  }
+  if (constraints.major && !["major", "lydian", "mixolydian"].includes(plan.key.mode)) {
+    issues.push(`El modo debe ser mayor (recibido ${plan.key.mode})`);
   }
   if (constraints.noDrums && plan.tracks.some((track) => track.role === "drums")) {
     issues.push("No debe haber pistas de batería");

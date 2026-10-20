@@ -20,6 +20,8 @@ const promptInput = $<HTMLTextAreaElement>("prompt");
 const sendButton = $<HTMLButtonElement>("send");
 const playButton = $<HTMLButtonElement>("play");
 const stopButton = $<HTMLButtonElement>("stop");
+const undoButton = $<HTMLButtonElement>("undo");
+const redoButton = $<HTMLButtonElement>("redo");
 const statusEl = $("status");
 const songInfo = $("song-info");
 const examples = $("examples");
@@ -29,6 +31,11 @@ const timeline = new TimelineView(canvas, wrap, heads);
 
 let project: Project | null = loadStored();
 let busy = false;
+
+const HISTORY_KEY = "miuzika.history";
+const HISTORY_LIMIT = 8;
+let history: Project[] = loadHistory();
+let future: Project[] = [];
 
 interface Example {
   text: string;
@@ -172,7 +179,71 @@ function loadStored(): Project | null {
   }
 }
 
-function setProject(next: Project | null): void {
+function loadHistory(): Project[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((entry): entry is Project => Boolean(entry) && entry.schemaVersion === 1)
+      .slice(-HISTORY_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(): void {
+  try {
+    while (history.length > 0 && JSON.stringify(history).length > 4_000_000) history.shift();
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch {
+    try {
+      localStorage.removeItem(HISTORY_KEY);
+    } catch {
+      /* sin historial persistente */
+    }
+  }
+}
+
+function updateHistoryButtons(): void {
+  undoButton.disabled = history.length === 0;
+  redoButton.disabled = future.length === 0;
+}
+
+function undo(): void {
+  const previous = history.pop();
+  if (!previous) return;
+  if (project) future.push(project);
+  saveHistory();
+  applyProject(previous);
+  updateHistoryButtons();
+}
+
+function redo(): void {
+  const next = future.pop();
+  if (!next) return;
+  if (project) {
+    history.push(project);
+    if (history.length > HISTORY_LIMIT) history.shift();
+  }
+  saveHistory();
+  applyProject(next);
+  updateHistoryButtons();
+}
+
+function setProject(next: Project | null, record = true): void {
+  if (record && project) {
+    history.push(structuredClone(project));
+    if (history.length > HISTORY_LIMIT) history.shift();
+    future = [];
+    saveHistory();
+  }
+  applyProject(next);
+  updateHistoryButtons();
+}
+
+function applyProject(next: Project | null): void {
   if (player.isPlaying) {
     player.stop();
     setPlaying(false);
@@ -311,6 +382,9 @@ stopButton.addEventListener("click", () => {
   setPlaying(false);
   if (project) player.seek(project, 0);
 });
+
+undoButton.addEventListener("click", undo);
+redoButton.addEventListener("click", redo);
 
 $("new-song").addEventListener("click", () => {
   if (project && project.tracks.length > 0 && !confirm("¿Empezar una canción nueva? Se perderá la actual.")) return;
@@ -473,12 +547,27 @@ promptInput.addEventListener("keydown", (event) => {
   }
 });
 
+window.addEventListener("keydown", (event) => {
+  const target = event.target as HTMLElement | null;
+  if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+  if (!(event.ctrlKey || event.metaKey)) return;
+  const key = event.key.toLowerCase();
+  if (key === "z") {
+    event.preventDefault();
+    if (event.shiftKey) redo();
+    else undo();
+  } else if (key === "y") {
+    event.preventDefault();
+    redo();
+  }
+});
+
 renderExamples();
 
 // --- Arranque --------------------------------------------------------------
 
 if (project) {
-  setProject(project);
+  setProject(project, false);
   addMessage("assistant", `Proyecto cargado: “${project.name}”. Pide cambios o pulsa ▶.`);
   if (project.tracks.some((track) => track.clips.some((clip) => clip.audio))) {
     addMessage(
@@ -487,7 +576,7 @@ if (project) {
     );
   }
 } else {
-  setProject(null);
+  setProject(null, false);
   addMessage(
     "assistant",
     "Soy Mizu, tu coproductor. Pídeme una canción completa o un loop: “synth pop 80s oscuro en re menor, lenta”.",
@@ -501,8 +590,16 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__miuzika = {
     player,
     timeline,
+    undo,
+    redo,
     get project() {
       return project;
+    },
+    get history() {
+      return history;
+    },
+    get future() {
+      return future;
     },
   };
 }

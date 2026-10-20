@@ -75,6 +75,12 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
 - **Chat**: si el proyecto está vacío, la primera petición planifica una canción completa; las
   siguientes editan con herramientas (`apply_ops`, `undo`, digest…).
 - **Timeline**: clic para mover el playhead, Ctrl+rueda para zoom, clic en la cabecera para mute.
+- **Deshacer/rehacer**: botones ↶ ↷ (Ctrl+Z / Ctrl+Shift+Z) con historial de las últimas 8
+  versiones, persistente al recargar. Cada mensaje del chat, edición del piano roll, importación
+  o generación guarda una versión.
+- **Reproducibilidad**: el proyecto guardado contiene las notas, la semilla y los FX; al pulsar ▶
+  suena exactamente igual. Volver a generar desde el mismo prompt crea una canción nueva (el LLM
+  no es determinista); para conservar una versión concreta, exporta el JSON.
 - **Piano roll**: doble clic en un clip MIDI. Clic añade, arrastrar mueve, clic derecho borra.
   Al aplicar se emite `replace_clip_notes` (la misma validación que usa el LLM).
 - **Audio**: botón «Audio» importa WAV al playhead, dibuja la forma de onda y lo reproduce.
