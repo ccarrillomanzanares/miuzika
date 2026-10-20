@@ -143,6 +143,18 @@ test("set_audio_clip ajusta offset, duración y ganancia", () => {
   assert.equal(clip.audio?.gainDb, -6);
 });
 
+test("acepta booleanos en parámetros de dispositivo", () => {
+  const { project } = applyOps(baseProject(), [
+    { op: "add_track", id: "trk_fx", name: "FX" },
+    {
+      op: "add_device",
+      trackId: "trk_fx",
+      device: { type: "delay", params: { pingPong: true, wet: 0.2 } },
+    },
+  ]);
+  assert.equal(project.tracks[0]!.devices[0]!.params.pingPong, 1);
+});
+
 test("add_notes usa tiempos relativos al clip", () => {  const { project } = applyOps(baseProject(), [
     { op: "add_track", id: "trk_lead", name: "Lead" },
     {

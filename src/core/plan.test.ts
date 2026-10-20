@@ -80,6 +80,26 @@ test("un loop puede pedir arp aunque el preset no lo tenga", () => {
   assert.equal(plan.sections[0]!.roles.includes("arp"), true);
 });
 
+test("acepta booleanos en parámetros de dispositivo", () => {
+  const raw = {
+    ...presetPlan("techno", { bars: 4 }),
+    tracks: [
+      {
+        name: "Delay",
+        role: "lead",
+        style: "hook",
+        gainDb: 0,
+        pan: 0,
+        devices: [{ type: "delay", params: { pingPong: true, wet: 0.2 } }],
+      },
+    ],
+    sections: [{ name: "loop", bars: 4, energy: 0.6, roles: ["lead"] }],
+  };
+  const parsed = parseSongPlan(raw);
+  assert.equal(parsed.tracks[0]!.devices[0]!.params!.pingPong, 1);
+  assert.deepEqual(validatePlan(parsed), []);
+});
+
 test("composePlan usa ids de pista estables", () => {
   const ops = composePlan(presetPlan("techno"));
   const addTrack = ops.filter((op) => op.op === "add_track");

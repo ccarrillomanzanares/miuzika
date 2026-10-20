@@ -7,6 +7,7 @@
 
 import { z } from "zod";
 import type { DeviceType, InstrumentType, KeySignature } from "./types.ts";
+import { ParamValueSchema, numericParam } from "./params.ts";
 import { DEVICE_PARAMS, DEVICE_TYPES } from "./types.ts";
 import type { Role } from "./patterns.ts";
 import { BASS_STYLES, CHORD_RHYTHMS, DRUM_STYLES, isValidChord } from "./patterns.ts";
@@ -96,7 +97,7 @@ export const SongPlanSchema = z.object({
           .array(
             z.object({
               type: z.enum(DEVICE_TYPES),
-              params: z.record(z.string(), z.number()).optional(),
+              params: z.record(z.string(), ParamValueSchema).optional(),
             }),
           )
           .default([]),
@@ -118,7 +119,7 @@ export function parseSongPlan(value: unknown): SongPlan {
       `Plan inválido: ${result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}`,
     );
   }
-  return result.data as SongPlan;
+  return normalizePlan(result.data as unknown as SongPlan);
 }
 
 /**
@@ -147,7 +148,8 @@ export function normalizePlan(plan: SongPlan): SongPlan {
       if (!allowed) continue;
       const aliases = PARAM_ALIASES[device.type] ?? {};
       const params: Record<string, number> = {};
-      for (const [name, value] of Object.entries(device.params ?? {})) {
+      for (const [name, raw] of Object.entries(device.params ?? {}) as Array<[string, number | boolean]>) {
+        const value = numericParam(raw);
         const target = aliases[name] ?? name;
         const range = allowed[target];
         if (!range) {

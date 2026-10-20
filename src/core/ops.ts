@@ -4,8 +4,7 @@
  */
 
 import { z } from "zod";
-import type { Device, DeviceType, Note, Project, Track } from "./types.ts";
-import {
+import type { Device, DeviceType, Note, Project, Track } from "./types.ts";import {
   DEVICE_DEFAULTS,
   DEVICE_PARAMS,
   DEVICE_TYPES,
@@ -19,6 +18,7 @@ import { expandPattern } from "./patterns.ts";
 import { MODE_NAMES, canonicalPitchClass, pitchClass } from "./theory.ts";
 import { validateProject } from "./project.ts";
 import type { Issue } from "./project.ts";
+import { ParamValueSchema, numericParam } from "./params.ts";
 
 export class OpError extends Error {
   constructor(message: string) {
@@ -147,7 +147,7 @@ const AddDeviceOp = z.object({
   id: IdSchema.optional(),
   device: z.object({
     type: z.enum(DEVICE_TYPES),
-    params: z.record(z.string(), z.number()).optional(),
+    params: z.record(z.string(), ParamValueSchema).optional(),
   }),
 });
 
@@ -155,7 +155,7 @@ const SetDeviceOp = z.object({
   op: z.literal("set_device"),
   trackId: IdSchema,
   deviceId: IdSchema.describe("Id o tipo del dispositivo (p. ej. 'reverb')"),
-  params: z.record(z.string(), z.number()).describe("Solo los parámetros a cambiar"),
+  params: z.record(z.string(), ParamValueSchema).describe("Solo los parámetros a cambiar"),
 });
 
 const RemoveDeviceOp = z.object({
@@ -346,10 +346,15 @@ function createTrack(project: Project, name: string, instrument?: Track["instrum
   return track;
 }
 
-function coerceParams(type: DeviceType, params: Record<string, number> | undefined, base?: Record<string, number>) {
+function coerceParams(
+  type: DeviceType,
+  params: Record<string, number | boolean> | undefined,
+  base?: Record<string, number>,
+) {
   const allowed = DEVICE_PARAMS[type];
   const result: Record<string, number> = { ...(base ?? DEVICE_DEFAULTS[type]) };
-  for (const [name, value] of Object.entries(params ?? {})) {
+  for (const [name, raw] of Object.entries(params ?? {})) {
+    const value = numericParam(raw);
     const range = allowed[name];
     if (!range) {
       throw new OpError(
