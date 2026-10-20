@@ -98,6 +98,23 @@ header {
   flex-shrink: 0;
 }
 
+select {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: #171a23;
+  color: var(--text);
+  border-radius: 7px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+select:hover {
+  background: #1e2230;
+  border-color: #333a4a;
+}
+
 button,
 .file {
   appearance: none;

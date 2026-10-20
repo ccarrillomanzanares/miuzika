@@ -356,8 +356,13 @@ $("export-wav").addEventListener("click", async () => {
   if (!project || project.tracks.length === 0) return;
   setBusy(true, "Renderizando WAV…");
   try {
+    const target = $<HTMLSelectElement>("master-target").value;
+    const options =
+      target === "raw"
+        ? { normalize: false }
+        : { targetLufs: target === "commercial" ? -10 : -14 };
     const { renderProject } = await import("./render.ts");
-    const result = await renderProject(project);
+    const result = await renderProject(project, options);
     download(result.blob, `${slug(project.name)}.wav`);
     addMessage(
       "assistant",

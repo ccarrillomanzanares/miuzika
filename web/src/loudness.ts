@@ -1,4 +1,4 @@
-/** Medición y normalización de loudness (ITU-R BS.1770, simplificado). */
+import { limitBuffer } from "./limiter.ts";
 
 export interface Loudness {
   /** LUFS integrados (aproximación BS.1770 con gating). */
@@ -136,23 +136,46 @@ export function measureLoudness(buffer: AudioBuffer): Loudness {
   };
 }
 
-/** Aplica ganancia para acercarse al target sin pasarse del techo de pico. */
-export function normalizeBuffer(
-  buffer: AudioBuffer,
-  targetLufs = -14,
-  ceilingDb = -1,
-): Loudness {
-  const before = measureLoudness(buffer);
-  if (!Number.isFinite(before.lufs)) return before;
-
-  let gainDb = targetLufs - before.lufs;
-  if (before.truePeakDb + gainDb > ceilingDb) {
-    gainDb = ceilingDb - before.truePeakDb;
-  }
+/** Aplica ganancia en dB a todas las muestras. */
+function applyGain(buffer: AudioBuffer, gainDb: number): void {
   const gain = 10 ** (gainDb / 20);
   for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
     const data = buffer.getChannelData(channel);
     for (let index = 0; index < data.length; index++) data[index]! *= gain;
+  }
+}
+
+/**
+ * Normaliza al target de loudness. Con limitador puede acercarse a targets
+ * comerciales; sin él, solo baja la ganancia para respetar el techo de pico.
+ */
+export function normalizeBuffer(
+  buffer: AudioBuffer,
+  targetLufs = -14,
+  ceilingDb = -1,
+  useLimiter = true,
+): Loudness {
+  const before = measureLoudness(buffer);
+  if (!Number.isFinite(before.lufs)) return before;
+
+  applyGain(buffer, Math.min(targetLufs - before.lufs, 24));
+  if (useLimiter) {
+    // Margen extra para picos entre muestras.
+    limitBuffer(buffer, ceilingDb - 0.2);
+    // El limitador baja algo el loudness: corrige en una segunda pasada.
+    for (let pass = 0; pass < 2; pass++) {
+      const current = measureLoudness(buffer);
+      const delta = targetLufs - current.lufs;
+      if (!Number.isFinite(delta) || Math.abs(delta) < 0.3) break;
+      applyGain(buffer, Math.max(-6, Math.min(6, delta)));
+      limitBuffer(buffer, ceilingDb - 0.2);
+    }
+    return measureLoudness(buffer);
+  }
+
+  const afterGain = measureLoudness(buffer);
+  if (afterGain.truePeakDb > ceilingDb) {
+    applyGain(buffer, ceilingDb - afterGain.truePeakDb);
   }
   return measureLoudness(buffer);
 }

@@ -17,6 +17,7 @@ export interface RenderOptions {
   sampleRate?: number;
   normalize?: boolean;
   targetLufs?: number;
+  limiter?: boolean;
 }
 
 export interface RenderResult {
@@ -99,7 +100,7 @@ export async function renderProject(project: Project, options: RenderOptions = {
   const loudness =
     options.normalize === false
       ? measureLoudness(rendered)
-      : normalizeBuffer(rendered, options.targetLufs ?? -14);
+      : normalizeBuffer(rendered, options.targetLufs ?? -14, -1, options.limiter !== false);
   return {
     blob: new Blob([audioBufferToWav(rendered)], { type: "audio/wav" }),
     loudness,
