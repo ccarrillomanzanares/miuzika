@@ -77,7 +77,11 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
 - **Timeline**: clic para mover el playhead, Ctrl+rueda para zoom, clic en la cabecera para mute.
 - **Sample Lab**: botón «Sample». Describes un sonido (“kick oscuro distorsionado para punk”,
   “loop de bajo punk en mi menor”), el LLM diseña la receta, el motor la renderiza a WAV y la
-  escuchas antes de insertarla como clip. Los loops se ajustan al BPM del proyecto.
+  escuchas antes de insertarla como clip. Puedes **elegir o crear la pista de destino**
+  (`Drums Samples`, `Bass Samples`…), así que cada sample va a su propia pista.
+- **Proyecto mixto**: puedes combinar pistas de samples y pistas MIDI. El Sample Lab crea el
+  proyecto vacío si hace falta; el chat añade o edita pistas MIDI con el agente. El planificador
+  de canción completa solo se usa en un proyecto vacío o al pedir “otra canción/desde cero”.
 - **Deshacer/rehacer**: botones ↶ ↷ (Ctrl+Z / Ctrl+Shift+Z) con historial de las últimas 8
   versiones, persistente al recargar. Cada mensaje del chat, edición del piano roll, importación
   o generación guarda una versión.

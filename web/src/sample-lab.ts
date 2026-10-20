@@ -5,11 +5,34 @@ import type { SampleSpec } from "../../src/core/sample.ts";
 import type { SampleResult } from "./sample-render.ts";
 import { renderSample } from "./sample-render.ts";
 
+export interface SampleInsert {
+  result: SampleResult;
+  trackName: string;
+}
+
 export interface SampleLabOptions {
   bpm: number;
   key: KeySignature;
-  onInsert: (result: SampleResult) => void;
+  /** Nombres de pistas de audio existentes, para el desplegable. */
+  tracks: string[];
+  onInsert: (insert: SampleInsert) => void;
 }
+
+const escapeAttr = (value: string): string =>
+  value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      default:
+        return "&#39;";
+    }
+  });
 
 export function openSampleLab(options: SampleLabOptions): void {
   const overlay = document.createElement("div");
@@ -30,6 +53,14 @@ export function openSampleLab(options: SampleLabOptions): void {
           <input class="sample-bars" type="number" min="1" max="8" value="2" title="Compases del loop" />
           <button class="design">Diseñar</button>
         </div>
+        <div class="sample-row">
+          <label class="sample-track-label">Pista
+            <input class="sample-track" list="sample-track-list" value="Samples" title="Pista de destino (puedes escribir una nueva)" />
+          </label>
+          <datalist id="sample-track-list">
+            ${options.tracks.map((name) => `<option value="${escapeAttr(name)}"></option>`).join("")}
+          </datalist>
+        </div>
         <div class="sample-status">Escribe una idea y pulsa Diseñar.</div>
         <div class="sample-result" hidden>
           <div class="sample-name"></div>
@@ -43,6 +74,7 @@ export function openSampleLab(options: SampleLabOptions): void {
   const prompt = overlay.querySelector<HTMLTextAreaElement>(".sample-prompt")!;
   const kind = overlay.querySelector<HTMLSelectElement>(".sample-kind")!;
   const bars = overlay.querySelector<HTMLInputElement>(".sample-bars")!;
+  const trackInput = overlay.querySelector<HTMLInputElement>(".sample-track")!;
   const design = overlay.querySelector<HTMLButtonElement>(".design")!;
   const status = overlay.querySelector<HTMLElement>(".sample-status")!;
   const resultBox = overlay.querySelector<HTMLElement>(".sample-result")!;
@@ -111,7 +143,10 @@ export function openSampleLab(options: SampleLabOptions): void {
 
   insert.addEventListener("click", () => {
     if (!current) return;
-    options.onInsert(current);
+    options.onInsert({
+      result: current,
+      trackName: trackInput.value.trim() || "Samples",
+    });
     close();
   });
 

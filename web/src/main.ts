@@ -1,6 +1,6 @@
 import type { Project } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
-import { projectStats } from "../../src/core/project.ts";
+import { createProject, projectStats } from "../../src/core/project.ts";
 import { projectToMidi } from "../../src/core/midi.ts";
 import { applyOps } from "../../src/core/ops.ts";
 import type { Op } from "../../src/core/ops.ts";
@@ -333,7 +333,14 @@ async function send(prompt: string): Promise<void> {
   setBusy(true, "Pensando…");
 
   try {
-    if (!project || project.tracks.length === 0 || NEW_SONG.test(text)) {
+    const wantsTrack = /\b(añade|añadir|agrega|agregar|crea|crear)\b[\s\S]*\b(pista|track|parte)\b/i.test(text);
+    if (!project && wantsTrack) {
+      setProject(createProject({ name: "Nuevo proyecto" }));
+    }
+    const startsEmpty = project !== null && project.tracks.length === 0;
+    const generateSong = !project || (startsEmpty && !wantsTrack) || NEW_SONG.test(text);
+
+    if (generateSong) {
       const data = await api<{ project: Project; warnings?: string[] }>("/api/generate", { prompt: text });
       setProject(data.project);
       addMessage(
@@ -430,14 +437,14 @@ $("export-stems").addEventListener("click", async () => {
 });
 
 $("sample-lab").addEventListener("click", () => {
-  if (!project) {
-    addMessage("system", "Genera una canción antes de diseñar un sample.");
-    return;
-  }
+  const base = project ?? createProject({ name: "Nuevo proyecto" });
+  if (!project) setProject(base);
+
   openSampleLab({
-    bpm: project.bpm,
-    key: project.key,
-    onInsert: (result) => {
+    bpm: base.bpm,
+    key: base.key,
+    tracks: base.tracks.filter((track) => track.kind === "audio").map((track) => track.name),
+    onInsert: ({ result, trackName }) => {
       if (!project) return;
       const assetId = `aud_${slug(result.name)}_${Date.now().toString(36)}`;
       audioAssets.set(assetId, {
@@ -449,7 +456,9 @@ $("sample-lab").addEventListener("click", () => {
       });
 
       const bar = Math.min(511, Math.floor(player.beat / beatsPerBar(project)));
-      const existing = project.tracks.find((track) => track.kind === "audio" && track.name === "Samples");
+      const existing = project.tracks.find(
+        (track) => track.kind === "audio" && track.name === trackName,
+      );
       const ops: Op[] = [
         {
           op: "register_audio_asset",
@@ -459,7 +468,7 @@ $("sample-lab").addEventListener("click", () => {
         },
         {
           op: "add_audio_clip",
-          ...(existing ? { trackId: existing.id } : { track: { name: "Samples" } }),
+          ...(existing ? { trackId: existing.id } : { track: { name: trackName } }),
           assetId,
           startBar: bar,
           lengthBeats: Math.min(result.durationBeats, 64),
@@ -472,7 +481,7 @@ $("sample-lab").addEventListener("click", () => {
         setProject(applyOps(project, ops).project);
         addMessage(
           "assistant",
-          `Sample “${result.name}” insertado en el compás ${bar + 1} (${result.durationBeats.toFixed(2)} beats).`,
+          `Sample “${result.name}” insertado en “${trackName}”, compás ${bar + 1} (${result.durationBeats.toFixed(2)} beats).`,
         );
       } catch (error) {
         addMessage("system", `No se pudo insertar: ${error instanceof Error ? error.message : String(error)}`);
