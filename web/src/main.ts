@@ -495,6 +495,7 @@ function updateSelectionBar(): void {
   $<HTMLButtonElement>("sel-mute").disabled = !enabled || selected.length === 0;
   $<HTMLButtonElement>("sel-solo").disabled = !enabled || selected.length === 0;
   $<HTMLButtonElement>("sel-freeze").disabled = !enabled || !hasMidi;
+  $<HTMLButtonElement>("sel-rendered").disabled = !enabled || !hasMidi;
   $<HTMLButtonElement>("sel-stems").disabled = !enabled || selected.length === 0;
   $<HTMLButtonElement>("sel-delete").disabled = !enabled || selected.length === 0;
   $<HTMLButtonElement>("sel-all").disabled = !enabled || !project || project.tracks.length === 0;
@@ -897,7 +898,111 @@ async function createSamplesFromChat(text: string): Promise<void> {
       .map((item) => `· “${item.name}” → pista “${item.track}” (${item.detail})`)
       .join("\n")}\n\nEstán montados en la timeline. Pulsa ▶ para escucharlos.`,
   );
-  addMessage("system", "Son pistas de audio; el modo MIDI está aparcado.");
+  addMessage("system", "Son pistas de audio.");
+}
+
+async function renderRenderedSelection(): Promise<void> {
+  if (!MIDI_ENABLED || busy || !project) return;
+  const base = project;
+  const tracks = base.tracks.filter(
+    (track) => track.kind === "midi" && selectedTrackIds.includes(track.id),
+  );
+  if (tracks.length === 0) {
+    addMessage("system", "Selecciona al menos una pista MIDI para renderizar con Rendered.");
+    return;
+  }
+
+  setBusy(true, "Renderizando con Rendered…");
+  const ops: Op[] = [];
+  const done: string[] = [];
+  const barBeats = beatsPerBar(base);
+  const totalBeats = base.lengthBars * barBeats;
+  const maxClipBeats = 64 * barBeats;
+
+  try {
+    for (let index = 0; index < tracks.length; index++) {
+      const track = tracks[index]!;
+      setStatus(`Rendered ${index + 1}/${tracks.length}: ${track.name}…`);
+      try {
+        const data = await api<{ wav: string; notes: number }>(
+          "/api/rendered/track",
+          { project: base, trackId: track.id },
+          360_000,
+        );
+        const bytes = Uint8Array.from(atob(data.wav), (char) => char.charCodeAt(0));
+        const blob = new Blob([bytes], { type: "audio/wav" });
+        const buffer = await decodeAudioBlob(blob);
+        const name = `${track.name} [Rendered]`.slice(0, 60);
+        const assetId = `aud_rendered_${Date.now().toString(36)}_${index}`;
+        audioAssets.set(assetId, {
+          id: assetId,
+          name,
+          buffer,
+          durationBeats: totalBeats,
+          peaks: computePeaks(buffer),
+        });
+        if (!(await persistAudioAsset(assetId, name, totalBeats, blob))) {
+          addMessage("system", `“${name}” no se pudo guardar en IndexedDB; se perderá al recargar.`);
+        }
+
+        const newTrackId = `trk_rendered_${Date.now().toString(36)}_${index}`;
+        ops.push(
+          {
+            op: "add_track",
+            id: newTrackId,
+            name,
+            kind: "audio",
+            instrument: { type: track.instrument.type },
+            gainDb: 0,
+            pan: 0,
+          },
+          {
+            op: "register_audio_asset",
+            assetId,
+            name,
+            durationBeats: totalBeats,
+          },
+        );
+        for (let offset = 0; offset < totalBeats; offset += maxClipBeats) {
+          const length = Math.min(maxClipBeats, totalBeats - offset);
+          ops.push({
+            op: "add_audio_clip",
+            trackId: newTrackId,
+            assetId,
+            startBar: offset / barBeats,
+            offsetBeats: offset,
+            lengthBeats: length,
+            gainDb: 0,
+            name,
+          });
+        }
+        ops.push({
+          op: "set_track",
+          trackId: track.id,
+          muted: true,
+          solo: false,
+        });
+        done.push(track.name);
+      } catch (error) {
+        addMessage(
+          "system",
+          `Rendered falló en “${track.name}”: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    if (done.length === 0) throw new Error("No se pudo renderizar ninguna pista con Rendered.");
+    setProject(applyOps(base, ops).project);
+    addMessage(
+      "assistant",
+      `Rendered: ${done.length} pista(s) (${done.join(", ")}). Las pistas MIDI originales quedan silenciadas para comparar; puedes reactivarlas o deshacer.`,
+    );
+    addMessage("system", "Rendered usa las voces Python del motor, no el sintetizador WebAudio.");
+  } catch (error) {
+    addMessage("system", `Rendered: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    setBusy(false);
+  }
 }
 
 async function send(prompt: string): Promise<void> {
@@ -908,21 +1013,23 @@ async function send(prompt: string): Promise<void> {
   setBusy(true, "Pensando…");
 
   try {
+    const edit = parseAudioEdit(text);
+    if (edit) {
+      await replaceAudioRange(text, edit);
+      return;
+    }
+    if (SAMPLE_INTENT.test(text)) {
+      await createSamplesFromChat(text);
+      return;
+    }
     if (!MIDI_ENABLED) {
-      const edit = parseAudioEdit(text);
-      if (edit) {
-        await replaceAudioRange(text, edit);
-      } else if (SAMPLE_INTENT.test(text)) {
-        await createSamplesFromChat(text);
-      } else {
-        const audioTracks = activeProject(project)?.tracks.map((track) => `“${track.name}”`) ?? [];
-        addMessage(
-          "assistant",
-          audioTracks.length > 0
-            ? `Puedo crear samples o cambiar una sección de una pista de audio. Por ejemplo: “cambia los compases 25 a 29 de ${audioTracks[0]} con otra melodía”. Pistas: ${audioTracks.join(", ")}.`
-            : "Pídeme un sample: “crea un kick industrial”, “un pad ambient cálido” o “un bajo dark wave”.",
-        );
-      }
+      const audioTracks = activeProject(project)?.tracks.map((track) => `“${track.name}”`) ?? [];
+      addMessage(
+        "assistant",
+        audioTracks.length > 0
+          ? `Puedo crear samples o cambiar una sección de una pista de audio. Por ejemplo: “cambia los compases 25 a 29 de ${audioTracks[0]} con otra melodía”. Pistas: ${audioTracks.join(", ")}.`
+          : "Pídeme un sample: “crea un kick industrial”, “un pad ambient cálido” o “un bajo dark wave”.",
+      );
       return;
     }
 
@@ -1088,6 +1195,7 @@ $("bounce-samples").addEventListener("click", openFreezeDialog);
 $("sel-mute").addEventListener("click", () => toggleTracksFlag(selectedTrackIds, "muted"));
 $("sel-solo").addEventListener("click", () => toggleTracksFlag(selectedTrackIds, "solo"));
 $("sel-freeze").addEventListener("click", openFreezeDialog);
+$("sel-rendered").addEventListener("click", () => void renderRenderedSelection());
 $("sel-stems").addEventListener("click", () => void exportStems(selectedTrackIds));
 $("sel-delete").addEventListener("click", deleteSelectedTracks);
 $("sel-all").addEventListener("click", () => timeline.selectAll());

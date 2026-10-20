@@ -22,9 +22,19 @@ import wave
 
 import numpy as np
 
+sys.path.insert(0, "/app/rendered")
+
 MAX_CODE = 50_000
 MAX_FRAMES = 32 * 48_000
-ALLOWED_IMPORTS = {"numpy", "math", "random"}
+ALLOWED_IMPORTS = {
+    "numpy",
+    "math",
+    "random",
+    "dsp_core",
+    "voices_drums",
+    "voices_synths",
+    "mix_master",
+}
 FORBIDDEN_NAMES = {
     "__builtins__",
     "__import__",

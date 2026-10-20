@@ -10,6 +10,7 @@ import { designSample } from "./src/agent/sample-designer.ts";
 import { planSamples } from "./src/agent/sample-plan.ts";
 import { renderSoundScript } from "./src/agent/sound-sandbox.ts";
 import { designSoundScript } from "./src/agent/sound-script.ts";
+import { renderRenderedTrack } from "./src/agent/rendered-track.ts";
 import { MIDI_ENABLED } from "./src/config.ts";
 import { createProject } from "./src/core/project.ts";
 import type { Project } from "./src/core/types.ts";
@@ -103,6 +104,36 @@ async function handler(
         model: planner.model,
         seed,
       });
+    }
+
+    if (url === "/api/rendered/track") {
+      const project = body.project as Project | undefined;
+      const trackId = String(body.trackId ?? "");
+      const track = project?.tracks.find((candidate) => candidate.id === trackId);
+      if (!project || !track || track.kind !== "midi") {
+        return sendJson(res, 400, { error: "Pista MIDI no encontrada" });
+      }
+      const result = await renderRenderedTrack({
+        bpm: project.bpm,
+        lengthBars: project.lengthBars,
+        track: {
+          name: track.name,
+          instrument: track.instrument.type,
+          gainDb: track.gainDb,
+          pan: track.pan,
+          clips: track.clips.map((clip) => ({
+            start: clip.start,
+            length: clip.length,
+            notes: clip.notes.map((note) => ({
+              pitch: note.pitch,
+              start: note.start,
+              duration: note.duration,
+              velocity: note.velocity,
+            })),
+          })),
+        },
+      });
+      return sendJson(res, 200, { ...result, wav: result.wav.toString("base64") });
     }
 
     if (url === "/api/sound/create") {

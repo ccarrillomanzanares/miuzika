@@ -72,16 +72,15 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
 
 `npm run dev` levanta Vite y la API local (la clave del LLM nunca llega al navegador).
 
-**Modo actual: audio-only.** `src/config.ts` fija `MIDI_ENABLED=false`: la UI oculta MIDI,
-Congelar, openDAW y el planner/chat MIDI; el LLM no recibe pistas ni herramientas MIDI. El código
-MIDI sigue en el repo y en los tests, pero no se usa en la ruta activa.
+**Modo actual: híbrido.** `src/config.ts` tiene `MIDI_ENABLED=true`: MIDI es la capa de
+composición/edición y el audio (samples + Rendered) la capa de sonido. Si se pone a `false`
+queda el modo audio-only anterior, sin MIDI visible ni enviado al LLM.
 
-- **Chat**: en modo audio, pide samples (“crea un kick industrial”, “un pad ambient cálido”,
-  “lo mismo para batería y bajo”). El chat planifica los samples, genera un script Python por
-  sonido en el sandbox, renderiza WAV y monta las pistas de audio. También puede cambiar una
-  sección: “cambia los compases 25 a 29 del Bass con otra melodía” genera una variación, corta
-  los clips existentes en ese rango y deja el resto igual. El planner de canciones MIDI queda
-  detrás del flag.
+- **Chat**: los prompts de samples (“crea un kick industrial”, “lo mismo para batería y bajo”)
+  van al planificador de samples + sandbox Python; los prompts de canción/edición MIDI van al
+  planner/agente. También puede cambiar una sección: “cambia los compases 25 a 29 del Bass con
+  otra melodía” genera una variación de audio, corta los clips existentes en ese rango y deja el
+  resto igual.
 - **Timeline**: clic para mover el playhead, Ctrl+rueda para zoom.
 - **Selección de pistas**: clic selecciona; Ctrl/Cmd+clic añade o quita; Shift+clic selecciona
   un rango. `M` y `S` son botones de mute y solo. La barra de selección permite Mute, Solo,
@@ -98,9 +97,9 @@ MIDI sigue en el repo y en los tests, pero no se usa en la ruta activa.
   EQ, delay y reverb. Con esos primitivos puede pedir kicks, snares, bajos, plucks, pads, risers,
   texturas o impactos, en cualquier estilo. La macro industrial es un preset interno de
   one-shot, no una opción aparte en la UI.
-- **Proyecto legacy mixto**: el código permite pistas de samples y MIDI, pero con
-  `MIDI_ENABLED=false` las pistas MIDI se ocultan y no se reproducen ni se envían al LLM. Se
-  conservan en el proyecto guardado para poder reactivarlas más adelante.
+- **Proyecto híbrido**: pistas MIDI editables y pistas de audio conviven en la timeline. Las
+  pistas MIDI se pueden renderizar a audio con Rendered y comparar; las pistas de audio se
+  reproducen como clips WAV.
 - **Deshacer/rehacer**: botones ↶ ↷ (Ctrl+Z / Ctrl+Shift+Z) con historial de las últimas 8
   versiones, persistente al recargar. Cada mensaje del chat, edición del piano roll, importación
   o generación guarda una versión.
@@ -108,10 +107,12 @@ MIDI sigue en el repo y en los tests, pero no se usa en la ruta activa.
   suena exactamente igual. Volver a generar desde el mismo prompt crea una canción nueva (el LLM
   no es determinista); para conservar una versión concreta, exporta el JSON. Si el proyecto
   contiene audio, exporta también WAV o stems: el JSON no embebe los bytes.
-- **Piano roll legacy**: doble clic en un clip MIDI. Clic añade, arrastrar mueve, clic derecho
-  borra. En modo audio no hay clips MIDI visibles.
-- **Congelar legacy**: convierte pistas MIDI en clips de audio. Está oculto con el flag actual;
-  el código y el diálogo se conservan. Eliges pista por pista, con sus FX, sin buses ni máster.
+- **Piano roll**: doble clic en un clip MIDI. Clic añade, arrastrar mueve, clic derecho borra.
+- **Congelar**: convierte pistas MIDI en clips de audio con el motor WebAudio, sin buses ni
+  máster. Eliges pista por pista con sus FX.
+- **Rendered**: con pistas MIDI seleccionadas, renderiza una pista Python por track con las
+  voces de Rendered, añade una pista `[Rendered]` y silencia la MIDI original para comparar.
+  Es el A/B contra el motor WebAudio; se puede deshacer.
 - **Audio persistente**: los WAV importados, los del Sample Lab y las pistas congeladas se
   guardan en IndexedDB (`miuzika` / `audio-assets`) y se rehidratan al recargar, también al
   deshacer/rehacer. El JSON solo lleva metadatos: al abrirlo en otro navegador hay que reimportar
@@ -119,15 +120,15 @@ MIDI sigue en el repo y en los tests, pero no se usa en la ruta activa.
 - **Audio**: botón «Audio» importa WAV al playhead, dibuja la forma de onda y lo reproduce.
 - **WAV**: mixdown final del proyecto con master, limitador y normalización de loudness.
 - **Stems**: un WAV por pista, con sus FX y sin máster; exporta todas o solo la selección.
-- **MIDI legacy**: exportación MIDI oculta en modo audio. El código sigue disponible.
-- **openDAW legacy**: exportación `.odw` oculta; solo soporta MIDI y el audio sigue pendiente
+- **MIDI**: exportación Standard MIDI de las pistas MIDI.
+- **openDAW**: exportación `.odw`; solo soporta MIDI y avisa de que el audio sigue pendiente
   (`SampleService`/`AudioFileBox`).
 - **JSON**: proyecto canónico con notas, FX, semilla y metadatos. No incluye los WAV; esos viven
   en IndexedDB. Para mover el proyecto a otro navegador hay que reimportar el audio.
 
 ### Sandbox Python
 
-El chat audio-only usa `/api/sound/create`: el LLM escribe un script Python con
+El sandbox de samples usa `/api/sound/create`: el LLM escribe un script Python con
 `render(sr, duration, params, seed)`, y un contenedor lo ejecuta y devuelve un WAV validado.
 
 - Imagen: `sandbox/sound/Dockerfile` (Python + numpy, usuario sin privilegios).
@@ -140,6 +141,9 @@ El chat audio-only usa `/api/sound/create`: el LLM escribe un script Python con
 - El modelo usa `reasoning_effort: low` para no gastar todo el presupuesto en razonamiento.
 - Si Docker/WSL no está disponible, `/api/sound/create` devuelve error; no hay fallback a
   ejecutar Python en Windows.
+- **Rendered track**: `/api/rendered/track` renderiza una pista MIDI completa con las voces de
+  `rendered/` (`voices_drums`, `voices_synths`) y devuelve WAV. La UI añade la pista
+  `[Rendered]` y silencia la MIDI original. Es independiente del LLM y del planner.
 
 Build de producción: `npm run build:web` y `npm run preview`. La API local vive en un plugin de
 Vite; para desplegar de verdad hará falta un servidor Node aparte que exponga `/api/*` y un
@@ -147,11 +151,10 @@ runner de contenedores separado.
 
 ### LLM (obligatorio)
 
-Configura `OLLAMA_API_KEY` en `.env` (ver `.env.example`). En modo audio el modelo devuelve un
-**plan de samples** y scripts DSP. El plan de canción MIDI (SongPlan) sigue existiendo solo como
-código legacy detrás del flag.
+Configura `OLLAMA_API_KEY` en `.env` (ver `.env.example`). En modo híbrido el modelo puede
+devolver un **plan de canción MIDI** (SongPlan) o un **plan de samples + scripts DSP**.
 
-El plan MIDI legacy pasaba tres filtros antes de tocar el proyecto:
+El plan MIDI pasa tres filtros antes de tocar el proyecto:
 
 1. **zod** — forma del JSON.
 2. **normalizePlan** — sinónimos de parámetros (`size`→`decay`, `mix`→`wet`, `amount`→`width`) y rangos.
@@ -187,8 +190,8 @@ Modo audio actual:
                          WAV / Stems / JSON
 ```
 
-El pipeline MIDI (`SongPlan` → `composePlan` → `Op[]` → MIDI/openDAW) se conserva en el repo,
-pero no es la ruta activa con `MIDI_ENABLED=false`.
+El pipeline MIDI (`SongPlan` → `composePlan` → `Op[]` → MIDI/openDAW) es la capa de composición
+con `MIDI_ENABLED=true`; con `false` queda aparcado y la app funciona solo con audio.
 
 Decisiones clave:
 
@@ -241,10 +244,17 @@ web/
   src/audio-db.ts IndexedDB de bytes WAV
   src/industrial.ts   motor DSP de one-shot industrial (Sample Lab)
   src/config.ts       flag MIDI_ENABLED / AUDIO_ONLY
+rendered/             motor Python Rendered (dsp_core + voces + mezcla)
+  dsp_core.py
+  voices_drums.py
+  voices_synths.py
+  mix_master.py
+  reference/          canción/contrato de referencia
 src/agent/
   sample-plan.ts      petición → lista de samples
   sound-script.ts     LLM → script Python de DSP
   sound-sandbox.ts    Node → contenedor Docker/WSL
+  rendered-track.ts   pista MIDI → WAV con Rendered
 sandbox/sound/
   Dockerfile          imagen Python + numpy
   runner.py           contrato render(), validación y WAV
@@ -270,24 +280,29 @@ docs/
 - El cambio de sección funciona con clips alineados al compás; si un clip de audio empieza a
   mitad de compás, todavía no se corta con precisión. Tampoco hay crossfade automático en los
   empalmes.
-- El modo MIDI está oculto y fuera del LLM, pero su código y tests siguen en el repositorio.
+- Rendered es offline y usa 1 CPU: una pista de 3 minutos puede tardar bastante; el WAV sale a
+  44,1 kHz/16 bits y se reinserta como clip de audio.
+- Rendered mapea el tipo de instrumento de la pista a sus voces (batería, bajo, pad, strings,
+  choir, lead, pluck); no reproduce articulaciones MIDI avanzadas ni samplea un instrumento real.
+- En el A/B, la pista MIDI original se silencia y se añade `[Rendered]`; los niveles pueden
+  diferir y hay que ajustar gain/pan a oído.
 - El JSON del proyecto no embebe los WAV: los bytes viven en IndexedDB, en el navegador y perfil
   actuales. Si se abre el JSON en otro navegador, se borran los datos del sitio o cambia el perfil,
   hay que reimportar el audio. Exportar un proyecto autocontenido está pendiente.
 - IndexedDB puede llenarse con proyectos largos (un stem de 2:40 ronda 30 MB); el navegador puede
   pedir más espacio o rechazar la escritura, y en ese caso la app avisa y mantiene el audio solo en
   la sesión.
-- El export legacy a openDAW no incluye las pistas de audio y está oculto en modo audio.
-- El preview legacy sintetiza instrumentos MIDI; en modo audio reproduce los clips de audio y su
-  mezcla WebAudio.
+- El export a openDAW no incluye las pistas de audio (`SampleService`/`AudioFileBox` pendiente).
+- El preview reproduce MIDI con WebAudio y audio con clips; Rendered es un motor distinto y no
+  lee la cadena de FX de la pista MIDI.
 - El motor de sintetizador es procedural, no neural: no imita instrumentos acústicos reales ni
   tiene capas de velocidad/round-robin. Para guitarras, voces o pianos reales hace falta una
   librería multimuestra o un modelo de audio con licencia adecuada.
 - El mixdown a WAV es offline y puede tardar decenas de segundos en canciones largas.
 - Sin validación musical avanzada (voz guía, conducción de voces, rango por instrumento real).
-- El plan MIDI legacy puede ser musicalmente conservador; en audio, la calidad depende del
-  script DSP y del sandbox, no de presets de notas.
-- El coste/latencia del planificador MIDI legacy es de ~4-13 s y ~2-18k tokens de entrada por
+- El plan MIDI puede ser musicalmente conservador; en audio, la calidad depende de las voces de
+  Rendered y del script DSP, no de presets de notas.
+- El coste/latencia del planificador MIDI es de ~4-13 s y ~2-18k tokens de entrada por
   operación (medido con `deepseek-v4.1-flash:1017`).
 
 ## Verificado de punta a punta

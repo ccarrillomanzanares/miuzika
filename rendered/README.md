@@ -18,9 +18,12 @@ generó el material de referencia; se copió **sin modificar** desde
 
 ## Estado
 
-Todavía no está conectado al sandbox ni al proyecto. El siguiente paso es exponer una
-API `renderStem(notes, voice, params) -> WAV` y permitir que el contenedor importe
-`dsp_core` y las voces como librería de solo lectura.
+Conectado al sandbox como librería de solo lectura. `sandbox/sound/render_track.py` renderiza
+una pista MIDI con estas voces y `/api/rendered/track` la expone a la app. La UI añade una pista
+`[Rendered]` y silencia la MIDI original para comparar.
+
+Los scripts generados por el LLM también pueden importar `dsp_core`, `voices_drums`,
+`voices_synths` y `mix_master`; el runner los permite explícitamente.
 
 Los módulos se probaron con Python + numpy:
 

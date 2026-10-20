@@ -196,13 +196,16 @@ Implementado en el spike:
   de ruido, saturación tanh asimétrica, bitcrush, SVF TPT con barrido de cutoff, taps de delay y
   ensanchado Haas. Es una macro de ejemplo, no el único motor; `IndustrialSpec` expone sus
   parámetros y `sample-render.ts` lo convierte en `AudioBuffer`/WAV.
-- «Congelar» (`web/src/bounce.ts`, `bounce-dialog.ts`): legacy MIDI→audio, oculto con
-  `MIDI_ENABLED=false`. El usuario elige pistas MIDI una a una; cada una se renderiza sola con sus
-  FX, sin buses ni máster (`buses: false`), y se sustituye por una pista de audio. Los WAV se
-  guardan en IndexedDB como el resto de assets.
-- **Modo audio-only** (`src/config.ts`): `MIDI_ENABLED=false` oculta botones, filtra pistas MIDI
-  de la timeline/player y bloquea `/api/generate` y `/api/chat`. El código y los tests MIDI se
-  conservan, pero no se importan en la ruta activa ni se envían al LLM.
+- «Congelar» (`web/src/bounce.ts`, `bounce-dialog.ts`): MIDI→audio con el motor WebAudio. El
+  usuario elige pistas MIDI una a una; cada una se renderiza sola con sus FX, sin buses ni máster
+  (`buses: false`), y se sustituye por una pista de audio. Los WAV se guardan en IndexedDB.
+- **Rendered** (`src/agent/rendered-track.ts`, `sandbox/sound/render_track.py`): renderiza las
+  pistas MIDI seleccionadas con las voces Python de `rendered/`; añade una pista `[Rendered]` y
+  silencia la MIDI original para comparar. Es el A/B contra Congelar/WebAudio.
+- **Modo híbrido** (`src/config.ts`): `MIDI_ENABLED=true` mantiene MIDI como capa de
+  composición/edición y audio como capa de sonido. Con `false` se ocultan MIDI, Congelar y
+  openDAW, se filtran pistas MIDI de la timeline/player y se bloquean `/api/generate` y
+  `/api/chat`. El código y los tests MIDI se conservan.
 - **Edición de secciones de audio** (`web/src/main.ts`): `parseAudioEdit` detecta pista + rango
   de compases y `replaceAudioRange` genera una variación con el sandbox, elimina/parte los clips
   que solapan el rango y coloca el nuevo clip. Requiere clips alineados al compás; no hay
