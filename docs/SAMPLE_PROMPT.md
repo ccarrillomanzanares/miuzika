@@ -1,22 +1,35 @@
-# Prompt del diseñador de samples
+# Prompt del Sample Lab
 
-Este documento es una instantánea del prompt que recibe el LLM en **Sample Lab**.
-El esquema se envía minificado para ahorrar tokens; aquí está formateado para revisarlo.
-
-- Fuente: `src/agent/sample-designer.ts` (`SAMPLE_DESIGNER_SYSTEM`)
-- Esquema: `src/core/sample.ts` (`SampleSpecSchema`, generado con `z.toJSONSchema`)
-- Modelo: `deepseek-v4.1-flash:1017`
-- Salida: solo JSON; se valida y se reintenta (2 intentos)
-- Temperatura: 0.8 en el primer intento, 0.4 en el reintento
-- `maxTokens`: 2000
+Este documento refleja el prompt actual. La copia del prompt anterior está en
+`docs/SAMPLE_PROMPT.full.md`.
 
 ## System prompt
 
-```
-Eres diseñador de sonido. Recibes una petición y devuelves SOLO un SampleSpec JSON que cumpla exactamente este esquema:
+```text
+Eres un compositor y productor de música.
 ```
 
-### Esquema JSON (formateado)
+Solo contiene el rol creativo. No hay instrucciones de estilo, presets, ejemplos ni reglas
+de arreglo.
+
+## Mensaje de usuario
+
+El esquema JSON viaja en el mensaje de usuario como **contrato técnico**; sin él la app no
+puede validar la receta ni renderizarla.
+
+```text
+Petición: {{prompt}}
+Tipo: {{formato}}.
+Proyecto: {{bpm}} BPM, {{tonic}} {{mode}}.
+Devuelve SOLO un JSON que cumpla exactamente este esquema:
+{{schema_minificado}}
+No expliques nada: solo el JSON.
+```
+
+Si el primer intento falla la validación, se añade el error y se reintenta una vez con
+temperatura 0.4. El primer intento usa temperatura 0.8.
+
+### Esquema JSON (formateado para revisión)
 
 ```json
 {
@@ -759,31 +772,7 @@ Eres diseñador de sonido. Recibes una petición y devuelves SOLO un SampleSpec 
 }
 ```
 
-### Reglas
-
-- one_shot: 1-4 capas. Cada capa tiene osc (sine, saw, square, triangle, noise), freq, glideTo/glide (pitch envelope), detune, voices (1-4) + spread (unísono), pan, fm {ratio, index, decay}, filter {type, freq, q}, filterEnv {amount, attack, decay, sustain}, env ADSR y gain. FX: drive, bitcrush {levels}, eq, delay, reverb. duration en segundos.
-- industrial: macro de impacto metálico. No usa layers; usa duration y params {rootHz, pitchDrop, pitchTau, decay, drive, crushHz, crushLevels, cutoffStart, cutoffEnd, cutoffTau, resonance, metalHz, metalRatio, metalIndex, noise, width, delayWet, seed}. Es solo un ejemplo de macros; no lo uses para todo.
-- loop: role, style, bars, bpm, key, density, octave, chords, energy. Usa el BPM del proyecto.
-- Elige los primitivos según el sonido, no por estilo: kick = sine con glide y click de noise; snare = noise bandpass + tono; bass = saw + filterEnv + sub; pluck = FM con decay corto; pad = voces detuneadas, ataque lento y reverb; riser = noise + filterEnv ascendente; impacto metálico = capas con FM/noise.
-- Usa kind "industrial" solo si piden explícitamente industrial; para cualquier otro estilo usa "one_shot" y compón las capas.
-- Roles y estilos válidos: drums, bass, chords, lead, arp, pad; estilos: drums (gated_80s, siniestro_punk, four_on_floor, half_time, breakbeat, driving, ambient), bass (straight8, driving8, syncopated, quarters, punk, ambient, sub), chords/pad (pad, gated, stab, offbeat, power, sustained), lead/arp (hook, up).
-- Para percusión usa capas de sine con glide (bombo/toms) o noise con filtro (caja/charles).
-- No expliques nada: solo el JSON.
-
-## Mensaje de usuario
-
-La app añade este mensaje después del system prompt:
-
-```text
-Petición: {prompt}
-Tipo: {formato}.
-Proyecto: {bpm} BPM, {tonic} {mode}.
-```
-
-`{formato}` es `one-shot` o `loop de N compases`. Si el primer intento falla, se añade
-una línea con el error y se reintenta.
-
-### Ejemplo real
+## Ejemplo real
 
 ```text
 Petición: crea un wav sample sintetizador industrial
@@ -791,12 +780,13 @@ Tipo: one-shot.
 Proyecto: 100 BPM, D minor.
 ```
 
-## Notas de diseño
+En la llamada real, `{{schema_minificado}}` es el mismo esquema en una sola línea para
+ahorrar tokens.
 
-- **one_shot** es el formato general: capas, osciladores, unísono, FM, pitch/filter envelopes,
-  ruido, pan, drive, bitcrush, EQ, delay y reverb. Sirve para kicks, snares, bajos, plucks,
-  pads, risers, texturas e impactos.
-- **industrial** es una macro interna de impacto metálico. El prompt pide usarla solo si se
-  menciona explícitamente “industrial”; no debe elegirse por estilo.
-- **loop** es un formato distinto: patrón temporal con BPM, compases, tonalidad y rol.
-- Los defaults del esquema se aplican al parsear; el LLM puede omitirlos.
+## Dónde se edita
+
+- Rol: `src/agent/sample-designer.ts` → `SAMPLE_DESIGNER_SYSTEM`
+- Contrato: `src/core/sample.ts` → `SampleSpecSchema`
+- Mensaje de usuario y reintentos: `src/agent/sample-designer.ts` → `designSample`
+- Temperatura: `0.8` primer intento, `0.4` reintento
+- `maxTokens`: `2000`
