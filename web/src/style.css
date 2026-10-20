@@ -332,6 +332,16 @@ main {
   text-overflow: ellipsis;
 }
 
+.examples .shuffle {
+  margin-left: auto;
+  width: 26px;
+  min-width: 26px;
+  padding: 4px 0;
+  border-radius: 50%;
+  font-size: 12px;
+  color: var(--text);
+}
+
 form {
   display: flex;
   gap: 8px;

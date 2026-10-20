@@ -30,12 +30,69 @@ const timeline = new TimelineView(canvas, wrap, heads);
 let project: Project | null = loadStored();
 let busy = false;
 
-const EXAMPLES = [
-  "créame una canción synth pop 80's oscura en re menor, lenta",
-  "loop de bajo y batería estilo siniestro punk español",
-  "techno hipnótico en la menor a 132 bpm, 32 compases",
-  "ambient melancólico para estudiar, sin batería",
+interface Example {
+  text: string;
+  tag: string;
+}
+
+const EXAMPLE_POOL: Example[] = [
+  { tag: "synthpop", text: "créame una canción synth pop 80's oscura en re menor, lenta" },
+  { tag: "synthpop", text: "synthpop cálido en la menor con pads y bajo pulsante" },
+  { tag: "punk", text: "punk siniestro español de los 80, en mi menor" },
+  { tag: "punk", text: "loop de bajo y batería estilo siniestro punk" },
+  { tag: "techno", text: "techno hipnótico en la menor a 132 bpm, 32 compases" },
+  { tag: "techno", text: "techno industrial oscuro con arp y kick contundente" },
+  { tag: "ambient", text: "ambient melancólico para estudiar, sin batería" },
+  { tag: "ambient", text: "drone ambient en do lidio, muy lento y sin percusión" },
+  { tag: "rock", text: "rock en mi menor con guitarras distorsionadas" },
+  { tag: "hiphop", text: "hip hop con swing en fa menor, 88 bpm" },
+  { tag: "pop", text: "canción de 16 compases en do mayor, alegre" },
+  { tag: "textura", text: "crea un loop de arp y pads en la menor" },
 ];
+
+function pickExamples(count = 4): Example[] {
+  const pool = [...EXAMPLE_POOL];
+  for (let index = pool.length - 1; index > 0; index--) {
+    const swap = Math.floor(Math.random() * (index + 1));
+    [pool[index], pool[swap]] = [pool[swap]!, pool[index]!];
+  }
+  const chosen: Example[] = [];
+  const tags = new Set<string>();
+  for (const example of pool) {
+    if (tags.has(example.tag)) continue;
+    chosen.push(example);
+    tags.add(example.tag);
+    if (chosen.length === count) return chosen;
+  }
+  for (const example of pool) {
+    if (chosen.length >= count) break;
+    if (!chosen.includes(example)) chosen.push(example);
+  }
+  return chosen;
+}
+
+function renderExamples(): void {
+  examples.innerHTML = "";
+  for (const example of pickExamples(4)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = example.text;
+    button.title = example.text;
+    button.addEventListener("click", () => {
+      promptInput.value = example.text;
+      promptInput.focus();
+    });
+    examples.appendChild(button);
+  }
+  const shuffle = document.createElement("button");
+  shuffle.type = "button";
+  shuffle.className = "shuffle";
+  shuffle.title = "Otras ideas";
+  shuffle.setAttribute("aria-label", "Otras ideas");
+  shuffle.textContent = "↻";
+  shuffle.addEventListener("click", renderExamples);
+  examples.appendChild(shuffle);
+}
 
 timeline.onSeek = (beat) => {
   if (!project) return;
@@ -392,17 +449,7 @@ promptInput.addEventListener("keydown", (event) => {
   }
 });
 
-for (const example of EXAMPLES) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.textContent = example;
-  button.title = example;
-  button.addEventListener("click", () => {
-    promptInput.value = example;
-    promptInput.focus();
-  });
-  examples.appendChild(button);
-}
+renderExamples();
 
 // --- Arranque --------------------------------------------------------------
 
