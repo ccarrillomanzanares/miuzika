@@ -33,6 +33,7 @@ export class PreviewPlayer {
   private frame: number | null = null;
   private readonly voices = new Set<VoiceHandle>();
   private readonly pending: Array<{ endsAt: number; bus: GainNode; voice: VoiceHandle }> = [];
+  private readonly muteGains = new Map<string, GainNode>();
   private chains: Array<MasterChain | BusChain | TrackChain> = [];
   private noise: AudioBuffer | null = null;
   private playing = false;
@@ -55,6 +56,13 @@ export class PreviewPlayer {
     return this.voices.size;
   }
 
+  /** Mute inmediato durante la reproducción (fade de 12 ms). */
+  setTrackMuted(trackId: string, muted: boolean): void {
+    const gain = this.muteGains.get(trackId);
+    if (!gain || !this.context) return;
+    gain.gain.setTargetAtTime(muted ? 0 : 1, this.context.currentTime, 0.012);
+  }
+
   play(project: Project, fromBeat = 0): void {
     this.stop();
     const context = (this.context ??= new AudioContext({ latencyHint: "balanced" }));
@@ -62,6 +70,7 @@ export class PreviewPlayer {
 
     this.playing = true;
     this.perTrack.clear();
+    this.muteGains.clear();
     this.voices.clear();
     this.pending.length = 0;
     this.chains = [];
@@ -75,11 +84,14 @@ export class PreviewPlayer {
     const soloed = project.tracks.some((track) => track.solo);
 
     for (const track of project.tracks) {
-      if (track.muted || (soloed && !track.solo)) continue;
       const bus = track.instrument.type === "drumkit" ? drumBus.input : musicBus.input;
-      const chain = buildTrackChain(context, track, bus, this.secondsPerBeat);
+      const mute = context.createGain();
+      mute.gain.value = track.muted || (soloed && !track.solo) ? 0 : 1;
+      mute.connect(bus);
+      const chain = buildTrackChain(context, track, mute, this.secondsPerBeat);
       this.perTrack.set(track.id, chain.input);
-      this.chains.push(chain);
+      this.muteGains.set(track.id, mute);
+      this.chains.push(chain, { input: mute, dispose: () => mute.disconnect() });
     }
 
     this.startBeat = Math.max(0, fromBeat);
@@ -180,6 +192,7 @@ export class PreviewPlayer {
       }
     }
     this.chains = [];
+    this.muteGains.clear();
     this.voices.clear();
   }
 

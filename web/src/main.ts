@@ -49,6 +49,7 @@ timeline.onToggleMute = (trackId) => {
   if (!track) return;
   track.muted = !track.muted;
   timeline.setMuted(trackId, track.muted);
+  player.setTrackMuted(trackId, track.muted);
   persist();
 };
 
