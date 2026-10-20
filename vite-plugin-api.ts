@@ -6,6 +6,7 @@ import type { Plugin } from "vite";
 
 import { clientFromEnv, plannerClientFromEnv } from "./src/agent/client.ts";
 import { composeFromPrompt, runAgent } from "./src/agent/agent.ts";
+import { designSample } from "./src/agent/sample-designer.ts";
 import { createProject } from "./src/core/project.ts";
 import type { Project } from "./src/core/types.ts";
 
@@ -95,6 +96,25 @@ async function handler(
         model: planner.model,
         seed,
       });
+    }
+
+    if (url === "/api/sample/design") {
+      const client = clientFromEnv();
+      if (!client) return sendJson(res, 503, { error: "Falta OLLAMA_API_KEY en .env" });
+      const prompt = String(body.prompt ?? "").trim();
+      if (!prompt) return sendJson(res, 400, { error: "Describe el sample que quieres" });
+
+      const kind = body.kind === "loop" ? "loop" : "one_shot";
+      const rawKey = body.key as { tonic?: unknown; mode?: unknown } | undefined;
+      const key =
+        rawKey && typeof rawKey.tonic === "string" && typeof rawKey.mode === "string"
+          ? { tonic: rawKey.tonic, mode: rawKey.mode }
+          : { tonic: "D", mode: "minor" };
+      const bpm = Number(body.bpm) || 120;
+      const bars = Math.min(8, Math.max(1, Number(body.bars) || 2));
+
+      const spec = await designSample(client, prompt, { bpm, key, kind, bars });
+      return sendJson(res, 200, { spec, model: client.model });
     }
 
     if (url === "/api/chat") {

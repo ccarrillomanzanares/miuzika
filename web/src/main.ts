@@ -4,9 +4,10 @@ import { projectStats } from "../../src/core/project.ts";
 import { projectToMidi } from "../../src/core/midi.ts";
 import { applyOps } from "../../src/core/ops.ts";
 import type { Op } from "../../src/core/ops.ts";
-import { loadAudioFile } from "./audio-store.ts";
+import { audioAssets, computePeaks, loadAudioFile } from "./audio-store.ts";
 import { loadDrumKit } from "./drum-kit.ts";
 import { openPianoRoll } from "./editor.ts";
+import { openSampleLab } from "./sample-lab.ts";
 import { PreviewPlayer } from "./player.ts";
 import { TimelineView, escapeHtml } from "./timeline.ts";
 
@@ -428,8 +429,59 @@ $("export-stems").addEventListener("click", async () => {
   }
 });
 
-$("export-midi").addEventListener("click", () => {
-  if (!project || project.tracks.length === 0) return;
+$("sample-lab").addEventListener("click", () => {
+  if (!project) {
+    addMessage("system", "Genera una canción antes de diseñar un sample.");
+    return;
+  }
+  openSampleLab({
+    bpm: project.bpm,
+    key: project.key,
+    onInsert: (result) => {
+      if (!project) return;
+      const assetId = `aud_${slug(result.name)}_${Date.now().toString(36)}`;
+      audioAssets.set(assetId, {
+        id: assetId,
+        name: result.name,
+        buffer: result.buffer,
+        durationBeats: result.durationBeats,
+        peaks: computePeaks(result.buffer),
+      });
+
+      const bar = Math.min(511, Math.floor(player.beat / beatsPerBar(project)));
+      const existing = project.tracks.find((track) => track.kind === "audio" && track.name === "Samples");
+      const ops: Op[] = [
+        {
+          op: "register_audio_asset",
+          assetId,
+          name: result.name,
+          durationBeats: result.durationBeats,
+        },
+        {
+          op: "add_audio_clip",
+          ...(existing ? { trackId: existing.id } : { track: { name: "Samples" } }),
+          assetId,
+          startBar: bar,
+          lengthBeats: Math.min(result.durationBeats, 64),
+          gainDb: 0,
+          name: result.name,
+        },
+      ];
+
+      try {
+        setProject(applyOps(project, ops).project);
+        addMessage(
+          "assistant",
+          `Sample “${result.name}” insertado en el compás ${bar + 1} (${result.durationBeats.toFixed(2)} beats).`,
+        );
+      } catch (error) {
+        addMessage("system", `No se pudo insertar: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    },
+  });
+});
+
+$("export-midi").addEventListener("click", () => {  if (!project || project.tracks.length === 0) return;
   const bytes = projectToMidi(project);
   download(new Blob([bytes as BlobPart], { type: "audio/midi" }), `${slug(project.name)}.mid`);
 });

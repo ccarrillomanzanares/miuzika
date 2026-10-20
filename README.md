@@ -75,6 +75,9 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
 - **Chat**: si el proyecto está vacío, la primera petición planifica una canción completa; las
   siguientes editan con herramientas (`apply_ops`, `undo`, digest…).
 - **Timeline**: clic para mover el playhead, Ctrl+rueda para zoom, clic en la cabecera para mute.
+- **Sample Lab**: botón «Sample». Describes un sonido (“kick oscuro distorsionado para punk”,
+  “loop de bajo punk en mi menor”), el LLM diseña la receta, el motor la renderiza a WAV y la
+  escuchas antes de insertarla como clip. Los loops se ajustan al BPM del proyecto.
 - **Deshacer/rehacer**: botones ↶ ↷ (Ctrl+Z / Ctrl+Shift+Z) con historial de las últimas 8
   versiones, persistente al recargar. Cada mensaje del chat, edición del piano roll, importación
   o generación guarda una versión.
@@ -191,6 +194,8 @@ docs/
 - Solo 4/4. El motor de patrones asume 16 pasos por compás.
 - Los WAV no se persisten en el proyecto: el JSON guarda metadatos, no los bytes. Al recargar hay
   que volver a importarlos (IndexedDB/OPFS es el siguiente paso).
+- Los samples del Sample Lab también viven en memoria durante la sesión; la receta aún no se
+  guarda en el proyecto (pendiente: guardar `spec` y rehidratar al cargar).
 - El export a openDAW no incluye las pistas de audio (necesita `SampleService`/`AudioFileBox`).
 - El preview sintetiza los instrumentos (capas, envolventes, dinámica) y aproxima la cadena de
   FX del proyecto; no es el motor de openDAW, así que no suena idéntico al `.odw`.

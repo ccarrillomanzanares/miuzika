@@ -491,6 +491,56 @@ textarea:focus {
   border-color: #3a4a6b;
 }
 
+.sample-card {
+  width: min(620px, 94vw);
+}
+
+.sample-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+
+.sample-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sample-row input[type="number"] {
+  width: 74px;
+  background: #12151d;
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 7px;
+  padding: 6px 8px;
+  font: inherit;
+}
+
+.sample-status {
+  min-height: 16px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.sample-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sample-name {
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  color: var(--text);
+}
+
+.sample-audio {
+  width: 100%;
+  height: 34px;
+}
+
 @media (max-width: 980px) {
   main {
     grid-template-columns: minmax(0, 1fr);
