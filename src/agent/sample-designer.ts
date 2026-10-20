@@ -18,7 +18,8 @@ ${SAMPLE_SCHEMA}
 - one_shot: 1-4 capas. Cada capa tiene osc (sine, saw, square, triangle, noise), freq, glideTo/glide (pitch envelope), detune, voices (1-4) + spread (unísono), pan, fm {ratio, index, decay}, filter {type, freq, q}, filterEnv {amount, attack, decay, sustain}, env ADSR y gain. FX: drive, bitcrush {levels}, eq, delay, reverb. duration en segundos.
 - industrial: macro de impacto metálico. No usa layers; usa duration y params {rootHz, pitchDrop, pitchTau, decay, drive, crushHz, crushLevels, cutoffStart, cutoffEnd, cutoffTau, resonance, metalHz, metalRatio, metalIndex, noise, width, delayWet, seed}. Es solo un ejemplo de macros; no lo uses para todo.
 - loop: role, style, bars, bpm, key, density, octave, chords, energy. Usa el BPM del proyecto.
-- Elige los primitivos según el sonido, no por estilo: kick = sine con glide y click de noise; snare = noise bandpass + tono; bass = saw + filterEnv + sub; pluck = FM con decay corto; pad = voces detuneadas, ataque lento y reverb; riser = noise + filterEnv ascendente; impacto metálico = industrial.
+- Elige los primitivos según el sonido, no por estilo: kick = sine con glide y click de noise; snare = noise bandpass + tono; bass = saw + filterEnv + sub; pluck = FM con decay corto; pad = voces detuneadas, ataque lento y reverb; riser = noise + filterEnv ascendente; impacto metálico = capas con FM/noise.
+- Usa kind "industrial" solo si piden explícitamente industrial; para cualquier otro estilo usa "one_shot" y compón las capas.
 - Roles y estilos válidos: ${SAMPLE_ROLE_DESCRIPTION}.
 - Para percusión usa capas de sine con glide (bombo/toms) o noise con filtro (caja/charles).
 - No expliques nada: solo el JSON.`;

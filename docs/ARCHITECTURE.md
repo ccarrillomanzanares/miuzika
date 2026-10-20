@@ -186,7 +186,9 @@ Implementado en el spike:
   saturación suave). Se aproxima el proyecto, no es el motor de openDAW.
 - Mixdown: `OfflineAudioContext` → PCM 16-bit (`web/src/render.ts`). Es offline, puede tardar.
   Una canción de 2:06 ronda los 20 MB y decenas de segundos de render.
-- Sample Lab con motor de sintetizador general: one-shots de 1-4 capas con osciladores,
+- Sample Lab con dos formatos de usuario: **one-shot** y **loop**. El one-shot usa el motor
+  general de capas o, internamente, la macro industrial; la UI no separa estilos ni motores.
+- Motor general: one-shots de 1-4 capas con osciladores,
   unísono/detune, FM, pitch envelope (`glide`), filter envelope, ruido, pan, drive, bitcrush,
   EQ, delay y reverb (`web/src/sample-render.ts`). El LLM compone los primitivos según el sonido.
 - Macro **industrial** (`web/src/industrial.ts`): one-shot procedural puro (Float32Array,

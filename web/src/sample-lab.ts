@@ -46,9 +46,8 @@ export function openSampleLab(options: SampleLabOptions): void {
       <div class="sample-body">
         <textarea class="sample-prompt" rows="2" placeholder="stab industrial metálico, kick oscuro para punk, riser de 2 compases, pad frío..."></textarea>
         <div class="sample-row">
-          <select class="sample-kind" title="Tipo de sample">
-            <option value="one_shot">Sintetizador</option>
-            <option value="industrial">Impacto industrial</option>
+          <select class="sample-kind" title="Formato del sample">
+            <option value="one_shot">Sonido (one-shot)</option>
             <option value="loop">Loop</option>
           </select>
           <input class="sample-bars" type="number" min="1" max="8" value="2" title="Compases del loop" />
@@ -137,9 +136,9 @@ export function openSampleLab(options: SampleLabOptions): void {
       audio.src = objectUrl;
       const engine =
         rendered.spec.kind === "industrial"
-          ? "impacto industrial · "
+          ? "macro impacto · "
           : rendered.spec.kind === "one_shot"
-            ? "sintetizador · "
+            ? "one-shot · "
             : "loop · ";
       nameEl.textContent = `${rendered.name} · ${engine}${rendered.durationBeats.toFixed(2)} beats · ${data.model ?? "LLM"}`;
       resultBox.hidden = false;

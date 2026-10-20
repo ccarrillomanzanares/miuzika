@@ -79,12 +79,13 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
   “loop de bajo punk en mi menor”), el LLM diseña la receta, el motor la renderiza a WAV y la
   escuchas antes de insertarla como clip. Puedes **elegir o crear la pista de destino**
   (`Drums Samples`, `Bass Samples`…), así que cada sample va a su propia pista. También puedes
-  **descargar el WAV** sin insertarlo.
+  **descargar el WAV** sin insertarlo. En la UI solo eliges **Sonido (one-shot)** o **Loop**;
+  el motor/macro concreto lo decide el LLM según la petición.
 - **Motor de sintetizador**: no es un modelo neural ni una librería fija. El LLM compone capas
   con osciladores, unísono/detune, FM, pitch envelope, filter envelope, ruido, drive, bitcrush,
   EQ, delay y reverb. Con esos primitivos puede pedir kicks, snares, bajos, plucks, pads, risers,
-  texturas o impactos, en cualquier estilo. «Impacto industrial» es solo una macro de ejemplo;
-  el modo «Sintetizador» es el general.
+  texturas o impactos, en cualquier estilo. La macro industrial es un preset interno de
+  one-shot, no una opción aparte en la UI.
 - **Proyecto mixto**: puedes combinar pistas de samples y pistas MIDI. El Sample Lab crea el
   proyecto vacío si hace falta; el chat añade o edita pistas MIDI con el agente. El planificador
   de canción completa solo se usa en un proyecto vacío o al pedir “otra canción/desde cero”.
