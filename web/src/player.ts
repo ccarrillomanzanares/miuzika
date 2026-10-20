@@ -7,6 +7,7 @@ import { buildBusChain, buildMasterChain, buildTrackChain } from "./fx.ts";
 import type { BusChain, MasterChain, TrackChain } from "./fx.ts";
 import { createNoiseBuffer, playInstrumentNote } from "./synth.ts";
 import type { VoiceHandle } from "./synth.ts";
+import { isSynthReady, prepareSynth, presetFor, WorkletInstrument } from "./worklet-synth.ts";
 
 interface Event {
   kind: "note" | "audio";
@@ -34,6 +35,7 @@ export class PreviewPlayer {
   private readonly voices = new Set<VoiceHandle>();
   private readonly pending: Array<{ endsAt: number; bus: GainNode; voice: VoiceHandle }> = [];
   private readonly muteGains = new Map<string, GainNode>();
+  private readonly synths = new Map<string, WorkletInstrument>();
   private chains: Array<MasterChain | BusChain | TrackChain> = [];
   private noise: AudioBuffer | null = null;
   private playing = false;
@@ -61,6 +63,12 @@ export class PreviewPlayer {
     const gain = this.muteGains.get(trackId);
     if (!gain || !this.context) return;
     gain.gain.setTargetAtTime(muted ? 0 : 1, this.context.currentTime, 0.012);
+  }
+
+  /** Crea el contexto y carga el sintetizador en segundo plano. */
+  async prepare(): Promise<void> {
+    const context = (this.context ??= new AudioContext({ latencyHint: "balanced" }));
+    await prepareSynth(context);
   }
 
   play(project: Project, fromBeat = 0): void {
@@ -92,6 +100,17 @@ export class PreviewPlayer {
       this.perTrack.set(track.id, chain.input);
       this.muteGains.set(track.id, mute);
       this.chains.push(chain, { input: mute, dispose: () => mute.disconnect() });
+    }
+
+    if (isSynthReady(context)) {
+      for (const track of project.tracks) {
+        if (track.instrument.type === "drumkit") continue;
+        const input = this.perTrack.get(track.id);
+        if (!input) continue;
+        const synth = new WorkletInstrument(context, presetFor(track.instrument.type));
+        synth.connect(input);
+        this.synths.set(track.id, synth);
+      }
     }
 
     this.startBeat = Math.max(0, fromBeat);
@@ -184,6 +203,8 @@ export class PreviewPlayer {
         /* ya parada */
       }
     }
+    for (const synth of this.synths.values()) synth.dispose();
+    this.synths.clear();
     for (const chain of this.chains) {
       try {
         chain.dispose();
@@ -219,6 +240,11 @@ export class PreviewPlayer {
       if (event.kind === "audio") {
         this.scheduleAudio(context, destination, event, when);
       } else {
+        const synth = this.synths.get(event.track.id);
+        if (synth) {
+          synth.note(event.pitch, event.velocity, when, event.duration * this.secondsPerBeat);
+          continue;
+        }
         const bus = context.createGain();
         bus.connect(destination);
         const voice = playInstrumentNote(

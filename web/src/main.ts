@@ -424,6 +424,7 @@ if (project) {
 }
 setPlaying(false);
 void loadDrumKit();
+void player.prepare();
 
 if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__miuzika = {

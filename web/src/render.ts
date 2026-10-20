@@ -9,6 +9,7 @@ import type { TrackChain } from "./fx.ts";
 import { measureLoudness, normalizeBuffer } from "./loudness.ts";
 import type { Loudness } from "./loudness.ts";
 import { createNoiseBuffer, playInstrumentNote } from "./synth.ts";
+import { prepareSynth, presetFor, WorkletInstrument } from "./worklet-synth.ts";
 
 const dbToGain = (db: number) => 10 ** (db / 20);
 
@@ -29,6 +30,7 @@ export async function renderProject(project: Project, options: RenderOptions = {
   const secondsPerBeat = 60 / project.bpm;
   const duration = project.lengthBars * beatsPerBar(project) * secondsPerBeat + 2;
   const context = new OfflineAudioContext(2, Math.ceil(duration * sampleRate), sampleRate);
+  const useWorklet = await prepareSynth(context);
 
   const master = buildMasterChain(context, project.master.gainDb, context.destination);
   const drumBus = buildBusChain(context, master.input, "drums");
@@ -36,11 +38,26 @@ export async function renderProject(project: Project, options: RenderOptions = {
   const noise = createNoiseBuffer(context);
   const soloed = project.tracks.some((track) => track.solo);
   const chains = new Map<string, TrackChain>();
+  const synths = new Map<string, WorkletInstrument>();
 
   for (const track of project.tracks) {
     if (track.muted || (soloed && !track.solo)) continue;
     const bus = track.instrument.type === "drumkit" ? drumBus.input : musicBus.input;
-    chains.set(track.id, buildTrackChain(context, track, bus, secondsPerBeat));
+    const chain = buildTrackChain(context, track, bus, secondsPerBeat);
+    chains.set(track.id, chain);
+    if (useWorklet && track.instrument.type !== "drumkit") {
+      const notes = track.clips.flatMap((clip) =>
+        clip.notes.map((note) => ({
+          note: note.pitch,
+          velocity: note.velocity / 127,
+          startAt: (clip.start + note.start) * secondsPerBeat,
+          duration: note.duration * secondsPerBeat,
+        })),
+      );
+      const synth = new WorkletInstrument(context, presetFor(track.instrument.type), notes);
+      synth.connect(chain.input);
+      synths.set(track.id, synth);
+    }
   }
 
   for (const track of project.tracks) {
@@ -61,6 +78,7 @@ export async function renderProject(project: Project, options: RenderOptions = {
         source.start(when, offset, length);
         continue;
       }
+      if (synths.has(track.id)) continue;
       for (const note of clip.notes) {
         playInstrumentNote(
           context,
@@ -77,6 +95,7 @@ export async function renderProject(project: Project, options: RenderOptions = {
   }
 
   const rendered = await context.startRendering();
+  for (const synth of synths.values()) synth.dispose();
   const loudness =
     options.normalize === false
       ? measureLoudness(rendered)
