@@ -163,6 +163,22 @@ function addMessage(role: "user" | "assistant" | "system", text: string): void {
   messages.scrollTop = messages.scrollHeight;
 }
 
+/** Mensaje con reproductor para escuchar el render sin salir de la app. */
+function addAudioMessage(blob: Blob, text: string): void {
+  const div = document.createElement("div");
+  div.className = "msg assistant";
+  const caption = document.createElement("div");
+  caption.innerHTML = escapeHtml(text).replace(/\n/g, "<br>");
+  const audio = document.createElement("audio");
+  audio.controls = true;
+  audio.preload = "metadata";
+  audio.src = URL.createObjectURL(blob);
+  audio.className = "render-audio";
+  div.append(caption, audio);
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
 function persist(): void {
   if (project) localStorage.setItem("miuzika.project", JSON.stringify(project));
   else localStorage.removeItem("miuzika.project");
@@ -457,9 +473,9 @@ $("export-wav").addEventListener("click", async () => {
     const { renderProject } = await import("./render.ts");
     const result = await renderProject(project, options);
     download(result.blob, `${slug(project.name)}.wav`);
-    addMessage(
-      "assistant",
-      `Mixdown listo (${(result.blob.size / 1024 / 1024).toFixed(1)} MB) · ${result.loudness.lufs.toFixed(1)} LUFS · pico ${result.loudness.truePeakDb.toFixed(1)} dBTP.`,
+    addAudioMessage(
+      result.blob,
+      `WAV renderizado (${(result.blob.size / 1024 / 1024).toFixed(1)} MB) · ${result.loudness.lufs.toFixed(1)} LUFS · pico ${result.loudness.truePeakDb.toFixed(1)} dBTP. Reproducción aquí abajo; el archivo también se ha descargado.`,
     );
   } catch (error) {
     addMessage("system", `No se pudo renderizar: ${error instanceof Error ? error.message : String(error)}`);
