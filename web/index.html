@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>miuzika · asistente de composición</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <div class="brand">miuzika <span>spike</span></div>
+        <div id="song-info" class="song-info"></div>
+        <div class="actions">
+          <button id="play" class="icon" title="Reproducir">▶</button>
+          <button id="stop" class="icon" title="Detener">■</button>
+          <span class="sep"></span>
+          <button id="export-wav" title="Mixdown del proyecto a WAV">WAV</button>
+          <button id="export-midi" title="Exportar Standard MIDI File">MIDI</button>
+          <button id="export-opendaw" title="Exportar proyecto de openDAW">openDAW</button>
+          <button id="export-json" title="Exportar el proyecto canónico">JSON</button>
+          <label class="file">Abrir<input id="open" type="file" accept=".json,application/json" /></label>
+          <label class="file">Audio<input id="audio-file" type="file" accept="audio/*" multiple /></label>
+          <button id="new-song" title="Empezar de cero">Nueva</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="timeline">
+          <div class="track-heads" id="track-heads"></div>
+          <div class="canvas-wrap" id="canvas-wrap">
+            <canvas id="timeline"></canvas>
+          </div>
+        </section>
+
+        <aside class="chat">
+          <div class="messages" id="messages"></div>
+          <div class="examples" id="examples"></div>
+          <form id="composer">
+            <textarea
+              id="prompt"
+              rows="2"
+              placeholder="Describe la canción o el cambio…"
+              autocomplete="off"
+            ></textarea>
+            <button id="send" type="submit">Enviar</button>
+          </form>
+          <div class="status" id="status">Enter envía · doble clic en un clip = piano roll · Ctrl+rueda = zoom</div>
+        </aside>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

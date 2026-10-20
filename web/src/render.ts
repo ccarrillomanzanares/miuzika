@@ -1,0 +1,107 @@
+/** Mixdown offline del proyecto a WAV (síntesis de previsualización + clips de audio). */
+
+import type { Project } from "../../src/core/types.ts";
+import { beatsPerBar } from "../../src/core/types.ts";
+import { audioAssets } from "./audio-store.ts";
+import { loadDrumKit } from "./drum-kit.ts";
+import { buildBusChain, buildMasterChain, buildTrackChain } from "./fx.ts";
+import type { TrackChain } from "./fx.ts";
+import { createNoiseBuffer, playInstrumentNote } from "./synth.ts";
+
+const dbToGain = (db: number) => 10 ** (db / 20);
+
+export async function renderProjectToWav(project: Project, sampleRate = 44_100): Promise<Blob> {
+  await loadDrumKit();
+  const secondsPerBeat = 60 / project.bpm;
+  const duration = project.lengthBars * beatsPerBar(project) * secondsPerBeat + 2;
+  const context = new OfflineAudioContext(2, Math.ceil(duration * sampleRate), sampleRate);
+
+  const master = buildMasterChain(context, project.master.gainDb, context.destination);
+  const drumBus = buildBusChain(context, master.input, "drums");
+  const musicBus = buildBusChain(context, master.input, "music");
+  const noise = createNoiseBuffer(context);
+  const soloed = project.tracks.some((track) => track.solo);
+  const chains = new Map<string, TrackChain>();
+
+  for (const track of project.tracks) {
+    if (track.muted || (soloed && !track.solo)) continue;
+    const bus = track.instrument.type === "drumkit" ? drumBus.input : musicBus.input;
+    chains.set(track.id, buildTrackChain(context, track, bus, secondsPerBeat));
+  }
+
+  for (const track of project.tracks) {
+    const chain = chains.get(track.id);
+    if (!chain) continue;
+    for (const clip of track.clips) {
+      if (clip.audio) {
+        const asset = audioAssets.get(clip.audio.assetId);
+        if (!asset) continue;
+        const source = context.createBufferSource();
+        source.buffer = asset.buffer;
+        const gain = context.createGain();
+        gain.gain.value = Math.max(0, Math.min(2, dbToGain(clip.audio.gainDb)));
+        source.connect(gain).connect(chain.input);
+        const when = clip.start * secondsPerBeat;
+        const offset = Math.max(0, clip.audio.offset * secondsPerBeat);
+        const length = Math.max(0.01, clip.length * secondsPerBeat);
+        source.start(when, offset, length);
+        continue;
+      }
+      for (const note of clip.notes) {
+        playInstrumentNote(
+          context,
+          chain.input,
+          track.instrument.type,
+          note.pitch,
+          (clip.start + note.start) * secondsPerBeat,
+          note.duration * secondsPerBeat,
+          note.velocity,
+          noise,
+        );
+      }
+    }
+  }
+
+  const rendered = await context.startRendering();
+  return new Blob([audioBufferToWav(rendered)], { type: "audio/wav" });
+}
+
+/** PCM 16-bit little-endian, estéreo si el buffer lo es. */
+export function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
+  const channels = Math.min(2, buffer.numberOfChannels);
+  const frames = buffer.length;
+  const bytesPerSample = 2;
+  const blockAlign = channels * bytesPerSample;
+  const dataSize = frames * blockAlign;
+  const output = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(output);
+
+  writeText(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeText(view, 8, "WAVE");
+  writeText(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, buffer.sampleRate, true);
+  view.setUint32(28, buffer.sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  writeText(view, 36, "data");
+  view.setUint32(40, dataSize, true);
+
+  const data = Array.from({ length: channels }, (_, channel) => buffer.getChannelData(channel));
+  let offset = 44;
+  for (let frame = 0; frame < frames; frame++) {
+    for (let channel = 0; channel < channels; channel++) {
+      const sample = Math.max(-1, Math.min(1, data[channel]![frame]!));
+      view.setInt16(offset, Math.round(sample < 0 ? sample * 0x8000 : sample * 0x7fff), true);
+      offset += 2;
+    }
+  }
+  return output;
+}
+
+function writeText(view: DataView, offset: number, text: string): void {
+  for (let index = 0; index < text.length; index++) view.setUint8(offset + index, text.charCodeAt(index));
+}

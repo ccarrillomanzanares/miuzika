@@ -1,0 +1,205 @@
+# Arquitectura
+
+## Principio
+
+El DAW no es el problema. Lo difícil es que una frase en español se convierta en un cambio
+musical **válido, coherente y reversible**. Por eso el sistema separa tres capas y solo una
+usa el LLM.
+
+```
+[1] Intención      lenguaje natural → SongPlan / lista de Op
+[2] Símbolos       Project (beats) → notas, clips, dispositivos
+[3] Audio          motor del host → samples, síntesis, render
+```
+
+`[1]` es probabilístico y barato de regenerar. `[2]` es determinista y testeable. `[3]` es lo
+único que suena, y se delega en openDAW.
+
+## Modelo de tiempo
+
+Todo el IR usa **beats** (negras) en coma flotante. No hay samples ni ticks en el modelo.
+La conversión ocurre solo al exportar:
+
+- MIDI: `tick = beat × 960`
+- openDAW: `position = beat × PPQN` (constante de `@opendaw/lib-dsp`)
+
+Así el mismo proyecto se puede renderizar a cualquier sample rate y el modelo no arrastra
+decisiones del motor.
+
+## IR
+
+`src/core/types.ts`
+
+```
+Project
+ ├─ bpm, key {tonic, mode}, timeSignature, lengthBars, seed
+ ├─ master {gainDb}
+ └─ Track[]
+     ├─ id, name, kind (midi|audio), instrument
+     ├─ gainDb, pan, muted, solo
+     ├─ Device[]  (reverb, delay, chorus, distortion, filter, eq, compressor, bitcrusher, gate, width)
+     └─ Clip[]
+         ├─ start, length (beats absolutos)
+         ├─ Note[]  (pitch, start relativo, duration, velocity)
+         └─ audio?  (assetId, offset, gainDb) ← reservado para WAV
+```
+
+Invariantes que se validan en cada cambio (`src/core/project.ts`):
+
+- pitch 0..127 entero, velocity 1..127, duración > 0
+- ganancias -60..12 dB, pan -1..1
+- parámetros de dispositivo dentro de rango y **con nombre conocido**
+- ids únicos, clips no solapados (aviso), máximo 64 pistas y 200k notas
+- si hay errores, la transacción no se aplica
+
+## Operaciones
+
+`src/core/ops.ts`. Es el **único** vocabulario de cambio, compartido por UI, LLM y tests.
+
+| Op | Uso |
+|---|---|
+| `set_song` | nombre, bpm, tonalidad, compases, semilla |
+| `add_track` / `remove_track` / `set_track` | alta, baja, gain/pan/mute/solo |
+| `generate_part` | **la importante**: rol + estilo + compases + densidad + acordes → notas |
+| `add_notes` / `replace_clip_notes` / `remove_clip` | edición quirúrgica |
+| `add_device` / `set_device` / `remove_device` | cadena de efectos |
+| `set_master` | ganancia global |
+
+`generate_part` es lo que hace viable la canción completa: el modelo manda ~10 números por
+sección y el motor genera cientos de notas.
+
+```json
+{"op":"generate_part","trackId":"trk_bass","startBar":12,"section":"chorus",
+ "pattern":{"role":"bass","style":"driving8","bars":8,"octave":2,
+            "chords":["Dm","Bb","F","C"],"density":0.8}}
+```
+
+### Resolución de referencias
+
+El modelo ve ids (`trk_bass`) y también puede usar nombre exacto o índice 1-based (`"2"`).
+La resolución está centralizada y los errores enumeran las alternativas, lo que permite que
+el bucle de reparación funcione con modelos pequeños.
+
+## Determinismo
+
+`expandPattern` usa `mulberry32(hash(seed, pattern.seed, rol, estilo))`.
+
+- misma entrada → mismas notas (tests, diffs, undo)
+- semilla distinta → variación musical (botón "otra versión")
+- el `seed` del proyecto se guarda en el JSON
+
+Esto es también lo que permite evaluar el pipeline sin LLM (`--offline`): es el mismo motor,
+solo cambia quién escribe el plan. No es una ruta del producto.
+
+## Estrategia LLM
+
+### Fase 1 — plan
+
+`src/agent/planner.ts`
+
+El modelo devuelve un `SongPlan` (JSON) que pasa tres filtros antes de aplicarse:
+
+1. **zod** (`parseSongPlan`): forma y tipos.
+2. **normalizePlan**: sinónimos de parámetros de DAW (`size`→`decay`, `mix`→`wet`,
+   `amount`→`width`…) y recorte a rango. El modelo no tiene que adivinar nuestro vocabulario.
+3. **validatePlan + checkConstraints**: estilos existentes, parámetros conocidos, roles con
+   pista, acordes parseables, octavas razonables, y las **restricciones duras** del prompt.
+
+Las restricciones (`extractConstraints`) se extraen de forma determinista: tonalidad explícita,
+BPM exacto o rango por adjetivo ("lenta"), compases, "sin batería", loops y roles mencionados.
+El LLM decide la música; esto impide que ignore lo que el usuario pidió.
+
+Si algún filtro falla, el error se devuelve al modelo como feedback y se reintenta (máximo 3
+intentos, temperatura 0.8 → 0.4). No hay fallback silencioso.
+
+### Fase 2 — expansión
+
+`composePlan(plan)` → `Op[]` → `applyOps` → `Project`. Cero tokens.
+
+### Fase 3 — edición conversacional
+
+`src/agent/agent.ts` + `src/agent/tools.ts`
+
+Cuatro herramientas: `get_project_digest`, `apply_ops`, `check_project`, `undo`.
+
+- el *digest* es un resumen (~2 KB), nunca el proyecto entero
+- `apply_ops` es transaccional; el error vuelve al modelo con las pistas disponibles
+- máximo 8 pasos y 200 ops por llamada
+- si el modelo se queda sin texto final, se le pide un resumen
+
+El esquema JSON de las ops se genera desde zod (`z.toJSONSchema`): una sola fuente de verdad
+para validación y tool-calling.
+
+### Por qué no dejamos que escriba notas
+
+Una canción de 3 minutos son ~90 compases y ~5.000 eventos. En JSON son >100k tokens, el modelo
+pierde la forma global y el resultado es incoherente. Con plan + patrones, el modelo toma las
+decisiones de alto nivel (donde es bueno) y el código resuelve el detalle (donde es fiable).
+
+## Evaluación
+
+`src/cli/eval.ts` ejecuta 8 prompts dorados y comprueba:
+
+- proyecto válido, sin pistas vacías, notas en rango
+- tonalidad, modo, duración y género esperados
+- presencia/ausencia de batería y distorsión
+- que el MIDI se genere con cabecera válida
+
+Es el mismo arnés que se usaría para comparar modelos o prompts. Para el LLM habría que añadir
+una métrica subjetiva (A/B a ciegas) y una de coste/latencia.
+
+## Host: openDAW
+
+Dos capas para que el SDK no contamine el núcleo:
+
+- `src/host/opendaw/mapping.ts`: funciones puras (beats→pulsos, dB, parámetros, instrumentos).
+  Se testea con `node:test` y sobrevive a cambios del SDK.
+- `src/host/opendaw/adapter.ts`: imports dinámicos del SDK, transacción `editing.modify`,
+  serialización y lectura.
+
+Decisiones:
+
+- `Project.new(env)` funciona **sin navegador** con shims mínimos (`shims.ts`): se puede exportar
+  y verificar en Node, no solo en la web.
+- openDAW usa **960 PPQN**, igual que nuestro export MIDI: la conversión es directa.
+- Los parámetros se traducen a unidades reales (dB, ms, Hz); los nombres de dispositivo no
+  coinciden, así que la tabla es explícita y falla si no hay mapeo.
+- Dispositivos sin equivalente exacto se aproximan: chorus → delay corto modulado; filtro → low-pass
+  de Revamp; EQ → tres bandas de Revamp.
+- El import lee `AudioUnitBoxAdapter` + `NoteRegionBoxAdapter`; los FX no se reconstruyen todavía.
+- El audio no se exporta a openDAW: requiere `AudioFileBox` y `SampleService`.
+
+## Audio
+
+Implementado en el spike:
+
+- IR: `project.audioAssets` (metadatos) + `clip.audio` (assetId, offset, gain).
+- Ops: `register_audio_asset`, `add_audio_clip`, `set_audio_clip` (mover, recortar, ganancia).
+- El LLM ve los assets en la línea `AUDIO` del digest y puede colocarlos o moverlos.
+- En el navegador, los bytes viven en `web/src/audio-store.ts` (decode + peaks). No se persisten.
+- Preview y mixdown comparten instrumentos y FX: `web/src/synth.ts` (capas, envolventes,
+  brillo dependiente de velocidad, drums sintetizados) y `web/src/fx.ts` (reverb por convolución,
+  delay con damping, chorus, drive, filtro, EQ de 3 bandas, compresor; master con compresión y
+  saturación suave). Se aproxima el proyecto, no es el motor de openDAW.
+- Mixdown: `OfflineAudioContext` → PCM 16-bit (`web/src/render.ts`). Es offline, puede tardar.
+  Una canción de 2:06 ronda los 20 MB y decenas de segundos de render.
+
+Siguiente fase de audio:
+
+1. **Persistencia** de assets en OPFS/IndexedDB y export a openDAW (`AudioFileBox`).
+2. **Time-stretch y slicing** para loops (Rubber Band/SoundTouch) y detección de transientes.
+3. **Asistente de mezcla**: análisis de loudness/espectro → `set_device`/automatización.
+4. **Generación**: ACE-Step (Apache-2.0/MIT según checkpoint) como servicio; evitar MusicGen
+   (CC-BY-NC restringe la salida) y revisar la licencia comunitaria de Stable Audio.
+5. **Coherencia multitrack**: mezcla completa + Demucs (MIT) para stems editables.
+
+## Riesgos
+
+| Riesgo | Mitigación |
+|---|---|
+| Musicalidad del LLM | plan + patrones deterministas, presets por género, A/B humano |
+| Alucinación de estado | digest obligatorio, ids resueltos, errores accionables |
+| Coste/latencia | plan corto, edición por tools, cache de planes, modelo flash para ops |
+| Licencias | openDAW AGPL o comercial; modelos con allowlist; samples CC0 |
+| Sin VST3 en web | catálogo propio de instrumentos; escritorio (Tracktion/JUCE) si se targetea pro |
+| Deriva de esquema | zod como fuente única + tests de contrato |
