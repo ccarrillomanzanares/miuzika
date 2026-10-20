@@ -1,4 +1,4 @@
-import type { InstrumentType, Project } from "../../src/core/types.ts";
+import type { InstrumentType, Project, Track } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
 import type { SampleRequest } from "../../src/agent/sample-plan.ts";
 import { MIDI_ENABLED } from "../../src/config.ts";
@@ -584,6 +584,181 @@ function sampleInstrument(role: SampleRequest["role"] | undefined, trackName: st
   }
 }
 
+function normalizeText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+const TRACK_ALIASES: Record<string, string[]> = {
+  drumkit: ["drum", "drums", "bateria", "percus"],
+  bass: ["bass", "bajo", "sub"],
+  synth: ["synth", "sintetizador"],
+  pad: ["pad", "acordes", "chord"],
+  lead: ["lead", "guitarra", "melodia"],
+  arp: ["arp", "arpegio"],
+};
+
+function findAudioTrack(text: string, tracks: Track[]): Track | undefined {
+  const haystack = normalizeText(text);
+  for (const track of tracks) {
+    if (haystack.includes(normalizeText(track.name))) return track;
+  }
+  for (const track of tracks) {
+    const aliases = TRACK_ALIASES[track.instrument.type] ?? [];
+    if (aliases.some((alias) => haystack.includes(alias))) return track;
+  }
+  return undefined;
+}
+
+interface AudioEditPlan {
+  startBar: number;
+  endBar: number;
+  trackId: string;
+  trackName: string;
+}
+
+function parseAudioEdit(text: string): AudioEditPlan | null {
+  const view = activeProject(project);
+  if (!view) return null;
+  if (!/\b(cambia|cambiar|modifica|modificar|edita|editar|reemplaza|reemplazar|sustituye|sustituir|varia|variar|haz|genera)\b/i.test(text)) {
+    return null;
+  }
+  const match = text.match(
+    /(?:comp[aá]s(?:es)?|estrofas?|barras?|del|desde)?\s*(\d{1,3})\s*(?:a|al|hasta|–|-)\s*(\d{1,3})/i,
+  );
+  if (!match) return null;
+  let start = Number(match[1]);
+  let end = Number(match[2]);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  if (start > end) [start, end] = [end, start];
+  start = Math.max(1, Math.min(view.lengthBars, start));
+  end = Math.max(start, Math.min(view.lengthBars, end));
+  const track = findAudioTrack(text, view.tracks.filter((candidate) => candidate.kind === "audio"));
+  if (!track) return null;
+  return { startBar: start - 1, endBar: end, trackId: track.id, trackName: track.name };
+}
+
+async function replaceAudioRange(text: string, plan: AudioEditPlan): Promise<void> {
+  const full = project;
+  const view = activeProject(full);
+  if (!full || !view) return;
+  const track = full.tracks.find((candidate) => candidate.id === plan.trackId);
+  if (!track || track.kind !== "audio") return;
+
+  const barBeats = beatsPerBar(full);
+  const startBeat = plan.startBar * barBeats;
+  const endBeat = plan.endBar * barBeats;
+  const lengthBeats = endBeat - startBeat;
+  const overlapping = track.clips.filter(
+    (clip) => clip.audio && clip.start < endBeat && clip.start + clip.length > startBeat,
+  );
+  if (
+    overlapping.some(
+      (clip) =>
+        !Number.isInteger(clip.start / barBeats) ||
+        !Number.isInteger((clip.start + clip.length) / barBeats),
+    )
+  ) {
+    addMessage(
+      "system",
+      "Esa pista tiene clips que no están alineados al compás; todavía no puedo cortarlos con precisión.",
+    );
+    return;
+  }
+
+  const seconds = (lengthBeats * 60) / full.bpm;
+  setStatus(`Generando variación de ${track.name}…`);
+  const generated = await api<{ wav: string; code: string }>(
+    "/api/sound/create",
+    {
+      prompt: `${text}. Nueva variación para ${track.name}, compases ${plan.startBar + 1}–${plan.endBar}, ${full.bpm} BPM, ${full.key.tonic} ${full.key.mode}.`,
+      duration: seconds,
+      sampleRate: 48_000,
+      seed: full.seed + plan.startBar * 7919 + plan.endBar,
+      bpm: full.bpm,
+      key: full.key,
+      params: { kind: "one_shot", bars: plan.endBar - plan.startBar },
+    },
+    360_000,
+  );
+  setStatus(`Montando ${track.name}…`);
+  const bytes = Uint8Array.from(atob(generated.wav), (char) => char.charCodeAt(0));
+  const blob = new Blob([bytes], { type: "audio/wav" });
+  const buffer = await decodeAudioBlob(blob);
+  const durationBeats = (buffer.duration * full.bpm) / 60;
+  const assetId = `aud_edit_${Date.now().toString(36)}`;
+  audioAssets.set(assetId, {
+    id: assetId,
+    name: `${track.name} ${plan.startBar + 1}-${plan.endBar}`,
+    buffer,
+    durationBeats,
+    peaks: computePeaks(buffer),
+  });
+  if (!(await persistAudioAsset(assetId, `${track.name} ${plan.startBar + 1}-${plan.endBar}`, durationBeats, blob))) {
+    addMessage("system", "La variación suena en esta sesión, pero no se pudo guardar en IndexedDB.");
+  }
+
+  const ops: Op[] = [
+    {
+      op: "register_audio_asset",
+      assetId,
+      name: `${track.name} ${plan.startBar + 1}-${plan.endBar}`,
+      durationBeats,
+    },
+  ];
+  for (const clip of overlapping) {
+    if (!clip.audio) continue;
+    ops.push({ op: "remove_clip", trackId: track.id, clipId: clip.id });
+    if (clip.start < startBeat) {
+      const leftBeats = startBeat - clip.start;
+      ops.push({
+        op: "add_audio_clip",
+        trackId: track.id,
+        assetId: clip.audio.assetId,
+        startBar: clip.start / barBeats,
+        offsetBeats: clip.audio.offset + leftBeats,
+        lengthBeats: leftBeats,
+        gainDb: clip.audio.gainDb,
+        name: clip.name,
+      });
+    }
+    if (clip.start + clip.length > endBeat) {
+      const rightBeats = clip.start + clip.length - endBeat;
+      ops.push({
+        op: "add_audio_clip",
+        trackId: track.id,
+        assetId: clip.audio.assetId,
+        startBar: endBeat / barBeats,
+        offsetBeats: clip.audio.offset + (endBeat - clip.start),
+        lengthBeats: rightBeats,
+        gainDb: clip.audio.gainDb,
+        name: clip.name,
+      });
+    }
+  }
+  ops.push({
+    op: "add_audio_clip",
+    trackId: track.id,
+    assetId,
+    startBar: plan.startBar,
+    offsetBeats: 0,
+    lengthBeats,
+    gainDb: 0,
+    name: `${track.name} ${plan.startBar + 1}-${plan.endBar}`,
+  });
+
+  setProject(applyOps(full, ops).project);
+  addMessage(
+    "assistant",
+    `He cambiado los compases ${plan.startBar + 1}–${plan.endBar} de “${track.name}” con una variación nueva. El resto de la pista sigue igual.`,
+  );
+  if (Math.abs(durationBeats - lengthBeats) > 0.25) {
+    addMessage("system", `La variación mide ${durationBeats.toFixed(2)} beats y el hueco ${lengthBeats}; revisa el empalme.`);
+  }
+}
+
 async function createSamplesFromChat(text: string): Promise<void> {
   let base = project;
   if (!base) {
@@ -734,12 +909,18 @@ async function send(prompt: string): Promise<void> {
 
   try {
     if (!MIDI_ENABLED) {
-      if (SAMPLE_INTENT.test(text)) {
+      const edit = parseAudioEdit(text);
+      if (edit) {
+        await replaceAudioRange(text, edit);
+      } else if (SAMPLE_INTENT.test(text)) {
         await createSamplesFromChat(text);
       } else {
+        const audioTracks = activeProject(project)?.tracks.map((track) => `“${track.name}”`) ?? [];
         addMessage(
           "assistant",
-          "El modo MIDI está aparcado. Pídeme un sample: “crea un kick industrial”, “un pad ambient cálido” o “un bajo dark wave”.",
+          audioTracks.length > 0
+            ? `Puedo crear samples o cambiar una sección de una pista de audio. Por ejemplo: “cambia los compases 25 a 29 de ${audioTracks[0]} con otra melodía”. Pistas: ${audioTracks.join(", ")}.`
+            : "Pídeme un sample: “crea un kick industrial”, “un pad ambient cálido” o “un bajo dark wave”.",
         );
       }
       return;

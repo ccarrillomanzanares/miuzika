@@ -78,8 +78,10 @@ MIDI sigue en el repo y en los tests, pero no se usa en la ruta activa.
 
 - **Chat**: en modo audio, pide samples (“crea un kick industrial”, “un pad ambient cálido”,
   “lo mismo para batería y bajo”). El chat planifica los samples, genera un script Python por
-  sonido en el sandbox, renderiza WAV y monta las pistas de audio. El planner de canciones MIDI
-  queda detrás del flag.
+  sonido en el sandbox, renderiza WAV y monta las pistas de audio. También puede cambiar una
+  sección: “cambia los compases 25 a 29 del Bass con otra melodía” genera una variación, corta
+  los clips existentes en ese rango y deja el resto igual. El planner de canciones MIDI queda
+  detrás del flag.
 - **Timeline**: clic para mover el playhead, Ctrl+rueda para zoom.
 - **Selección de pistas**: clic selecciona; Ctrl/Cmd+clic añade o quita; Shift+clic selecciona
   un rango. `M` y `S` son botones de mute y solo. La barra de selección permite Mute, Solo,
@@ -265,6 +267,9 @@ docs/
 - El script Python que genera cada sample **aún no se guarda como receta** en el proyecto; se
   persiste el WAV, no el código. Rehacer el sonido requiere volver a pedirlo.
 - Los loops Python no tienen validación de continuidad sample-perfect; pueden necesitar crossfade.
+- El cambio de sección funciona con clips alineados al compás; si un clip de audio empieza a
+  mitad de compás, todavía no se corta con precisión. Tampoco hay crossfade automático en los
+  empalmes.
 - El modo MIDI está oculto y fuera del LLM, pero su código y tests siguen en el repositorio.
 - El JSON del proyecto no embebe los WAV: los bytes viven en IndexedDB, en el navegador y perfil
   actuales. Si se abre el JSON en otro navegador, se borran los datos del sitio o cambia el perfil,

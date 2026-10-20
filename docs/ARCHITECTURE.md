@@ -203,6 +203,10 @@ Implementado en el spike:
 - **Modo audio-only** (`src/config.ts`): `MIDI_ENABLED=false` oculta botones, filtra pistas MIDI
   de la timeline/player y bloquea `/api/generate` y `/api/chat`. El código y los tests MIDI se
   conservan, pero no se importan en la ruta activa ni se envían al LLM.
+- **Edición de secciones de audio** (`web/src/main.ts`): `parseAudioEdit` detecta pista + rango
+  de compases y `replaceAudioRange` genera una variación con el sandbox, elimina/parte los clips
+  que solapan el rango y coloca el nuevo clip. Requiere clips alineados al compás; no hay
+  crossfade automático todavía.
 - **Sandbox Python** (`sandbox/sound`, `src/agent/sound-sandbox.ts`): el LLM escribe
   `render(sr, duration, params, seed)`; un contenedor Docker (o Docker dentro de WSL2) lo ejecuta
   con `--network none`, root read-only, tmpfs, sin capabilities, límites de CPU/memoria/pids y
