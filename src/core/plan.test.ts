@@ -67,6 +67,19 @@ test("los dispositivos del plan existen y sus parámetros son válidos", () => {
   assert.ok(guitar?.devices.some((device) => device.type === "distortion"));
 });
 
+test("synthpop no incluye arp por defecto", () => {
+  const plan = presetPlan("synthpop80s");
+  assert.ok(plan.tracks.every((track) => track.role !== "arp"));
+  assert.ok(plan.sections.every((section) => !section.roles.includes("arp")));
+});
+
+test("un loop puede pedir arp aunque el preset no lo tenga", () => {
+  const plan = loopPlan("synthpop80s", ["arp"], 4);
+  assert.equal(plan.tracks.length, 1);
+  assert.equal(plan.tracks[0]!.role, "arp");
+  assert.equal(plan.sections[0]!.roles.includes("arp"), true);
+});
+
 test("composePlan usa ids de pista estables", () => {
   const ops = composePlan(presetPlan("techno"));
   const addTrack = ops.filter((op) => op.op === "add_track");

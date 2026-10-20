@@ -241,6 +241,16 @@ const ROLE_INSTRUMENT: Record<Role, InstrumentType> = {
   arp: "arp",
 };
 
+/** Pistas mínimas para loops que piden un rol ausente en el preset. */
+const LOOP_TRACKS: Record<Role, TrackPlan> = {
+  drums: { name: "Drums", role: "drums", style: "four_on_floor", gainDb: -3, pan: 0, devices: [] },
+  bass: { name: "Bass", role: "bass", style: "driving8", octave: 2, gainDb: -4, pan: 0, devices: [] },
+  chords: { name: "Chords", role: "chords", style: "stab", octave: 4, gainDb: -8, pan: 0, devices: [] },
+  pad: { name: "Pad", role: "pad", style: "pad", octave: 4, gainDb: -8, pan: 0, devices: [] },
+  lead: { name: "Lead", role: "lead", style: "hook", octave: 5, gainDb: -6, pan: 0, devices: [] },
+  arp: { name: "Arp", role: "arp", style: "up", octave: 5, gainDb: -12, pan: 0, devices: [] },
+};
+
 function slugify(name: string): string {
   return name
     .normalize("NFD")
@@ -405,30 +415,20 @@ const LEAD_80S: TrackPlan = {
   ],
 };
 
-const ARP_80S: TrackPlan = {
-  name: "Arp",
-  role: "arp",
-  style: "up",
-  octave: 5,
-  gainDb: -13,
-  pan: 0.32,
-  devices: [{ type: "delay", params: { wet: 0.32, time: 0.3, feedback: 0.42 } }],
-};
-
 const PRESETS: Record<Genre, Preset> = {
   synthpop80s: {
     bpm: 96,
     key: { tonic: "D", mode: "minor" },
     degrees: { minor: [0, 5, 2, 6], major: [0, 5, 3, 4] },
     sections: [
-      { name: "intro", bars: 4, energy: 0.25, roles: ["pad", "arp"] },
-      { name: "verse", bars: 8, energy: 0.55, roles: ["drums", "bass", "pad", "arp"] },
-      { name: "chorus", bars: 8, energy: 0.92, roles: ["drums", "bass", "pad", "chords", "lead", "arp"] },
-      { name: "verse2", bars: 8, energy: 0.6, roles: ["drums", "bass", "pad", "arp"] },
-      { name: "chorus2", bars: 8, energy: 0.98, roles: ["drums", "bass", "pad", "chords", "lead", "arp"] },
-      { name: "outro", bars: 4, energy: 0.3, roles: ["pad", "arp"] },
+      { name: "intro", bars: 4, energy: 0.25, roles: ["pad"] },
+      { name: "verse", bars: 8, energy: 0.55, roles: ["drums", "bass", "pad"] },
+      { name: "chorus", bars: 8, energy: 0.92, roles: ["drums", "bass", "pad", "chords", "lead"] },
+      { name: "verse2", bars: 8, energy: 0.6, roles: ["drums", "bass", "pad"] },
+      { name: "chorus2", bars: 8, energy: 0.98, roles: ["drums", "bass", "pad", "chords", "lead"] },
+      { name: "outro", bars: 4, energy: 0.3, roles: ["pad"] },
     ],
-    tracks: [DRUMS_80S, BASS_80S, PAD_80S, CHORDS_80S, LEAD_80S, ARP_80S],
+    tracks: [DRUMS_80S, BASS_80S, PAD_80S, CHORDS_80S, LEAD_80S],
     mixNotes: "Pad ancho y oscuro, batería con puerta, bajo con saturación suave y lead con delay.",
   },
 
@@ -779,6 +779,11 @@ export function presetPlan(genre: Genre, options: PresetOptions = {}): SongPlan 
 export function loopPlan(genre: Genre, roles: Role[], bars = 4, options: PresetOptions = {}): SongPlan {
   const base = presetPlan(genre, { ...options, bars });
   const selected = base.tracks.filter((track) => roles.includes(track.role));
+  for (const role of roles) {
+    if (!selected.some((track) => track.role === role)) {
+      selected.push({ ...LOOP_TRACKS[role], devices: [] });
+    }
+  }
   const tracks = selected.length > 0 ? selected : base.tracks;
   return {
     ...base,
