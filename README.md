@@ -74,7 +74,11 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
 
 - **Chat**: si el proyecto está vacío, la primera petición planifica una canción completa; las
   siguientes editan con herramientas (`apply_ops`, `undo`, digest…).
-- **Timeline**: clic para mover el playhead, Ctrl+rueda para zoom, clic en la cabecera para mute.
+- **Timeline**: clic para mover el playhead, Ctrl+rueda para zoom.
+- **Selección de pistas**: clic selecciona; Ctrl/Cmd+clic añade o quita; Shift+clic selecciona
+  un rango. `M` y `S` son botones de mute y solo. La barra de selección permite Mute, Solo,
+  Congelar, Stems de las seleccionadas, Borrar, Todas y Limpiar. Ctrl+A selecciona todo,
+  Esc limpia y Supr borra con confirmación.
 - **Sample Lab**: botón «Sample Lab». Describes un sonido (“kick oscuro distorsionado para punk”,
   “loop de bajo punk en mi menor”), el LLM diseña la receta, el motor la renderiza a WAV y la
   escuchas antes de insertarla como clip. Puedes **elegir o crear la pista de destino**
@@ -99,16 +103,17 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
 - **Piano roll**: doble clic en un clip MIDI. Clic añade, arrastrar mueve, clic derecho borra.
   Al aplicar se emite `replace_clip_notes` (la misma validación que usa el LLM).
 - **Congelar**: convierte pistas MIDI en clips de audio dentro del proyecto. Eliges **pista por
-  pista** en el diálogo (Todas/Ninguna y casillas); cada stem se renderiza con sus FX, sin buses
-  ni máster, y se reinserta en el mismo bus. Las canciones largas se parten en clips de 64
-  compases y los stems se atenúan en bloque solo si haría falta evitar clipping.
+  pista** en el diálogo (Todas/Ninguna y casillas); si hay pistas seleccionadas, llegan ya
+  marcadas. Cada stem se renderiza con sus FX, sin buses ni máster, y se reinserta en el mismo
+  bus. Las canciones largas se parten en clips de 64 compases y los stems se atenúan en bloque
+  solo si haría falta evitar clipping.
 - **Audio persistente**: los WAV importados, los del Sample Lab y las pistas congeladas se
   guardan en IndexedDB (`miuzika` / `audio-assets`) y se rehidratan al recargar, también al
   deshacer/rehacer. El JSON solo lleva metadatos: al abrirlo en otro navegador hay que reimportar
   los WAV.
 - **Audio**: botón «Audio» importa WAV al playhead, dibuja la forma de onda y lo reproduce.
 - **WAV**: mixdown final del proyecto con master, limitador y normalización de loudness.
-- **Stems**: un WAV por pista, con sus FX y sin máster; para mezclar fuera.
+- **Stems**: un WAV por pista, con sus FX y sin máster; exporta todas o solo la selección.
 - **MIDI**: solo pistas MIDI; las pistas de audio no se incluyen.
 - **openDAW**: proyecto `.odw`; por ahora exporta MIDI y avisa de que las pistas de audio
   todavía no se incluyen (`SampleService`/`AudioFileBox` pendiente).

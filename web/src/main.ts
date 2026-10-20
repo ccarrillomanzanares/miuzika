@@ -41,6 +41,7 @@ let project: Project | null = loadStored();
 let busy = false;
 let ready = false;
 let restoring = false;
+let selectedTrackIds: string[] = [];
 
 const HISTORY_KEY = "miuzika.history";
 const HISTORY_LIMIT = 8;
@@ -117,14 +118,11 @@ timeline.onSeek = (beat) => {
   else player.seek(project, beat);
 };
 
-timeline.onToggleMute = (trackId) => {
-  if (!project) return;
-  const track = project.tracks.find((candidate) => candidate.id === trackId);
-  if (!track) return;
-  track.muted = !track.muted;
-  timeline.setMuted(trackId, track.muted);
-  player.setTrackMuted(trackId, track.muted);
-  persist();
+timeline.onToggleMute = (trackId) => toggleTracksFlag([trackId], "muted");
+timeline.onToggleSolo = (trackId) => toggleTracksFlag([trackId], "solo");
+timeline.onSelectionChange = (ids) => {
+  selectedTrackIds = ids;
+  updateSelectionBar();
 };
 
 timeline.onEditClip = (trackId, clipId) => {
@@ -185,6 +183,7 @@ function updateActions(): void {
   $<HTMLButtonElement>("new-song").disabled = !enabled;
   playButton.disabled = !enabled || !hasTracks;
   stopButton.disabled = !ready || !hasTracks;
+  updateSelectionBar();
 }
 
 function setPlaying(value: boolean): void {
@@ -274,6 +273,14 @@ function updateHistoryButtons(): void {
   redoButton.disabled = future.length === 0;
 }
 
+function recordHistory(): void {
+  if (!project) return;
+  history.push(structuredClone(project));
+  if (history.length > HISTORY_LIMIT) history.shift();
+  future = [];
+  saveHistory();
+}
+
 async function undo(): Promise<void> {
   if (!ready || restoring || busy) return;
   const previous = history.pop();
@@ -316,14 +323,38 @@ async function redo(): Promise<void> {
 }
 
 function setProject(next: Project | null, record = true): void {
-  if (record && project) {
-    history.push(structuredClone(project));
-    if (history.length > HISTORY_LIMIT) history.shift();
-    future = [];
-    saveHistory();
-  }
+  if (record && project) recordHistory();
   applyProject(next);
   updateHistoryButtons();
+}
+
+/** Cambio en vivo (mute/solo): no reinicia el player ni el playhead. */
+function commitLive(next: Project): void {
+  if (!project) return;
+  recordHistory();
+  project = next;
+  persist();
+  timeline.refresh(next);
+  player.setMuteState(next);
+  updateActions();
+  updateHistoryButtons();
+}
+
+function toggleTracksFlag(ids: string[], flag: "muted" | "solo"): void {
+  if (!project || busy) return;
+  const tracks = project.tracks.filter((track) => ids.includes(track.id));
+  if (tracks.length === 0) return;
+  const value = !tracks.every((track) => track[flag]);
+  const ops: Op[] = tracks.map((track) =>
+    flag === "muted"
+      ? { op: "set_track", trackId: track.id, muted: value }
+      : { op: "set_track", trackId: track.id, solo: value },
+  );
+  try {
+    commitLive(applyOps(project, ops).project);
+  } catch (error) {
+    addMessage("system", `No se pudo cambiar ${flag}: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 function applyProject(next: Project | null): void {
@@ -409,6 +440,80 @@ async function convertToSamples(base: Project, ids: string[]): Promise<void> {
     );
   } catch (error) {
     addMessage("system", `No se pudo congelar: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function updateSelectionBar(): void {
+  const selected = project?.tracks.filter((track) => selectedTrackIds.includes(track.id)) ?? [];
+  const bar = $<HTMLElement>("selection-bar");
+  bar.hidden = selected.length === 0;
+  $("selection-count").textContent = selected.length === 1 ? "1 pista" : `${selected.length} pistas`;
+  const enabled = ready && !busy;
+  const hasMidi = selected.some((track) => track.kind === "midi");
+  $<HTMLButtonElement>("sel-mute").disabled = !enabled || selected.length === 0;
+  $<HTMLButtonElement>("sel-solo").disabled = !enabled || selected.length === 0;
+  $<HTMLButtonElement>("sel-freeze").disabled = !enabled || !hasMidi;
+  $<HTMLButtonElement>("sel-stems").disabled = !enabled || selected.length === 0;
+  $<HTMLButtonElement>("sel-delete").disabled = !enabled || selected.length === 0;
+  $<HTMLButtonElement>("sel-all").disabled = !enabled || !project || project.tracks.length === 0;
+  $<HTMLButtonElement>("sel-clear").disabled = selected.length === 0;
+}
+
+function deleteSelectedTracks(): void {
+  if (!project || busy) return;
+  const tracks = project.tracks.filter((track) => selectedTrackIds.includes(track.id));
+  if (tracks.length === 0) return;
+  const label = tracks.length === 1 ? `“${tracks[0]!.name}”` : `${tracks.length} pistas`;
+  if (!confirm(`¿Borrar ${label}?`)) return;
+  const ops: Op[] = tracks.map((track) => ({ op: "remove_track", trackId: track.id }));
+  try {
+    setProject(applyOps(project, ops).project);
+    addMessage(
+      "assistant",
+      `Borradas ${tracks.length} pista(s): ${tracks.map((track) => `“${track.name}”`).join(", ")}.`,
+    );
+  } catch (error) {
+    addMessage("system", `No se pudieron borrar: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function openFreezeDialog(): void {
+  if (!ready || busy || !project) return;
+  const midiTracks = project.tracks.filter((track) => track.kind === "midi");
+  if (midiTracks.length === 0) {
+    addMessage("system", "No hay pistas MIDI que congelar.");
+    return;
+  }
+  const preselected = midiTracks
+    .filter((track) => selectedTrackIds.includes(track.id))
+    .map((track) => track.id);
+  const base = project;
+  openBounceDialog({
+    tracks: midiTracks,
+    ...(preselected.length > 0 ? { preselected } : {}),
+    onConvert: (ids) => void convertToSamples(base, ids),
+  });
+}
+
+async function exportStems(trackIds?: string[]): Promise<void> {
+  const base = project;
+  if (busy || !base || base.tracks.length === 0) return;
+  setBusy(true, "Renderizando stems…");
+  try {
+    const { renderStems } = await import("./render.ts");
+    const files = await renderStems(base, {
+      ...(trackIds && trackIds.length > 0 ? { trackIds } : {}),
+      onProgress: (index, total, name) => setStatus(`Stem ${index}/${total}: ${name}…`),
+    });
+    const { zipStems } = await import("./stems-zip.ts");
+    const archive = await zipStems(files);
+    const suffix = trackIds && trackIds.length > 0 ? "-seleccion" : "-stems";
+    download(archive, `${slug(base.name)}${suffix}.zip`);
+    addMessage("assistant", `Stems listos: ${files.length} pista(s) (pre-máster, con sus FX).`);
+  } catch (error) {
+    addMessage("system", `No se pudieron renderizar los stems: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
     setBusy(false);
   }
@@ -507,24 +612,7 @@ $("new-song").addEventListener("click", () => {
   addMessage("assistant", "Cuéntame qué quieres crear: género, tonalidad, tempo, instrumentos o una referencia.");
 });
 
-$("export-stems").addEventListener("click", async () => {
-  if (!ready || !project || project.tracks.length === 0) return;
-  setBusy(true, "Renderizando stems…");
-  try {
-    const { renderStems } = await import("./render.ts");
-    const files = await renderStems(project, {
-      onProgress: (index, total, name) => setStatus(`Stem ${index}/${total}: ${name}…`),
-    });
-    const { zipStems } = await import("./stems-zip.ts");
-    const archive = await zipStems(files);
-    download(archive, `${slug(project.name)}-stems.zip`);
-    addMessage("assistant", `Stems listos: ${files.length} pistas (pre-máster, con sus FX).`);
-  } catch (error) {
-    addMessage("system", `No se pudieron renderizar los stems: ${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    setBusy(false);
-  }
-});
+$("export-stems").addEventListener("click", () => void exportStems());
 
 $("sample-lab").addEventListener("click", () => {
   if (!ready) return;
@@ -594,19 +682,15 @@ $("sample-lab").addEventListener("click", () => {
   });
 });
 
-$("bounce-samples").addEventListener("click", () => {
-  if (!ready || !project) return;
-  const midiTracks = project.tracks.filter((track) => track.kind === "midi");
-  if (midiTracks.length === 0) {
-    addMessage("system", "No hay pistas MIDI que congelar.");
-    return;
-  }
-  const base = project;
-  openBounceDialog({
-    tracks: midiTracks,
-    onConvert: (ids) => void convertToSamples(base, ids),
-  });
-});
+$("bounce-samples").addEventListener("click", openFreezeDialog);
+
+$("sel-mute").addEventListener("click", () => toggleTracksFlag(selectedTrackIds, "muted"));
+$("sel-solo").addEventListener("click", () => toggleTracksFlag(selectedTrackIds, "solo"));
+$("sel-freeze").addEventListener("click", openFreezeDialog);
+$("sel-stems").addEventListener("click", () => void exportStems(selectedTrackIds));
+$("sel-delete").addEventListener("click", deleteSelectedTracks);
+$("sel-all").addEventListener("click", () => timeline.selectAll());
+$("sel-clear").addEventListener("click", () => timeline.clearSelection());
 
 $("export-midi").addEventListener("click", () => {
   if (!ready || !project || project.tracks.length === 0) return;
@@ -758,9 +842,24 @@ promptInput.addEventListener("keydown", (event) => {
 window.addEventListener("keydown", (event) => {
   const target = event.target as HTMLElement | null;
   if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
-  if (!(event.ctrlKey || event.metaKey)) return;
+  if (event.key === "Escape") {
+    timeline.clearSelection();
+    return;
+  }
+  const modifier = event.ctrlKey || event.metaKey;
+  if (!modifier) {
+    if (event.key === "Delete" || event.key === "Backspace") {
+      if (selectedTrackIds.length === 0) return;
+      event.preventDefault();
+      deleteSelectedTracks();
+    }
+    return;
+  }
   const key = event.key.toLowerCase();
-  if (key === "z") {
+  if (key === "a") {
+    event.preventDefault();
+    timeline.selectAll();
+  } else if (key === "z") {
     event.preventDefault();
     if (event.shiftKey) void redo();
     else void undo();

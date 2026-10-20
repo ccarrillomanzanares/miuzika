@@ -172,6 +172,37 @@ button.icon.active {
   cursor: pointer;
 }
 
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 12px;
+  background: #10131b;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.selection-bar[hidden] {
+  display: none;
+}
+
+.selection-bar strong {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.selection-bar .spacer {
+  flex: 1;
+}
+
+.selection-bar button {
+  padding: 4px 9px;
+  font-size: 11px;
+}
+
 main {
   flex: 1;
   display: grid;
@@ -215,8 +246,18 @@ main {
   background: #151923;
 }
 
+.track-head.selected {
+  background: #1a2030;
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+
 .track-head.muted {
   opacity: 0.45;
+}
+
+.track-buttons {
+  display: flex;
+  gap: 4px;
 }
 
 .track-head .dot {
@@ -250,7 +291,8 @@ main {
   text-overflow: ellipsis;
 }
 
-.track-head .mute {
+.track-head .mute,
+.track-head .solo {
   width: 18px;
   height: 18px;
   border: 1px solid var(--line);
@@ -259,11 +301,17 @@ main {
   font-size: 9px;
   display: grid;
   place-items: center;
+  cursor: pointer;
 }
 
 .track-head.muted .mute {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.track-head.soloed .solo {
+  border-color: #e5c07b;
+  color: #e5c07b;
 }
 
 .canvas-wrap {

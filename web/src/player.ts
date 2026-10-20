@@ -59,11 +59,17 @@ export class PreviewPlayer {
     return this.voices.size;
   }
 
-  /** Mute inmediato durante la reproducción (fade de 12 ms). */
-  setTrackMuted(trackId: string, muted: boolean): void {
-    const gain = this.muteGains.get(trackId);
-    if (!gain || !this.context) return;
-    gain.gain.setTargetAtTime(muted ? 0 : 1, this.context.currentTime, 0.012);
+  /** Aplica mute/solo de todo el proyecto sin reiniciar la reproducción (fade de 12 ms). */
+  setMuteState(project: Project): void {
+    if (!this.context) return;
+    const now = this.context.currentTime;
+    const soloed = project.tracks.some((track) => track.solo);
+    for (const track of project.tracks) {
+      const gain = this.muteGains.get(track.id);
+      if (!gain) continue;
+      const audible = !track.muted && (!soloed || track.solo);
+      gain.gain.setTargetAtTime(audible ? 1 : 0, now, 0.012);
+    }
   }
 
   /** Crea el contexto y carga el sintetizador en segundo plano. */

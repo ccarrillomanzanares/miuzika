@@ -37,9 +37,13 @@ export class TimelineView {
   private pxPerBeat = 24;
   private beat = 0;
   private lastPlayheadX: number | null = null;
+  private selected = new Set<string>();
+  private anchor: string | null = null;
 
   onSeek: (beat: number) => void = () => {};
   onToggleMute: (trackId: string) => void = () => {};
+  onToggleSolo: (trackId: string) => void = () => {};
+  onSelectionChange: (trackIds: string[]) => void = () => {};
   onEditClip: (trackId: string, clipId: string) => void = () => {};
 
   constructor(canvas: HTMLCanvasElement, wrap: HTMLElement, heads: HTMLElement) {
@@ -72,8 +76,44 @@ export class TimelineView {
     });
 
     this.heads.addEventListener("click", (event) => {
-      const target = (event.target as HTMLElement).closest("[data-track]") as HTMLElement | null;
-      if (target?.dataset.track) this.onToggleMute(target.dataset.track);
+      const element = event.target as HTMLElement;
+      const target = element.closest("[data-track]") as HTMLElement | null;
+      if (!target?.dataset.track) {
+        this.clearSelection();
+        return;
+      }
+      const trackId = target.dataset.track;
+      if (element.closest(".mute")) {
+        this.onToggleMute(trackId);
+        return;
+      }
+      if (element.closest(".solo")) {
+        this.onToggleSolo(trackId);
+        return;
+      }
+      if (!this.project) return;
+      const ids = this.project.tracks.map((track) => track.id);
+      const index = ids.indexOf(trackId);
+      if (index < 0) return;
+
+      if (event.shiftKey && this.anchor) {
+        const anchorIndex = ids.indexOf(this.anchor);
+        if (anchorIndex >= 0) {
+          const [from, to] = anchorIndex < index ? [anchorIndex, index] : [index, anchorIndex];
+          this.selected = new Set(ids.slice(from, to + 1));
+        }
+      } else if (event.ctrlKey || event.metaKey) {
+        if (this.selected.has(trackId)) this.selected.delete(trackId);
+        else this.selected.add(trackId);
+        this.anchor = trackId;
+      } else {
+        this.selected = new Set([trackId]);
+        this.anchor = trackId;
+      }
+      this.emitSelection();
+      this.renderHeads();
+      this.renderStatic();
+      this.draw(this.beat);
     });
 
     this.wrap.addEventListener(
@@ -100,20 +140,63 @@ export class TimelineView {
   setProject(project: Project): void {
     this.project = project;
     this.beat = 0;
+    this.pruneSelection();
     this.resize();
     this.renderHeads();
     this.renderStatic();
     this.draw(0);
+    this.emitSelection();
   }
 
-  setMuted(trackId: string, muted: boolean): void {
-    if (!this.project) return;
-    const track = this.project.tracks.find((candidate) => candidate.id === trackId);
-    if (!track) return;
-    track.muted = muted;
+  /** Actualiza el proyecto sin resetear el playhead ni la selección (mute/solo en vivo). */
+  refresh(project?: Project): void {
+    if (project) this.project = project;
+    this.pruneSelection();
     this.renderHeads();
     this.renderStatic();
     this.draw(this.beat);
+    this.emitSelection();
+  }
+
+  getSelected(): string[] {
+    return [...this.selected];
+  }
+
+  selectAll(): void {
+    if (!this.project) return;
+    this.selected = new Set(this.project.tracks.map((track) => track.id));
+    this.anchor = this.project.tracks.at(-1)?.id ?? null;
+    this.emitSelection();
+    this.renderHeads();
+    this.renderStatic();
+    this.draw(this.beat);
+  }
+
+  clearSelection(): void {
+    if (this.selected.size === 0) return;
+    this.selected.clear();
+    this.anchor = null;
+    this.emitSelection();
+    this.renderHeads();
+    this.renderStatic();
+    this.draw(this.beat);
+  }
+
+  private pruneSelection(): void {
+    if (!this.project) {
+      this.selected.clear();
+      this.anchor = null;
+      return;
+    }
+    const ids = new Set(this.project.tracks.map((track) => track.id));
+    for (const id of [...this.selected]) {
+      if (!ids.has(id)) this.selected.delete(id);
+    }
+    if (this.anchor && !ids.has(this.anchor)) this.anchor = null;
+  }
+
+  private emitSelection(): void {
+    this.onSelectionChange([...this.selected]);
   }
 
   draw(beat: number): void {
@@ -189,13 +272,20 @@ export class TimelineView {
     const rows = this.project.tracks
       .map((track) => {
         const notes = track.clips.reduce((sum, clip) => sum + clip.notes.length, 0);
-        return `<div class="track-head${track.muted ? " muted" : ""}" data-track="${track.id}">
+        const classes = ["track-head"];
+        if (track.muted) classes.push("muted");
+        if (track.solo) classes.push("soloed");
+        if (this.selected.has(track.id)) classes.push("selected");
+        return `<div class="${classes.join(" ")}" data-track="${track.id}">
           <span class="dot" style="background:${colorOf(track)}"></span>
           <span class="track-meta">
             <strong>${escapeHtml(track.name)}</strong>
             <small>${track.instrument.type} · ${notes} n · ${track.devices.length} fx</small>
           </span>
-          <span class="mute">M</span>
+          <span class="track-buttons">
+            <span class="solo" title="Solo">S</span>
+            <span class="mute" title="Mute">M</span>
+          </span>
         </div>`;
       })
       .join("");
@@ -223,7 +313,11 @@ export class TimelineView {
     // Filas
     project.tracks.forEach((track, index) => {
       const top = RULER + index * ROW;
-      ctx.fillStyle = index % 2 === 0 ? "#161922" : "#141720";
+      ctx.fillStyle = this.selected.has(track.id)
+        ? "#1a2030"
+        : index % 2 === 0
+          ? "#161922"
+          : "#141720";
       ctx.fillRect(0, top, this.width, ROW);
       ctx.fillStyle = track.muted ? "#2a2d38" : "#1e2230";
       ctx.fillRect(0, top + ROW - 1, this.width, 1);

@@ -131,6 +131,8 @@ export interface StemFile {
 
 export interface StemOptions {
   sampleRate?: number;
+  /** Si se indica, exporta solo estas pistas. */
+  trackIds?: string[];
   onProgress?: (index: number, total: number, name: string) => void;
 }
 
@@ -140,8 +142,11 @@ export interface StemOptions {
  */
 export async function renderStems(project: Project, options: StemOptions = {}): Promise<StemFile[]> {
   const soloed = project.tracks.some((track) => track.solo);
-  const tracks = project.tracks.filter((track) => !track.muted && (!soloed || track.solo));
-  if (tracks.length === 0) throw new Error("No hay pistas audibles para exportar");
+  const selected = options.trackIds ? new Set(options.trackIds) : null;
+  const tracks = selected
+    ? project.tracks.filter((track) => selected.has(track.id))
+    : project.tracks.filter((track) => !track.muted && (!soloed || track.solo));
+  if (tracks.length === 0) throw new Error("No hay pistas para exportar");
 
   const files: StemFile[] = [];
   for (let index = 0; index < tracks.length; index++) {

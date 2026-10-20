@@ -4,6 +4,8 @@ import type { Track } from "../../src/core/types.ts";
 
 export interface BounceDialogOptions {
   tracks: Track[];
+  /** IDs que llegan ya marcados (selección del timeline). */
+  preselected?: string[];
   onConvert: (trackIds: string[]) => void;
 }
 
@@ -29,8 +31,9 @@ export function openBounceDialog(options: BounceDialogOptions): void {
 
   const rows = options.tracks
     .map((track) => {
+      const checked = !options.preselected || options.preselected.includes(track.id);
       return `<label class="bounce-row">
-        <input type="checkbox" value="${escape(track.id)}" checked />
+        <input type="checkbox" value="${escape(track.id)}" ${checked ? "checked" : ""} />
         <span>${escape(track.name)}</span>
         <small>${escape(track.instrument.type)}</small>
       </label>`;
