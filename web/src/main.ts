@@ -7,6 +7,7 @@ import type { Op } from "../../src/core/ops.ts";
 import { audioAssets, computePeaks, loadAudioFile } from "./audio-store.ts";
 import { loadDrumKit } from "./drum-kit.ts";
 import { openPianoRoll } from "./editor.ts";
+import { openBounceDialog } from "./bounce-dialog.ts";
 import { openSampleLab } from "./sample-lab.ts";
 import { PreviewPlayer } from "./player.ts";
 import { TimelineView, escapeHtml } from "./timeline.ts";
@@ -325,6 +326,25 @@ async function api<T>(url: string, body: unknown): Promise<T> {
 
 const NEW_SONG = /\b(otra canci[oó]n|nueva canci[oó]n|canci[oó]n nueva|desde cero|de cero|empezar de nuevo|empieza de nuevo)\b/i;
 
+async function convertToSamples(base: Project, ids: string[]): Promise<void> {
+  setBusy(true, "Convirtiendo a samples…");
+  try {
+    const { bounceTracks } = await import("./bounce.ts");
+    const next = await bounceTracks(base, ids, (index, total, name) =>
+      setStatus(`Sample ${index}/${total}: ${name}…`),
+    );
+    setProject(next);
+    addMessage(
+      "assistant",
+      `Convertidas ${ids.length} pista(s) a audio. Las no marcadas siguen en MIDI.`,
+    );
+  } catch (error) {
+    addMessage("system", `No se pudo convertir: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    setBusy(false);
+  }
+}
+
 async function send(prompt: string): Promise<void> {
   const text = prompt.trim();
   if (!text || busy) return;
@@ -490,7 +510,22 @@ $("sample-lab").addEventListener("click", () => {
   });
 });
 
-$("export-midi").addEventListener("click", () => {  if (!project || project.tracks.length === 0) return;
+$("bounce-samples").addEventListener("click", () => {
+  if (!project) return;
+  const midiTracks = project.tracks.filter((track) => track.kind === "midi");
+  if (midiTracks.length === 0) {
+    addMessage("system", "No hay pistas MIDI que convertir.");
+    return;
+  }
+  const base = project;
+  openBounceDialog({
+    tracks: midiTracks,
+    onConvert: (ids) => void convertToSamples(base, ids),
+  });
+});
+
+$("export-midi").addEventListener("click", () => {
+  if (!project || project.tracks.length === 0) return;
   const bytes = projectToMidi(project);
   download(new Blob([bytes as BlobPart], { type: "audio/midi" }), `${slug(project.name)}.mid`);
 });

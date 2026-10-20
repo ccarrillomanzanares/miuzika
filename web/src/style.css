@@ -559,6 +559,67 @@ textarea:focus {
   font: inherit;
 }
 
+.bounce-card {
+  width: min(540px, 94vw);
+}
+
+.bounce-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
+.bounce-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 300px;
+  overflow: auto;
+}
+
+.bounce-toolbar {
+  display: flex;
+  gap: 6px;
+}
+
+.bounce-toolbar button {
+  font-size: 11px;
+  padding: 4px 9px;
+  border-radius: 999px;
+}
+
+.bounce-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.bounce-row small {
+  margin-left: auto;
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.bounce-status {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.bounce-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.bounce-actions .convert {
+  background: #2b3449;
+  border-color: #3a4a6b;
+}
+
 @media (max-width: 980px) {
   main {
     grid-template-columns: minmax(0, 1fr);

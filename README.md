@@ -90,6 +90,10 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
   no es determinista); para conservar una versión concreta, exporta el JSON.
 - **Piano roll**: doble clic en un clip MIDI. Clic añade, arrastrar mueve, clic derecho borra.
   Al aplicar se emite `replace_clip_notes` (la misma validación que usa el LLM).
+- **A samples**: convierte pistas MIDI en clips de audio. Eliges **pista por pista** en el
+  diálogo (Todas/Ninguna y casillas); cada stem se renderiza con sus FX, sin buses ni máster, y
+  se reinserta en el mismo bus. Las canciones largas se parten en clips de 64 compases y los
+  stems se atenúan en bloque solo si haría falta evitar clipping.
 - **Audio**: botón «Audio» importa WAV al playhead, dibuja la forma de onda y lo reproduce.
   Los bytes no se guardan en el JSON; al recargar hay que volver a importarlos.
 - **Exportar**: WAV (mixdown offline), MIDI, proyecto openDAW (`.odw`) y JSON.
@@ -198,8 +202,8 @@ docs/
 - Solo 4/4. El motor de patrones asume 16 pasos por compás.
 - Los WAV no se persisten en el proyecto: el JSON guarda metadatos, no los bytes. Al recargar hay
   que volver a importarlos (IndexedDB/OPFS es el siguiente paso).
-- Los samples del Sample Lab también viven en memoria durante la sesión; la receta aún no se
-  guarda en el proyecto (pendiente: guardar `spec` y rehidratar al cargar).
+- Los samples del Sample Lab y los stems de «A samples» también viven en memoria durante la
+  sesión; sus bytes no se guardan en el JSON (pendiente: OPFS/IndexedDB y rehidratar al cargar).
 - El export a openDAW no incluye las pistas de audio (necesita `SampleService`/`AudioFileBox`).
 - El preview sintetiza los instrumentos (capas, envolventes, dinámica) y aproxima la cadena de
   FX del proyecto; no es el motor de openDAW, así que no suena idéntico al `.odw`.

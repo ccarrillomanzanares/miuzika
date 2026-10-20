@@ -183,6 +183,11 @@ Implementado en el spike:
   saturación suave). Se aproxima el proyecto, no es el motor de openDAW.
 - Mixdown: `OfflineAudioContext` → PCM 16-bit (`web/src/render.ts`). Es offline, puede tardar.
   Una canción de 2:06 ronda los 20 MB y decenas de segundos de render.
+- «A samples» (`web/src/bounce.ts`, `bounce-dialog.ts`): el usuario elige pistas MIDI una a una;
+  cada una se renderiza sola con sus FX, sin buses ni máster (`buses: false`), y se sustituye por
+  una pista de audio con el mismo tipo de instrumento para conservar el bus. Los stems largos se
+  parten en clips de 64 compases (límite de `add_audio_clip`) y se atenúan todos por igual solo
+  si algún pico supera 0,98. Los bytes siguen siendo de sesión.
 
 Siguiente fase de audio:
 

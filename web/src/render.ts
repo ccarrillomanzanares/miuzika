@@ -21,6 +21,8 @@ export interface RenderOptions {
   limiter?: boolean;
   /** false = sin cadena de máster (para stems). */
   master?: boolean;
+  /** false = sin buses de mezcla (para material que se reinserta en el proyecto). */
+  buses?: boolean;
 }
 
 export interface RenderResult {
@@ -41,8 +43,8 @@ export async function renderProject(project: Project, options: RenderOptions = {
       ? null
       : buildMasterChain(context, project.master.gainDb, context.destination);
   const masterInput = master ? master.input : context.destination;
-  const drumBus = buildBusChain(context, masterInput, "drums");
-  const musicBus = buildBusChain(context, masterInput, "music");
+  const drumBus = options.buses === false ? null : buildBusChain(context, masterInput, "drums");
+  const musicBus = options.buses === false ? null : buildBusChain(context, masterInput, "music");
   const noise = createNoiseBuffer(context);
   const soloed = project.tracks.some((track) => track.solo);
   const chains = new Map<string, TrackChain>();
@@ -50,7 +52,12 @@ export async function renderProject(project: Project, options: RenderOptions = {
 
   for (const track of project.tracks) {
     if (track.muted || (soloed && !track.solo)) continue;
-    const bus = track.instrument.type === "drumkit" ? drumBus.input : musicBus.input;
+    const bus =
+      options.buses === false
+        ? masterInput
+        : track.instrument.type === "drumkit"
+          ? drumBus!.input
+          : musicBus!.input;
     const chain = buildTrackChain(context, track, bus, secondsPerBeat);
     chains.set(track.id, chain);
     if (useWorklet && track.instrument.type !== "drumkit") {
