@@ -35,6 +35,16 @@ function tanhCurve(amount: number): Float32Array<ArrayBuffer> {
   return curve;
 }
 
+function quantizeCurve(levels: number): Float32Array<ArrayBuffer> {
+  const samples = 4096;
+  const curve = new Float32Array(samples) as Float32Array<ArrayBuffer>;
+  for (let index = 0; index < samples; index++) {
+    const x = (index / (samples - 1)) * 2 - 1;
+    curve[index] = Math.round(x * levels) / levels;
+  }
+  return curve;
+}
+
 function impulse(context: BaseAudioContext, decay: number): AudioBuffer {
   const seconds = 0.4 + decay * 2.2;
   const length = Math.floor(context.sampleRate * seconds);
@@ -86,6 +96,14 @@ function buildFx(
     current = tone;
   }
 
+  if (fx?.bitcrush) {
+    const crusher = context.createWaveShaper();
+    crusher.curve = quantizeCurve(fx.bitcrush.levels);
+    crusher.oversample = "none";
+    current.connect(crusher);
+    current = crusher;
+  }
+
   if (fx?.eq) {
     const low = context.createBiquadFilter();
     low.type = "lowshelf";
@@ -127,22 +145,24 @@ function buildFx(
 }
 
 function fadeAndNormalize(buffer: AudioBuffer, fadeSeconds = 0.02): void {
+  const fade = Math.max(1, Math.floor(buffer.sampleRate * fadeSeconds));
   let peak = 0;
   for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
     const data = buffer.getChannelData(channel);
-    for (let index = 0; index < data.length; index++) peak = Math.max(peak, Math.abs(data[index]!));
-  }
-  const gain = peak > 1e-9 ? 10 ** (-1 / 20) / peak : 0;
-  const fade = Math.max(1, Math.floor(buffer.sampleRate * fadeSeconds));
-  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-    const data = buffer.getChannelData(channel);
     for (let index = 0; index < data.length; index++) {
-      let value = data[index]! * gain;
+      let value = data[index]!;
       if (index < fade) value *= index / fade;
       const remaining = data.length - 1 - index;
       if (remaining < fade) value *= remaining / fade;
       data[index] = value;
+      peak = Math.max(peak, Math.abs(value));
     }
+  }
+  const gain = peak > 1e-9 ? 10 ** (-1 / 20) / peak : 0;
+  if (gain === 0) return;
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    const data = buffer.getChannelData(channel);
+    for (let index = 0; index < data.length; index++) data[index] = data[index]! * gain;
   }
 }
 
@@ -186,13 +206,49 @@ async function renderOneShot(spec: OneShotSpec, sampleRate: number): Promise<Aud
     gain.gain.setValueAtTime(level * sustain, holdEnd);
     gain.gain.exponentialRampToValueAtTime(0.0001, end);
 
-    let source: OscillatorNode | AudioBufferSourceNode;
-    if (layer.osc === "noise") {
-      const bufferSource = context.createBufferSource();
-      bufferSource.buffer = noise;
-      bufferSource.loop = true;
-      source = bufferSource;
-    } else {
+    const panner = context.createStereoPanner();
+    panner.pan.value = layer.pan ?? 0;
+    gain.connect(panner).connect(input);
+
+    const filterConfig = layer.filter ?? (layer.filterEnv ? { type: "lowpass" as const, freq: 12_000, q: 0.7 } : null);
+    const filter = filterConfig ? context.createBiquadFilter() : null;
+    if (filter && filterConfig) {
+      filter.type = filterConfig.type;
+      filter.Q.value = filterConfig.q;
+      const base = Math.max(20, Math.min(context.sampleRate * 0.45, filterConfig.freq));
+      filter.frequency.setValueAtTime(base, 0);
+      if (layer.filterEnv) {
+        const peak = Math.max(20, Math.min(context.sampleRate * 0.45, base + layer.filterEnv.amount));
+        const tail = Math.max(
+          20,
+          Math.min(context.sampleRate * 0.45, base + layer.filterEnv.amount * layer.filterEnv.sustain),
+        );
+        const attackTime = Math.max(0.001, layer.filterEnv.attack);
+        const decayTime = Math.max(attackTime + 0.001, attackTime + layer.filterEnv.decay);
+        filter.frequency.linearRampToValueAtTime(peak, attackTime);
+        filter.frequency.exponentialRampToValueAtTime(tail, decayTime);
+      }
+      filter.connect(gain);
+    }
+
+    const voices = layer.osc === "noise" ? 1 : Math.max(1, Math.min(4, layer.voices ?? 1));
+    const spread = layer.spread ?? 7;
+    for (let voice = 0; voice < voices; voice++) {
+      const voiceGain = context.createGain();
+      voiceGain.gain.value = 1 / voices;
+      if (filter) voiceGain.connect(filter);
+      else voiceGain.connect(gain);
+
+      if (layer.osc === "noise") {
+        const source = context.createBufferSource();
+        source.buffer = noise;
+        source.loop = true;
+        source.connect(voiceGain);
+        source.start(0);
+        source.stop(end);
+        continue;
+      }
+
       const oscillator = context.createOscillator();
       oscillator.type = layer.osc === "saw" ? "sawtooth" : layer.osc;
       const frequency = layer.freq ?? 440;
@@ -203,26 +259,34 @@ async function renderOneShot(spec: OneShotSpec, sampleRate: number): Promise<Aud
           Math.max(0.01, layer.glide ?? 0.2),
         );
       }
-      if (layer.detune !== undefined) oscillator.detune.value = layer.detune;
-      source = oscillator;
-    }
+      const offset = voices > 1 ? (voice / (voices - 1) - 0.5) * 2 * spread : 0;
+      const detune = (layer.detune ?? 0) + offset;
+      if (detune !== 0) oscillator.detune.value = detune;
 
-    if (layer.filter) {
-      const filter = context.createBiquadFilter();
-      filter.type = layer.filter.type;
-      filter.frequency.value = layer.filter.freq;
-      filter.Q.value = layer.filter.q;
-      source.connect(filter).connect(gain).connect(input);
-    } else {
-      source.connect(gain).connect(input);
-    }
+      if (layer.fm && layer.fm.index > 0) {
+        const modulator = context.createOscillator();
+        modulator.type = "sine";
+        modulator.frequency.setValueAtTime(Math.max(20, frequency * layer.fm.ratio), 0);
+        const modGain = context.createGain();
+        const depth = Math.max(0.001, frequency * layer.fm.index);
+        modGain.gain.setValueAtTime(depth, 0);
+        modGain.gain.exponentialRampToValueAtTime(
+          Math.max(0.001, depth * 0.001),
+          Math.max(0.02, layer.fm.decay),
+        );
+        modulator.connect(modGain).connect(oscillator.frequency);
+        modulator.start(0);
+        modulator.stop(end);
+      }
 
-    source.start(0);
-    source.stop(end);
+      oscillator.connect(voiceGain);
+      oscillator.start(0);
+      oscillator.stop(end);
+    }
   }
 
   const rendered = await context.startRendering();
-  fadeAndNormalize(rendered, 0.015);
+  fadeAndNormalize(rendered, 0.003);
   return rendered;
 }
 
@@ -275,7 +339,7 @@ async function renderLoop(spec: LoopSpec, sampleRate: number): Promise<AudioBuff
   }
 
   const rendered = await context.startRendering();
-  fadeAndNormalize(rendered, 0.02);
+  fadeAndNormalize(rendered, 0.005);
   return rendered;
 }
 

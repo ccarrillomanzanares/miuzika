@@ -186,11 +186,14 @@ Implementado en el spike:
   saturación suave). Se aproxima el proyecto, no es el motor de openDAW.
 - Mixdown: `OfflineAudioContext` → PCM 16-bit (`web/src/render.ts`). Es offline, puede tardar.
   Una canción de 2:06 ronda los 20 MB y decenas de segundos de render.
-- Sample Lab con motor **industrial** (`web/src/industrial.ts`): one-shot procedural puro
-  (Float32Array, testeable en Node) con stack de sierras detuneadas y pitch-drop, sub, FM
-  inarmónica, transitorio de ruido, saturación tanh asimétrica, bitcrush, SVF TPT con barrido de
-  cutoff, taps de delay y ensanchado Haas. `IndustrialSpec` expone los parámetros y
-  `sample-render.ts` lo convierte en `AudioBuffer`/WAV; el LLM elige el motor y los valores.
+- Sample Lab con motor de sintetizador general: one-shots de 1-4 capas con osciladores,
+  unísono/detune, FM, pitch envelope (`glide`), filter envelope, ruido, pan, drive, bitcrush,
+  EQ, delay y reverb (`web/src/sample-render.ts`). El LLM compone los primitivos según el sonido.
+- Macro **industrial** (`web/src/industrial.ts`): one-shot procedural puro (Float32Array,
+  testeable en Node) con stack de sierras detuneadas y pitch-drop, sub, FM inarmónica, transitorio
+  de ruido, saturación tanh asimétrica, bitcrush, SVF TPT con barrido de cutoff, taps de delay y
+  ensanchado Haas. Es una macro de ejemplo, no el único motor; `IndustrialSpec` expone sus
+  parámetros y `sample-render.ts` lo convierte en `AudioBuffer`/WAV.
 - «A samples» (`web/src/bounce.ts`, `bounce-dialog.ts`): el usuario elige pistas MIDI una a una;
   cada una se renderiza sola con sus FX, sin buses ni máster (`buses: false`), y se sustituye por
   una pista de audio con el mismo tipo de instrumento para conservar el bus. Los stems largos se

@@ -43,6 +43,30 @@ test("acepta un one-shot con capas y defaults", () => {
   }
 });
 
+test("acepta FM, unísono, pan y filter envelope", () => {
+  const spec = SampleSpecSchema.parse({
+    ...oneShot,
+    layers: [
+      {
+        ...oneShot.layers[0],
+        voices: 3,
+        spread: 14,
+        pan: -0.3,
+        fm: { ratio: 2, index: 8, decay: 0.25 },
+        filterEnv: { amount: 3500, attack: 0.01, decay: 0.2, sustain: 0.2 },
+      },
+    ],
+    fx: { bitcrush: { levels: 24 } },
+  });
+  assert.equal(spec.kind, "one_shot");
+  if (spec.kind === "one_shot") {
+    assert.equal(spec.layers[0]!.voices, 3);
+    assert.equal(spec.layers[0]!.fm?.index, 8);
+    assert.equal(spec.layers[0]!.filterEnv?.amount, 3500);
+    assert.equal(spec.fx?.bitcrush?.levels, 24);
+  }
+});
+
 test("rechaza un one-shot sin capas", () => {
   assert.throws(() => SampleSpecSchema.parse({ ...oneShot, layers: [] }));
 });

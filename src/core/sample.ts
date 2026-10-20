@@ -21,19 +21,42 @@ const FilterSchema = z.object({
   q: z.number().min(0.1).max(20).default(1),
 });
 
+const FmSchema = z.object({
+  ratio: z.number().min(0.1).max(12).default(1).describe("Frecuencia del modulador / portadora"),
+  index: z.number().min(0).max(20).default(2).describe("Profundidad FM (× frecuencia)"),
+  decay: z.number().min(0.01).max(2).default(0.2).describe("Caída del índice FM"),
+});
+
+const FilterEnvSchema = z.object({
+  amount: z.number().min(-12_000).max(12_000).default(4000).describe("Recorrido del cutoff en Hz"),
+  attack: z.number().min(0).max(2).default(0.005),
+  decay: z.number().min(0.01).max(2).default(0.2),
+  sustain: z.number().min(0).max(1).default(0),
+});
+
 const LayerSchema = z.object({
   osc: z.enum(["sine", "saw", "square", "triangle", "noise"]),
   freq: z.number().min(20).max(20_000).optional().describe("Frecuencia inicial en Hz"),
   glideTo: z.number().min(20).max(20_000).optional(),
   glide: z.number().min(0).max(2).optional(),
   detune: z.number().min(-100).max(100).optional(),
+  /** Capas/unísono del mismo oscilador (pads, supersaws). */
+  voices: z.number().int().min(1).max(4).default(1),
+  spread: z.number().min(0).max(100).optional().describe("Desafinación del unísono en cents"),
+  pan: z.number().min(-1).max(1).optional(),
+  fm: FmSchema.optional().describe("FM inarmónica para campanas, plucks metálicos, bajos growl"),
   filter: FilterSchema.optional(),
+  filterEnv: FilterEnvSchema.optional().describe("Envolvente del filtro para kicks, plucks, risers"),
   env: EnvelopeSchema,
   gain: z.number().min(0).max(1).default(0.7),
 });
 
 const FxSchema = z.object({
   drive: z.number().min(0).max(1).optional(),
+  bitcrush: z
+    .object({ levels: z.number().min(4).max(256).default(32) })
+    .optional()
+    .describe("Cuantización lo-fi; levels bajos = más sucio"),
   eq: z
     .object({ low: z.number().min(-18).max(18), mid: z.number().min(-18).max(18), high: z.number().min(-18).max(18) })
     .optional(),
