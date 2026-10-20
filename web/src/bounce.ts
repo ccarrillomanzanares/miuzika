@@ -8,8 +8,8 @@ import type { Project, Track } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
 import type { Op } from "../../src/core/ops.ts";
 import { applyOps } from "../../src/core/ops.ts";
-import { audioAssets, computePeaks } from "./audio-store.ts";
-import { renderProject } from "./render.ts";
+import { audioAssets, computePeaks, persistAudioAsset } from "./audio-store.ts";
+import { audioBufferToWav, renderProject } from "./render.ts";
 
 let decodeContext: AudioContext | null = null;
 
@@ -29,6 +29,7 @@ export async function bounceTracks(
   project: Project,
   trackIds: string[],
   onProgress?: BounceProgress,
+  onWarning?: (message: string) => void,
 ): Promise<Project> {
   const tracks = project.tracks.filter(
     (track) => track.kind === "midi" && trackIds.includes(track.id),
@@ -93,6 +94,13 @@ export async function bounceTracks(
       durationBeats: totalBeats,
       peaks: computePeaks(item.buffer),
     });
+
+    const wav = new Blob([audioBufferToWav(item.buffer) as BlobPart], { type: "audio/wav" });
+    if (!(await persistAudioAsset(item.assetId, item.name, totalBeats, wav))) {
+      onWarning?.(
+        `No se pudo guardar “${item.name}” en el navegador; sonará en esta sesión, pero se perderá al recargar.`,
+      );
+    }
 
     ops.push(
       {

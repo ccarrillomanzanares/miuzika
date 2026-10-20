@@ -15,7 +15,7 @@ export interface SampleLabOptions {
   key: KeySignature;
   /** Nombres de pistas de audio existentes, para el desplegable. */
   tracks: string[];
-  onInsert: (insert: SampleInsert) => void;
+  onInsert: (insert: SampleInsert) => void | Promise<void>;
 }
 
 const escapeAttr = (value: string): string =>
@@ -141,13 +141,20 @@ export function openSampleLab(options: SampleLabOptions): void {
     }
   });
 
-  insert.addEventListener("click", () => {
+  insert.addEventListener("click", async () => {
     if (!current) return;
-    options.onInsert({
-      result: current,
-      trackName: trackInput.value.trim() || "Samples",
-    });
-    close();
+    insert.disabled = true;
+    status.textContent = "Insertando…";
+    try {
+      await options.onInsert({
+        result: current,
+        trackName: trackInput.value.trim() || "Samples",
+      });
+      close();
+    } catch (error) {
+      status.textContent = `Error al insertar: ${error instanceof Error ? error.message : String(error)}`;
+      insert.disabled = false;
+    }
   });
 
   overlay.querySelector(".close")?.addEventListener("click", close);

@@ -176,7 +176,10 @@ Implementado en el spike:
 - IR: `project.audioAssets` (metadatos) + `clip.audio` (assetId, offset, gain).
 - Ops: `register_audio_asset`, `add_audio_clip`, `set_audio_clip` (mover, recortar, ganancia).
 - El LLM ve los assets en la línea `AUDIO` del digest y puede colocarlos o moverlos.
-- En el navegador, los bytes viven en `web/src/audio-store.ts` (decode + peaks). No se persisten.
+- En el navegador, el mapa de assets vive en `web/src/audio-store.ts` (decode + peaks) y los bytes
+  se guardan en IndexedDB (`web/src/audio-db.ts`, base `miuzika`, store `audio-assets`). Al arrancar
+  y antes de un undo/redo, `hydrateProjectAudio` decodifica los WAV que referencia el proyecto;
+  si falta alguno se avisa y se puede reimportar.
 - Preview y mixdown comparten instrumentos y FX: `web/src/synth.ts` (capas, envolventes,
   brillo dependiente de velocidad, drums sintetizados) y `web/src/fx.ts` (reverb por convolución,
   delay con damping, chorus, drive, filtro, EQ de 3 bandas, compresor; master con compresión y
@@ -187,11 +190,11 @@ Implementado en el spike:
   cada una se renderiza sola con sus FX, sin buses ni máster (`buses: false`), y se sustituye por
   una pista de audio con el mismo tipo de instrumento para conservar el bus. Los stems largos se
   parten en clips de 64 compases (límite de `add_audio_clip`) y se atenúan todos por igual solo
-  si algún pico supera 0,98. Los bytes siguen siendo de sesión.
+  si algún pico supera 0,98. Los WAV resultantes se guardan en IndexedDB como el resto de assets.
 
 Siguiente fase de audio:
 
-1. **Persistencia** de assets en OPFS/IndexedDB y export a openDAW (`AudioFileBox`).
+1. **Export autocontenido** (WAV dentro del proyecto o ZIP) y export a openDAW (`AudioFileBox`).
 2. **Time-stretch y slicing** para loops (Rubber Band/SoundTouch) y detección de transientes.
 3. **Asistente de mezcla**: análisis de loudness/espectro → `set_device`/automatización.
 4. **Generación**: ACE-Step (Apache-2.0/MIT según checkpoint) como servicio; evitar MusicGen

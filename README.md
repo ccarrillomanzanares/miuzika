@@ -94,8 +94,11 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
   diálogo (Todas/Ninguna y casillas); cada stem se renderiza con sus FX, sin buses ni máster, y
   se reinserta en el mismo bus. Las canciones largas se parten en clips de 64 compases y los
   stems se atenúan en bloque solo si haría falta evitar clipping.
+- **Audio persistente**: los WAV importados, los del Sample Lab y los stems de «A samples» se
+  guardan en IndexedDB (`miuzika` / `audio-assets`) y se rehidratan al recargar, también al
+  deshacer/rehacer. El JSON solo lleva metadatos: al abrirlo en otro navegador hay que reimportar
+  los WAV.
 - **Audio**: botón «Audio» importa WAV al playhead, dibuja la forma de onda y lo reproduce.
-  Los bytes no se guardan en el JSON; al recargar hay que volver a importarlos.
 - **Exportar**: WAV (mixdown offline), MIDI, proyecto openDAW (`.odw`) y JSON.
 
 Build de producción: `npm run build:web` y `npm run preview`. La API local vive en un plugin de
@@ -188,7 +191,8 @@ web/
   src/player.ts   reproducción WebAudio
   src/render.ts   mixdown offline a WAV
   src/synth.ts    síntesis compartida preview/mixdown
-  src/audio-store.ts  WAV decodificados y peaks
+  src/audio-store.ts  WAV decodificados, peaks y rehidratación
+  src/audio-db.ts IndexedDB de bytes WAV
 vite-plugin-api.ts  API local (mantiene la clave fuera del navegador)
 scripts/
   bundle-run.mjs  ejecuta el SDK (imports sin extensión) con esbuild
@@ -200,10 +204,12 @@ docs/
 ## Limitaciones conocidas
 
 - Solo 4/4. El motor de patrones asume 16 pasos por compás.
-- Los WAV no se persisten en el proyecto: el JSON guarda metadatos, no los bytes. Al recargar hay
-  que volver a importarlos (IndexedDB/OPFS es el siguiente paso).
-- Los samples del Sample Lab y los stems de «A samples» también viven en memoria durante la
-  sesión; sus bytes no se guardan en el JSON (pendiente: OPFS/IndexedDB y rehidratar al cargar).
+- El JSON del proyecto no embebe los WAV: los bytes viven en IndexedDB, en el navegador y perfil
+  actuales. Si se abre el JSON en otro navegador, se borran los datos del sitio o cambia el perfil,
+  hay que reimportar el audio. Exportar un proyecto autocontenido está pendiente.
+- IndexedDB puede llenarse con proyectos largos (un stem de 2:40 ronda 30 MB); el navegador puede
+  pedir más espacio o rechazar la escritura, y en ese caso la app avisa y mantiene el audio solo en
+  la sesión.
 - El export a openDAW no incluye las pistas de audio (necesita `SampleService`/`AudioFileBox`).
 - El preview sintetiza los instrumentos (capas, envolventes, dinámica) y aproxima la cadena de
   FX del proyecto; no es el motor de openDAW, así que no suena idéntico al `.odw`.

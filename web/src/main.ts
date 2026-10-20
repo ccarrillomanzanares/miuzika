@@ -4,7 +4,13 @@ import { createProject, projectStats } from "../../src/core/project.ts";
 import { projectToMidi } from "../../src/core/midi.ts";
 import { applyOps } from "../../src/core/ops.ts";
 import type { Op } from "../../src/core/ops.ts";
-import { audioAssets, computePeaks, loadAudioFile } from "./audio-store.ts";
+import {
+  audioAssets,
+  computePeaks,
+  hydrateProjectAudio,
+  loadAudioFile,
+  persistAudioAsset,
+} from "./audio-store.ts";
 import { loadDrumKit } from "./drum-kit.ts";
 import { openPianoRoll } from "./editor.ts";
 import { openBounceDialog } from "./bounce-dialog.ts";
@@ -33,6 +39,8 @@ const timeline = new TimelineView(canvas, wrap, heads);
 
 let project: Project | null = loadStored();
 let busy = false;
+let ready = false;
+let restoring = false;
 
 const HISTORY_KEY = "miuzika.history";
 const HISTORY_LIMIT = 8;
@@ -165,6 +173,16 @@ function addMessage(role: "user" | "assistant" | "system", text: string): void {
   messages.scrollTop = messages.scrollHeight;
 }
 
+function warnMissingAudio(missing: string[]): void {
+  if (missing.length === 0) return;
+  const shown = missing.slice(0, 3).join(", ");
+  const rest = missing.length > 3 ? ` y ${missing.length - 3} más` : "";
+  addMessage(
+    "system",
+    `Faltan ${missing.length} WAV (${shown}${rest}). El proyecto los referencia, pero no están guardados en este navegador; vuelve a importarlos con «Audio».`,
+  );
+}
+
 /** Mensaje con reproductor para escuchar el render sin salir de la app. */
 function addAudioMessage(blob: Blob, text: string): void {
   const div = document.createElement("div");
@@ -229,16 +247,27 @@ function updateHistoryButtons(): void {
   redoButton.disabled = future.length === 0;
 }
 
-function undo(): void {
+async function undo(): Promise<void> {
+  if (!ready || restoring || busy) return;
   const previous = history.pop();
   if (!previous) return;
   if (project) future.push(project);
   saveHistory();
-  applyProject(previous);
-  updateHistoryButtons();
+  restoring = true;
+  setBusy(true, "Cargando audio…");
+  try {
+    const { missing } = await hydrateProjectAudio(previous);
+    applyProject(previous);
+    warnMissingAudio(missing);
+  } finally {
+    restoring = false;
+    setBusy(false);
+    updateHistoryButtons();
+  }
 }
 
-function redo(): void {
+async function redo(): Promise<void> {
+  if (!ready || restoring || busy) return;
   const next = future.pop();
   if (!next) return;
   if (project) {
@@ -246,8 +275,17 @@ function redo(): void {
     if (history.length > HISTORY_LIMIT) history.shift();
   }
   saveHistory();
-  applyProject(next);
-  updateHistoryButtons();
+  restoring = true;
+  setBusy(true, "Cargando audio…");
+  try {
+    const { missing } = await hydrateProjectAudio(next);
+    applyProject(next);
+    warnMissingAudio(missing);
+  } finally {
+    restoring = false;
+    setBusy(false);
+    updateHistoryButtons();
+  }
 }
 
 function setProject(next: Project | null, record = true): void {
@@ -330,8 +368,11 @@ async function convertToSamples(base: Project, ids: string[]): Promise<void> {
   setBusy(true, "Convirtiendo a samples…");
   try {
     const { bounceTracks } = await import("./bounce.ts");
-    const next = await bounceTracks(base, ids, (index, total, name) =>
-      setStatus(`Sample ${index}/${total}: ${name}…`),
+    const next = await bounceTracks(
+      base,
+      ids,
+      (index, total, name) => setStatus(`Sample ${index}/${total}: ${name}…`),
+      (message) => addMessage("system", message),
     );
     setProject(next);
     addMessage(
@@ -347,7 +388,7 @@ async function convertToSamples(base: Project, ids: string[]): Promise<void> {
 
 async function send(prompt: string): Promise<void> {
   const text = prompt.trim();
-  if (!text || busy) return;
+  if (!text || busy || !ready) return;
   addMessage("user", text);
   promptInput.value = "";
   setBusy(true, "Pensando…");
@@ -409,7 +450,7 @@ function slug(name: string): string {
 // --- Eventos ---------------------------------------------------------------
 
 playButton.addEventListener("click", () => {
-  if (!project) return;
+  if (!ready || !project) return;
   if (player.isPlaying) {
     player.stop();
     setPlaying(false);
@@ -427,10 +468,11 @@ stopButton.addEventListener("click", () => {
   if (project) player.seek(project, 0);
 });
 
-undoButton.addEventListener("click", undo);
-redoButton.addEventListener("click", redo);
+undoButton.addEventListener("click", () => void undo());
+redoButton.addEventListener("click", () => void redo());
 
 $("new-song").addEventListener("click", () => {
+  if (!ready) return;
   if (project && project.tracks.length > 0 && !confirm("¿Empezar una canción nueva? Se perderá la actual.")) return;
   setProject(null);
   messages.innerHTML = "";
@@ -438,7 +480,7 @@ $("new-song").addEventListener("click", () => {
 });
 
 $("export-stems").addEventListener("click", async () => {
-  if (!project || project.tracks.length === 0) return;
+  if (!ready || !project || project.tracks.length === 0) return;
   setBusy(true, "Renderizando stems…");
   try {
     const { renderStems } = await import("./render.ts");
@@ -457,6 +499,7 @@ $("export-stems").addEventListener("click", async () => {
 });
 
 $("sample-lab").addEventListener("click", () => {
+  if (!ready) return;
   const base = project ?? createProject({ name: "Nuevo proyecto" });
   if (!project) setProject(base);
 
@@ -464,8 +507,9 @@ $("sample-lab").addEventListener("click", () => {
     bpm: base.bpm,
     key: base.key,
     tracks: base.tracks.filter((track) => track.kind === "audio").map((track) => track.name),
-    onInsert: ({ result, trackName }) => {
-      if (!project) return;
+    onInsert: async ({ result, trackName }) => {
+      const base = project;
+      if (!base) return;
       const assetId = `aud_${slug(result.name)}_${Date.now().toString(36)}`;
       audioAssets.set(assetId, {
         id: assetId,
@@ -475,8 +519,8 @@ $("sample-lab").addEventListener("click", () => {
         peaks: computePeaks(result.buffer),
       });
 
-      const bar = Math.min(511, Math.floor(player.beat / beatsPerBar(project)));
-      const existing = project.tracks.find(
+      const bar = Math.min(511, Math.floor(player.beat / beatsPerBar(base)));
+      const existing = base.tracks.find(
         (track) => track.kind === "audio" && track.name === trackName,
       );
       const ops: Op[] = [
@@ -497,12 +541,24 @@ $("sample-lab").addEventListener("click", () => {
         },
       ];
 
+      const saved = await persistAudioAsset(
+        assetId,
+        result.name,
+        result.durationBeats,
+        result.blob,
+      );
       try {
-        setProject(applyOps(project, ops).project);
+        setProject(applyOps(base, ops).project);
         addMessage(
           "assistant",
           `Sample “${result.name}” insertado en “${trackName}”, compás ${bar + 1} (${result.durationBeats.toFixed(2)} beats).`,
         );
+        if (!saved) {
+          addMessage(
+            "system",
+            "El sample suena en esta sesión, pero no se pudo guardar en IndexedDB; se perderá al recargar.",
+          );
+        }
       } catch (error) {
         addMessage("system", `No se pudo insertar: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -511,7 +567,7 @@ $("sample-lab").addEventListener("click", () => {
 });
 
 $("bounce-samples").addEventListener("click", () => {
-  if (!project) return;
+  if (!ready || !project) return;
   const midiTracks = project.tracks.filter((track) => track.kind === "midi");
   if (midiTracks.length === 0) {
     addMessage("system", "No hay pistas MIDI que convertir.");
@@ -525,13 +581,13 @@ $("bounce-samples").addEventListener("click", () => {
 });
 
 $("export-midi").addEventListener("click", () => {
-  if (!project || project.tracks.length === 0) return;
+  if (!ready || !project || project.tracks.length === 0) return;
   const bytes = projectToMidi(project);
   download(new Blob([bytes as BlobPart], { type: "audio/midi" }), `${slug(project.name)}.mid`);
 });
 
 $("export-json").addEventListener("click", () => {
-  if (!project) return;
+  if (!ready || !project) return;
   download(
     new Blob([JSON.stringify(project, null, 2)], { type: "application/json" }),
     `${slug(project.name)}.json`,
@@ -539,7 +595,7 @@ $("export-json").addEventListener("click", () => {
 });
 
 $("export-opendaw").addEventListener("click", async () => {
-  if (!project || project.tracks.length === 0) return;
+  if (!ready || !project || project.tracks.length === 0) return;
   setBusy(true, "Generando proyecto openDAW…");
   try {
     const { projectToOpenDaw } = await import("../../src/host/opendaw/adapter.ts");
@@ -558,7 +614,7 @@ $("export-opendaw").addEventListener("click", async () => {
 });
 
 $("export-wav").addEventListener("click", async () => {
-  if (!project || project.tracks.length === 0) return;
+  if (!ready || !project || project.tracks.length === 0) return;
   setBusy(true, "Renderizando WAV…");
   try {
     const target = $<HTMLSelectElement>("master-target").value;
@@ -584,7 +640,7 @@ $<HTMLInputElement>("audio-file").addEventListener("change", async (event) => {
   const input = event.target as HTMLInputElement;
   const files = Array.from(input.files ?? []);
   input.value = "";
-  if (files.length === 0) return;
+  if (!ready || files.length === 0) return;
   if (!project) {
     addMessage("system", "Genera una canción antes de importar audio.");
     return;
@@ -592,10 +648,12 @@ $<HTMLInputElement>("audio-file").addEventListener("change", async (event) => {
   setBusy(true, "Importando audio…");
   try {
     let current = project;
+    let persisted = true;
     const bar = Math.floor(player.beat / beatsPerBar(current));
     const maxLength = 16 * beatsPerBar(current);
     for (const file of files) {
       const asset = await loadAudioFile(file, current.bpm);
+      if (!(await persistAudioAsset(asset.id, asset.name, asset.durationBeats, file))) persisted = false;
       const existing = current.tracks.find((track) => track.kind === "audio" && track.name === "Audio");
       const base = {
         op: "add_audio_clip" as const,
@@ -624,6 +682,12 @@ $<HTMLInputElement>("audio-file").addEventListener("change", async (event) => {
       "assistant",
       `Añadidos ${files.length} audio(s) en el compás ${bar + 1}. Ahora puedes pedirme que los mueva, los recorte o los mezcle.`,
     );
+    if (!persisted) {
+      addMessage(
+        "system",
+        "El audio suena en esta sesión, pero no se pudo guardar en IndexedDB; se perderá al recargar.",
+      );
+    }
   } catch (error) {
     addMessage("system", `No se pudo importar: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
@@ -634,15 +698,19 @@ $<HTMLInputElement>("audio-file").addEventListener("change", async (event) => {
 $<HTMLInputElement>("open").addEventListener("change", async (event) => {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
-  if (!file) return;
+  if (!ready || !file) return;
+  setBusy(true, "Cargando audio…");
   try {
     const parsed = JSON.parse(await file.text()) as Project;
     if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.tracks)) throw new Error("Formato no reconocido");
+    const { missing } = await hydrateProjectAudio(parsed);
     setProject(parsed);
     addMessage("assistant", `Abierto “${parsed.name}”.`);
+    warnMissingAudio(missing);
   } catch (error) {
     addMessage("system", `No se pudo abrir: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
+    setBusy(false);
     input.value = "";
   }
 });
@@ -666,11 +734,11 @@ window.addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();
   if (key === "z") {
     event.preventDefault();
-    if (event.shiftKey) redo();
-    else undo();
+    if (event.shiftKey) void redo();
+    else void undo();
   } else if (key === "y") {
     event.preventDefault();
-    redo();
+    void redo();
   }
 });
 
@@ -678,25 +746,49 @@ renderExamples();
 
 // --- Arranque --------------------------------------------------------------
 
-if (project) {
-  setProject(project, false);
-  addMessage("assistant", `Proyecto cargado: “${project.name}”. Pide cambios o pulsa ▶.`);
-  if (project.tracks.some((track) => track.clips.some((clip) => clip.audio))) {
+async function boot(): Promise<void> {
+  const hasAudio = Boolean(
+    project &&
+      ((project.audioAssets?.length ?? 0) > 0 ||
+        project.tracks.some((track) => track.clips.some((clip) => clip.audio))),
+  );
+  let result: Awaited<ReturnType<typeof hydrateProjectAudio>> = { loaded: 0, missing: [] };
+
+  if (hasAudio) setBusy(true, "Cargando audio…");
+  try {
+    if (project) result = await hydrateProjectAudio(project);
+  } catch (error) {
     addMessage(
       "system",
-      "Este proyecto contiene audio, pero los WAV no se guardan en el JSON: vuelve a importarlos con «Audio».",
+      `No se pudo cargar el audio guardado: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    if (hasAudio) setBusy(false);
+  }
+
+  if (project) {
+    setProject(project, false);
+    addMessage("assistant", `Proyecto cargado: “${project.name}”. Pide cambios o pulsa ▶.`);
+    if (result.missing.length > 0) {
+      warnMissingAudio(result.missing);
+    } else if (result.loaded > 0) {
+      addMessage("system", `Audio restaurado desde IndexedDB: ${result.loaded} WAV.`);
+    }
+  } else {
+    setProject(null, false);
+    addMessage(
+      "assistant",
+      "Soy Mizu, tu coproductor. Pídeme una canción completa o un loop: “synth pop 80s oscuro en re menor, lenta”.",
     );
   }
-} else {
-  setProject(null, false);
-  addMessage(
-    "assistant",
-    "Soy Mizu, tu coproductor. Pídeme una canción completa o un loop: “synth pop 80s oscuro en re menor, lenta”.",
-  );
+
+  setPlaying(false);
+  ready = true;
 }
-setPlaying(false);
+
 void loadDrumKit();
 void player.prepare();
+void boot();
 
 if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__miuzika = {
@@ -706,6 +798,9 @@ if (import.meta.env.DEV) {
     redo,
     get project() {
       return project;
+    },
+    get audioAssets() {
+      return audioAssets;
     },
     get history() {
       return history;
