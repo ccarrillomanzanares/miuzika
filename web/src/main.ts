@@ -298,10 +298,13 @@ $("export-wav").addEventListener("click", async () => {
   if (!project || project.tracks.length === 0) return;
   setBusy(true, "Renderizando WAV…");
   try {
-    const { renderProjectToWav } = await import("./render.ts");
-    const blob = await renderProjectToWav(project);
-    download(blob, `${slug(project.name)}.wav`);
-    addMessage("assistant", `Mixdown listo (${(blob.size / 1024 / 1024).toFixed(1)} MB).`);
+    const { renderProject } = await import("./render.ts");
+    const result = await renderProject(project);
+    download(result.blob, `${slug(project.name)}.wav`);
+    addMessage(
+      "assistant",
+      `Mixdown listo (${(result.blob.size / 1024 / 1024).toFixed(1)} MB) · ${result.loudness.lufs.toFixed(1)} LUFS · pico ${result.loudness.truePeakDb.toFixed(1)} dBTP.`,
+    );
   } catch (error) {
     addMessage("system", `No se pudo renderizar: ${error instanceof Error ? error.message : String(error)}`);
   } finally {

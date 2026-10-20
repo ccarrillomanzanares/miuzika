@@ -6,12 +6,26 @@ import { audioAssets } from "./audio-store.ts";
 import { loadDrumKit } from "./drum-kit.ts";
 import { buildBusChain, buildMasterChain, buildTrackChain } from "./fx.ts";
 import type { TrackChain } from "./fx.ts";
+import { measureLoudness, normalizeBuffer } from "./loudness.ts";
+import type { Loudness } from "./loudness.ts";
 import { createNoiseBuffer, playInstrumentNote } from "./synth.ts";
 
 const dbToGain = (db: number) => 10 ** (db / 20);
 
-export async function renderProjectToWav(project: Project, sampleRate = 44_100): Promise<Blob> {
+export interface RenderOptions {
+  sampleRate?: number;
+  normalize?: boolean;
+  targetLufs?: number;
+}
+
+export interface RenderResult {
+  blob: Blob;
+  loudness: Loudness;
+}
+
+export async function renderProject(project: Project, options: RenderOptions = {}): Promise<RenderResult> {
   await loadDrumKit();
+  const sampleRate = options.sampleRate ?? 44_100;
   const secondsPerBeat = 60 / project.bpm;
   const duration = project.lengthBars * beatsPerBar(project) * secondsPerBeat + 2;
   const context = new OfflineAudioContext(2, Math.ceil(duration * sampleRate), sampleRate);
@@ -63,7 +77,18 @@ export async function renderProjectToWav(project: Project, sampleRate = 44_100):
   }
 
   const rendered = await context.startRendering();
-  return new Blob([audioBufferToWav(rendered)], { type: "audio/wav" });
+  const loudness =
+    options.normalize === false
+      ? measureLoudness(rendered)
+      : normalizeBuffer(rendered, options.targetLufs ?? -14);
+  return {
+    blob: new Blob([audioBufferToWav(rendered)], { type: "audio/wav" }),
+    loudness,
+  };
+}
+
+export async function renderProjectToWav(project: Project, sampleRate = 44_100): Promise<Blob> {
+  return (await renderProject(project, { sampleRate })).blob;
 }
 
 /** PCM 16-bit little-endian, estéreo si el buffer lo es. */
