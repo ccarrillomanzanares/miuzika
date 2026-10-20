@@ -44,10 +44,11 @@ export function openSampleLab(options: SampleLabOptions): void {
         <button class="close" title="Cerrar">×</button>
       </header>
       <div class="sample-body">
-        <textarea class="sample-prompt" rows="2" placeholder="kick oscuro distorsionado para punk, riser de 2 compases, pad frío..."></textarea>
+        <textarea class="sample-prompt" rows="2" placeholder="stab industrial metálico, kick oscuro para punk, riser de 2 compases, pad frío..."></textarea>
         <div class="sample-row">
           <select class="sample-kind" title="Tipo de sample">
             <option value="one_shot">One-shot</option>
+            <option value="industrial">Industrial</option>
             <option value="loop">Loop</option>
           </select>
           <input class="sample-bars" type="number" min="1" max="8" value="2" title="Compases del loop" />
@@ -65,7 +66,10 @@ export function openSampleLab(options: SampleLabOptions): void {
         <div class="sample-result" hidden>
           <div class="sample-name"></div>
           <audio class="sample-audio" controls></audio>
-          <button class="insert">Insertar en el compás actual</button>
+          <div class="sample-actions">
+            <button class="download">Descargar WAV</button>
+            <button class="insert">Insertar en el compás actual</button>
+          </div>
         </div>
       </div>
     </div>`;
@@ -80,6 +84,7 @@ export function openSampleLab(options: SampleLabOptions): void {
   const resultBox = overlay.querySelector<HTMLElement>(".sample-result")!;
   const nameEl = overlay.querySelector<HTMLElement>(".sample-name")!;
   const audio = overlay.querySelector<HTMLAudioElement>(".sample-audio")!;
+  const download = overlay.querySelector<HTMLButtonElement>(".download")!;
   const insert = overlay.querySelector<HTMLButtonElement>(".insert")!;
 
   let current: SampleResult | null = null;
@@ -130,7 +135,8 @@ export function openSampleLab(options: SampleLabOptions): void {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       objectUrl = URL.createObjectURL(rendered.blob);
       audio.src = objectUrl;
-      nameEl.textContent = `${rendered.name} · ${rendered.durationBeats.toFixed(2)} beats · ${data.model ?? "LLM"}`;
+      const engine = rendered.spec.kind === "industrial" ? "industrial · " : "";
+      nameEl.textContent = `${rendered.name} · ${engine}${rendered.durationBeats.toFixed(2)} beats · ${data.model ?? "LLM"}`;
       resultBox.hidden = false;
       insert.disabled = false;
       status.textContent = "Escúchalo. Si te vale, insértalo.";
@@ -139,6 +145,16 @@ export function openSampleLab(options: SampleLabOptions): void {
     } finally {
       design.disabled = false;
     }
+  });
+
+  download.addEventListener("click", () => {
+    if (!current || !objectUrl) return;
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = `${current.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "sample"}.wav`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
   });
 
   insert.addEventListener("click", async () => {

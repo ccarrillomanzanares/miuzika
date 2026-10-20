@@ -16,7 +16,9 @@ export const SAMPLE_DESIGNER_SYSTEM = `Eres diseñador de sonido. Recibes una pe
 ${SAMPLE_SCHEMA}
 
 - one_shot: 1-4 capas. Cada capa tiene osc (sine, saw, square, triangle, noise), freq, glideTo, glide, detune, filter {type, freq, q}, env {attack, decay, sustain, release} y gain. Puedes añadir fx {drive, eq, delay, reverb}. duration en segundos.
+- industrial: one-shot de impacto metálico (stab, clank, maquinaria). No usa layers; usa duration y, opcionalmente, params {rootHz, pitchDrop, pitchTau, decay, drive, crushHz, crushLevels, cutoffStart, cutoffEnd, cutoffTau, resonance, metalHz, metalRatio, metalIndex, noise, width, delayWet, seed}. Los defaults ya suenan a stab industrial; ajusta solo lo que pida el usuario.
 - loop: role, style, bars, bpm, key, density, octave, chords, energy. Usa el BPM del proyecto.
+- Si piden industrial, stab metálico, maquinaria, oxidado o un golpe agresivo, usa kind "industrial".
 - Roles y estilos válidos: ${SAMPLE_ROLE_DESCRIPTION}.
 - Para percusión usa capas de sine con glide (bombo/toms) o noise con filtro (caja/charles).
 - No expliques nada: solo el JSON.`;
@@ -24,9 +26,11 @@ ${SAMPLE_SCHEMA}
 export interface SampleDesignContext {
   bpm: number;
   key: { tonic: string; mode: string };
-  kind: "one_shot" | "loop";
+  kind: "one_shot" | "industrial" | "loop";
   bars: number;
 }
+
+const WANTS_INDUSTRIAL = /\b(industrial|stab|clank|maquinaria|mec[aá]nic|oxid|metal|golpe)\b/i;
 
 function validateLoopStyle(spec: LoopSpec): void {
   if (spec.role === "drums" && !DRUM_STYLES[spec.style]) {
@@ -54,9 +58,12 @@ export async function designSample(
   const attempts = options.attempts ?? 2;
   let lastError: unknown;
 
-  const describe = context.kind === "loop"
-    ? `loop de ${context.bars} compases`
-    : "one-shot";
+  const describe =
+    context.kind === "loop"
+      ? `loop de ${context.bars} compases`
+      : context.kind === "industrial"
+        ? "one-shot industrial"
+        : "one-shot";
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     const user = [
@@ -81,13 +88,26 @@ export async function designSample(
     });
 
     try {
-      const spec = SampleSpecSchema.parse(extractJson(response.content ?? ""));
-      if (spec.kind !== context.kind) {
-        throw new Error(`Se pidió ${context.kind} y llegó ${spec.kind}`);
-      }
+      let spec = SampleSpecSchema.parse(extractJson(response.content ?? ""));
+      const accepted =
+        context.kind === "loop"
+          ? spec.kind === "loop"
+          : context.kind === "industrial"
+            ? spec.kind === "industrial"
+            : spec.kind !== "loop";
+      if (!accepted) throw new Error(`Se pidió ${context.kind} y llegó ${spec.kind}`);
+
       if (spec.kind === "loop") {
         spec.bpm = context.bpm;
         validateLoopStyle(spec);
+      } else if (context.kind === "one_shot" && spec.kind === "one_shot" && WANTS_INDUSTRIAL.test(prompt)) {
+        // El modelo a veces devuelve un one-shot básico aunque pidan un stab: forzamos el motor industrial.
+        spec = SampleSpecSchema.parse({
+          kind: "industrial",
+          name: spec.name,
+          duration: Math.max(0.3, spec.duration),
+          gainDb: spec.gainDb,
+        });
       }
       return spec;
     } catch (error) {

@@ -541,6 +541,17 @@ textarea:focus {
   height: 34px;
 }
 
+.sample-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sample-actions .insert {
+  background: #2b3449;
+  border-color: #3a4a6b;
+}
+
 .sample-track-label {
   display: flex;
   align-items: center;

@@ -78,7 +78,13 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
 - **Sample Lab**: botón «Sample». Describes un sonido (“kick oscuro distorsionado para punk”,
   “loop de bajo punk en mi menor”), el LLM diseña la receta, el motor la renderiza a WAV y la
   escuchas antes de insertarla como clip. Puedes **elegir o crear la pista de destino**
-  (`Drums Samples`, `Bass Samples`…), así que cada sample va a su propia pista.
+  (`Drums Samples`, `Bass Samples`…), así que cada sample va a su propia pista. También puedes
+  **descargar el WAV** sin insertarlo.
+- **Motor Industrial**: elige «Industrial» (o pide “crea un wav sample sintetizador industrial”).
+  No es un modelo neural: es DSP procedural con pitch-drop, FM inarmónica, ruido, saturación
+  asimétrica, bitcrush, barrido de filtro, delays y Haas. El LLM ajusta parámetros (`rootHz`,
+  `pitchDrop`, `drive`, `cutoffStart/End`, `metalIndex`, `noise`, `width`…), así que cada petición
+  puede dar un stab distinto; no hay una librería fija de samples.
 - **Proyecto mixto**: puedes combinar pistas de samples y pistas MIDI. El Sample Lab crea el
   proyecto vacío si hace falta; el chat añade o edita pistas MIDI con el agente. El planificador
   de canción completa solo se usa en un proyecto vacío o al pedir “otra canción/desde cero”.
@@ -193,6 +199,7 @@ web/
   src/synth.ts    síntesis compartida preview/mixdown
   src/audio-store.ts  WAV decodificados, peaks y rehidratación
   src/audio-db.ts IndexedDB de bytes WAV
+  src/industrial.ts   motor DSP de one-shot industrial
 vite-plugin-api.ts  API local (mantiene la clave fuera del navegador)
 scripts/
   bundle-run.mjs  ejecuta el SDK (imports sin extensión) con esbuild
@@ -213,6 +220,9 @@ docs/
 - El export a openDAW no incluye las pistas de audio (necesita `SampleService`/`AudioFileBox`).
 - El preview sintetiza los instrumentos (capas, envolventes, dinámica) y aproxima la cadena de
   FX del proyecto; no es el motor de openDAW, así que no suena idéntico al `.odw`.
+- El motor Industrial es procedural, no neural: no imita instrumentos acústicos reales ni tiene
+  capas de velocidad/round-robin. Para guitarras, voces o pianos reales hace falta una librería
+  multimuestra o un modelo de audio con licencia adecuada.
 - El mixdown a WAV es offline y puede tardar decenas de segundos en canciones largas.
 - Sin validación musical avanzada (voz guía, conducción de voces, rango por instrumento real).
 - El plan del LLM puede ser musicalmente conservador: los presets y la validación garantizan

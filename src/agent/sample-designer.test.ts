@@ -55,6 +55,32 @@ test("reintenta si el estilo no es válido", async () => {
   if (spec.kind === "loop") assert.equal(spec.style, "punk");
 });
 
+test("diseña un one-shot industrial", async () => {
+  const industrial = { kind: "industrial", name: "stab E2", duration: 2.4 };
+  const client = new FakeClient([{ content: JSON.stringify(industrial), toolCalls: [], raw: {} }]);
+  const spec = await designSample(client, "stab industrial en mi", {
+    ...context,
+    kind: "industrial",
+  });
+  assert.equal(spec.kind, "industrial");
+});
+
+test("fuerza industrial si el prompt lo pide y llega un one-shot básico", async () => {
+  const oneShot = {
+    kind: "one_shot",
+    name: "stab",
+    duration: 1.2,
+    layers: [{ osc: "saw", freq: 82, env: { attack: 0.001, decay: 0.2, sustain: 0.2, release: 0.2 } }],
+  };
+  const client = new FakeClient([{ content: JSON.stringify(oneShot), toolCalls: [], raw: {} }]);
+  const spec = await designSample(client, "stab industrial metálico", {
+    ...context,
+    kind: "one_shot",
+  });
+  assert.equal(spec.kind, "industrial");
+  if (spec.kind === "industrial") assert.equal(spec.duration, 1.2);
+});
+
 test("rechaza un tipo distinto al pedido", async () => {
   const oneShot = {
     kind: "one_shot",

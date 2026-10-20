@@ -47,6 +47,31 @@ test("rechaza un one-shot sin capas", () => {
   assert.throws(() => SampleSpecSchema.parse({ ...oneShot, layers: [] }));
 });
 
+test("acepta un industrial con defaults", () => {
+  const spec = SampleSpecSchema.parse({ kind: "industrial", name: "stab" });
+  assert.equal(spec.kind, "industrial");
+  if (spec.kind === "industrial") {
+    assert.equal(spec.duration, 2.4);
+    assert.equal(spec.gainDb, 0);
+    assert.equal(spec.params, undefined);
+  }
+});
+
+test("los params industriales aplican defaults", () => {
+  const spec = SampleSpecSchema.parse({
+    kind: "industrial",
+    name: "stab",
+    params: { rootHz: 110, drive: 5 },
+  });
+  assert.equal(spec.kind, "industrial");
+  if (spec.kind === "industrial") {
+    assert.equal(spec.params?.rootHz, 110);
+    assert.equal(spec.params?.drive, 5);
+    assert.equal(spec.params?.cutoffStart, 8800);
+    assert.equal(spec.params?.seed, 20_261_020);
+  }
+});
+
 test("acepta un loop válido", () => {
   const spec = SampleSpecSchema.parse(loop);
   assert.equal(spec.kind, "loop");

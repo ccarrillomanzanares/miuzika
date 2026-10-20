@@ -5,8 +5,9 @@
  */
 
 import type { InstrumentType } from "../../src/core/types.ts";
-import type { LoopSpec, OneShotSpec, SampleSpec } from "../../src/core/sample.ts";
+import type { IndustrialSpec, LoopSpec, OneShotSpec, SampleSpec } from "../../src/core/sample.ts";
 import { SampleSpecSchema } from "../../src/core/sample.ts";
+import { renderIndustrialStab } from "./industrial.ts";
 import { expandPattern } from "../../src/core/patterns.ts";
 import { tonicChordSymbol } from "../../src/core/theory.ts";
 import { audioBufferToWav } from "./render.ts";
@@ -225,6 +226,15 @@ async function renderOneShot(spec: OneShotSpec, sampleRate: number): Promise<Aud
   return rendered;
 }
 
+function renderIndustrial(spec: IndustrialSpec, sampleRate: number): AudioBuffer {
+  const { left, right } = renderIndustrialStab(spec.params, spec.duration, sampleRate);
+  const context = new OfflineAudioContext(2, left.length, sampleRate);
+  const buffer = context.createBuffer(2, left.length, sampleRate);
+  buffer.copyToChannel(left as Float32Array<ArrayBuffer>, 0);
+  buffer.copyToChannel(right as Float32Array<ArrayBuffer>, 1);
+  return buffer;
+}
+
 async function renderLoop(spec: LoopSpec, sampleRate: number): Promise<AudioBuffer> {
   const beatsPerBar = 4;
   const secondsPerBeat = 60 / spec.bpm;
@@ -278,9 +288,11 @@ export async function renderSample(
   const sampleRate = options.sampleRate ?? 48_000;
   const projectBpm = options.projectBpm ?? 120;
   const buffer =
-    normalized.kind === "one_shot"
-      ? await renderOneShot(normalized, sampleRate)
-      : await renderLoop(normalized, sampleRate);
+    normalized.kind === "loop"
+      ? await renderLoop(normalized, sampleRate)
+      : normalized.kind === "industrial"
+        ? renderIndustrial(normalized, sampleRate)
+        : await renderOneShot(normalized, sampleRate);
 
   const durationBeats =
     normalized.kind === "loop" ? normalized.bars * 4 : (buffer.duration * projectBpm) / 60;
