@@ -196,20 +196,27 @@ Implementado en el spike:
   de ruido, saturación tanh asimétrica, bitcrush, SVF TPT con barrido de cutoff, taps de delay y
   ensanchado Haas. Es una macro de ejemplo, no el único motor; `IndustrialSpec` expone sus
   parámetros y `sample-render.ts` lo convierte en `AudioBuffer`/WAV.
-- «Congelar» (`web/src/bounce.ts`, `bounce-dialog.ts`): el usuario elige pistas MIDI una a una;
-  cada una se renderiza sola con sus FX, sin buses ni máster (`buses: false`), y se sustituye por
-  una pista de audio con el mismo tipo de instrumento para conservar el bus. Los stems largos se
-  parten en clips de 64 compases (límite de `add_audio_clip`) y se atenúan todos por igual solo
-  si algún pico supera 0,98. Los WAV resultantes se guardan en IndexedDB como el resto de assets.
+- «Congelar» (`web/src/bounce.ts`, `bounce-dialog.ts`): legacy MIDI→audio, oculto con
+  `MIDI_ENABLED=false`. El usuario elige pistas MIDI una a una; cada una se renderiza sola con sus
+  FX, sin buses ni máster (`buses: false`), y se sustituye por una pista de audio. Los WAV se
+  guardan en IndexedDB como el resto de assets.
+- **Modo audio-only** (`src/config.ts`): `MIDI_ENABLED=false` oculta botones, filtra pistas MIDI
+  de la timeline/player y bloquea `/api/generate` y `/api/chat`. El código y los tests MIDI se
+  conservan, pero no se importan en la ruta activa ni se envían al LLM.
+- **Sandbox Python** (`sandbox/sound`, `src/agent/sound-sandbox.ts`): el LLM escribe
+  `render(sr, duration, params, seed)`; un contenedor Docker (o Docker dentro de WSL2) lo ejecuta
+  con `--network none`, root read-only, tmpfs, sin capabilities, límites de CPU/memoria/pids y
+  timeout. El runner valida imports y AST, prohíbe I/O/red/exec, comprueba NaN/forma y normaliza
+  a −1 dBFS. El WAV vuelve al navegador y se monta como pistas de audio.
 
 Siguiente fase de audio:
 
-1. **Export autocontenido** (WAV dentro del proyecto o ZIP) y export a openDAW (`AudioFileBox`).
-2. **Time-stretch y slicing** para loops (Rubber Band/SoundTouch) y detección de transientes.
-3. **Asistente de mezcla**: análisis de loudness/espectro → `set_device`/automatización.
-4. **Generación**: ACE-Step (Apache-2.0/MIT según checkpoint) como servicio; evitar MusicGen
-   (CC-BY-NC restringe la salida) y revisar la licencia comunitaria de Stable Audio.
-5. **Coherencia multitrack**: mezcla completa + Demucs (MIT) para stems editables.
+1. **Receta reproducible**: guardar código + params + seed junto al WAV y permitir re-render.
+2. **Loops sample-perfect**: crossfades/validación de continuidad y time-stretch.
+3. **Export autocontenido** (ZIP con WAV) y export a openDAW audio (`AudioFileBox`).
+4. **Asistente de mezcla**: análisis de loudness/espectro → automatización.
+5. **Generación neural**: ACE-Step (Apache-2.0/MIT) o Stable Audio con licencia revisada.
+6. **Coherencia multitrack**: mezcla completa + Demucs (MIT) para stems editables.
 
 ## Riesgos
 
@@ -220,4 +227,5 @@ Siguiente fase de audio:
 | Coste/latencia | plan corto, edición por tools, cache de planes, modelo flash para ops |
 | Licencias | openDAW AGPL o comercial; modelos con allowlist; samples CC0 |
 | Sin VST3 en web | catálogo propio de instrumentos; escritorio (Tracktion/JUCE) si se targetea pro |
+| Código Python malicioso | contenedor sin red/read-only/caps/límites + allowlist AST; nunca en el host |
 | Deriva de esquema | zod como fuente única + tests de contrato |

@@ -1,5 +1,7 @@
-import type { Project } from "../../src/core/types.ts";
+import type { InstrumentType, Project } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
+import type { SampleRequest } from "../../src/agent/sample-plan.ts";
+import { MIDI_ENABLED } from "../../src/config.ts";
 import { createProject, projectStats } from "../../src/core/project.ts";
 import { projectToMidi } from "../../src/core/midi.ts";
 import { applyOps } from "../../src/core/ops.ts";
@@ -7,6 +9,7 @@ import type { Op } from "../../src/core/ops.ts";
 import {
   audioAssets,
   computePeaks,
+  decodeAudioBlob,
   hydrateProjectAudio,
   loadAudioFile,
   persistAudioAsset,
@@ -68,21 +71,32 @@ const EXAMPLE_POOL: Example[] = [
   { tag: "textura", text: "crea un loop de arp y pads en la menor" },
 ];
 
-function pickExamples(count = 4): Example[] {
-  const pool = [...EXAMPLE_POOL];
-  for (let index = pool.length - 1; index > 0; index--) {
+const SAMPLE_EXAMPLE_POOL: Example[] = [
+  { tag: "sample", text: "crea un sample de sintetizador dark wave" },
+  { tag: "sample", text: "crea un kick industrial seco y contundente" },
+  { tag: "sample", text: "crea un pad ambient cálido y ancho" },
+  { tag: "sample", text: "crea un loop de batería siniestra" },
+  { tag: "sample", text: "crea un bajo dark wave con distorsión" },
+  { tag: "sample", text: "crea un riser de ruido para techno" },
+  { tag: "sample", text: "crea un pluck metálico para hip hop" },
+  { tag: "sample", text: "crea un stab industrial en re menor" },
+];
+
+function pickExamples(pool: Example[], count = 4): Example[] {
+  const shuffled = [...pool];
+  for (let index = shuffled.length - 1; index > 0; index--) {
     const swap = Math.floor(Math.random() * (index + 1));
-    [pool[index], pool[swap]] = [pool[swap]!, pool[index]!];
+    [shuffled[index], shuffled[swap]] = [shuffled[swap]!, shuffled[index]!];
   }
   const chosen: Example[] = [];
   const tags = new Set<string>();
-  for (const example of pool) {
+  for (const example of shuffled) {
     if (tags.has(example.tag)) continue;
     chosen.push(example);
     tags.add(example.tag);
     if (chosen.length === count) return chosen;
   }
-  for (const example of pool) {
+  for (const example of shuffled) {
     if (chosen.length >= count) break;
     if (!chosen.includes(example)) chosen.push(example);
   }
@@ -91,7 +105,8 @@ function pickExamples(count = 4): Example[] {
 
 function renderExamples(): void {
   examples.innerHTML = "";
-  for (const example of pickExamples(4)) {
+  const pool = MIDI_ENABLED ? EXAMPLE_POOL : SAMPLE_EXAMPLE_POOL;
+  for (const example of pickExamples(pool, 4)) {
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = example.text;
@@ -113,9 +128,10 @@ function renderExamples(): void {
 }
 
 timeline.onSeek = (beat) => {
-  if (!project) return;
-  if (player.isPlaying) player.play(project, beat);
-  else player.seek(project, beat);
+  const view = activeProject(project);
+  if (!view) return;
+  if (player.isPlaying) player.play(view, beat);
+  else player.seek(view, beat);
 };
 
 timeline.onToggleMute = (trackId) => toggleTracksFlag([trackId], "muted");
@@ -160,14 +176,34 @@ function setBusy(value: boolean, text = ""): void {
 }
 
 /** Activa solo las acciones que tienen sentido para el proyecto actual. */
+/** En modo audio oculta las pistas MIDI legacy sin borrarlas del proyecto guardado. */
+function activeProject(source: Project | null): Project | null {
+  if (!source || MIDI_ENABLED) return source;
+  const tracks = source.tracks.filter((track) => track.kind === "audio");
+  return tracks.length === source.tracks.length ? source : { ...source, tracks };
+}
+
+function applyMode(): void {
+  for (const element of document.querySelectorAll<HTMLElement>("[data-midi-only]")) {
+    element.hidden = !MIDI_ENABLED;
+  }
+  if (!MIDI_ENABLED) {
+    promptInput.placeholder = "Describe el sample que quieres crear…";
+    statusEl.textContent = "Enter envía · pide samples · Ctrl+rueda = zoom";
+    document.body.classList.add("audio-only");
+  }
+}
+
 function updateActions(): void {
   const enabled = ready && !busy;
+  const view = activeProject(project);
   const hasProject = project !== null;
-  const hasTracks = Boolean(project && project.tracks.length > 0);
+  const hasTracks = Boolean(view && view.tracks.length > 0);
   const hasMidi = Boolean(
-    project?.tracks.some(
-      (track) => track.kind === "midi" && track.clips.some((clip) => clip.notes.length > 0),
-    ),
+    MIDI_ENABLED &&
+      project?.tracks.some(
+        (track) => track.kind === "midi" && track.clips.some((clip) => clip.notes.length > 0),
+      ),
   );
 
   $<HTMLButtonElement>("export-wav").disabled = !enabled || !hasTracks;
@@ -331,11 +367,13 @@ function setProject(next: Project | null, record = true): void {
 /** Cambio en vivo (mute/solo): no reinicia el player ni el playhead. */
 function commitLive(next: Project): void {
   if (!project) return;
+  const view = activeProject(next);
+  if (!view) return;
   recordHistory();
   project = next;
   persist();
-  timeline.refresh(next);
-  player.setMuteState(next);
+  timeline.refresh(view);
+  player.setMuteState(view);
   updateActions();
   updateHistoryButtons();
 }
@@ -365,7 +403,8 @@ function applyProject(next: Project | null): void {
   project = next;
   persist();
   updateActions();
-  if (!next) {
+  const view = activeProject(next);
+  if (!view) {
     timeline.setProject({
       schemaVersion: 1,
       id: "empty",
@@ -382,21 +421,21 @@ function applyProject(next: Project | null): void {
     songInfo.textContent = "";
     return;
   }
-  timeline.setProject(next);
-  const stats = projectStats(next);
+  timeline.setProject(view);
+  const stats = projectStats(view);
   const minutes = Math.floor(stats.seconds / 60);
   const seconds = String(Math.round(stats.seconds % 60)).padStart(2, "0");
-  songInfo.innerHTML = `<strong>${escapeHtml(next.name)}</strong><span>${next.bpm} BPM · ${next.key.tonic} ${next.key.mode} · ${next.lengthBars} compases · ${stats.tracks} pistas · ${stats.notes} notas · ${minutes}:${seconds}</span>`;
+  songInfo.innerHTML = `<strong>${escapeHtml(view.name)}</strong><span>${view.bpm} BPM · ${view.key.tonic} ${view.key.mode} · ${view.lengthBars} compases · ${stats.tracks} pistas · ${stats.notes} notas · ${minutes}:${seconds}</span>`;
 }
 
-async function api<T>(url: string, body: unknown): Promise<T> {
+async function api<T>(url: string, body: unknown, timeoutMs = 130_000): Promise<T> {
   let response: Response;
   try {
     response = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(130_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "TimeoutError") {
@@ -422,6 +461,7 @@ async function api<T>(url: string, body: unknown): Promise<T> {
 }
 
 const NEW_SONG = /\b(otra canci[oó]n|nueva canci[oó]n|canci[oó]n nueva|desde cero|de cero|empezar de nuevo|empieza de nuevo)\b/i;
+const SAMPLE_INTENT = /\b(samples?|muestras?|wav)\b/i;
 
 async function convertToSamples(base: Project, ids: string[]): Promise<void> {
   setBusy(true, "Congelando pistas a audio…");
@@ -498,7 +538,7 @@ function openFreezeDialog(): void {
 }
 
 async function exportStems(trackIds?: string[]): Promise<void> {
-  const base = project;
+  const base = activeProject(project);
   if (busy || !base || base.tracks.length === 0) return;
   setBusy(true, "Renderizando stems…");
   try {
@@ -519,6 +559,172 @@ async function exportStems(trackIds?: string[]): Promise<void> {
   }
 }
 
+function sampleInstrument(role: SampleRequest["role"] | undefined, trackName: string): InstrumentType {
+  switch (role) {
+    case "drums":
+      return "drumkit";
+    case "bass":
+      return "bass";
+    case "chords":
+    case "pad":
+      return "pad";
+    case "lead":
+      return "lead";
+    case "arp":
+      return "arp";
+    default: {
+      const name = trackName.toLowerCase();
+      if (/drum|bater|perc|kick|snare/.test(name)) return "drumkit";
+      if (/bass|bajo|sub/.test(name)) return "bass";
+      if (/pad|chord|acord|ambient/.test(name)) return "pad";
+      if (/lead|guitar|pluck|hook/.test(name)) return "lead";
+      if (/arp/.test(name)) return "arp";
+      return "synth";
+    }
+  }
+}
+
+async function createSamplesFromChat(text: string): Promise<void> {
+  let base = project;
+  if (!base) {
+    base = createProject({ name: "Nuevo proyecto", prompt: text });
+    setProject(base);
+  }
+
+  setStatus("Planificando samples…");
+  const plan = await api<{ samples: SampleRequest[] }>("/api/sample/plan", {
+    prompt: text,
+    project: base,
+  });
+  if (plan.samples.length === 0) throw new Error("El plan no devolvió ningún sample.");
+
+  const barBeats = beatsPerBar(base);
+  const ops: Op[] = [];
+  const created: Array<{ name: string; track: string; detail: string }> = [];
+
+  for (let index = 0; index < plan.samples.length; index++) {
+    const request = plan.samples[index]!;
+    setStatus(`Escribiendo DSP ${index + 1}/${plan.samples.length}: ${request.name}…`);
+    try {
+      const loopSeconds = (request.bars * 4 * 60) / base.bpm;
+      const duration = request.kind === "loop" ? loopSeconds : 2.4;
+      const generated = await api<{ wav: string; code: string; frames: number }>(
+        "/api/sound/create",
+        {
+          prompt:
+            request.kind === "loop"
+              ? `${request.prompt}. Loop de ${request.bars} compases, sin cola, preparado para repetir.`
+              : request.prompt,
+          duration,
+          sampleRate: 48_000,
+          seed: base.seed + index * 7919,
+          bpm: base.bpm,
+          key: base.key,
+          params: { kind: request.kind, bars: request.bars, role: request.role ?? null },
+        },
+        360_000,
+      );
+      setStatus(`Renderizando ${request.name}…`);
+      const bytes = Uint8Array.from(atob(generated.wav), (char) => char.charCodeAt(0));
+      const blob = new Blob([bytes], { type: "audio/wav" });
+      const buffer = await decodeAudioBlob(blob);
+      const durationBeats =
+        request.kind === "loop" ? request.bars * 4 : (buffer.duration * base.bpm) / 60;
+      const assetId = `aud_${slug(request.name)}_${Date.now().toString(36)}_${index}`;
+      audioAssets.set(assetId, {
+        id: assetId,
+        name: request.name,
+        buffer,
+        durationBeats,
+        peaks: computePeaks(buffer),
+      });
+      if (!(await persistAudioAsset(assetId, request.name, durationBeats, blob))) {
+        addMessage(
+          "system",
+          `“${request.name}” no se pudo guardar en IndexedDB; sonará en esta sesión y se perderá al recargar.`,
+        );
+      }
+
+      const trackName = request.track || request.name;
+      const trackId = `trk_sample_${Date.now().toString(36)}_${index}`;
+      ops.push(
+        {
+          op: "add_track",
+          id: trackId,
+          name: trackName,
+          kind: "audio",
+          instrument: { type: sampleInstrument(request.role, trackName) },
+          gainDb: 0,
+          pan: 0,
+        },
+        {
+          op: "register_audio_asset",
+          assetId,
+          name: request.name,
+          durationBeats,
+        },
+      );
+
+      if (request.kind === "loop") {
+        let repeats = 0;
+        for (let startBar = 0; startBar < base.lengthBars; startBar += request.bars) {
+          const lengthBeats = Math.min(
+            request.bars * barBeats,
+            (base.lengthBars - startBar) * barBeats,
+          );
+          ops.push({
+            op: "add_audio_clip",
+            trackId,
+            assetId,
+            startBar,
+            offsetBeats: 0,
+            lengthBeats,
+            gainDb: 0,
+            name: request.name,
+          });
+          repeats++;
+        }
+        created.push({
+          name: request.name,
+          track: trackName,
+          detail: `loop de ${request.bars} compases ×${repeats}`,
+        });
+      } else {
+        ops.push({
+          op: "add_audio_clip",
+          trackId,
+          assetId,
+          startBar: 0,
+          offsetBeats: 0,
+          lengthBeats: Math.min(durationBeats, 64 * barBeats),
+          gainDb: 0,
+          name: request.name,
+        });
+        created.push({
+          name: request.name,
+          track: trackName,
+          detail: `one-shot de ${durationBeats.toFixed(2)} beats`,
+        });
+      }
+    } catch (error) {
+      addMessage(
+        "system",
+        `No se pudo crear “${request.name}”: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  if (created.length === 0) throw new Error("No se pudo renderizar ningún sample.");
+  setProject(applyOps(base, ops).project);
+  addMessage(
+    "assistant",
+    `He creado ${created.length} sample(s) de audio:\n${created
+      .map((item) => `· “${item.name}” → pista “${item.track}” (${item.detail})`)
+      .join("\n")}\n\nEstán montados en la timeline. Pulsa ▶ para escucharlos.`,
+  );
+  addMessage("system", "Son pistas de audio; el modo MIDI está aparcado.");
+}
+
 async function send(prompt: string): Promise<void> {
   const text = prompt.trim();
   if (!text || busy || !ready) return;
@@ -527,6 +733,18 @@ async function send(prompt: string): Promise<void> {
   setBusy(true, "Pensando…");
 
   try {
+    if (!MIDI_ENABLED) {
+      if (SAMPLE_INTENT.test(text)) {
+        await createSamplesFromChat(text);
+      } else {
+        addMessage(
+          "assistant",
+          "El modo MIDI está aparcado. Pídeme un sample: “crea un kick industrial”, “un pad ambient cálido” o “un bajo dark wave”.",
+        );
+      }
+      return;
+    }
+
     const wantsTrack = /\b(añade|añadir|agrega|agregar|crea|crear)\b[\s\S]*\b(pista|track|parte)\b/i.test(text);
     if (!project && wantsTrack) {
       setProject(createProject({ name: "Nuevo proyecto" }));
@@ -583,22 +801,24 @@ function slug(name: string): string {
 // --- Eventos ---------------------------------------------------------------
 
 playButton.addEventListener("click", () => {
-  if (!ready || !project) return;
+  const view = activeProject(project);
+  if (!ready || !view || view.tracks.length === 0) return;
   if (player.isPlaying) {
     player.stop();
     setPlaying(false);
     return;
   }
-  const end = project.lengthBars * beatsPerBar(project);
+  const end = view.lengthBars * beatsPerBar(view);
   const from = player.beat >= end - 0.25 ? 0 : player.beat;
-  player.play(project, from);
+  player.play(view, from);
   setPlaying(true);
 });
 
 stopButton.addEventListener("click", () => {
   player.stop();
   setPlaying(false);
-  if (project) player.seek(project, 0);
+  const view = activeProject(project);
+  if (view) player.seek(view, 0);
 });
 
 undoButton.addEventListener("click", () => void undo());
@@ -699,10 +919,11 @@ $("export-midi").addEventListener("click", () => {
 });
 
 $("export-json").addEventListener("click", () => {
-  if (!ready || !project) return;
+  const view = activeProject(project);
+  if (!ready || !view) return;
   download(
-    new Blob([JSON.stringify(project, null, 2)], { type: "application/json" }),
-    `${slug(project.name)}.json`,
+    new Blob([JSON.stringify(view, null, 2)], { type: "application/json" }),
+    `${slug(view.name)}.json`,
   );
 });
 
@@ -726,7 +947,8 @@ $("export-opendaw").addEventListener("click", async () => {
 });
 
 $("export-wav").addEventListener("click", async () => {
-  if (!ready || !project || project.tracks.length === 0) return;
+  const view = activeProject(project);
+  if (!ready || !view || view.tracks.length === 0) return;
   setBusy(true, "Renderizando WAV…");
   try {
     const target = $<HTMLSelectElement>("master-target").value;
@@ -735,8 +957,8 @@ $("export-wav").addEventListener("click", async () => {
         ? { normalize: false }
         : { targetLufs: target === "commercial" ? -10 : -14 };
     const { renderProject } = await import("./render.ts");
-    const result = await renderProject(project, options);
-    download(result.blob, `${slug(project.name)}.wav`);
+    const result = await renderProject(view, options);
+    download(result.blob, `${slug(view.name)}.wav`);
     addAudioMessage(
       result.blob,
       `WAV renderizado (${(result.blob.size / 1024 / 1024).toFixed(1)} MB) · ${result.loudness.lufs.toFixed(1)} LUFS · pico ${result.loudness.truePeakDb.toFixed(1)} dBTP. Reproducción aquí abajo; el archivo también se ha descargado.`,
@@ -896,6 +1118,12 @@ async function boot(): Promise<void> {
   if (project) {
     setProject(project, false);
     addMessage("assistant", `Proyecto cargado: “${project.name}”. Pide cambios o pulsa ▶.`);
+    if (!MIDI_ENABLED && project.tracks.some((track) => track.kind === "midi")) {
+      addMessage(
+        "system",
+        "Este proyecto tiene pistas MIDI legacy: están ocultas y no se usan en modo audio. Crea pistas nuevas con samples.",
+      );
+    }
     if (result.missing.length > 0) {
       warnMissingAudio(result.missing);
     } else if (result.loaded > 0) {
@@ -905,7 +1133,9 @@ async function boot(): Promise<void> {
     setProject(null, false);
     addMessage(
       "assistant",
-      "Soy Mizu, tu coproductor. Pídeme una canción completa o un loop: “synth pop 80s oscuro en re menor, lenta”.",
+      MIDI_ENABLED
+        ? "Soy Mizu, tu coproductor. Pídeme una canción completa o un loop: “synth pop 80s oscuro en re menor, lenta”."
+        : "Soy Mizu, tu coproductor. Pídeme samples: “crea un kick industrial”, “un pad ambient cálido” o “un bajo dark wave”.",
     );
   }
 
@@ -914,6 +1144,7 @@ async function boot(): Promise<void> {
   updateActions();
 }
 
+applyMode();
 updateActions();
 void loadDrumKit();
 void player.prepare();

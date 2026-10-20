@@ -24,9 +24,9 @@
           </select>
           <button id="export-wav" title="Mixdown del proyecto a WAV" disabled>WAV</button>
           <button id="export-stems" title="WAV por pista, con sus FX y sin máster" disabled>Stems</button>
-          <button id="bounce-samples" title="Congelar pistas MIDI seleccionadas en clips de audio" disabled>Congelar</button>
-          <button id="export-midi" title="Exportar MIDI (solo pistas MIDI)" disabled>MIDI</button>
-          <button id="export-opendaw" title="Exportar a openDAW (solo pistas MIDI por ahora)" disabled>openDAW</button>
+          <button id="bounce-samples" title="Congelar pistas MIDI seleccionadas en clips de audio" data-midi-only hidden disabled>Congelar</button>
+          <button id="export-midi" title="Exportar MIDI (solo pistas MIDI)" data-midi-only hidden disabled>MIDI</button>
+          <button id="export-opendaw" title="Exportar a openDAW (solo pistas MIDI por ahora)" data-midi-only hidden disabled>openDAW</button>
           <button id="export-json" title="Proyecto canónico: metadatos; no incluye los WAV" disabled>JSON</button>
           <label class="file">Abrir<input id="open" type="file" accept=".json,application/json" /></label>
           <label class="file">Audio<input id="audio-file" type="file" accept="audio/*" multiple /></label>
@@ -39,7 +39,7 @@
         <strong id="selection-count">0 pistas</strong>
         <button id="sel-mute">Mute</button>
         <button id="sel-solo">Solo</button>
-        <button id="sel-freeze">Congelar</button>
+        <button id="sel-freeze" data-midi-only hidden>Congelar</button>
         <button id="sel-stems">Stems</button>
         <button id="sel-delete">Borrar</button>
         <span class="spacer"></span>

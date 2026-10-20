@@ -72,8 +72,14 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
 
 `npm run dev` levanta Vite y la API local (la clave del LLM nunca llega al navegador).
 
-- **Chat**: si el proyecto está vacío, la primera petición planifica una canción completa; las
-  siguientes editan con herramientas (`apply_ops`, `undo`, digest…).
+**Modo actual: audio-only.** `src/config.ts` fija `MIDI_ENABLED=false`: la UI oculta MIDI,
+Congelar, openDAW y el planner/chat MIDI; el LLM no recibe pistas ni herramientas MIDI. El código
+MIDI sigue en el repo y en los tests, pero no se usa en la ruta activa.
+
+- **Chat**: en modo audio, pide samples (“crea un kick industrial”, “un pad ambient cálido”,
+  “lo mismo para batería y bajo”). El chat planifica los samples, genera un script Python por
+  sonido en el sandbox, renderiza WAV y monta las pistas de audio. El planner de canciones MIDI
+  queda detrás del flag.
 - **Timeline**: clic para mover el playhead, Ctrl+rueda para zoom.
 - **Selección de pistas**: clic selecciona; Ctrl/Cmd+clic añade o quita; Shift+clic selecciona
   un rango. `M` y `S` son botones de mute y solo. La barra de selección permite Mute, Solo,
@@ -90,9 +96,9 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
   EQ, delay y reverb. Con esos primitivos puede pedir kicks, snares, bajos, plucks, pads, risers,
   texturas o impactos, en cualquier estilo. La macro industrial es un preset interno de
   one-shot, no una opción aparte en la UI.
-- **Proyecto mixto**: puedes combinar pistas de samples y pistas MIDI. El Sample Lab crea el
-  proyecto vacío si hace falta; el chat añade o edita pistas MIDI con el agente. El planificador
-  de canción completa solo se usa en un proyecto vacío o al pedir “otra canción/desde cero”.
+- **Proyecto legacy mixto**: el código permite pistas de samples y MIDI, pero con
+  `MIDI_ENABLED=false` las pistas MIDI se ocultan y no se reproducen ni se envían al LLM. Se
+  conservan en el proyecto guardado para poder reactivarlas más adelante.
 - **Deshacer/rehacer**: botones ↶ ↷ (Ctrl+Z / Ctrl+Shift+Z) con historial de las últimas 8
   versiones, persistente al recargar. Cada mensaje del chat, edición del piano roll, importación
   o generación guarda una versión.
@@ -100,13 +106,10 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
   suena exactamente igual. Volver a generar desde el mismo prompt crea una canción nueva (el LLM
   no es determinista); para conservar una versión concreta, exporta el JSON. Si el proyecto
   contiene audio, exporta también WAV o stems: el JSON no embebe los bytes.
-- **Piano roll**: doble clic en un clip MIDI. Clic añade, arrastrar mueve, clic derecho borra.
-  Al aplicar se emite `replace_clip_notes` (la misma validación que usa el LLM).
-- **Congelar**: convierte pistas MIDI en clips de audio dentro del proyecto. Eliges **pista por
-  pista** en el diálogo (Todas/Ninguna y casillas); si hay pistas seleccionadas, llegan ya
-  marcadas. Cada stem se renderiza con sus FX, sin buses ni máster, y se reinserta en el mismo
-  bus. Las canciones largas se parten en clips de 64 compases y los stems se atenúan en bloque
-  solo si haría falta evitar clipping.
+- **Piano roll legacy**: doble clic en un clip MIDI. Clic añade, arrastrar mueve, clic derecho
+  borra. En modo audio no hay clips MIDI visibles.
+- **Congelar legacy**: convierte pistas MIDI en clips de audio. Está oculto con el flag actual;
+  el código y el diálogo se conservan. Eliges pista por pista, con sus FX, sin buses ni máster.
 - **Audio persistente**: los WAV importados, los del Sample Lab y las pistas congeladas se
   guardan en IndexedDB (`miuzika` / `audio-assets`) y se rehidratan al recargar, también al
   deshacer/rehacer. El JSON solo lleva metadatos: al abrirlo en otro navegador hay que reimportar
@@ -114,19 +117,39 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
 - **Audio**: botón «Audio» importa WAV al playhead, dibuja la forma de onda y lo reproduce.
 - **WAV**: mixdown final del proyecto con master, limitador y normalización de loudness.
 - **Stems**: un WAV por pista, con sus FX y sin máster; exporta todas o solo la selección.
-- **MIDI**: solo pistas MIDI; las pistas de audio no se incluyen.
-- **openDAW**: proyecto `.odw`; por ahora exporta MIDI y avisa de que las pistas de audio
-  todavía no se incluyen (`SampleService`/`AudioFileBox` pendiente).
+- **MIDI legacy**: exportación MIDI oculta en modo audio. El código sigue disponible.
+- **openDAW legacy**: exportación `.odw` oculta; solo soporta MIDI y el audio sigue pendiente
+  (`SampleService`/`AudioFileBox`).
 - **JSON**: proyecto canónico con notas, FX, semilla y metadatos. No incluye los WAV; esos viven
   en IndexedDB. Para mover el proyecto a otro navegador hay que reimportar el audio.
 
+### Sandbox Python
+
+El chat audio-only usa `/api/sound/create`: el LLM escribe un script Python con
+`render(sr, duration, params, seed)`, y un contenedor lo ejecuta y devuelve un WAV validado.
+
+- Imagen: `sandbox/sound/Dockerfile` (Python + numpy, usuario sin privilegios).
+- Construir: `npm run sandbox:build` (en Windows usa WSL2 Ubuntu; en Linux, Docker).
+- Ejecución: `--network none`, `--read-only`, `/tmp` tmpfs, `--cap-drop ALL`,
+  `--security-opt no-new-privileges`, 512 MB, 1 CPU, límites de procesos, timeout.
+- El runner valida imports permitidos (`numpy`, `math`, `random`), prohíbe I/O/red/exec,
+  comprueba forma, NaN, duración y normaliza a −1 dBFS.
+- Contrato de salida: array mono o estéreo; el navegador lo decodifica y monta los clips.
+- El modelo usa `reasoning_effort: low` para no gastar todo el presupuesto en razonamiento.
+- Si Docker/WSL no está disponible, `/api/sound/create` devuelve error; no hay fallback a
+  ejecutar Python en Windows.
+
 Build de producción: `npm run build:web` y `npm run preview`. La API local vive en un plugin de
-Vite; para desplegar de verdad hará falta un servidor Node aparte que exponga `/api/*`.
+Vite; para desplegar de verdad hará falta un servidor Node aparte que exponga `/api/*` y un
+runner de contenedores separado.
 
 ### LLM (obligatorio)
 
-El asistente es la ruta normal: configura `OLLAMA_API_KEY` en `.env` (ver `.env.example`).
-El modelo devuelve un **plan** que pasa tres filtros antes de tocar el proyecto:
+Configura `OLLAMA_API_KEY` en `.env` (ver `.env.example`). En modo audio el modelo devuelve un
+**plan de samples** y scripts DSP. El plan de canción MIDI (SongPlan) sigue existiendo solo como
+código legacy detrás del flag.
+
+El plan MIDI legacy pasaba tres filtros antes de tocar el proyecto:
 
 1. **zod** — forma del JSON.
 2. **normalizePlan** — sinónimos de parámetros (`size`→`decay`, `mix`→`wet`, `amount`→`width`) y rangos.
@@ -142,26 +165,28 @@ evaluación; no es una ruta del producto. También funciona con Ollama local:
 
 ## Cómo está pensado
 
+Modo audio actual:
+
 ```
  lenguaje natural
        │
-       ├─► restricciones (deterministas) ──┐
-       │                                   ▼
-       └─► planificador LLM ──► SongPlan (JSON)  ← validado y reintentado
+       └─► planificador de samples (LLM) ──► SamplePlan
                                       │
                                       ▼
-                            composePlan() → Op[]
+                    diseñador DSP (LLM) ──► script Python
                                       │
                                       ▼
-                     applyOps()  (validación + transacción + undo)
+                 sandbox Docker/WSL (sin red, read-only) ──► WAV
                                       │
                                       ▼
-                         Project (IR canónico, beats)
+                     renderSample/audio → pistas + clips
                                       │
-                        ┌─────────────┴─────────────┐
-                        ▼                           ▼
-                  export MIDI                 adaptador openDAW
+                                      ▼
+                         WAV / Stems / JSON
 ```
+
+El pipeline MIDI (`SongPlan` → `composePlan` → `Op[]` → MIDI/openDAW) se conserva en el repo,
+pero no es la ruta activa con `MIDI_ENABLED=false`.
 
 Decisiones clave:
 
@@ -212,10 +237,19 @@ web/
   src/synth.ts    síntesis compartida preview/mixdown
   src/audio-store.ts  WAV decodificados, peaks y rehidratación
   src/audio-db.ts IndexedDB de bytes WAV
-  src/industrial.ts   motor DSP de one-shot industrial
+  src/industrial.ts   motor DSP de one-shot industrial (Sample Lab)
+  src/config.ts       flag MIDI_ENABLED / AUDIO_ONLY
+src/agent/
+  sample-plan.ts      petición → lista de samples
+  sound-script.ts     LLM → script Python de DSP
+  sound-sandbox.ts    Node → contenedor Docker/WSL
+sandbox/sound/
+  Dockerfile          imagen Python + numpy
+  runner.py           contrato render(), validación y WAV
 vite-plugin-api.ts  API local (mantiene la clave fuera del navegador)
 scripts/
   bundle-run.mjs  ejecuta el SDK (imports sin extensión) con esbuild
+  build-sound-sandbox.mjs  construye la imagen del sandbox
 docs/
   ARCHITECTURE.md  detalle técnico y hoja de ruta
   OPENDAW.md      integración con openDAW y licencias
@@ -223,25 +257,33 @@ docs/
 
 ## Limitaciones conocidas
 
-- Solo 4/4. El motor de patrones asume 16 pasos por compás.
+- Solo 4/4. El motor de patrones legacy asume 16 pasos por compás; el audio no depende de eso.
+- El sandbox Python necesita Docker (Linux) o Docker dentro de WSL2 (Windows). Si no está,
+  `/api/sound/create` falla; no se ejecuta Python arbitrario en el host.
+- El LLM tarda y consume tokens: con `deepseek-v4.1-flash:1017`, un script DSP puede necesitar
+  10–20k tokens de salida y decenas de segundos. Tres samples pueden tardar varios minutos.
+- El script Python que genera cada sample **aún no se guarda como receta** en el proyecto; se
+  persiste el WAV, no el código. Rehacer el sonido requiere volver a pedirlo.
+- Los loops Python no tienen validación de continuidad sample-perfect; pueden necesitar crossfade.
+- El modo MIDI está oculto y fuera del LLM, pero su código y tests siguen en el repositorio.
 - El JSON del proyecto no embebe los WAV: los bytes viven en IndexedDB, en el navegador y perfil
   actuales. Si se abre el JSON en otro navegador, se borran los datos del sitio o cambia el perfil,
   hay que reimportar el audio. Exportar un proyecto autocontenido está pendiente.
 - IndexedDB puede llenarse con proyectos largos (un stem de 2:40 ronda 30 MB); el navegador puede
   pedir más espacio o rechazar la escritura, y en ese caso la app avisa y mantiene el audio solo en
   la sesión.
-- El export a openDAW no incluye las pistas de audio (necesita `SampleService`/`AudioFileBox`).
-- El preview sintetiza los instrumentos (capas, envolventes, dinámica) y aproxima la cadena de
-  FX del proyecto; no es el motor de openDAW, así que no suena idéntico al `.odw`.
+- El export legacy a openDAW no incluye las pistas de audio y está oculto en modo audio.
+- El preview legacy sintetiza instrumentos MIDI; en modo audio reproduce los clips de audio y su
+  mezcla WebAudio.
 - El motor de sintetizador es procedural, no neural: no imita instrumentos acústicos reales ni
   tiene capas de velocidad/round-robin. Para guitarras, voces o pianos reales hace falta una
   librería multimuestra o un modelo de audio con licencia adecuada.
 - El mixdown a WAV es offline y puede tardar decenas de segundos en canciones largas.
 - Sin validación musical avanzada (voz guía, conducción de voces, rango por instrumento real).
-- El plan del LLM puede ser musicalmente conservador: los presets y la validación garantizan
-  coherencia, no originalidad. Para hooks y forma larga hace falta intervención humana.
-- El coste/latencia del planificador es de ~4-13 s y ~2-18k tokens de entrada por operación
-  (medido con `deepseek-v4.1-flash:1017`).
+- El plan MIDI legacy puede ser musicalmente conservador; en audio, la calidad depende del
+  script DSP y del sandbox, no de presets de notas.
+- El coste/latencia del planificador MIDI legacy es de ~4-13 s y ~2-18k tokens de entrada por
+  operación (medido con `deepseek-v4.1-flash:1017`).
 
 ## Verificado de punta a punta
 

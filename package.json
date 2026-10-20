@@ -17,6 +17,7 @@
     "dev": "vite",
     "preview": "vite preview",
     "build:web": "vite build",
+    "sandbox:build": "node scripts/build-sound-sandbox.mjs",
     "export:opendaw": "node scripts/bundle-run.mjs src/host/opendaw/export-cli.ts tmp/opendaw-export.mjs"
   },
   "dependencies": {

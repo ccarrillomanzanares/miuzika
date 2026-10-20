@@ -33,6 +33,8 @@ export interface LlmRequest {
   maxTokens?: number;
   /** Pide JSON estricto (response_format). */
   jsonMode?: boolean;
+  /** Menos razonamiento = menos latencia (si el proveedor lo soporta). */
+  reasoningEffort?: "low" | "medium" | "high";
 }
 
 export interface LlmResponse {
@@ -112,6 +114,7 @@ export class OllamaClient implements LlmClient {
       body.tool_choice = "auto";
     }
     if (request.jsonMode) body.response_format = { type: "json_object" };
+    if (request.reasoningEffort) body.reasoning_effort = request.reasoningEffort;
 
     let response = await this.post(body);
     // Algunos despliegues no soportan response_format: reintento sin él.
@@ -168,6 +171,7 @@ export class OllamaClient implements LlmClient {
 export interface ClientFromEnvOptions {
   baseUrl?: string;
   model?: string;
+  timeoutMs?: number;
 }
 
 export function clientFromEnv(
@@ -182,6 +186,7 @@ export function clientFromEnv(
     baseUrl,
     apiKey,
     model: overrides.model ?? env.OLLAMA_MODEL ?? DEFAULT_MODEL,
+    ...(overrides.timeoutMs ? { timeoutMs: overrides.timeoutMs } : {}),
   });
 }
 

@@ -26,9 +26,13 @@ function slug(value: string): string {
   );
 }
 
-export async function loadAudioFile(file: File, bpm: number): Promise<LoadedAsset> {
+export async function decodeAudioBlob(blob: Blob): Promise<AudioBuffer> {
   decodeContext ??= new AudioContext();
-  const buffer = await decodeContext.decodeAudioData(await file.arrayBuffer());
+  return decodeContext.decodeAudioData(await blob.arrayBuffer());
+}
+
+export async function loadAudioFile(file: File, bpm: number): Promise<LoadedAsset> {
+  const buffer = await decodeAudioBlob(file);
   const name = file.name.replace(/\.[^.]+$/, "");
   const base = `aud_${slug(name)}_${Date.now().toString(36)}`;
   let id = base;

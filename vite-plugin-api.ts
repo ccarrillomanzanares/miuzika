@@ -7,6 +7,10 @@ import type { Plugin } from "vite";
 import { clientFromEnv, plannerClientFromEnv } from "./src/agent/client.ts";
 import { composeFromPrompt, runAgent } from "./src/agent/agent.ts";
 import { designSample } from "./src/agent/sample-designer.ts";
+import { planSamples } from "./src/agent/sample-plan.ts";
+import { renderSoundScript } from "./src/agent/sound-sandbox.ts";
+import { designSoundScript } from "./src/agent/sound-script.ts";
+import { MIDI_ENABLED } from "./src/config.ts";
 import { createProject } from "./src/core/project.ts";
 import type { Project } from "./src/core/types.ts";
 
@@ -74,9 +78,12 @@ async function handler(
   try {
     const body = await readJson(req);
     const prompt = String(body.prompt ?? "").trim();
-    if (!prompt) return sendJson(res, 400, { error: "La petición está vacía" });
 
     if (url === "/api/generate") {
+      if (!MIDI_ENABLED) {
+        return sendJson(res, 409, { error: "El modo MIDI está aparcado. Pide samples." });
+      }
+      if (!prompt) return sendJson(res, 400, { error: "La petición está vacía" });
       const planner = plannerClientFromEnv();
       if (!planner) {
         return sendJson(res, 503, {
@@ -96,6 +103,87 @@ async function handler(
         model: planner.model,
         seed,
       });
+    }
+
+    if (url === "/api/sound/create") {
+      if (!prompt) return sendJson(res, 400, { error: "Describe el sonido que quieres" });
+      const client = clientFromEnv(undefined, { timeoutMs: 300_000 });
+      if (!client) return sendJson(res, 503, { error: "Falta OLLAMA_API_KEY en .env" });
+      const duration = Math.min(32, Math.max(0.1, Number(body.duration) || 2.4));
+      const sampleRate = Number(body.sampleRate) === 44_100 ? 44_100 : 48_000;
+      const seed = Number(body.seed) || 1;
+      const params =
+        body.params && typeof body.params === "object"
+          ? (body.params as Record<string, unknown>)
+          : {};
+      let previousError: string | undefined;
+      let lastCode = "";
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const designed = await designSoundScript(client, prompt, {
+            duration,
+            sampleRate,
+            seed,
+            previousError,
+            ...(body.bpm ? { bpm: Number(body.bpm) } : {}),
+            ...(body.key ? { key: body.key as { tonic: string; mode: string } } : {}),
+          });
+          lastCode = designed.code;
+          const rendered = await renderSoundScript({
+            code: designed.code,
+            duration,
+            sampleRate,
+            params,
+            seed,
+          });
+          return sendJson(res, 200, {
+            ...rendered,
+            wav: rendered.wav.toString("base64"),
+            code: designed.code,
+            model: designed.model,
+            attempts: attempt + 1,
+          });
+        } catch (error) {
+          previousError = error instanceof Error ? error.message : String(error);
+        }
+      }
+      return sendJson(res, 422, {
+        error: `No se pudo generar el sonido: ${previousError ?? "error desconocido"}`,
+        code: lastCode,
+      });
+    }
+
+    if (url === "/api/sound/render") {
+      const code = String(body.code ?? "");
+      if (!code) return sendJson(res, 400, { error: "Falta el script Python" });
+      const result = await renderSoundScript({
+        code,
+        duration: Number(body.duration) || 2,
+        ...(body.sampleRate ? { sampleRate: Number(body.sampleRate) } : {}),
+        ...(body.params && typeof body.params === "object"
+          ? { params: body.params as Record<string, unknown> }
+          : {}),
+        ...(body.seed !== undefined ? { seed: Number(body.seed) } : {}),
+      });
+      return sendJson(res, 200, { ...result, wav: result.wav.toString("base64") });
+    }
+
+    if (url === "/api/sample/plan") {
+      if (!prompt) return sendJson(res, 400, { error: "La petición está vacía" });
+      const client = clientFromEnv();
+      if (!client) return sendJson(res, 503, { error: "Falta OLLAMA_API_KEY en .env" });
+      const project = body.project as Project | undefined;
+      const key =
+        project && typeof project.key?.tonic === "string" && typeof project.key?.mode === "string"
+          ? project.key
+          : { tonic: "D", mode: "minor" as const };
+      const samples = await planSamples(client, prompt, {
+        bpm: project?.bpm ?? 100,
+        key,
+        tracks: project?.tracks.filter((track) => track.kind === "audio").map((track) => track.name),
+        lengthBars: project?.lengthBars,
+      });
+      return sendJson(res, 200, { samples, model: client.model });
     }
 
     if (url === "/api/sample/design") {
@@ -118,6 +206,10 @@ async function handler(
     }
 
     if (url === "/api/chat") {
+      if (!MIDI_ENABLED) {
+        return sendJson(res, 409, { error: "El modo MIDI está aparcado. Pide samples." });
+      }
+      if (!prompt) return sendJson(res, 400, { error: "La petición está vacía" });
       const client = clientFromEnv();
       if (!client) return sendJson(res, 503, { error: "Falta OLLAMA_API_KEY en .env" });
       const project = body.project as Project | undefined;
