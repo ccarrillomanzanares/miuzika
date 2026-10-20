@@ -13,6 +13,7 @@ import type { Role } from "./patterns.ts";
 import { BASS_STYLES, CHORD_RHYTHMS, DRUM_STYLES, isValidChord } from "./patterns.ts";
 import type { Op } from "./ops.ts";
 import { MODE_NAMES, isMajorFamily, normalizeKey, progressionFromDegrees } from "./theory.ts";
+import { hashString } from "./rng.ts";
 
 export const GENRES = ["synthpop80s", "siniestroPunk", "techno", "ambient", "rock", "hiphop"] as const;
 export type Genre = (typeof GENRES)[number];
@@ -51,6 +52,8 @@ export interface SongSection {
   /** 0..1: controla densidad y qué pistas entran. */
   energy: number;
   roles: Role[];
+  /** Progresión propia de la sección (si falta, se usa la global). */
+  chords?: string[];
 }
 
 export interface SongPlan {
@@ -79,6 +82,7 @@ export const SongPlanSchema = z.object({
         bars: z.number().int().min(1).max(64),
         energy: z.number().min(0).max(1),
         roles: z.array(RoleSchema).min(1),
+        chords: z.array(z.string().min(1).max(16)).max(16).optional(),
       }),
     )
     .min(1)
@@ -185,6 +189,9 @@ export function validatePlan(plan: SongPlan): string[] {
 
   const harmonic = [
     ...(plan.chords ?? []).map((chord) => ({ chord, path: "chords" })),
+    ...plan.sections.flatMap((section, index) =>
+      (section.chords ?? []).map((chord) => ({ chord, path: `sections[${index}].chords` })),
+    ),
     ...plan.tracks.flatMap((track, index) =>
       (track.chords ?? []).map((chord) => ({ chord, path: `tracks[${index}] "${track.name}".chords` })),
     ),
@@ -205,7 +212,7 @@ export function validatePlan(plan: SongPlan): string[] {
       issues.push(`${path}: estilo de acordes "${track.style}" no válido. Usa: ${Object.keys(CHORD_RHYTHMS).join(", ")}`);
     }
 
-    if (track.octave !== undefined) {
+    if (track.role !== "drums" && track.octave !== undefined) {
       const range: [number, number] =
         track.role === "bass" ? [0, 3] : track.role === "lead" || track.role === "arp" ? [3, 7] : [2, 6];
       if (track.octave < range[0] || track.octave > range[1]) {
@@ -310,6 +317,10 @@ export function composePlan(plan: SongPlan): Op[] {
     for (const { plan: track, id } of tracks) {
       if (!section.roles.includes(track.role)) continue;
       const density = Math.max(0.12, Math.min(1, 0.18 + section.energy * (track.density ?? 1)));
+      const patternSeed = hashString(
+        `${plan.title}|${section.name}|${startBar}|${track.name}|${track.role}`,
+      );
+      const sectionChords = section.chords ?? track.chords ?? chords;
       ops.push({
         op: "generate_part",
         trackId: id,
@@ -320,7 +331,9 @@ export function composePlan(plan: SongPlan): Op[] {
           style: track.style,
           bars: section.bars,
           density,
-          ...(track.chords ?? chords ? { chords: track.chords ?? chords } : {}),
+          energy: section.energy,
+          seed: patternSeed,
+          ...(sectionChords ? { chords: sectionChords } : {}),
           ...(track.octave !== undefined ? { octave: track.octave } : {}),
           ...(track.motif ? { motif: track.motif } : {}),
           ...(plan.swing !== undefined && track.role !== "drums" ? { swing: plan.swing } : {}),

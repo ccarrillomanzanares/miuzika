@@ -100,6 +100,23 @@ test("acepta booleanos en parámetros de dispositivo", () => {
   assert.deepEqual(validatePlan(parsed), []);
 });
 
+test("los acordes por sección cambian la armonía", () => {
+  const plan = presetPlan("synthpop80s", { bars: 8 });
+  plan.sections[0]!.chords = ["Am", "F"];
+  plan.sections[1]!.chords = ["C", "G"];
+  const ops = composePlan(plan);
+  const verse = ops.find(
+    (op) =>
+      op.op === "generate_part" &&
+      op.trackId === "trk_bass" &&
+      op.section === plan.sections[1]!.name,
+  );
+  assert.ok(verse && verse.op === "generate_part");
+  if (verse.op === "generate_part") {
+    assert.deepEqual(verse.pattern.chords, ["C", "G"]);
+  }
+});
+
 test("composePlan usa ids de pista estables", () => {
   const ops = composePlan(presetPlan("techno"));
   const addTrack = ops.filter((op) => op.op === "add_track");

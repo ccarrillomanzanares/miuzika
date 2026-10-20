@@ -1,6 +1,6 @@
 /** Carga y control del sintetizador AudioWorklet. */
 
-const MODULE_URL = "/worklets/synth-processor.js?v=2";
+const MODULE_URL = "/worklets/synth-processor.js?v=3";
 const loaded = new WeakSet<BaseAudioContext>();
 
 export type SynthPreset = "bass" | "lead" | "pad" | "arp" | "synth";
@@ -28,15 +28,25 @@ export function isSynthReady(context: BaseAudioContext): boolean {
   return loaded.has(context);
 }
 
+export interface WorkletOptions {
+  notes?: WorkletNote[];
+  /** Variación de timbre determinista por canción/pista. */
+  variant?: number;
+}
+
 export class WorkletInstrument {
   readonly node: AudioWorkletNode;
 
-  constructor(context: BaseAudioContext, preset: SynthPreset, notes?: WorkletNote[]) {
+  constructor(context: BaseAudioContext, preset: SynthPreset, options: WorkletOptions = {}) {
     this.node = new AudioWorkletNode(context, "miuzika-synth", {
       numberOfInputs: 0,
       numberOfOutputs: 1,
       outputChannelCount: [2],
-      processorOptions: { preset, ...(notes ? { notes } : {}) },
+      processorOptions: {
+        preset,
+        variant: options.variant ?? 0,
+        ...(options.notes ? { notes: options.notes } : {}),
+      },
     });
   }
 

@@ -10,6 +10,7 @@ import { measureLoudness, normalizeBuffer } from "./loudness.ts";
 import type { Loudness } from "./loudness.ts";
 import { createNoiseBuffer, playInstrumentNote } from "./synth.ts";
 import { prepareSynth, presetFor, WorkletInstrument } from "./worklet-synth.ts";
+import { hashString } from "../../src/core/rng.ts";
 
 const dbToGain = (db: number) => 10 ** (db / 20);
 
@@ -61,7 +62,10 @@ export async function renderProject(project: Project, options: RenderOptions = {
           duration: note.duration * secondsPerBeat,
         })),
       );
-      const synth = new WorkletInstrument(context, presetFor(track.instrument.type), notes);
+      const synth = new WorkletInstrument(context, presetFor(track.instrument.type), {
+        notes,
+        variant: hashString(`${project.seed}|${track.id}`) % 1000,
+      });
       synth.connect(chain.input);
       synths.set(track.id, synth);
     }

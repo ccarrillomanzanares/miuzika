@@ -8,6 +8,7 @@ import type { BusChain, MasterChain, TrackChain } from "./fx.ts";
 import { createNoiseBuffer, playInstrumentNote } from "./synth.ts";
 import type { VoiceHandle } from "./synth.ts";
 import { isSynthReady, prepareSynth, presetFor, WorkletInstrument } from "./worklet-synth.ts";
+import { hashString } from "../../src/core/rng.ts";
 
 interface Event {
   kind: "note" | "audio";
@@ -107,7 +108,9 @@ export class PreviewPlayer {
         if (track.instrument.type === "drumkit") continue;
         const input = this.perTrack.get(track.id);
         if (!input) continue;
-        const synth = new WorkletInstrument(context, presetFor(track.instrument.type));
+        const synth = new WorkletInstrument(context, presetFor(track.instrument.type), {
+          variant: hashString(`${project.seed}|${track.id}`) % 1000,
+        });
         synth.connect(input);
         this.synths.set(track.id, synth);
       }

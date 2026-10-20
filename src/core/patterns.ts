@@ -34,6 +34,8 @@ export interface PatternSpec {
   octave?: number;
   /** 0 = mínimo, 1 = máximo. */
   density?: number;
+  /** Energía de la sección: cambia fills, movimiento y densidad. */
+  energy?: number;
   /** Fundamental si no hay progresión. */
   root?: string;
   /** Grados de la escala para el motivo del lead. */
@@ -190,6 +192,7 @@ function expandDrums(spec: PatternSpec, ctx: ExpandContext, bars: number): Note[
   const stepsPerBar = ctx.stepsPerBar ?? 16;
   const rng = seededRng(ctx.seed, spec.seed ?? 0, "drums", styleName);
   const density = spec.density ?? 0.7;
+  const energy = spec.energy ?? 0.6;
   const notes: Note[] = [];
 
   for (let bar = 0; bar < bars; bar++) {
@@ -214,7 +217,18 @@ function expandDrums(spec: PatternSpec, ctx: ExpandContext, bars: number): Note[
       }
     }
 
-    if (style.fill && isLastBar && density > 0.55) {
+    // Aire extra en secciones de alta energía, sin saturar.
+    if (energy > 0.8 && bar % 2 === 0) {
+      notes.push({
+        pitch: DRUM.openHat,
+        start: barStart + stepToBeats(15, stepsPerBar, ctx.beatsPerBar),
+        duration: 0.1,
+        velocity: clampVelocity(72 + jitter(rng, 5)),
+      });
+    }
+
+    const fillBar = isLastBar || (energy > 0.7 && (bar + 1) % 4 === 0 && bar > 0);
+    if (style.fill && fillBar && density > 0.55) {
       const fillSteps = [12, 13, 14, 15];
       const fillPitches = [DRUM.tomHigh, DRUM.tomMid, DRUM.tomLow, DRUM.snare];
       fillSteps.forEach((step, index) => {
@@ -242,8 +256,15 @@ function expandBass(spec: PatternSpec, ctx: ExpandContext, bars: number): Note[]
   const rng = seededRng(ctx.seed, spec.seed ?? 0, "bass", styleName);
   const octave = spec.octave ?? 2;
   const density = spec.density ?? 0.8;
+  const energy = spec.energy ?? 0.6;
   const chords = resolveChords(spec, ctx.key, bars);
   const notes: Note[] = [];
+  const movementPattern =
+    energy < 0.4
+      ? [0, 0, 0, 0, 0, 0, 0, 0]
+      : energy > 0.8
+        ? [0, 0, 7, 12, 0, 7, 12, 0]
+        : [0, 0, 7, 0, 12, 0, 7, 0];
 
   for (let bar = 0; bar < bars; bar++) {
     const chord = parseChord(chords[bar]!);
@@ -252,8 +273,8 @@ function expandBass(spec: PatternSpec, ctx: ExpandContext, bars: number): Note[]
     const steps = density < 0.5 ? rhythm.filter((_, index) => index % 2 === 0) : rhythm;
     steps.forEach((step, index) => {
       if (rng() < 0.04) return;
-      // Movimiento: fundamental, quinta, octava.
-      const movement = [0, 0, 7, 0, 12, 0, 7, 0][index % 8]!;
+      // Movimiento: fundamental, quinta, octava (según energía de la sección).
+      const movement = movementPattern[index % 8]!;
       notes.push({
         pitch: Math.max(24, Math.min(60, root + movement)),
         start: bar * ctx.beatsPerBar + stepToBeats(step, stepsPerBar, ctx.beatsPerBar),
@@ -310,7 +331,14 @@ function expandLead(spec: PatternSpec, ctx: ExpandContext, bars: number): Note[]
   const octave = spec.octave ?? 5;
   const chords = resolveChords(spec, ctx.key, bars);
   const density = spec.density ?? 0.6;
-  const motif = spec.motif?.length ? spec.motif : [0, 2, 4, 2, 4, 6, 4, 2];
+  const baseMotif = spec.motif?.length ? spec.motif : [0, 2, 4, 2, 4, 6, 4, 2];
+  const variation = Math.abs(spec.seed ?? 0) % 3;
+  const motif =
+    variation === 1
+      ? baseMotif.map((degree) => 2 * baseMotif[0]! - degree)
+      : variation === 2
+        ? [...baseMotif.slice(1), baseMotif[0]!]
+        : baseMotif;
   const stepPattern = density > 0.75 ? [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14] : [0, 2, 4, 6, 8, 10, 12, 14];
   const tonic = noteToMidi(ctx.key.tonic, octave);
   const notes: Note[] = [];
@@ -340,6 +368,8 @@ function expandArp(spec: PatternSpec, ctx: ExpandContext, bars: number): Note[] 
   const stepsPerBar = ctx.stepsPerBar ?? 16;
   const rng = seededRng(ctx.seed, spec.seed ?? 0, "arp");
   const octave = spec.octave ?? 5;
+  const energy = spec.energy ?? 0.6;
+  const stepSize = energy > 0.8 ? 1 : energy < 0.4 ? 4 : 2;
   const chords = resolveChords(spec, ctx.key, bars);
   const notes: Note[] = [];
 
@@ -347,12 +377,12 @@ function expandArp(spec: PatternSpec, ctx: ExpandContext, bars: number): Note[] 
     const chord = parseChord(chords[bar]!);
     const tones = chordToMidi(chord, octave).map((pitch) => (pitch < 55 ? pitch + 12 : pitch));
     const cycle = bar % 2 === 0 ? [...tones, tones[0]! + 12] : [...tones].reverse();
-    for (let step = 0; step < stepsPerBar; step += 2) {
-      const pitch = cycle[(step / 2) % cycle.length]!;
+    for (let step = 0; step < stepsPerBar; step += stepSize) {
+      const pitch = cycle[(step / stepSize) % cycle.length]!;
       notes.push({
         pitch,
         start: bar * ctx.beatsPerBar + stepToBeats(step, stepsPerBar, ctx.beatsPerBar),
-        duration: 0.18 * (ctx.beatsPerBar / 4),
+        duration: (stepSize === 1 ? 0.1 : 0.18) * (ctx.beatsPerBar / 4),
         velocity: clampVelocity(78 + jitter(rng, 6)),
       });
     }

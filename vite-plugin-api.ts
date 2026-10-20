@@ -82,16 +82,18 @@ async function handler(
           error: "Falta OLLAMA_API_KEY. Copia .env.example a .env y pon tu clave de Ollama Cloud.",
         });
       }
+      const seed = Number(body.seed) || Math.floor(Math.random() * 1_000_000_000);
       const composed = await composeFromPrompt({
         planner,
         prompt,
-        project: createProject({ prompt, seed: Number(body.seed) || 1 }),
+        project: createProject({ prompt, seed }),
       });
       return sendJson(res, 200, {
         project: composed.project,
         plan: composed.plan,
         warnings: composed.warnings,
         model: planner.model,
+        seed,
       });
     }
 

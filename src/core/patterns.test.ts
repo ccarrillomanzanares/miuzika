@@ -70,6 +70,42 @@ test("los acordes de pad duran el compás", () => {
   }
 });
 
+test("la energía alta añade recursos de arreglo", () => {
+  const low = expandPattern({ role: "drums", style: "gated_80s", bars: 4, energy: 0.25 }, context);
+  const high = expandPattern({ role: "drums", style: "gated_80s", bars: 4, energy: 0.95 }, context);
+  assert.ok(high.length > low.length, `${high.length} vs ${low.length}`);
+});
+
+test("el bajo cambia de movimiento con la energía", () => {
+  const low = expandPattern(
+    { role: "bass", style: "driving8", bars: 2, energy: 0.2, chords: ["Dm"] },
+    context,
+  );
+  const high = expandPattern(
+    { role: "bass", style: "driving8", bars: 2, energy: 0.95, chords: ["Dm"] },
+    context,
+  );
+  assert.notDeepEqual(
+    low.map((note) => note.pitch),
+    high.map((note) => note.pitch),
+  );
+});
+
+test("la semilla cambia el motivo del lead", () => {
+  const a = expandPattern(
+    { role: "lead", style: "hook", bars: 1, energy: 0.6, seed: 1, chords: ["Dm"] },
+    context,
+  );
+  const b = expandPattern(
+    { role: "lead", style: "hook", bars: 1, energy: 0.6, seed: 2, chords: ["Dm"] },
+    context,
+  );
+  assert.notDeepEqual(
+    a.map((note) => note.pitch),
+    b.map((note) => note.pitch),
+  );
+});
+
 test("un estilo desconocido falla con la lista de válidos", () => {
   assert.throws(
     () => expandPattern(spec({ role: "drums", style: "inventado" }), context),

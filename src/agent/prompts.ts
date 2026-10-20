@@ -1,7 +1,9 @@
 /** Prompts del asistente y del planificador. */
 
+import { z } from "zod";
 import type { Project } from "../core/types.ts";
 import { projectDigest } from "../core/digest.ts";
+import { SongPlanSchema } from "../core/plan.ts";
 
 export const SYSTEM_PROMPT = `Eres Mizu, el asistente de composición de miuzika, un DAW.
 
@@ -55,43 +57,39 @@ export function userMessage(project: Project, request: string): string {
   return `ESTADO ACTUAL\n${projectDigest(project)}\n\nPETICIÓN DEL USUARIO\n${request}`;
 }
 
-export const PLANNER_SYSTEM = `Eres arreglista musical. Recibes una petición en lenguaje natural y devuelves SOLO un objeto JSON con el plan de la canción. Sin markdown, sin explicaciones.
+const PLAN_SCHEMA = (() => {
+  const schema = z.toJSONSchema(SongPlanSchema) as Record<string, unknown>;
+  delete schema.$schema;
+  return JSON.stringify(schema);
+})();
 
-Formato exacto:
-{
-  "title": "string",
-  "genre": "synthpop80s | siniestroPunk | techno | ambient | rock | hiphop | custom",
-  "bpm": 20-300,
-  "key": {"tonic": "C|C#|D|...|B", "mode": "major|minor|dorian|phrygian|lydian|mixolydian|harmonicMinor|pentatonicMinor"},
-  "chords": ["Dm","Bb","F","C"],
-  "sections": [{"name":"intro","bars":4,"energy":0.25,"roles":["pad","arp"]}],
-  "tracks": [{"name":"Drums","role":"drums","style":"gated_80s","gainDb":-3,"pan":0,"devices":[{"type":"compressor","params":{"threshold":0.55,"ratio":4}}]}],
-  "mixNotes": "string",
-  "swing": 0
-}
+/**
+ * Prompt mínimo: el contrato vive en el esquema, no en una canción de ejemplo.
+ * Las reglas musicales que falten se corrigen con validatePlan y reintento.
+ */
+export const PLANNER_SYSTEM = `Eres arreglista musical. Recibes una petición y devuelves SOLO un objeto JSON que cumpla exactamente este esquema:
 
-Estructura:
-- 24-64 compases si no se pide otra cosa. La suma de "sections[].bars" es la duración total.
-- "roles" de cada sección debe ser subconjunto de los roles de las pistas.
-- Estilos válidos: drums (gated_80s, siniestro_punk, four_on_floor, half_time, breakbeat, driving, ambient); bass (straight8, driving8, syncopated, quarters, punk, ambient, sub); chords/pad (pad, gated, stab, offbeat, power, sustained); lead y arp usan "hook" o "up".
-- No incluyas arp por defecto. Solo si el usuario lo pide o el género es techno/ambient y aporta movimiento. En synthpop puede ser una textura del estribillo, nunca en todas las secciones. En rock, punk o hip hop, no lo uses.
-- Octavas: bass 1-2, chords/pad 3-4, lead/arp 5.
-- La progresión debe encajar con la tonalidad pedida. Si no se pide tonalidad, elige una coherente con el género.
-- Si es un loop: UNA sola sección, solo las pistas mencionadas y la duración pedida (4 u 8 compases por defecto).
+${PLAN_SCHEMA}
 
-Tempo:
-- "lenta" ≈ 70-90 BPM, "muy lenta" ≈ 55-70, "media" ≈ 95-120, "rápida" ≈ 125-175. Ajusta al género.
-- Si se indica un BPM exacto, úsalo sin redondear.
+Estilos válidos por rol:
+- drums: gated_80s, siniestro_punk, four_on_floor, half_time, breakbeat, driving, ambient
+- bass: straight8, driving8, syncopated, quarters, punk, ambient, sub
+- chords/pad: pad, gated, stab, offbeat, power, sustained
+- lead/arp: hook, up
 
-Dispositivos y parámetros EXACTOS (no inventes nombres):
+No uses arp salvo que la petición lo pida o el género sea techno/ambient; en synthpop, solo como textura puntual.
+
+Parámetros válidos por dispositivo (0..1 salvo indicación):
 reverb: wet, decay, preDelay, damping · delay: wet, time, feedback, pingPong · chorus: wet, rate, depth ·
 distortion: drive, tone, mix · filter: cutoff, resonance · eq: low, mid, high ·
-compressor: threshold, ratio, attack, release · bitcrusher: bits, mix · gate: threshold, release · width: width.
-Valores 0..1 salvo eq (dB, -24..24), compressor.ratio (1..20), bitcrusher.bits (1..16), width.width (0..2).
-Usa solo los parámetros que aporten; el resto toma valores por defecto.
+compressor: threshold, ratio (1..20), attack, release · bitcrusher: bits (1..16), mix · gate: threshold, release · width: width (0..2).
 
-Si el mensaje incluye "RESTRICCIONES OBLIGATORIAS", cúmplelas al pie de la letra: son requisitos del usuario, no sugerencias.
-No incluyas comentarios ni campos extra.`;
+Reglas mínimas:
+- La suma de sections[].bars es la duración total.
+- Cada rol de una sección debe existir en tracks.
+- Puedes dar acordes por sección en sections[].chords; si no, se usa el campo global chords.
+- Respeta las restricciones obligatorias.
+- No incluyas comentarios ni campos extra.`;
 
 export function plannerMessage(request: string, constraints?: string): string {
   if (!constraints) return `Petición: ${request}`;

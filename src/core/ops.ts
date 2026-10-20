@@ -59,6 +59,7 @@ export const PatternSchema = z.object({
   chords: z.array(z.string().min(1).max(16)).max(32).optional().describe("Un acorde por compás, se cicla"),
   octave: z.number().int().min(0).max(8).optional().describe("Octava de la fundamental (bajo: 2, pads: 4, lead: 5)"),
   density: z.number().min(0).max(1).optional(),
+  energy: z.number().min(0).max(1).optional().describe("Energía de la sección; cambia fills y movimiento"),
   root: z.string().max(4).optional(),
   motif: z.array(z.number().int().min(-14).max(21)).max(32).optional().describe("Grados de escala del motivo"),
   seed: z.number().int().optional(),

@@ -161,7 +161,16 @@ class SynthProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     const name = options?.processorOptions?.preset ?? "lead";
-    this.preset = PRESETS[name] ?? PRESETS.synth;
+    const base = PRESETS[name] ?? PRESETS.synth;
+    const variant = options?.processorOptions?.variant ?? 0;
+
+    // Variación de timbre determinista: misma canción/pista → mismo color.
+    this.preset = {
+      ...base,
+      detune: base.detune + ((variant % 7) - 3),
+      cutoff: base.cutoff * (0.85 + (((variant >> 3) % 5) * 0.06)),
+      sub: base.sub * (0.85 + (((variant >> 6) % 4) * 0.08)),
+    };
     this.voices = Array.from({ length: 64 }, () => new Voice(sampleRate, this.preset));
     this.queue = [];
     this.fallbackFrame = 0;
