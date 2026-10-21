@@ -235,6 +235,7 @@ function updateActions(): void {
   $<HTMLSelectElement>("master-target").disabled = !enabled || !hasTracks;
   $<HTMLButtonElement>("sample-lab").disabled = !enabled;
   $<HTMLButtonElement>("code-lab").disabled = !enabled;
+  $<HTMLButtonElement>("fit-timeline").disabled = !enabled || !hasProject;
   $<HTMLButtonElement>("new-song").disabled = !enabled;
   playButton.disabled = !enabled || !hasTracks;
   stopButton.disabled = !ready || !hasTracks;
@@ -1449,6 +1450,7 @@ stopButton.addEventListener("click", () => {
 
 undoButton.addEventListener("click", () => void undo());
 redoButton.addEventListener("click", () => void redo());
+$("fit-timeline").addEventListener("click", () => timeline.fitToProject());
 
 $("new-song").addEventListener("click", () => {
   if (!ready) return;
@@ -1750,6 +1752,11 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   const modifier = event.ctrlKey || event.metaKey;
+  if (modifier && event.key === "0") {
+    event.preventDefault();
+    timeline.fitToProject();
+    return;
+  }
   if (!modifier) {
     if (event.key === "Delete" || event.key === "Backspace") {
       if (selectedTrackIds.length === 0) return;

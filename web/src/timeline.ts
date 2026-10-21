@@ -149,11 +149,20 @@ export class TimelineView {
     this.project = project;
     this.beat = 0;
     this.pruneSelection();
-    this.resize();
+    this.fitToProject();
     this.renderHeads();
-    this.renderStatic();
-    this.draw(0);
     this.emitSelection();
+  }
+
+  /** Ajusta el zoom para que toda la canción quepa en el viewport. */
+  fitToProject(): void {
+    if (!this.project) return;
+    const totalBeats = Math.max(1, this.project.lengthBars * beatsPerBar(this.project));
+    const available = Math.max(320, this.wrap.clientWidth - 2);
+    this.pxPerBeat = Math.max(0.8, Math.min(MAX_PX_PER_BEAT, available / totalBeats));
+    this.resize();
+    this.renderStatic();
+    this.draw(this.beat);
   }
 
   /** Actualiza el proyecto sin resetear el playhead ni la selección (mute/solo en vivo). */
