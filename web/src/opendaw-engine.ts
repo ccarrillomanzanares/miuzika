@@ -17,6 +17,8 @@ export interface OpenDawPlaybackHandle {
   readonly isPlaying: boolean;
   stop: () => void;
   seek: (beat: number) => void;
+  /** Aplica mute/solo/volumen/pan al proyecto vivo del engine. */
+  syncMix: (source: MiuzikaProject) => void;
 }
 
 interface EngineBoot {
@@ -184,6 +186,21 @@ export async function playWithOpenDaw(
   };
 
   const project = Project.load(env as never, exported.bytes);
+  const units = new Map(
+    project.rootBoxAdapter.audioUnits.adapters().map((unit) => [unit.label, unit] as const),
+  );
+  const syncMix = (source: MiuzikaProject): void => {
+    project.editing.modify(() => {
+      for (const track of source.tracks) {
+        const unit = units.get(track.name);
+        if (!unit) continue;
+        unit.namedParameter.mute.setValue(track.muted);
+        unit.namedParameter.solo.setValue(track.solo);
+        unit.namedParameter.volume.setValue(track.gainDb);
+        unit.namedParameter.panning.setValue(track.pan);
+      }
+    });
+  };
   const worklet = project.startAudioWorklet();
   await worklet.isReady();
   await context.resume();
@@ -207,6 +224,7 @@ export async function playWithOpenDaw(
     seek: (beat) => {
       project.engine.setPosition(Math.max(0, beat) * 960);
     },
+    syncMix,
     stop: () => {
       project.engine.stop(true);
       subscription.terminate();

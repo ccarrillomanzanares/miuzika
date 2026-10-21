@@ -17,6 +17,7 @@ mezcla). Lo que sigue explica las decisiones y lo que queda pendiente.
 | Import (openDAW → IR): pistas, notas, tempo, mezcla | ✅ |
 | Playback en navegador: `WasmEngine` + `EngineWorklet` | ✅ `web/src/opendaw-engine.ts`; ▶ en proyectos MIDI |
 | Batería Playfield con samples WAV | ✅ `SampleProvider` sobre `web/public/drums` |
+| Mute/solo/volumen/pan en caliente | ✅ `syncMix` actualiza los `AudioUnitBox` del engine |
 | Import de dispositivos | 📋 (se conservan las notas; los FX no se reconstruyen) |
 | Pistas/regiones de audio dentro del engine | 📋 (necesita `AudioFileBox`/`SampleService`; hoy usan el player interno) |
 

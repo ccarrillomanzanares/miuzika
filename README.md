@@ -81,9 +81,10 @@ queda el modo audio-only anterior, sin MIDI visible ni enviado al LLM.
 
 - **Reproducción**: en proyectos MIDI puros, ▶ carga el proyecto en el engine WASM de
   openDAW (`WasmEngine` + `EngineWorklet`), no en el reproductor WebAudio casero. Las pistas de
-  batería usan Playfield y un `SampleProvider` con el kit WAV de `web/public/drums`. Si el
-  proyecto contiene pistas de audio, ▶ usa el player interno hasta completar `AudioFileBox`.
-  El servidor de Vite envía `COOP/COEP` para habilitar `SharedArrayBuffer`.
+  batería usan Playfield y un `SampleProvider` con el kit WAV de `web/public/drums`. Mute, solo,
+  volumen y pan se aplican en caliente al proyecto vivo del engine. Si el proyecto contiene
+  pistas de audio, ▶ usa el player interno hasta completar `AudioFileBox`. El servidor de Vite
+  envía `COOP/COEP` para habilitar `SharedArrayBuffer`.
 - **Chat**: los prompts de samples (“crea un kick industrial”, “lo mismo para batería y bajo”)
   van al planificador de samples + sandbox Python; los prompts de canción/edición MIDI van al
   planner/agente. También puede cambiar una sección: “cambia los compases 25 a 29 del Bass con

@@ -519,6 +519,7 @@ function commitLive(next: Project): void {
   persist();
   timeline.refresh(view);
   player.setMuteState(view);
+  openDawHandle?.syncMix(view);
   updateActions();
   updateHistoryButtons();
 }

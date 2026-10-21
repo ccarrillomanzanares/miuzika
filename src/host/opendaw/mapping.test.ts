@@ -107,7 +107,8 @@ test("el filtro se aproxima con el low-pass de Revamp", () => {
   assert.equal(mapped.factory, "Revamp");
   const params = Object.fromEntries(mapped.params.map((param) => [param.name, param.value]));
   assert.equal(params["lowPass.enabled"], true);
-  assert.equal(params["lowPass.frequency"], 20);
+  // Suelo audible: Vaporisateur no tiene los armónicos del motor WebAudio.
+  assert.equal(params["lowPass.frequency"], 1_200);
   assert.equal(params["lowShelf.enabled"], false);
 });
 

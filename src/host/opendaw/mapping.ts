@@ -145,7 +145,9 @@ export function dbToUnit(db: number): number {
           { name: "highBell.enabled", value: false },
           { name: "highShelf.enabled", value: false },
           { name: "lowPass.enabled", value: true },
-          { name: "lowPass.frequency", value: 20 * 1000 ** unit(params.cutoff, 0.7) },
+          // Vaporisateur tiene menos armónicos que nuestro motor WebAudio; con el
+          // mapeo literal, un cutoff de 0.2-0.35 dejaba pistas enteras inaudibles.
+          { name: "lowPass.frequency", value: Math.max(1_200, 20 * 1000 ** unit(params.cutoff, 0.7)) },
           { name: "lowPass.q", value: 0.5 + unit(params.resonance, 0.2) * 9.5 },
           { name: "lowPass.order", value: 1 },
         ],
