@@ -39,7 +39,7 @@ async function bootEngine(): Promise<EngineBoot> {
   if (bootStore.__miuzikaOpenDawBoot) return bootStore.__miuzikaOpenDawBoot;
   const boot = (async (): Promise<EngineBoot> => {
     const [
-      { Project, AudioWorklets, Workers, GlobalSampleLoaderManager },
+      { Project, AudioWorklets, Workers },
       { WasmEngine },
       { AnimationFrame },
       { UUID, Option },
@@ -71,7 +71,7 @@ async function bootEngine(): Promise<EngineBoot> {
     }
     return {
       context,
-      core: { Project, AudioWorklets, Workers, GlobalSampleLoaderManager } as typeof import("@opendaw/studio-core"),
+      core: { Project, AudioWorklets, Workers } as typeof import("@opendaw/studio-core"),
       UUID,
       Option,
       AudioData,
@@ -110,7 +110,6 @@ export interface OpenDawAudioInput {
 async function prepareSamples(
   context: AudioContext,
   bpm: number,
-  core: typeof import("@opendaw/studio-core"),
   UUID: typeof import("@opendaw/lib-std").UUID,
   Option: typeof import("@opendaw/lib-std").Option,
   AudioData: typeof import("@opendaw/lib-dsp").AudioData,
@@ -218,9 +217,9 @@ async function prepareSamples(
     };
     loaders.set(key, loader);
   }
-  // No usamos GlobalSampleLoaderManager aquí: calcula peaks en un worker y
-  // tarda decenas de segundos con los WAV de canción completa. El engine solo
-  // necesita los datos, y ya están en memoria.
+  // No usamos el loader de samples de openDAW aquí: calcula peaks en un
+  // worker y tarda decenas de segundos con los WAV de canción completa. El
+  // engine solo necesita los datos, y ya están en memoria.
   const manager = {
     register: () => ({ terminate: () => {} }),
     record: () => {},
@@ -252,7 +251,6 @@ export async function playWithOpenDaw(
   const prepared = await prepareSamples(
     context,
     source.bpm,
-    core,
     UUID,
     Option,
     AudioData,

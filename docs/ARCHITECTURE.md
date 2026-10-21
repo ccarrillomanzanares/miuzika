@@ -41,7 +41,7 @@ Project
      └─ Clip[]
          ├─ start, length (beats absolutos)
          ├─ Note[]  (pitch, start relativo, duration, velocity)
-         └─ audio?  (assetId, offset, gainDb) ← reservado para WAV
+         └─ audio?  (assetId, offset, gainDb) ← clip WAV
 ```
 
 Invariantes que se validan en cada cambio (`src/core/project.ts`):
@@ -63,6 +63,8 @@ Invariantes que se validan en cada cambio (`src/core/project.ts`):
 | `generate_part` | **la importante**: rol + estilo + compases + densidad + acordes → notas |
 | `add_notes` / `replace_clip_notes` / `remove_clip` | edición quirúrgica |
 | `add_device` / `set_device` / `remove_device` | cadena de efectos |
+| `register_audio_asset` / `add_audio_clip` / `set_audio_clip` | clips WAV |
+| `add_code_source` | fuente Strudel pendiente de compilar en el navegador |
 | `set_master` | ganancia global |
 
 `generate_part` es lo que hace viable la canción completa: el modelo manda ~10 números por
@@ -189,7 +191,7 @@ Decisiones:
 
 ## Audio
 
-Implementado en el spike:
+Implementado:
 
 - IR: `project.audioAssets` (metadatos) + `clip.audio` (assetId, offset, gain).
 - Ops: `register_audio_asset`, `add_audio_clip`, `set_audio_clip` (mover, recortar, ganancia).
@@ -198,7 +200,7 @@ Implementado en el spike:
   se guardan en IndexedDB (`web/src/audio-db.ts`, base `miuzika`, store `audio-assets`). Al arrancar
   y antes de un undo/redo, `hydrateProjectAudio` decodifica los WAV que referencia el proyecto;
   si falta alguno se avisa y se puede reimportar.
-- Preview y mixdown comparten instrumentos y FX: `web/src/synth.ts` (capas, envolventes,
+- Mixdown y stems comparten instrumentos y FX: `web/src/synth.ts` (capas, envolventes,
   brillo dependiente de velocidad, drums sintetizados) y `web/src/fx.ts` (reverb por convolución,
   delay con damping, chorus, drive, filtro, EQ de 3 bandas, compresor; master con compresión y
   saturación suave). Se aproxima el proyecto, no es el motor de openDAW.
@@ -242,7 +244,7 @@ Siguiente fase de audio:
 
 1. **Receta reproducible**: guardar código + params + seed junto al WAV y permitir re-render.
 2. **Loops sample-perfect**: crossfades/validación de continuidad y time-stretch.
-3. **Export autocontenido** (ZIP con WAV) y export a openDAW audio (`AudioFileBox`).
+3. **Export autocontenido** (ZIP con WAV) y `.odw` standalone con bytes de audio.
 4. **Asistente de mezcla**: análisis de loudness/espectro → automatización.
 5. **Generación neural**: ACE-Step (Apache-2.0/MIT) o Stable Audio con licencia revisada.
 6. **Coherencia multitrack**: mezcla completa + Demucs (MIT) para stems editables.

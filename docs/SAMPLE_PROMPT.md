@@ -1,7 +1,6 @@
 # Prompt del Sample Lab
 
-Este documento refleja el prompt actual. La copia del prompt anterior está en
-`docs/SAMPLE_PROMPT.full.md`.
+Este documento refleja el prompt actual del Sample Lab.
 
 ## System prompt
 

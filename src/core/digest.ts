@@ -20,7 +20,7 @@ function formatDevices(track: Track): string {
     .join(" ");
 }
 
-function formatClips(project: Project, track: Track, barBeats: number): string {
+function formatClips(track: Track, barBeats: number): string {
   if (track.clips.length === 0) return "sin clips";
   return track.clips
     .map((clip) => {
@@ -71,7 +71,7 @@ export function projectDigest(project: Project, options: DigestOptions = {}): st
         track.instrument.preset ? `(${track.instrument.preset})` : ""
       } gain=${track.gainDb}dB pan=${track.pan}${track.muted ? " MUTE" : ""}${track.solo ? " SOLO" : ""} | FX: ${formatDevices(track)}`,
     );
-    lines.push(`   ${formatClips(project, track, barBeats)}`);
+    lines.push(`   ${formatClips(track, barBeats)}`);
     if (options.includeNotesFor && (track.id === options.includeNotesFor || track.name === options.includeNotesFor)) {
       const clip = track.clips[0];
       if (clip) {

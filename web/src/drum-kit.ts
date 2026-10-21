@@ -46,10 +46,6 @@ let kit: Map<string, AudioBuffer[]> | null = null;
 let loading: Promise<void> | null = null;
 let decodeContext: AudioContext | null = null;
 
-export function isDrumKitReady(): boolean {
-  return kit !== null;
-}
-
 export async function loadDrumKit(): Promise<void> {
   if (kit) return;
   if (loading) return loading;

@@ -9,7 +9,8 @@ import { beatsPerBar } from "../../src/core/types.ts";
 import type { Op } from "../../src/core/ops.ts";
 import { applyOps } from "../../src/core/ops.ts";
 import { audioAssets, computePeaks, persistAudioAsset } from "./audio-store.ts";
-import { audioBufferToWav, renderProject } from "./render.ts";
+import { renderProject } from "./render.ts";
+import { audioBufferToWav } from "./wav.ts";
 
 let decodeContext: AudioContext | null = null;
 

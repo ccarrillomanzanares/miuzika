@@ -15,7 +15,6 @@ import {
   degreeToSemitones,
   noteToMidi,
   parseChord,
-  pitchClass,
   tonicChordSymbol,
 } from "./theory.ts";
 
@@ -452,12 +451,3 @@ export const PROGRESSIONS: Record<string, string[]> = {
   ambient: ["C", "Am", "F", "G"],
   hiphop: ["Fm", "Db", "Ab", "Eb"],
 };
-
-export function progressionToChords(key: KeySignature, progression?: string[]): string[] {
-  if (progression?.length) return progression.filter(isValidChord).map((symbol) => parseChord(symbol).symbol);
-  return [tonicChordSymbol(key)];
-}
-
-export function pitchClassOfChord(symbol: string): number {
-  return pitchClass(parseChord(symbol).symbol.match(/^[A-G][#b]?/)![0]);
-}

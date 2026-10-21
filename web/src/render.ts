@@ -1,4 +1,4 @@
-/** Mixdown offline del proyecto a WAV (síntesis de previsualización + clips de audio). */
+/** Mixdown/stems offline del proyecto a WAV (síntesis + clips de audio). */
 
 import type { Project } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
@@ -11,6 +11,7 @@ import type { Loudness } from "./loudness.ts";
 import { createNoiseBuffer, playInstrumentNote } from "./synth.ts";
 import { prepareSynth, presetFor, WorkletInstrument } from "./worklet-synth.ts";
 import { hashString } from "../../src/core/rng.ts";
+import { audioBufferToWav } from "./wav.ts";
 
 const dbToGain = (db: number) => 10 ** (db / 20);
 
@@ -175,48 +176,4 @@ function slug(value: string): string {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "pista"
   );
-}
-
-export async function renderProjectToWav(project: Project, sampleRate = 44_100): Promise<Blob> {
-  return (await renderProject(project, { sampleRate })).blob;
-}
-
-/** PCM 16-bit little-endian, estéreo si el buffer lo es. */
-export function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
-  const channels = Math.min(2, buffer.numberOfChannels);
-  const frames = buffer.length;
-  const bytesPerSample = 2;
-  const blockAlign = channels * bytesPerSample;
-  const dataSize = frames * blockAlign;
-  const output = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(output);
-
-  writeText(view, 0, "RIFF");
-  view.setUint32(4, 36 + dataSize, true);
-  writeText(view, 8, "WAVE");
-  writeText(view, 12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, channels, true);
-  view.setUint32(24, buffer.sampleRate, true);
-  view.setUint32(28, buffer.sampleRate * blockAlign, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, 16, true);
-  writeText(view, 36, "data");
-  view.setUint32(40, dataSize, true);
-
-  const data = Array.from({ length: channels }, (_, channel) => buffer.getChannelData(channel));
-  let offset = 44;
-  for (let frame = 0; frame < frames; frame++) {
-    for (let channel = 0; channel < channels; channel++) {
-      const sample = Math.max(-1, Math.min(1, data[channel]![frame]!));
-      view.setInt16(offset, Math.round(sample < 0 ? sample * 0x8000 : sample * 0x7fff), true);
-      offset += 2;
-    }
-  }
-  return output;
-}
-
-function writeText(view: DataView, offset: number, text: string): void {
-  for (let index = 0; index < text.length; index++) view.setUint8(offset + index, text.charCodeAt(index));
 }

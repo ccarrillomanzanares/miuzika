@@ -12,7 +12,20 @@ miuzika se plantea como un trabajo combinado con openDAW. En despliegues públic
 La licencia comercial de openDAW excluye algunos componentes de terceros
 (compresor CTAGDRC, Tone3000, TempoCNN); ver `docs/OPENDAW.md`.
 
-## Modelos y datos (fase de audio, no implementada)
+## Strudel / superdough
+
+- Web: https://strudel.cc
+- Código: https://codeberg.org/uzu/strudel
+- Licencia: AGPL-3.0-or-later
+- Paquetes: `@strudel/core`, `@strudel/mini`, `@strudel/transpiler`, `@strudel/tonal`,
+  `@strudel/webaudio`, `@strudel/soundfonts`, `superdough`.
+- El render de audio descarga sample maps de `strudel.b-cdn.net` y soundfonts de
+  `webaudiofontdata`. Las licencias de cada pack/soundfont son las de su proyecto de origen;
+  revisa la atribución antes de redistribuir un build con esos assets empaquetados.
+- Packs usados por defecto en el render: Uzu drumkit, Tidal drum machines y VCSL
+  (VCSL se distribuye como CC0; comprueba el resto de packs antes de empaquetarlos).
+
+## Modelos de generación de audio (no integrados)
 
 Cualquier modelo de generación de audio que se integre debe pasar por una allowlist
 de licencias. Referencias verificadas durante el diseño:

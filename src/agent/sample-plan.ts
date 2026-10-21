@@ -25,7 +25,7 @@ export type SampleRequest = z.infer<typeof SampleRequestSchema>;
 const schema = z.toJSONSchema(SamplePlanSchema) as Record<string, unknown>;
 delete schema.$schema;
 
-export const SAMPLE_PLANNER_SYSTEM = `Eres un compositor y productor de música.
+const SAMPLE_PLANNER_SYSTEM = `Eres un compositor y productor de música.
 
 Extrae de la petición los samples que hay que crear. Devuelve SOLO JSON con este esquema:
 

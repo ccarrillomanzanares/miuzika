@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { audioBufferToWav } from "./render.ts";
+import { audioBufferToWav } from "./wav.ts";
 
 function fakeBuffer(samples: number[], sampleRate = 8000): AudioBuffer {
   return {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CLI del spike.
+ * CLI de miuzika.
  *
  *   npm run compose -- "créame una canción synth pop 80's oscura en re menor, lenta"
  *   npm run compose -- --plan "..."
@@ -130,7 +130,7 @@ async function writeOutputs(project: Project, plan: SongPlan | null, outDir: str
 }
 
 function usage(): void {
-  console.log(`miuzika (spike)
+  console.log(`miuzika (alpha)
 
   npm run compose -- "<petición en lenguaje natural>"
 

@@ -8,14 +8,14 @@
  *  - tempo, compases, master, pistas MIDI, clips y notas
  *  - volumen, pan, mute, solo
  *  - efectos: reverb, delay, waveshaper, crusher, compressor, gate, stereotool
- *  - audio WAV: pendiente (openDAW necesita SampleService/AudioFileBox)
+ *  - pistas de audio: AudioFileBox/AudioRegionBox (los bytes WAV se
+ *    proporcionan al engine en playback; el .odw solo guarda referencias)
  */
 
 import type { Project as MiuzikaProject, Track } from "../../core/types.ts";
 import { createProject, emptyTrack } from "../../core/project.ts";
 import { beatsPerBar } from "../../core/types.ts";
 import {
-  PULSES_PER_BEAT,
   beatsToPulses,
   mapDevice,
   mapInstrument,
@@ -159,7 +159,6 @@ export async function projectToOpenDaw(
   const project = core.Project.new(env as never);
   const warnings: string[] = [];
   const stats = { tracks: 0, regions: 0, notes: 0, devices: 0, skippedDevices: 0 };
-  const audioUnitByTrack = new Map<string, unknown>();
   const audioFileByAsset = new Map<string, unknown>();
 
   try {
@@ -189,7 +188,6 @@ export async function projectToOpenDaw(
           unit.namedParameter.panning.setValue(track.pan);
           unit.namedParameter.mute.setValue(track.muted);
           unit.namedParameter.solo.setValue(track.solo);
-          audioUnitByTrack.set(track.id, product.audioUnitBox);
           const secondsPerBeat = 60 / source.bpm;
 
           for (const clip of track.clips) {
@@ -278,8 +276,6 @@ export async function projectToOpenDaw(
         unit.namedParameter.panning.setValue(track.pan);
         unit.namedParameter.mute.setValue(track.muted);
         unit.namedParameter.solo.setValue(track.solo);
-        audioUnitByTrack.set(track.id, product.audioUnitBox);
-
         track.devices.forEach((device, index) => {
           const mapped = mapDevice(device);
           if (!mapped.factory) {
@@ -422,10 +418,4 @@ export async function openDawToProject(bytes: ArrayBuffer): Promise<OpenDawImpor
   } finally {
     project.terminate();
   }
-}
-
-/** Metadatos útiles para la UI sin exponer el SDK. */
-export function summarizeExport(result: OpenDawExport): string {
-  const { stats } = result;
-  return `${stats.tracks} pistas · ${stats.regions} clips · ${stats.notes} notas · ${stats.devices} FX`;
 }

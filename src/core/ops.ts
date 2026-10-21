@@ -679,20 +679,6 @@ export function applyOps(project: Project, ops: Op[]): ApplyResult {
   return { project: draft, results, warnings: issues.filter((issue) => issue.severity === "warning") };
 }
 
-/** Resumen legible de una operación, para logs y transcripciones. */
-export function describeOp(op: Op | ParsedOp): string {
-  switch (op.op) {
-    case "generate_part":
-      return `generate_part ${op.pattern.role}/${op.pattern.style ?? "-"} ${op.pattern.bars}c @${op.startBar + 1}`;
-    case "set_device":
-      return `set_device ${op.deviceId} ${JSON.stringify(op.params)}`;
-    case "set_track":
-      return `set_track ${op.trackId}`;
-    default:
-      return op.op;
-  }
-}
-
 export function instrumentProgram(track: Track): number {
   return track.instrument.program ?? INSTRUMENT_PROGRAM[track.instrument.type] ?? 0;
 }

@@ -1,5 +1,5 @@
 /**
- * Cadena de efectos del preview. Traduce los dispositivos del IR a nodos
+ * Cadena de efectos del mixdown. Traduce los dispositivos del IR a nodos
  * WebAudio para que lo que suena se parezca al proyecto que se exporta.
  */
 
@@ -8,7 +8,7 @@ import type { Device, Track } from "../../src/core/types.ts";
 const clamp = (value: number, min: number, max: number) =>
   Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : min;
 
-export const dbToGain = (db: number): number => 10 ** (db / 20);
+const dbToGain = (db: number): number => 10 ** (db / 20);
 
 function tanhCurve(amount: number): Float32Array<ArrayBuffer> {
   const samples = 2048;
@@ -289,7 +289,7 @@ function buildDevice(
       };
     }
 
-    // Sin equivalente razonable en el preview: se dejan pasar.
+    // Sin equivalente razonable en el mixdown: se dejan pasar.
     case "gate":
     case "width":
       return null;

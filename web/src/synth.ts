@@ -1,4 +1,4 @@
-/** Instrumentos del preview: capas, envolventes y dinámica. */
+/** Instrumentos del mixdown: capas, envolventes y dinámica. */
 
 import type { InstrumentType } from "../../src/core/types.ts";
 import { playDrum } from "./drum-kit.ts";

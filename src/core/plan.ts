@@ -807,7 +807,3 @@ export function loopPlan(genre: Genre, roles: Role[], bars = 4, options: PresetO
     tracks,
   };
 }
-
-export function presetFor(genre: string): Genre | null {
-  return (GENRES as readonly string[]).includes(genre) ? (genre as Genre) : null;
-}

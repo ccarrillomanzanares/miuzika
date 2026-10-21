@@ -1,8 +1,9 @@
 # Integración con openDAW
 
-Este documento fija la frontera entre miuzika y el motor. La primera versión está **implementada
-y verificada** en `src/host/opendaw/` (export e import, con ida y vuelta de notas, tempo y
-mezcla). Lo que sigue explica las decisiones y lo que queda pendiente.
+Este documento fija la frontera entre miuzika y el motor. Está **implementada y verificada**
+la integración de `src/host/opendaw/` (export/import con ida y vuelta de notas, tempo, mezcla y
+audio) y el playback WASM de `web/src/opendaw-engine.ts`. Lo que sigue explica las decisiones y
+lo que queda pendiente.
 
 ## Estado real
 
@@ -34,8 +35,8 @@ las 666 notas, el tempo, la duración y las ganancias.
 ## Por qué openDAW
 
 - Motor de audio en Rust/WASM + Web Audio, pensado para navegador.
-- SDK público en npm (`@opendaw/studio-sdk` y subpaquetes: `studio-core`, `studio-boxes`,
-  `studio-adapters`, `studio-core-wasm`, `lib-dsp`, `lib-midi`, `lib-dawproject`…).
+- SDK público en npm (subpaquetes: `studio-core`, `studio-boxes`, `studio-adapters`,
+  `studio-core-wasm`, `lib-dsp`, `lib-midi`, `lib-dawproject`…).
 - Import/export **DAWproject**, lo que da interoperabilidad con Bitwig, Studio One, etc.
 - Dispositivos propios: Vaporisateur (sustractivo), Playfield (batería), Nano (sampler),
   reproductor de SoundFont, y efectos (reverb Dattorro/FreeVerb, delay, vocoder, waveshaper,
@@ -114,7 +115,7 @@ Se parte del repo de openDAW y se añade el panel del asistente.
 - Ventaja: DAW completo desde el día 1.
 - Coste: mantener un fork grande, UI no basada en React, y todo el código queda AGPL.
 
-Para el spike, **A** es más limpio: el `Project` del SDK es el ejecutor y nuestro IR manda.
+Para miuzika, **A** es más limpio: el `Project` del SDK es el ejecutor y nuestro IR manda.
 Si se elige B, el adaptador sigue siendo el mismo; solo cambia dónde se engancha.
 
 ## Mapeo conceptual
@@ -126,7 +127,7 @@ Si se elige B, el adaptador sigue siendo el mismo; solo cambia dónde se enganch
 | `Track.instrument.type` | `InstrumentFactories` | drumkit→Playfield, bass/pad/lead/synth→Vaporisateur, soundfont→SoundFont player, sampler→Nano |
 | `Clip` (MIDI) | región MIDI + `ValueEventCollectionBox` | convertir `beat × PPQN` |
 | `Note` | note event (pitch, position, duration, velocity) | `lib-midi` puede ayudar |
-| `Clip` (audio) | `AudioRegionBox` + `AudioFileBox` | pendiente de samples |
+| `Clip` (audio) | `AudioRegionBox` + `AudioFileBox` | playback y referencias; los bytes WAV se cargan desde IndexedDB |
 | `Device` | dispositivo del grafo | los nombres de parámetros **no** coinciden; hace falta tabla |
 | `Track.gainDb/pan` | gain/pan de la unidad | dB vs ganancia lineal: convertir |
 | `master.gainDb` | salida/master | ídem |

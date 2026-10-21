@@ -4,7 +4,7 @@
  */
 
 import { expandLabeledPatterns, stripVisualMethods } from "./strudel-compiler.ts";
-import { audioBufferToWav } from "./render.ts";
+import { audioBufferToWav } from "./wav.ts";
 
 export interface RenderedStrudelAudio {
   blob: Blob;

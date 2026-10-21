@@ -10,7 +10,3 @@ export type ParamValue = z.infer<typeof ParamValueSchema>;
 export function numericParam(value: ParamValue): number {
   return typeof value === "boolean" ? (value ? 1 : 0) : value;
 }
-
-export function paramRecord(): z.ZodType<Record<string, number | boolean>, Record<string, number | boolean>> {
-  return z.record(z.string(), ParamValueSchema);
-}

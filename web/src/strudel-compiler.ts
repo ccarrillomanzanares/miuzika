@@ -162,6 +162,11 @@ export function stripVisualMethods(code: string): string {
   );
 }
 
+/** El compilador MIDI no carga sample packs: ignora las llamadas de URL simple. */
+export function stripSampleCalls(code: string): string {
+  return code.replace(/samples\s*\(\s*(['"])([^'"]+)\1\s*\)/g, "");
+}
+
 export function expandLabeledPatterns(code: string): string {
   const lines = code.split(/\r?\n/);
   const blocks: string[] = [];
@@ -197,7 +202,7 @@ export async function compileStrudelSource(
   bars: number,
   beatsPerBar: number,
 ): Promise<StrudelCompileResult> {
-  const source = stripVisualMethods(expandLabeledPatterns(code.trim()));
+  const source = stripVisualMethods(stripSampleCalls(expandLabeledPatterns(code.trim())));
   if (!source) throw new Error("El código Strudel está vacío.");
   if (!(bars >= 1 && bars <= 64)) throw new Error("Los compases deben estar entre 1 y 64.");
   const { transpiler } = await getScope();

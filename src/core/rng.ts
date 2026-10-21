@@ -11,7 +11,7 @@ export function hashString(input: string): number {
 
 export type Rng = () => number;
 
-export function mulberry32(seed: number): Rng {
+function mulberry32(seed: number): Rng {
   let state = seed >>> 0;
   return () => {
     state = (state + 0x6d2b79f5) >>> 0;
@@ -24,11 +24,6 @@ export function mulberry32(seed: number): Rng {
 
 export function seededRng(...parts: Array<string | number>): Rng {
   return mulberry32(hashString(parts.join("|")));
-}
-
-export function pick<T>(rng: Rng, items: readonly T[]): T {
-  if (items.length === 0) throw new Error("pick() sobre una lista vacía");
-  return items[Math.floor(rng() * items.length) % items.length]!;
 }
 
 export function jitter(rng: Rng, amount: number): number {

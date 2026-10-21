@@ -10,7 +10,7 @@ import { SampleSpecSchema } from "../../src/core/sample.ts";
 import { renderIndustrialStab } from "./industrial.ts";
 import { expandPattern } from "../../src/core/patterns.ts";
 import { tonicChordSymbol } from "../../src/core/theory.ts";
-import { audioBufferToWav } from "./render.ts";
+import { audioBufferToWav } from "./wav.ts";
 import { buildMasterChain } from "./fx.ts";
 import { createNoiseBuffer, playInstrumentNote } from "./synth.ts";
 import { loadDrumKit } from "./drum-kit.ts";

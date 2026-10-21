@@ -1,5 +1,5 @@
 /**
- * Genera un kit de batería sampleado propio (16-bit/48 kHz) para el preview.
+ * Genera el kit de batería propio (16-bit/48 kHz) para Playfield/openDAW.
  * Sin samples de terceros: todo es síntesis offline con procesado.
  *
  *   node scripts/make-drums.ts

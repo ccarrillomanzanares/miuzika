@@ -134,10 +134,14 @@ export class TimelineView {
       { passive: false },
     );
 
+    let resizeFrame = 0;
     new ResizeObserver(() => {
-      this.resize();
-      this.renderStatic();
-      this.draw(this.beat);
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        this.resize();
+        this.renderStatic();
+        this.draw(this.beat);
+      });
     }).observe(this.wrap);
   }
 

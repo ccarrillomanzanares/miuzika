@@ -2,11 +2,11 @@
  * Intérprete offline de prompts (sin LLM).
  *
  * No pretende competir con el modelo: es la red de seguridad, el baseline de
- * evaluación y lo que permite que el spike funcione sin API key.
+ * evaluación y lo que permite usar el pipeline sin API key.
  */
 
 import type { Genre, SongPlan, TrackPlan } from "./plan.ts";
-import { GENRES, loopPlan, presetPlan } from "./plan.ts";
+import { loopPlan, presetPlan } from "./plan.ts";
 import type { Mode, KeySignature } from "./types.ts";
 import type { Role } from "./patterns.ts";
 import { canonicalPitchClass, normalizeKey } from "./theory.ts";
@@ -413,8 +413,4 @@ export function parsePrompt(prompt: string): ParsedPrompt {
     hints,
     explicitKey: detected?.explicit ?? false,
   };
-}
-
-export function availableGenres(): readonly Genre[] {
-  return GENRES;
 }

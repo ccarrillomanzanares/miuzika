@@ -24,10 +24,6 @@ export async function prepareSynth(context: BaseAudioContext): Promise<boolean> 
   }
 }
 
-export function isSynthReady(context: BaseAudioContext): boolean {
-  return loaded.has(context);
-}
-
 export interface WorkletOptions {
   notes?: WorkletNote[];
   /** Variación de timbre determinista por canción/pista. */

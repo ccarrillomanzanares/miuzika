@@ -3,7 +3,7 @@
  * Sirve para escuchar el resultado y para importarlo en openDAW.
  */
 
-import type { Note, Project, Track } from "./types.ts";
+import type { Note, Project } from "./types.ts";
 import { beatsPerBar } from "./types.ts";
 import { keyAccidentals } from "./theory.ts";
 import { instrumentProgram } from "./ops.ts";
@@ -148,22 +148,4 @@ export function projectToMidi(project: Project): Uint8Array {
     offset += part.length;
   }
   return output;
-}
-
-export function midiFileName(name: string): string {
-  return `${name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9-_]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .toLowerCase() || "miuzika"}.mid`;
-}
-
-/** Cuenta de notas por pista, útil para diagnósticos. */
-export function notesPerTrack(project: Project): Record<string, number> {
-  const result: Record<string, number> = {};
-  for (const track of project.tracks as Track[]) {
-    result[track.id] = track.clips.reduce((sum, clip) => sum + clip.notes.length, 0);
-  }
-  return result;
 }

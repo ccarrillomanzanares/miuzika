@@ -12,7 +12,7 @@ delete schema.$schema;
 const SAMPLE_SCHEMA = JSON.stringify(schema);
 
 /** El rol creativo es mínimo; el esquema JSON viaja aparte como contrato técnico. */
-export const SAMPLE_DESIGNER_SYSTEM = "Eres un compositor y productor de música.";
+const SAMPLE_DESIGNER_SYSTEM = "Eres un compositor y productor de música.";
 
 export interface SampleDesignContext {
   bpm: number;

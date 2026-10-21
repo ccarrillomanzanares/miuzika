@@ -1,6 +1,6 @@
 /** Creación y validación de proyectos. */
 
-import type { Device, Note, Project, Track } from "./types.ts";
+import type { Note, Project, Track } from "./types.ts";
 import { DEVICE_PARAMS, beatsPerBar } from "./types.ts";
 import type { Mode } from "./types.ts";
 import { MODES } from "./theory.ts";
@@ -10,16 +10,6 @@ export interface Issue {
   severity: "error" | "warning";
   path: string;
   message: string;
-}
-
-export class ValidationError extends Error {
-  readonly issues: Issue[];
-
-  constructor(issues: Issue[]) {
-    super(issues.map((issue) => `[${issue.severity}] ${issue.path}: ${issue.message}`).join("\n"));
-    this.name = "ValidationError";
-    this.issues = issues;
-  }
 }
 
 export interface CreateProjectInput {
@@ -46,7 +36,7 @@ export function createProject(input: CreateProjectInput = {}): Project {
     tracks: [],
     audioAssets: [],
     master: { gainDb: -1 },
-    meta: { generator: "miuzika-spike", createdAt: now, ...(input.prompt ? { prompt: input.prompt } : {}) },
+    meta: { generator: "miuzika", createdAt: now, ...(input.prompt ? { prompt: input.prompt } : {}) },
   };
 }
 
@@ -67,7 +57,7 @@ export function validateProject(project: Project): Issue[] {
   if (!Number.isInteger(project.seed)) error("seed", "Debe ser un entero");
   if (!MODES.includes(project.key.mode)) error("key.mode", `Modo desconocido: ${project.key.mode}`);
   if (project.timeSignature.numerator !== 4 || project.timeSignature.denominator !== 4) {
-    warn("timeSignature", "El motor de patrones del spike asume 4/4");
+    warn("timeSignature", "El motor de patrones asume 4/4");
   }
   if (project.tracks.length === 0) warn("tracks", "Proyecto sin pistas");
   if (project.tracks.length > 64) error("tracks", "Máximo 64 pistas");
@@ -178,11 +168,6 @@ function validateNote(note: Note, path: string, error: (path: string, message: s
   }
 }
 
-export function assertValidProject(project: Project): void {
-  const issues = validateProject(project);
-  if (issues.some((issue) => issue.severity === "error")) throw new ValidationError(issues);
-}
-
 export interface ProjectStats {
   tracks: number;
   clips: number;
@@ -208,8 +193,4 @@ export function projectStats(project: Project): ProjectStats {
     midiTracks: project.tracks.filter((track) => track.kind === "midi").length,
     audioTracks: project.tracks.filter((track) => track.kind === "audio").length,
   };
-}
-
-export function deviceRange(type: Device["type"], param: string): [number, number] | undefined {
-  return DEVICE_PARAMS[type]?.[param];
 }

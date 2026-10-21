@@ -11,7 +11,7 @@ export interface SoundScriptContext {
   previousError?: string;
 }
 
-export const SOUND_SCRIPT_SYSTEM = `Eres compositor, productor y programador de DSP.
+const SOUND_SCRIPT_SYSTEM = `Eres compositor, productor y programador de DSP.
 
 Escribe SOLO un script Python que defina exactamente:
 
