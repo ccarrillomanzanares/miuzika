@@ -33,15 +33,14 @@
           </select>
           <button id="export-wav" title="Mixdown del proyecto a WAV" disabled>WAV</button>
           <button id="export-stems" title="WAV por pista, con sus FX y sin máster" disabled>Stems</button>
-          <button id="bounce-samples" title="Congelar pistas MIDI seleccionadas en clips de audio" data-midi-only hidden disabled>Congelar</button>
           <button id="export-midi" title="Exportar MIDI (solo pistas MIDI)" data-midi-only hidden disabled>MIDI</button>
           <button id="export-opendaw" title="Exportar a openDAW (solo pistas MIDI por ahora)" data-midi-only hidden disabled>openDAW</button>
           <button id="export-json" title="Proyecto canónico: metadatos; no incluye los WAV" disabled>JSON</button>
           <button id="save-bundle" title="Guardar proyecto completo: JSON + WAVs en un ZIP" disabled>Proyecto</button>
           <label class="file" title="Abrir JSON o bundle .miuzika.zip">Abrir<input id="open" type="file" accept=".json,.zip,.miuzika.zip,application/json,application/zip" /></label>
           <label class="file">Audio<input id="audio-file" type="file" accept="audio/*" multiple /></label>
-          <button id="sample-lab" title="Diseñar un sample con el LLM">Sample Lab</button>
-          <button id="code-lab" title="Escribir un patrón Strudel y convertirlo en pistas MIDI">Código</button>
+          <button id="song-agent" title="Componer una canción completa con el agente y el worker Python">Canción</button>
+          <button id="code-lab" title="Escribir un patrón Strudel y renderizarlo a WAV">Strudel</button>
           <button id="new-song" title="Empezar de cero">Nueva</button>
         </div>
       </header>
@@ -50,8 +49,6 @@
         <strong id="selection-count">0 pistas</strong>
         <button id="sel-mute">Mute</button>
         <button id="sel-solo">Solo</button>
-        <button id="sel-freeze" data-midi-only hidden>Congelar</button>
-        <button id="sel-rendered" data-midi-only hidden title="Renderizar las pistas MIDI seleccionadas con el motor Python Rendered">Rendered</button>
         <button id="sel-stems">Stems</button>
         <button id="sel-delete">Borrar</button>
         <span class="spacer"></span>

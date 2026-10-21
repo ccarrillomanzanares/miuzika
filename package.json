@@ -1,6 +1,6 @@
 {
   "name": "miuzika",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "description": "DAW web con asistente LLM, Strudel y motor de audio openDAW",
@@ -26,7 +26,6 @@
     "dev": "vite",
     "preview": "vite preview",
     "build:web": "vite build",
-    "sandbox:build": "node scripts/build-sound-sandbox.mjs",
     "drums:build": "node scripts/make-drums.ts",
     "export:opendaw": "node scripts/bundle-run.mjs src/host/opendaw/export-cli.ts tmp/opendaw-export.mjs"
   },

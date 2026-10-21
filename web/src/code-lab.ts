@@ -1,17 +1,6 @@
-/** Editor Strudel: compila patrones a pistas MIDI normales de miuzika. */
+/** Editor Strudel: convierte un patrón en un WAV con el motor real. */
 
 import type { CodeSource, Project } from "../../src/core/types.ts";
-import { beatsPerBar } from "../../src/core/types.ts";
-import { compileStrudelInWorker } from "./strudel-client.ts";
-import type { StrudelCompileResult } from "./strudel-compiler.ts";
-
-export interface CodeCompileRequest {
-  sourceId: string;
-  name: string;
-  code: string;
-  bars: number;
-  result: StrudelCompileResult;
-}
 
 export interface CodeAudioRequest {
   sourceId: string;
@@ -22,7 +11,6 @@ export interface CodeAudioRequest {
 
 export interface CodeLabOptions {
   project: Project;
-  onCompile: (request: CodeCompileRequest) => Promise<void>;
   onRenderAudio: (request: CodeAudioRequest) => Promise<void>;
 }
 
@@ -66,7 +54,7 @@ export function openCodeLab(options: CodeLabOptions): void {
   overlay.innerHTML = `
     <div class="modal-card code-card">
       <header>
-        <div><strong>Strudel → pistas</strong><span>1 ciclo = 1 compás · MIDI editable o audio con samples</span></div>
+        <div><strong>Strudel → WAV</strong><span>1 ciclo = 1 compás · render con samples y efectos</span></div>
         <button class="close" title="Cerrar">×</button>
       </header>
       <div class="code-body">
@@ -87,13 +75,12 @@ export function openCodeLab(options: CodeLabOptions): void {
         <textarea class="code-editor" rows="12" spellcheck="false"></textarea>
         <div class="code-row code-help">
           <span>Ejemplo: <button class="code-example">cargar ejemplo</button></span>
-          <span class="code-status">Escribe un patrón y pulsa Compilar.</span>
+          <span class="code-status">Escribe un patrón y pulsa Renderizar WAV.</span>
         </div>
       </div>
       <footer>
-        <span class="hint">Compilar = MIDI editable (sin samples). Renderizar audio = motor real de Strudel con samples y efectos.</span>
-        <button class="render-audio">Renderizar audio</button>
-        <button class="compile apply">Compilar a pistas</button>
+        <span class="hint">El resultado se inserta como pista de audio en la timeline.</span>
+        <button class="render-audio">Renderizar WAV</button>
       </footer>
     </div>`;
   document.body.appendChild(overlay);
@@ -103,7 +90,6 @@ export function openCodeLab(options: CodeLabOptions): void {
   const barsInput = overlay.querySelector<HTMLInputElement>(".code-bars")!;
   const editor = overlay.querySelector<HTMLTextAreaElement>(".code-editor")!;
   const status = overlay.querySelector<HTMLElement>(".code-status")!;
-  const compile = overlay.querySelector<HTMLButtonElement>(".compile")!;
   const renderAudio = overlay.querySelector<HTMLButtonElement>(".render-audio")!;
   const example = overlay.querySelector<HTMLButtonElement>(".code-example")!;
 
@@ -112,8 +98,8 @@ export function openCodeLab(options: CodeLabOptions): void {
     barsInput.value = String(source?.bars ?? 8);
     editor.value = source?.code ?? DEFAULT_CODE;
     status.textContent = source
-      ? `Fuente guardada. Recompilar reemplaza sus pistas.`
-      : "Escribe un patrón y pulsa Compilar.";
+      ? "Fuente guardada. Renderizar sustituye su pista de audio."
+      : "Escribe un patrón y pulsa Renderizar WAV.";
   };
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   sourceSelect.addEventListener("change", () => fill(sourceById.get(sourceSelect.value)));
@@ -129,46 +115,6 @@ export function openCodeLab(options: CodeLabOptions): void {
   overlay.querySelector(".close")?.addEventListener("click", close);
   overlay.addEventListener("mousedown", (event) => {
     if (event.target === overlay) close();
-  });
-
-  compile.addEventListener("click", async () => {
-    const name = nameInput.value.trim();
-    const code = editor.value.trim();
-    const bars = Number(barsInput.value);
-    if (!name) {
-      status.textContent = "Pon un nombre a la fuente.";
-      return;
-    }
-    if (!Number.isInteger(bars) || bars < 1 || bars > 64) {
-      status.textContent = "Compases debe ser un entero entre 1 y 64.";
-      return;
-    }
-    if (!code) {
-      status.textContent = "El código está vacío.";
-      return;
-    }
-    const sourceId = sourceSelect.value
-      ? sourceSelect.value
-      : `code_strudel_${slug(name)}`;
-    compile.disabled = true;
-    renderAudio.disabled = true;
-    status.textContent = "Compilando en el worker…";
-    try {
-      const result = await compileStrudelInWorker(code, bars, beatsPerBar(options.project));
-      if (result.groups.length === 0) {
-        throw new Error(
-          `No se generaron pistas. ${result.warnings.join(" ") || "¿Hay notas o sonidos reconocidos?"}`,
-        );
-      }
-      await options.onCompile({ sourceId, name, code, bars, result });
-      const notes = result.groups.reduce((sum, group) => sum + group.notes.length, 0);
-      status.textContent = `Listo: ${result.groups.length} pista(s), ${notes} notas.`;
-    } catch (error) {
-      status.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
-    } finally {
-      compile.disabled = false;
-      renderAudio.disabled = false;
-    }
   });
 
   renderAudio.addEventListener("click", async () => {
@@ -190,16 +136,14 @@ export function openCodeLab(options: CodeLabOptions): void {
     const sourceId = sourceSelect.value
       ? sourceSelect.value
       : `code_strudel_${slug(name)}`;
-    compile.disabled = true;
     renderAudio.disabled = true;
-    status.textContent = "Renderizando audio con Strudel…";
+    status.textContent = "Renderizando WAV con Strudel…";
     try {
       await options.onRenderAudio({ sourceId, name, code, bars });
-      status.textContent = "Audio renderizado e insertado como pista de audio.";
+      status.textContent = "WAV renderizado e insertado como pista de audio.";
     } catch (error) {
       status.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
-      compile.disabled = false;
       renderAudio.disabled = false;
     }
   });

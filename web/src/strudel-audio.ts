@@ -3,7 +3,7 @@
  * No usa las notas MIDI: produce un WAV para insertarlo como pista de audio.
  */
 
-import { expandLabeledPatterns, stripVisualMethods } from "./strudel-compiler.ts";
+import { expandLabeledPatterns, stripVisualMethods } from "./strudel-source.ts";
 import { audioBufferToWav } from "./wav.ts";
 
 export interface RenderedStrudelAudio {

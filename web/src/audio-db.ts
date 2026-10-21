@@ -4,7 +4,7 @@ export interface StoredAudioAsset {
   id: string;
   name: string;
   durationBeats: number;
-  /** WAV original o bounce ya renderizado. */
+  /** WAV original o audio ya renderizado. */
   blob: Blob;
 }
 

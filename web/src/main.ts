@@ -1,6 +1,5 @@
-import type { CodeSource, InstrumentType, Project, Track } from "../../src/core/types.ts";
+import type { CodeSource, Project } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
-import type { SampleRequest } from "../../src/agent/sample-plan.ts";
 import { MIDI_ENABLED } from "../../src/config.ts";
 import { listAudioAssets } from "./audio-db.ts";
 import {
@@ -16,20 +15,17 @@ import type { Op } from "../../src/core/ops.ts";
 import {
   audioAssets,
   computePeaks,
-  decodeAudioBlob,
   hydrateProjectAudio,
   loadAudioFile,
   persistAudioAsset,
 } from "./audio-store.ts";
 import { loadDrumKit } from "./drum-kit.ts";
 import { openPianoRoll } from "./editor.ts";
-import { openBounceDialog } from "./bounce-dialog.ts";
-import { openSampleLab } from "./sample-lab.ts";
 import { openCodeLab } from "./code-lab.ts";
-import type { CodeAudioRequest, CodeCompileRequest } from "./code-lab.ts";
-import { compileStrudelInWorker } from "./strudel-client.ts";
+import type { CodeAudioRequest } from "./code-lab.ts";
 import { renderStrudelAudio } from "./strudel-audio.ts";
 import { exportProjectBundle, importProjectBundle } from "./project-bundle.ts";
+import { fetchSongArtifact, openSongAgent } from "./song-agent.ts";
 import { TimelineView, escapeHtml } from "./timeline.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 import type { OpenDawAudioAsset } from "../../src/host/opendaw/adapter.ts";
@@ -86,17 +82,6 @@ const EXAMPLE_POOL: Example[] = [
   { tag: "textura", text: "crea un loop de arp y pads en la menor" },
 ];
 
-const SAMPLE_EXAMPLE_POOL: Example[] = [
-  { tag: "sample", text: "crea un sample de sintetizador dark wave" },
-  { tag: "sample", text: "crea un kick industrial seco y contundente" },
-  { tag: "sample", text: "crea un pad ambient cálido y ancho" },
-  { tag: "sample", text: "crea un loop de batería siniestra" },
-  { tag: "sample", text: "crea un bajo dark wave con distorsión" },
-  { tag: "sample", text: "crea un riser de ruido para techno" },
-  { tag: "sample", text: "crea un pluck metálico para hip hop" },
-  { tag: "sample", text: "crea un stab industrial en re menor" },
-];
-
 function pickExamples(pool: Example[], count = 4): Example[] {
   const shuffled = [...pool];
   for (let index = shuffled.length - 1; index > 0; index--) {
@@ -120,8 +105,7 @@ function pickExamples(pool: Example[], count = 4): Example[] {
 
 function renderExamples(): void {
   examples.innerHTML = "";
-  const pool = MIDI_ENABLED ? EXAMPLE_POOL : SAMPLE_EXAMPLE_POOL;
-  for (const example of pickExamples(pool, 4)) {
+  for (const example of pickExamples(EXAMPLE_POOL, 4)) {
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = example.text;
@@ -205,8 +189,8 @@ function applyMode(): void {
     element.hidden = !MIDI_ENABLED;
   }
   if (!MIDI_ENABLED) {
-    promptInput.placeholder = "Describe el sample que quieres crear…";
-    statusEl.textContent = "Enter envía · pide samples · Ctrl+rueda = zoom";
+    promptInput.placeholder = "Describe el cambio que quieres hacer…";
+    statusEl.textContent = "Enter envía · Ctrl+rueda = zoom";
     document.body.classList.add("audio-only");
   }
 }
@@ -225,7 +209,6 @@ function updateActions(): void {
 
   $<HTMLButtonElement>("export-wav").disabled = !enabled || !hasTracks;
   $<HTMLButtonElement>("export-stems").disabled = !enabled || !hasTracks;
-  $<HTMLButtonElement>("bounce-samples").disabled = !enabled || !hasMidi;
   $<HTMLButtonElement>("export-midi").disabled = !enabled || !hasMidi;
   $<HTMLButtonElement>("export-opendaw").disabled = !enabled || !hasMidi;
   $<HTMLButtonElement>("export-json").disabled = !enabled || !hasProject;
@@ -233,8 +216,8 @@ function updateActions(): void {
   $<HTMLInputElement>("audio-file").disabled = !enabled || !hasProject;
   $<HTMLInputElement>("open").disabled = !enabled;
   $<HTMLSelectElement>("master-target").disabled = !enabled || !hasTracks;
-  $<HTMLButtonElement>("sample-lab").disabled = !enabled;
   $<HTMLButtonElement>("code-lab").disabled = !enabled;
+  $<HTMLButtonElement>("song-agent").disabled = !enabled;
   $<HTMLButtonElement>("fit-timeline").disabled = !enabled || !hasProject;
   $<HTMLButtonElement>("new-song").disabled = !enabled;
   playButton.disabled = !enabled || !hasTracks;
@@ -413,7 +396,7 @@ async function recoverOrphanAudio(): Promise<AudioRecovery | null> {
         id: trackId,
         name,
         kind: "audio",
-        instrument: { type: sampleInstrument(undefined, name) },
+        instrument: { type: "sampler" },
         gainDb: 0,
         pan: 0,
       },
@@ -609,30 +592,7 @@ async function api<T>(url: string, body: unknown, timeoutMs = 130_000): Promise<
 }
 
 const NEW_SONG = /\b(otra canci[oó]n|nueva canci[oó]n|canci[oó]n nueva|desde cero|de cero|empezar de nuevo|empieza de nuevo)\b/i;
-const SAMPLE_INTENT = /\b(samples?|muestras?|wav)\b/i;
 const STRUDEL_INTENT = /\b(strudel|patr[oó]n(es)? de c[oó]digo|c[oó]digo generativo)\b/i;
-
-async function convertToSamples(base: Project, ids: string[]): Promise<void> {
-  setBusy(true, "Congelando pistas a audio…");
-  try {
-    const { bounceTracks } = await import("./bounce.ts");
-    const next = await bounceTracks(
-      base,
-      ids,
-      (index, total, name) => setStatus(`Congelando ${index}/${total}: ${name}…`),
-      (message) => addMessage("system", message),
-    );
-    setProject(next);
-    addMessage(
-      "assistant",
-      `Congeladas ${ids.length} pista(s) a audio. Las no marcadas siguen en MIDI.`,
-    );
-  } catch (error) {
-    addMessage("system", `No se pudo congelar: ${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    setBusy(false);
-  }
-}
 
 function updateSelectionBar(): void {
   const selected = project?.tracks.filter((track) => selectedTrackIds.includes(track.id)) ?? [];
@@ -640,11 +600,8 @@ function updateSelectionBar(): void {
   bar.hidden = selected.length === 0;
   $("selection-count").textContent = selected.length === 1 ? "1 pista" : `${selected.length} pistas`;
   const enabled = ready && !busy;
-  const hasMidi = selected.some((track) => track.kind === "midi");
   $<HTMLButtonElement>("sel-mute").disabled = !enabled || selected.length === 0;
   $<HTMLButtonElement>("sel-solo").disabled = !enabled || selected.length === 0;
-  $<HTMLButtonElement>("sel-freeze").disabled = !enabled || !hasMidi;
-  $<HTMLButtonElement>("sel-rendered").disabled = !enabled || !hasMidi;
   $<HTMLButtonElement>("sel-stems").disabled = !enabled || selected.length === 0;
   $<HTMLButtonElement>("sel-delete").disabled = !enabled || selected.length === 0;
   $<HTMLButtonElement>("sel-all").disabled = !enabled || !project || project.tracks.length === 0;
@@ -669,24 +626,6 @@ function deleteSelectedTracks(): void {
   }
 }
 
-function openFreezeDialog(): void {
-  if (!ready || busy || !project) return;
-  const midiTracks = project.tracks.filter((track) => track.kind === "midi");
-  if (midiTracks.length === 0) {
-    addMessage("system", "No hay pistas MIDI que congelar.");
-    return;
-  }
-  const preselected = midiTracks
-    .filter((track) => selectedTrackIds.includes(track.id))
-    .map((track) => track.id);
-  const base = project;
-  openBounceDialog({
-    tracks: midiTracks,
-    ...(preselected.length > 0 ? { preselected } : {}),
-    onConvert: (ids) => void convertToSamples(base, ids),
-  });
-}
-
 async function exportStems(trackIds?: string[]): Promise<void> {
   const base = activeProject(project);
   if (busy || !base || base.tracks.length === 0) return;
@@ -709,451 +648,6 @@ async function exportStems(trackIds?: string[]): Promise<void> {
   }
 }
 
-function sampleInstrument(role: SampleRequest["role"] | undefined, trackName: string): InstrumentType {
-  switch (role) {
-    case "drums":
-      return "drumkit";
-    case "bass":
-      return "bass";
-    case "chords":
-    case "pad":
-      return "pad";
-    case "lead":
-      return "lead";
-    case "arp":
-      return "arp";
-    default: {
-      const name = trackName.toLowerCase();
-      if (/drum|bater|perc|kick|snare/.test(name)) return "drumkit";
-      if (/bass|bajo|sub/.test(name)) return "bass";
-      if (/pad|chord|acord|ambient/.test(name)) return "pad";
-      if (/lead|guitar|pluck|hook/.test(name)) return "lead";
-      if (/arp/.test(name)) return "arp";
-      return "synth";
-    }
-  }
-}
-
-function normalizeText(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
-
-const TRACK_ALIASES: Record<string, string[]> = {
-  drumkit: ["drum", "drums", "bateria", "percus"],
-  bass: ["bass", "bajo", "sub"],
-  synth: ["synth", "sintetizador"],
-  pad: ["pad", "acordes", "chord"],
-  lead: ["lead", "guitarra", "melodia"],
-  arp: ["arp", "arpegio"],
-};
-
-function findAudioTrack(text: string, tracks: Track[]): Track | undefined {
-  const haystack = normalizeText(text);
-  for (const track of tracks) {
-    if (haystack.includes(normalizeText(track.name))) return track;
-  }
-  for (const track of tracks) {
-    const aliases = TRACK_ALIASES[track.instrument.type] ?? [];
-    if (aliases.some((alias) => haystack.includes(alias))) return track;
-  }
-  return undefined;
-}
-
-interface AudioEditPlan {
-  startBar: number;
-  endBar: number;
-  trackId: string;
-  trackName: string;
-}
-
-function parseAudioEdit(text: string): AudioEditPlan | null {
-  const view = activeProject(project);
-  if (!view) return null;
-  if (!/\b(cambia|cambiar|modifica|modificar|edita|editar|reemplaza|reemplazar|sustituye|sustituir|varia|variar|haz|genera)\b/i.test(text)) {
-    return null;
-  }
-  const match = text.match(
-    /(?:comp[aá]s(?:es)?|estrofas?|barras?|del|desde)?\s*(\d{1,3})\s*(?:a|al|hasta|–|-)\s*(\d{1,3})/i,
-  );
-  if (!match) return null;
-  let start = Number(match[1]);
-  let end = Number(match[2]);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
-  if (start > end) [start, end] = [end, start];
-  start = Math.max(1, Math.min(view.lengthBars, start));
-  end = Math.max(start, Math.min(view.lengthBars, end));
-  const track = findAudioTrack(text, view.tracks.filter((candidate) => candidate.kind === "audio"));
-  if (!track) return null;
-  return { startBar: start - 1, endBar: end, trackId: track.id, trackName: track.name };
-}
-
-async function replaceAudioRange(text: string, plan: AudioEditPlan): Promise<void> {
-  const full = project;
-  const view = activeProject(full);
-  if (!full || !view) return;
-  const track = full.tracks.find((candidate) => candidate.id === plan.trackId);
-  if (!track || track.kind !== "audio") return;
-
-  const barBeats = beatsPerBar(full);
-  const startBeat = plan.startBar * barBeats;
-  const endBeat = plan.endBar * barBeats;
-  const lengthBeats = endBeat - startBeat;
-  const overlapping = track.clips.filter(
-    (clip) => clip.audio && clip.start < endBeat && clip.start + clip.length > startBeat,
-  );
-  if (
-    overlapping.some(
-      (clip) =>
-        !Number.isInteger(clip.start / barBeats) ||
-        !Number.isInteger((clip.start + clip.length) / barBeats),
-    )
-  ) {
-    addMessage(
-      "system",
-      "Esa pista tiene clips que no están alineados al compás; todavía no puedo cortarlos con precisión.",
-    );
-    return;
-  }
-
-  const seconds = (lengthBeats * 60) / full.bpm;
-  setStatus(`Generando variación de ${track.name}…`);
-  const generated = await api<{ wav: string; code: string }>(
-    "/api/sound/create",
-    {
-      prompt: `${text}. Nueva variación para ${track.name}, compases ${plan.startBar + 1}–${plan.endBar}, ${full.bpm} BPM, ${full.key.tonic} ${full.key.mode}.`,
-      duration: seconds,
-      sampleRate: 48_000,
-      seed: full.seed + plan.startBar * 7919 + plan.endBar,
-      bpm: full.bpm,
-      key: full.key,
-      params: { kind: "one_shot", bars: plan.endBar - plan.startBar },
-    },
-    360_000,
-  );
-  setStatus(`Montando ${track.name}…`);
-  const bytes = Uint8Array.from(atob(generated.wav), (char) => char.charCodeAt(0));
-  const blob = new Blob([bytes], { type: "audio/wav" });
-  const buffer = await decodeAudioBlob(blob);
-  const durationBeats = (buffer.duration * full.bpm) / 60;
-  const assetId = `aud_edit_${Date.now().toString(36)}`;
-  audioAssets.set(assetId, {
-    id: assetId,
-    name: `${track.name} ${plan.startBar + 1}-${plan.endBar}`,
-    buffer,
-    durationBeats,
-    peaks: computePeaks(buffer),
-  });
-  if (!(await persistAudioAsset(assetId, `${track.name} ${plan.startBar + 1}-${plan.endBar}`, durationBeats, blob))) {
-    addMessage("system", "La variación suena en esta sesión, pero no se pudo guardar en IndexedDB.");
-  }
-
-  const ops: Op[] = [
-    {
-      op: "register_audio_asset",
-      assetId,
-      name: `${track.name} ${plan.startBar + 1}-${plan.endBar}`,
-      durationBeats,
-    },
-  ];
-  for (const clip of overlapping) {
-    if (!clip.audio) continue;
-    ops.push({ op: "remove_clip", trackId: track.id, clipId: clip.id });
-    if (clip.start < startBeat) {
-      const leftBeats = startBeat - clip.start;
-      ops.push({
-        op: "add_audio_clip",
-        trackId: track.id,
-        assetId: clip.audio.assetId,
-        startBar: clip.start / barBeats,
-        offsetBeats: clip.audio.offset + leftBeats,
-        lengthBeats: leftBeats,
-        gainDb: clip.audio.gainDb,
-        name: clip.name,
-      });
-    }
-    if (clip.start + clip.length > endBeat) {
-      const rightBeats = clip.start + clip.length - endBeat;
-      ops.push({
-        op: "add_audio_clip",
-        trackId: track.id,
-        assetId: clip.audio.assetId,
-        startBar: endBeat / barBeats,
-        offsetBeats: clip.audio.offset + (endBeat - clip.start),
-        lengthBeats: rightBeats,
-        gainDb: clip.audio.gainDb,
-        name: clip.name,
-      });
-    }
-  }
-  ops.push({
-    op: "add_audio_clip",
-    trackId: track.id,
-    assetId,
-    startBar: plan.startBar,
-    offsetBeats: 0,
-    lengthBeats,
-    gainDb: 0,
-    name: `${track.name} ${plan.startBar + 1}-${plan.endBar}`,
-  });
-
-  setProject(applyOps(full, ops).project);
-  addMessage(
-    "assistant",
-    `He cambiado los compases ${plan.startBar + 1}–${plan.endBar} de “${track.name}” con una variación nueva. El resto de la pista sigue igual.`,
-  );
-  if (Math.abs(durationBeats - lengthBeats) > 0.25) {
-    addMessage("system", `La variación mide ${durationBeats.toFixed(2)} beats y el hueco ${lengthBeats}; revisa el empalme.`);
-  }
-}
-
-async function createSamplesFromChat(text: string): Promise<void> {
-  let base = project;
-  if (!base) {
-    base = createProject({ name: "Nuevo proyecto", prompt: text });
-    setProject(base);
-  }
-
-  setStatus("Planificando samples…");
-  const plan = await api<{ samples: SampleRequest[] }>("/api/sample/plan", {
-    prompt: text,
-    project: base,
-  });
-  if (plan.samples.length === 0) throw new Error("El plan no devolvió ningún sample.");
-
-  const barBeats = beatsPerBar(base);
-  const ops: Op[] = [];
-  const created: Array<{ name: string; track: string; detail: string }> = [];
-
-  for (let index = 0; index < plan.samples.length; index++) {
-    const request = plan.samples[index]!;
-    setStatus(`Escribiendo DSP ${index + 1}/${plan.samples.length}: ${request.name}…`);
-    try {
-      const loopSeconds = (request.bars * 4 * 60) / base.bpm;
-      const duration = request.kind === "loop" ? loopSeconds : 2.4;
-      const generated = await api<{ wav: string; code: string; frames: number }>(
-        "/api/sound/create",
-        {
-          prompt:
-            request.kind === "loop"
-              ? `${request.prompt}. Loop de ${request.bars} compases, sin cola, preparado para repetir.`
-              : request.prompt,
-          duration,
-          sampleRate: 48_000,
-          seed: base.seed + index * 7919,
-          bpm: base.bpm,
-          key: base.key,
-          params: { kind: request.kind, bars: request.bars, role: request.role ?? null },
-        },
-        360_000,
-      );
-      setStatus(`Renderizando ${request.name}…`);
-      const bytes = Uint8Array.from(atob(generated.wav), (char) => char.charCodeAt(0));
-      const blob = new Blob([bytes], { type: "audio/wav" });
-      const buffer = await decodeAudioBlob(blob);
-      const durationBeats =
-        request.kind === "loop" ? request.bars * 4 : (buffer.duration * base.bpm) / 60;
-      const assetId = `aud_${slug(request.name)}_${Date.now().toString(36)}_${index}`;
-      audioAssets.set(assetId, {
-        id: assetId,
-        name: request.name,
-        buffer,
-        durationBeats,
-        peaks: computePeaks(buffer),
-      });
-      if (!(await persistAudioAsset(assetId, request.name, durationBeats, blob))) {
-        addMessage(
-          "system",
-          `“${request.name}” no se pudo guardar en IndexedDB; sonará en esta sesión y se perderá al recargar.`,
-        );
-      }
-
-      const trackName = request.track || request.name;
-      const trackId = `trk_sample_${Date.now().toString(36)}_${index}`;
-      ops.push(
-        {
-          op: "add_track",
-          id: trackId,
-          name: trackName,
-          kind: "audio",
-          instrument: { type: sampleInstrument(request.role, trackName) },
-          gainDb: 0,
-          pan: 0,
-        },
-        {
-          op: "register_audio_asset",
-          assetId,
-          name: request.name,
-          durationBeats,
-        },
-      );
-
-      if (request.kind === "loop") {
-        let repeats = 0;
-        for (let startBar = 0; startBar < base.lengthBars; startBar += request.bars) {
-          const lengthBeats = Math.min(
-            request.bars * barBeats,
-            (base.lengthBars - startBar) * barBeats,
-          );
-          ops.push({
-            op: "add_audio_clip",
-            trackId,
-            assetId,
-            startBar,
-            offsetBeats: 0,
-            lengthBeats,
-            gainDb: 0,
-            name: request.name,
-          });
-          repeats++;
-        }
-        created.push({
-          name: request.name,
-          track: trackName,
-          detail: `loop de ${request.bars} compases ×${repeats}`,
-        });
-      } else {
-        ops.push({
-          op: "add_audio_clip",
-          trackId,
-          assetId,
-          startBar: 0,
-          offsetBeats: 0,
-          lengthBeats: Math.min(durationBeats, 64 * barBeats),
-          gainDb: 0,
-          name: request.name,
-        });
-        created.push({
-          name: request.name,
-          track: trackName,
-          detail: `one-shot de ${durationBeats.toFixed(2)} beats`,
-        });
-      }
-    } catch (error) {
-      addMessage(
-        "system",
-        `No se pudo crear “${request.name}”: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  if (created.length === 0) throw new Error("No se pudo renderizar ningún sample.");
-  setProject(applyOps(base, ops).project);
-  addMessage(
-    "assistant",
-    `He creado ${created.length} sample(s) de audio:\n${created
-      .map((item) => `· “${item.name}” → pista “${item.track}” (${item.detail})`)
-      .join("\n")}\n\nEstán montados en la timeline. Pulsa ▶ para escucharlos.`,
-  );
-  addMessage("system", "Son pistas de audio.");
-}
-
-async function renderRenderedSelection(): Promise<void> {
-  if (!MIDI_ENABLED || busy || !project) return;
-  const base = project;
-  const tracks = base.tracks.filter(
-    (track) => track.kind === "midi" && selectedTrackIds.includes(track.id),
-  );
-  if (tracks.length === 0) {
-    addMessage("system", "Selecciona al menos una pista MIDI para renderizar con Rendered.");
-    return;
-  }
-
-  setBusy(true, "Renderizando con Rendered…");
-  const ops: Op[] = [];
-  const done: string[] = [];
-  const barBeats = beatsPerBar(base);
-  const totalBeats = base.lengthBars * barBeats;
-  const maxClipBeats = 64 * barBeats;
-
-  try {
-    for (let index = 0; index < tracks.length; index++) {
-      const track = tracks[index]!;
-      setStatus(`Rendered ${index + 1}/${tracks.length}: ${track.name}…`);
-      try {
-        const data = await api<{ wav: string; notes: number }>(
-          "/api/rendered/track",
-          { project: base, trackId: track.id },
-          360_000,
-        );
-        const bytes = Uint8Array.from(atob(data.wav), (char) => char.charCodeAt(0));
-        const blob = new Blob([bytes], { type: "audio/wav" });
-        const buffer = await decodeAudioBlob(blob);
-        const name = `${track.name} [Rendered]`.slice(0, 60);
-        const assetId = `aud_rendered_${Date.now().toString(36)}_${index}`;
-        audioAssets.set(assetId, {
-          id: assetId,
-          name,
-          buffer,
-          durationBeats: totalBeats,
-          peaks: computePeaks(buffer),
-        });
-        if (!(await persistAudioAsset(assetId, name, totalBeats, blob))) {
-          addMessage("system", `“${name}” no se pudo guardar en IndexedDB; se perderá al recargar.`);
-        }
-
-        const newTrackId = `trk_rendered_${Date.now().toString(36)}_${index}`;
-        ops.push(
-          {
-            op: "add_track",
-            id: newTrackId,
-            name,
-            kind: "audio",
-            instrument: { type: track.instrument.type },
-            gainDb: 0,
-            pan: 0,
-          },
-          {
-            op: "register_audio_asset",
-            assetId,
-            name,
-            durationBeats: totalBeats,
-          },
-        );
-        for (let offset = 0; offset < totalBeats; offset += maxClipBeats) {
-          const length = Math.min(maxClipBeats, totalBeats - offset);
-          ops.push({
-            op: "add_audio_clip",
-            trackId: newTrackId,
-            assetId,
-            startBar: offset / barBeats,
-            offsetBeats: offset,
-            lengthBeats: length,
-            gainDb: 0,
-            name,
-          });
-        }
-        ops.push({
-          op: "set_track",
-          trackId: track.id,
-          muted: true,
-          solo: false,
-        });
-        done.push(track.name);
-      } catch (error) {
-        addMessage(
-          "system",
-          `Rendered falló en “${track.name}”: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-
-    if (done.length === 0) throw new Error("No se pudo renderizar ninguna pista con Rendered.");
-    setProject(applyOps(base, ops).project);
-    addMessage(
-      "assistant",
-      `Rendered: ${done.length} pista(s) (${done.join(", ")}). Las pistas MIDI originales quedan silenciadas para comparar; puedes reactivarlas o deshacer.`,
-    );
-    addMessage("system", "Rendered usa las voces Python del motor, no el sintetizador WebAudio.");
-  } catch (error) {
-    addMessage("system", `Rendered: ${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    setBusy(false);
-  }
-}
-
 async function send(prompt: string): Promise<void> {
   const text = prompt.trim();
   if (!text || busy || !ready) return;
@@ -1162,33 +656,18 @@ async function send(prompt: string): Promise<void> {
   setBusy(true, "Pensando…");
 
   try {
-    const edit = parseAudioEdit(text);
-    if (edit) {
-      await replaceAudioRange(text, edit);
-      return;
-    }
-    if (SAMPLE_INTENT.test(text)) {
-      await createSamplesFromChat(text);
-      return;
-    }
-    if (!MIDI_ENABLED) {
-      const audioTracks = activeProject(project)?.tracks.map((track) => `“${track.name}”`) ?? [];
-      addMessage(
-        "assistant",
-        audioTracks.length > 0
-          ? `Puedo crear samples o cambiar una sección de una pista de audio. Por ejemplo: “cambia los compases 25 a 29 de ${audioTracks[0]} con otra melodía”. Pistas: ${audioTracks.join(", ")}.`
-          : "Pídeme un sample: “crea un kick industrial”, “un pad ambient cálido” o “un bajo dark wave”.",
-      );
+    if (STRUDEL_INTENT.test(text)) {
+      openCodeEditor();
+      addMessage("assistant", "Abre el editor Strudel y pulsa «Renderizar WAV» para insertar el audio.");
       return;
     }
 
     const wantsTrack = /\b(añade|añadir|agrega|agregar|crea|crear)\b[\s\S]*\b(pista|track|parte)\b/i.test(text);
-    const wantsCode = STRUDEL_INTENT.test(text);
-    if (!project && (wantsTrack || wantsCode)) {
-      setProject(createProject({ name: wantsCode ? "Strudel" : "Nuevo proyecto", bpm: wantsCode ? 120 : undefined }));
+    if (!project && wantsTrack) {
+      setProject(createProject({ name: "Nuevo proyecto" }));
     }
     const startsEmpty = project !== null && project.tracks.length === 0;
-    const generateSong = !wantsCode && (!project || (startsEmpty && !wantsTrack) || NEW_SONG.test(text));
+    const generateSong = !project || (startsEmpty && !wantsTrack) || NEW_SONG.test(text);
 
     if (generateSong) {
       const data = await api<{ project: Project; warnings?: string[] }>("/api/generate", { prompt: text });
@@ -1203,11 +682,7 @@ async function send(prompt: string): Promise<void> {
         "/api/chat",
         { prompt: text, project },
       );
-      if ((data.project.codeSources ?? []).some((source) => source.compiledAt === "")) {
-        setBusy(true, "Compilando Strudel…");
-      }
-      const next = await compilePendingCodeSources(data.project);
-      setProject(next);
+      setProject(data.project);
       addMessage("assistant", data.text || "Hecho.");
       const failed = data.toolLog.filter((entry) => !entry.ok);
       if (failed.length > 0) addMessage("system", `Herramientas con error: ${failed.map((entry) => entry.name).join(", ")}`);
@@ -1241,113 +716,6 @@ function slug(name: string): string {
 }
 
 /** Inserta una compilación Strudel en un proyecto; no toca el estado global. */
-function buildStrudelProject(
-  base: Project,
-  request: CodeCompileRequest,
-): { project: Project; source: CodeSource; notes: number } {
-  const previous = base.codeSources?.find((source) => source.id === request.sourceId);
-  const previousTrackIds = previous?.trackIds.filter((id) =>
-    base.tracks.some((track) => track.id === id),
-  ) ?? [];
-  const newTrackIds = request.result.groups.map((group) =>
-    `trk_${request.sourceId}_${slug(group.key)}`.slice(0, 64),
-  );
-  const removeIds = [...new Set([...previousTrackIds, ...newTrackIds])].filter((id) =>
-    base.tracks.some((track) => track.id === id),
-  );
-  const ops: Op[] = removeIds.map((trackId) => ({ op: "remove_track", trackId }));
-
-  request.result.groups.forEach((group, index) => {
-    if (group.notes.length === 0) return;
-    if (group.notes.length > 2000) {
-      throw new Error(
-        `El grupo "${group.label}" genera ${group.notes.length} notas; el máximo por pista es 2000. Reduce los compases o la densidad.`,
-      );
-    }
-    const trackId = newTrackIds[index]!;
-    const trackName = `${request.name} · ${group.label}`.slice(0, 60);
-    ops.push({
-      op: "add_track",
-      id: trackId,
-      name: trackName,
-      kind: "midi",
-      instrument: { type: group.instrument },
-    });
-    ops.push({
-      op: "add_notes",
-      trackId,
-      startBar: 0,
-      name: trackName,
-      notes: group.notes,
-    });
-  });
-
-  const notes = request.result.groups.reduce((sum, group) => sum + group.notes.length, 0);
-  if (notes === 0) throw new Error("El patrón no generó ninguna nota.");
-  const { project: next } = applyOps(base, ops);
-  const source: CodeSource = {
-    id: request.sourceId,
-    name: request.name,
-    language: "strudel",
-    code: request.code,
-    bars: request.bars,
-    trackIds: newTrackIds.filter((_, index) => request.result.groups[index]!.notes.length > 0),
-    compiledAt: new Date().toISOString(),
-    mode: "midi",
-  };
-  next.codeSources = [
-    ...(next.codeSources ?? []).filter((candidate) => candidate.id !== source.id),
-    source,
-  ];
-  return { project: next, source, notes };
-}
-
-function announceStrudel(source: CodeSource, result: { groups: Array<{ notes: unknown[] }>; warnings: string[] }, notes: number): void {
-  addMessage(
-    "assistant",
-    `Strudel “${source.name}”: ${result.groups.length} pista(s) y ${notes} notas. Ya puedes reproducir, editar o renderizar con Rendered.`,
-  );
-  for (const warning of result.warnings) addMessage("system", `Strudel: ${warning}`);
-}
-
-/** Compilación pedida desde el editor de código. */
-async function applyStrudelCompilation(request: CodeCompileRequest): Promise<void> {
-  const base = project;
-  if (!base) throw new Error("No hay proyecto abierto.");
-  const built = buildStrudelProject(base, request);
-  setProject(built.project);
-  announceStrudel(built.source, request.result, built.notes);
-}
-
-/** Compila las fuentes que el agente añadió mediante add_code_source. */
-async function compilePendingCodeSources(sourceProject: Project): Promise<Project> {
-  const pending = (sourceProject.codeSources ?? []).filter(
-    (source) => source.compiledAt === "" && (source.mode ?? "midi") === "midi",
-  );
-  if (pending.length === 0) return sourceProject;
-  let next = sourceProject;
-  for (const source of pending) {
-    try {
-      const result = await compileStrudelInWorker(source.code, source.bars, beatsPerBar(next));
-      const built = buildStrudelProject(next, {
-        sourceId: source.id,
-        name: source.name,
-        code: source.code,
-        bars: source.bars,
-        result,
-      });
-      next = built.project;
-      announceStrudel(built.source, result, built.notes);
-    } catch (error) {
-      addMessage(
-        "system",
-        `No se pudo compilar la fuente Strudel “${source.name}”: ${error instanceof Error ? error.message : String(error)}. Abre «Código» para corregirla.`,
-      );
-    }
-  }
-  return next;
-}
-
 /** Renderiza con el motor real de Strudel y lo inserta como pista de audio. */
 async function renderStrudelAudioSource(request: CodeAudioRequest): Promise<void> {
   const base = project;
@@ -1425,8 +793,26 @@ function openCodeEditor(): void {
   if (!project) return;
   openCodeLab({
     project,
-    onCompile: applyStrudelCompilation,
     onRenderAudio: renderStrudelAudioSource,
+  });
+}
+
+function openSongAgentDialog(): void {
+  if (!ready) return;
+  openSongAgent({
+    onOpen: async (job) => {
+      if (!job.bundle) throw new Error("El job no tiene bundle.");
+      const blob = await fetchSongArtifact(job.id, job.bundle);
+      const imported = await importProjectBundle(blob);
+      const { missing } = await hydrateProjectAudio(imported.project);
+      setProject(imported.project);
+      addMessage(
+        "assistant",
+        `Canción abierta: “${imported.project.name}”. ${imported.project.tracks.length} pistas, ${imported.project.lengthBars} compases.`,
+      );
+      for (const warning of imported.warnings) addMessage("system", `Canción: ${warning}`);
+      warnMissingAudio(missing);
+    },
   });
 }
 
@@ -1462,82 +848,11 @@ $("new-song").addEventListener("click", () => {
 
 $("export-stems").addEventListener("click", () => void exportStems());
 
+$("song-agent").addEventListener("click", () => openSongAgentDialog());
 $("code-lab").addEventListener("click", () => openCodeEditor());
-
-$("sample-lab").addEventListener("click", () => {
-  if (!ready) return;
-  const base = project ?? createProject({ name: "Nuevo proyecto" });
-  if (!project) setProject(base);
-
-  openSampleLab({
-    bpm: base.bpm,
-    key: base.key,
-    tracks: base.tracks.filter((track) => track.kind === "audio").map((track) => track.name),
-    onInsert: async ({ result, trackName }) => {
-      const base = project;
-      if (!base) return;
-      const assetId = `aud_${slug(result.name)}_${Date.now().toString(36)}`;
-      audioAssets.set(assetId, {
-        id: assetId,
-        name: result.name,
-        buffer: result.buffer,
-        durationBeats: result.durationBeats,
-        peaks: computePeaks(result.buffer),
-      });
-
-      const bar = Math.min(511, Math.floor(currentBeat() / beatsPerBar(base)));
-      const existing = base.tracks.find(
-        (track) => track.kind === "audio" && track.name === trackName,
-      );
-      const ops: Op[] = [
-        {
-          op: "register_audio_asset",
-          assetId,
-          name: result.name,
-          durationBeats: result.durationBeats,
-        },
-        {
-          op: "add_audio_clip",
-          ...(existing ? { trackId: existing.id } : { track: { name: trackName } }),
-          assetId,
-          startBar: bar,
-          lengthBeats: Math.min(result.durationBeats, 64),
-          gainDb: 0,
-          name: result.name,
-        },
-      ];
-
-      const saved = await persistAudioAsset(
-        assetId,
-        result.name,
-        result.durationBeats,
-        result.blob,
-      );
-      try {
-        setProject(applyOps(base, ops).project);
-        addMessage(
-          "assistant",
-          `Sample “${result.name}” insertado en “${trackName}”, compás ${bar + 1} (${result.durationBeats.toFixed(2)} beats).`,
-        );
-        if (!saved) {
-          addMessage(
-            "system",
-            "El sample suena en esta sesión, pero no se pudo guardar en IndexedDB; se perderá al recargar.",
-          );
-        }
-      } catch (error) {
-        addMessage("system", `No se pudo insertar: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    },
-  });
-});
-
-$("bounce-samples").addEventListener("click", openFreezeDialog);
 
 $("sel-mute").addEventListener("click", () => toggleTracksFlag(selectedTrackIds, "muted"));
 $("sel-solo").addEventListener("click", () => toggleTracksFlag(selectedTrackIds, "solo"));
-$("sel-freeze").addEventListener("click", openFreezeDialog);
-$("sel-rendered").addEventListener("click", () => void renderRenderedSelection());
 $("sel-stems").addEventListener("click", () => void exportStems(selectedTrackIds));
 $("sel-delete").addEventListener("click", deleteSelectedTracks);
 $("sel-all").addEventListener("click", () => timeline.selectAll());
@@ -1840,7 +1155,7 @@ async function boot(): Promise<void> {
     if (!MIDI_ENABLED && project.tracks.some((track) => track.kind === "midi")) {
       addMessage(
         "system",
-        "Este proyecto tiene pistas MIDI legacy: están ocultas y no se usan en modo audio. Crea pistas nuevas con samples.",
+        "Este proyecto tiene pistas MIDI legacy: están ocultas y no se usan en modo audio.",
       );
     }
     if (result.missing.length > 0) {
@@ -1854,7 +1169,7 @@ async function boot(): Promise<void> {
       "assistant",
       MIDI_ENABLED
         ? "Soy Mizu, tu coproductor. Pídeme una canción completa o un loop: “synth pop 80s oscuro en re menor, lenta”."
-        : "Soy Mizu, tu coproductor. Pídeme samples: “crea un kick industrial”, “un pad ambient cálido” o “un bajo dark wave”.",
+        : "Soy Mizu, tu coproductor. Pídeme cambios sobre el proyecto.",
     );
   }
 

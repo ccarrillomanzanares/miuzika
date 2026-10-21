@@ -211,7 +211,7 @@ def env_ad(n: int, attack: float, decay: float, sr: int = SR,
     """
     t = np.arange(n) / sr
     e = sus + (1.0 - sus) * np.exp(-(np.maximum(t - attack, 0.0) / max(decay, 1e-4)) ** shape)
-    a = max(int(attack * sr), 2)
+    a = min(max(int(attack * sr), 2), n)          # idem: buffers mas cortos que el ataque
     if a > 2:
         e[:a] *= np.linspace(0.0, 1.0, a) ** 0.6
     return np.clip(e, 0.0, None)
@@ -221,7 +221,7 @@ def env_exp(n: int, tau: float, attack: float = 0.002, sr: int = SR) -> np.ndarr
     """Caida exponencial pura (tau = constante de tiempo en segundos)."""
     t = np.arange(n) / sr
     e = np.exp(-t / max(tau, 1e-4))
-    a = max(int(attack * sr), 2)
+    a = min(max(int(attack * sr), 2), n)          # la rampa nunca puede ser mas larga que el buffer
     if a > 2:
         e[:a] *= np.linspace(0.0, 1.0, a) ** 0.6
     return e
@@ -242,7 +242,9 @@ def env_sustain(n: int, attack: float, release: float, sr: int = SR,
 
 def env_ar(n: int, attack: float, release: float, sr: int = SR) -> np.ndarray:
     """Subida y bajada (1 -> 0): percusion tipo swipe/riser."""
-    a = min(max(int(attack * sr), 2), n - 2)
+    if n < 2:
+        return np.ones(n)
+    a = min(max(int(attack * sr), 2), n - 1)
     e = np.empty(n)
     e[:a] = np.linspace(0.0, 1.0, a) ** 0.5
     e[a:] = np.cos(np.linspace(0.0, np.pi / 2, n - a)) ** 2
@@ -539,6 +541,17 @@ if __name__ == "__main__":
                     ("sustain", env_sustain(n, 0.05, 0.1)), ("ar", env_ar(n, 0.2, 0.2)),
                     ("duck", env_duck(n, 0.001, 0.02, 0.2))):
         print(f"  env {name:8s} [{e.min():.3f}..{e.max():.3f}] largo={len(e)}")
+
+    # envolventes con buffers diminutos (regresion: n < rampa de ataque reventaba)
+    for tiny in (1, 2, 7, 22, 64, 87):
+        for fname, f in (("exp", lambda m: env_exp(m, 0.2)),
+                         ("ad", lambda m: env_ad(m, 0.002, 0.3)),
+                         ("sustain", lambda m: env_sustain(m, 0.05, 0.1)),
+                         ("ar", lambda m: env_ar(m, 0.2, 0.2)),
+                         ("duck", lambda m: env_duck(m, 0.001, 0.02, 0.2))):
+            e = f(tiny)
+            assert len(e) == tiny and np.isfinite(e).all(), f"{fname}(n={tiny})"
+    print("  envolventes con n=1,2,7,22,64,87: OK")
 
     # filtros estaticos
     for nm, fun in (("hp", hp), ("lp", lp), ("bp", bp)):

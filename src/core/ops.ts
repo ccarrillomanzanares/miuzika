@@ -199,16 +199,6 @@ const SetMasterOp = z.object({
   gainDb: GainSchema,
 });
 
-const AddCodeSourceOp = z.object({
-  op: z.literal("add_code_source"),
-  id: IdSchema.optional(),
-  name: z.string().min(1).max(40),
-  language: z.literal("strudel").default("strudel"),
-  /** Se compila en el navegador (el runtime de Strudel no corre en Node). */
-  code: z.string().min(1).max(20_000),
-  bars: z.number().int().min(1).max(64).default(8),
-});
-
 export const OpSchema = z.discriminatedUnion("op", [
   SetSongOp,
   AddTrackOp,
@@ -225,7 +215,6 @@ export const OpSchema = z.discriminatedUnion("op", [
   AddAudioClipOp,
   SetAudioClipOp,
   SetMasterOp,
-  AddCodeSourceOp,
 ]);
 
 export const OpsSchema = z.array(OpSchema).min(1).max(200);
@@ -608,28 +597,6 @@ function applyOne(project: Project, op: ParsedOp): string {
       const device = resolveDevice(track, op.deviceId);
       track.devices = track.devices.filter((existing) => existing !== device);
       return `Dispositivo eliminado de ${track.name}: ${device.type}`;
-    }
-
-    case "add_code_source": {
-      const sources = (project.codeSources ??= []);
-      const id = op.id ?? `code_strudel_${slugify(op.name) || "fuente"}`;
-      const index = sources.findIndex((candidate) => candidate.id === id);
-      const source = {
-        id,
-        name: op.name,
-        language: "strudel" as const,
-        code: op.code,
-        bars: op.bars,
-        // Conservamos las pistas anteriores para que el navegador pueda
-        // reemplazarlas; compiledAt vacío marca la fuente como pendiente.
-        trackIds: index >= 0 ? sources[index]!.trackIds : [],
-        compiledAt: "",
-        mode: "midi" as const,
-      };
-      if (index >= 0) sources[index] = source;
-      else sources.push(source);
-      project.lengthBars = Math.max(project.lengthBars, op.bars);
-      return `Fuente Strudel “${op.name}” guardada (${op.bars} compases); el navegador la compilará a pistas al recibir la respuesta`;
     }
 
     case "set_master": {
