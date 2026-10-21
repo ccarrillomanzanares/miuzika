@@ -15,8 +15,10 @@ mezcla). Lo que sigue explica las decisiones y lo que queda pendiente.
 | Reverb, delay, waveshaper, crusher, compressor, gate, stereotool | ✅ |
 | EQ y filtro (aproximados con Revamp), chorus (delay modulado) | ✅ |
 | Import (openDAW → IR): pistas, notas, tempo, mezcla | ✅ |
+| Playback en navegador: `WasmEngine` + `EngineWorklet` | ✅ `web/src/opendaw-engine.ts`; ▶ en proyectos MIDI |
+| Batería Playfield con samples WAV | ✅ `SampleProvider` sobre `web/public/drums` |
 | Import de dispositivos | 📋 (se conservan las notas; los FX no se reconstruyen) |
-| Pistas/regiones de audio | 📋 (necesita `SampleService`/`AudioFileBox`) |
+| Pistas/regiones de audio dentro del engine | 📋 (necesita `AudioFileBox`/`SampleService`; hoy usan el player interno) |
 
 Comandos:
 
@@ -64,21 +66,32 @@ licencia AGPL-3.0 para que el conjunto sea coherente.
 Requisitos que condicionan el despliegue:
 
 1. **Cross-origin isolation** (`COOP: same-origin`, `COEP: require-corp`) porque el motor usa
-   `SharedArrayBuffer`.
-2. Servir los artefactos WASM del paquete (`wasm-processor.js`, `wasm-offline-worker.js`,
-   `engine.wasm`, `plugins/*.wasm`) e instalar el motor antes de arrancar:
+   `SharedArrayBuffer`. Está configurado en `vite.config.ts` para `server` y `preview`.
+2. Servir los artefactos WASM del paquete. `web/public/opendaw-wasm/wasm/` contiene
+   `engine.wasm`, `stretch_wasm.wasm` y `plugins/*.wasm`; los worklets/workers se importan con
+   `?url` para que Vite los empaquete. El arranque real está en `web/src/opendaw-engine.ts`:
 
 ```ts
-// Forma documentada por el SDK (verificar versión exacta al integrar)
+import workletsUrl from "@opendaw/studio-core/processors.js?url"
+import workersUrl from "@opendaw/studio-core/workers-main.js?worker&url"
+import wasmProcessorUrl from "@opendaw/studio-core-wasm/wasm-processor.js?url"
+import wasmOfflineWorkerUrl from "@opendaw/studio-core-wasm/wasm-offline-worker.js?worker&url"
 import { WasmEngine } from "@opendaw/studio-core-wasm"
+import { AudioWorklets, Workers } from "@opendaw/studio-core"
 
+await Workers.install(workersUrl)
+AudioWorklets.install(workletsUrl)
+await AudioWorklets.createFor(audioContext) // añade processors.js a ESTE contexto
 WasmEngine.install({
-  processorUrl: "/opendaw-wasm/wasm-processor.js",
-  offlineWorkerUrl: "/opendaw-wasm/wasm-offline-worker.js",
-  wasmUrl: "/opendaw-wasm",
+  processorUrl: wasmProcessorUrl,
+  offlineWorkerUrl: wasmOfflineWorkerUrl,
+  wasmUrl: `${import.meta.env.BASE_URL}opendaw-wasm`,
 })
-await WasmEngine.ensureReady(audioContext)
+await WasmEngine.ensureReady(audioContext) // añade wasm-processor.js
 ```
+
+   El processor WASM se registra **una vez por contexto**. Por eso hay un único `AudioContext`
+   guardado en `globalThis` (`__miuzikaOpenDawBoot`), incluso si Vite recarga el módulo por HMR.
 
 3. Si se compila el motor desde fuente: Rust ≥ 1.82, target `wasm32-unknown-unknown` y toolchain
    nightly con `rust-src`. Con los artefactos prebuilt del npm no hace falta.
@@ -198,8 +211,9 @@ propios; si no, mantener una tabla `miuzikaId ↔ hostId`.
 ## Plan de implementación
 
 1. ~~**Spike de SDK**: montar un proyecto en blanco, cargar el WASM y reproducir.~~
-   Hecho en su mayor parte: el modelo de datos se crea headless; falta el arranque del motor
-   (WASM/COOP-COEP) para reproducir dentro de openDAW.
+   Hecho: `web/src/opendaw-engine.ts` carga el IR como `.odw`, arranca `EngineWorklet` y suena
+   con `WasmEngine`. Las pistas MIDI puras usan este camino; audio/mixto sigue en el player
+   interno.
 2. ~~**Adaptador de lectura**: volcar un `Project` nuestro a openDAW.~~ Hecho.
 3. ~~**Adaptador de escritura**: leer un proyecto de openDAW y convertirlo a IR.~~ Hecho para
    notas/pistas/mezcla; los FX no se reconstruyen.
@@ -211,11 +225,11 @@ propios; si no, mantener una tabla `miuzikaId ↔ hostId`.
 
 ## Checklist de verificación contra el SDK real
 
-- [ ] Nombre y firma exactos de `WasmEngine.install` / `ensureReady` en la versión instalada.
-- [ ] Constante `PPQN` y utilidades de conversión de beats.
-- [ ] API para crear región MIDI y volcar eventos (`ValueEventCollectionBox`).
-- [ ] Factorías de instrumentos disponibles y sus parámetros.
-- [ ] Nombres y rangos de parámetros de cada efecto.
+- [x] Nombre y firma exactos de `WasmEngine.install` / `ensureReady` en la versión instalada.
+- [x] Constante `PPQN` y utilidades de conversión de beats.
+- [x] API para crear región MIDI y volcar eventos (`ValueEventCollectionBox`).
+- [x] Factorías de instrumentos disponibles y sus parámetros.
+- [ ] Nombres y rangos de parámetros de cada efecto (mapeados y probados en ida/vuelta).
 - [ ] Cómo se expone el historial de undo.
 - [ ] Formato de `ProjectBundle` y gestión de assets en OPFS.
 - [ ] `OfflineEngineRenderer`: entrada, salida y límites.

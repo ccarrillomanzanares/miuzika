@@ -167,7 +167,13 @@ Decisiones:
 - Dispositivos sin equivalente exacto se aproximan: chorus → delay corto modulado; filtro → low-pass
   de Revamp; EQ → tres bandas de Revamp.
 - El import lee `AudioUnitBoxAdapter` + `NoteRegionBoxAdapter`; los FX no se reconstruyen todavía.
-- El audio no se exporta a openDAW: requiere `AudioFileBox` y `SampleService`.
+- El playback MIDI usa el engine real (`web/src/opendaw-engine.ts`): serializa el IR a `.odw`,
+  lo carga con `Project.load`, arranca `EngineWorklet`/`WasmEngine` y sigue la posición del
+  engine. Hay un solo `AudioContext` por página; `COOP/COEP` viven en `vite.config.ts`.
+- Las pistas de batería Playfield reciben un `SampleProvider` con el kit WAV de
+  `web/public/drums`; sin él, Playfield queda en silencio.
+- El audio no se exporta a openDAW: requiere `AudioFileBox` y `SampleService`. Por eso los
+  proyectos con pistas de audio siguen usando el player WebAudio interno.
 
 ## Audio
 

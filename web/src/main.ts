@@ -27,6 +27,7 @@ import { openBounceDialog } from "./bounce-dialog.ts";
 import { openSampleLab } from "./sample-lab.ts";
 import { PreviewPlayer } from "./player.ts";
 import { TimelineView, escapeHtml } from "./timeline.ts";
+import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -53,6 +54,7 @@ let ready = false;
 let restoring = false;
 let selectedTrackIds: string[] = [];
 let persistenceWarned = false;
+let openDawHandle: OpenDawPlaybackHandle | null = null;
 
 const HISTORY_KEY = "miuzika.history";
 const HISTORY_LIMIT = 8;
@@ -138,6 +140,11 @@ function renderExamples(): void {
 timeline.onSeek = (beat) => {
   const view = activeProject(project);
   if (!view) return;
+  if (openDawHandle) {
+    openDawHandle.seek(beat);
+    timeline.draw(beat);
+    return;
+  }
   if (player.isPlaying) player.play(view, beat);
   else player.seek(view, beat);
 };
@@ -233,6 +240,49 @@ function updateActions(): void {
 function setPlaying(value: boolean): void {
   playButton.textContent = value ? "❚❚" : "▶";
   playButton.classList.toggle("active", value);
+}
+
+function stopOpenDaw(): void {
+  const handle = openDawHandle;
+  openDawHandle = null;
+  if (handle) {
+    try {
+      handle.stop();
+    } catch {
+      /* ya parado */
+    }
+  }
+  setPlaying(false);
+}
+
+async function startOpenDawPlayback(view: Project): Promise<void> {
+  if (openDawHandle) stopOpenDaw();
+  if (player.isPlaying) {
+    player.stop();
+    setPlaying(false);
+  }
+  setBusy(true, "Arrancando engine openDAW…");
+  try {
+    const { playWithOpenDaw } = await import("./opendaw-engine.ts");
+    const endBeat = view.lengthBars * beatsPerBar(view);
+    const handle = await playWithOpenDaw(view, (beat) => {
+      timeline.draw(beat);
+      if (openDawHandle && beat >= endBeat - 0.05) stopOpenDaw();
+    });
+    openDawHandle = handle;
+    setPlaying(true);
+    addMessage("assistant", "Reproduciendo con el engine de openDAW.");
+  } catch (error) {
+    addMessage(
+      "system",
+      `Engine openDAW no disponible (${error instanceof Error ? error.message : String(error)}). Uso el player interno.`,
+    );
+    const from = player.beat >= view.lengthBars * beatsPerBar(view) - 0.25 ? 0 : player.beat;
+    player.play(view, from);
+    setPlaying(true);
+  } finally {
+    setBusy(false);
+  }
 }
 
 function addMessage(role: "user" | "assistant" | "system", text: string): void {
@@ -483,6 +533,7 @@ function toggleTracksFlag(ids: string[], flag: "muted" | "solo"): void {
 }
 
 function applyProject(next: Project | null): void {
+  if (openDawHandle) stopOpenDaw();
   if (player.isPlaying) {
     player.stop();
     setPlaying(false);
@@ -1177,12 +1228,23 @@ function slug(name: string): string {
 
 playButton.addEventListener("click", () => {
   const view = activeProject(project);
-  if (!ready || !view || view.tracks.length === 0) return;
+  if (!ready || busy || !view || view.tracks.length === 0) return;
+  if (openDawHandle) {
+    stopOpenDaw();
+    return;
+  }
   if (player.isPlaying) {
     player.stop();
     setPlaying(false);
     return;
   }
+
+  // MIDI puro: engine de openDAW. Mezclas con audio: player interno (SampleService pendiente).
+  if (!view.tracks.some((track) => track.kind === "audio") && view.tracks.some((track) => track.kind === "midi")) {
+    void startOpenDawPlayback(view);
+    return;
+  }
+
   const end = view.lengthBars * beatsPerBar(view);
   const from = player.beat >= end - 0.25 ? 0 : player.beat;
   player.play(view, from);
@@ -1190,6 +1252,10 @@ playButton.addEventListener("click", () => {
 });
 
 stopButton.addEventListener("click", () => {
+  if (openDawHandle) {
+    stopOpenDaw();
+    return;
+  }
   player.stop();
   setPlaying(false);
   const view = activeProject(project);
@@ -1568,6 +1634,9 @@ if (import.meta.env.DEV) {
     },
     get audioAssets() {
       return audioAssets;
+    },
+    get openDawPlayback() {
+      return openDawHandle;
     },
     get history() {
       return history;

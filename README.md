@@ -22,11 +22,12 @@ lo que no existe en ningún DAW: **el puente entre el lenguaje natural y el mode
 | Asistente con tool-calling (Ollama Cloud) | ✅ probado contra `deepseek-v4.1-flash:1017` |
 | Interfaz web: chat, timeline, piano roll | ✅ |
 | Adaptador openDAW (export + import) | ✅ 11 FX mapeados, ida y vuelta verificada |
+| Playback MIDI con el engine WASM de openDAW | ✅ `WasmEngine` + `EngineWorklet`; batería Playfield con samples |
 | Audio WAV: import, waveform, playback | ✅ |
 | Mixdown a WAV | ✅ |
 | Evaluación automática (8 prompts) | ✅ 8/8 |
-| Tests | ✅ 77 + integración real de openDAW |
-| Audio dentro de openDAW | 📋 pendiente (necesita SampleService) |
+| Tests | ✅ 110 + integración real de openDAW |
+| Pistas/clips de audio dentro de openDAW | 📋 pendiente (`AudioFileBox`); de momento usan el player interno |
 
 ## Arranque
 
@@ -35,7 +36,7 @@ Requiere **Node 24** (ejecuta TypeScript nativamente, sin build) y una clave de 
 ```bash
 npm install
 cp .env.example .env    # y pon tu OLLAMA_API_KEY
-npm run dev             # abre http://127.0.0.1:5173
+npm run dev             # abre http://localhost:5173
 npm test
 npm run eval
 ```
@@ -78,6 +79,11 @@ válido para no separar el almacenamiento.
 composición/edición y el audio (samples + Rendered) la capa de sonido. Si se pone a `false`
 queda el modo audio-only anterior, sin MIDI visible ni enviado al LLM.
 
+- **Reproducción**: en proyectos MIDI puros, ▶ carga el proyecto en el engine WASM de
+  openDAW (`WasmEngine` + `EngineWorklet`), no en el reproductor WebAudio casero. Las pistas de
+  batería usan Playfield y un `SampleProvider` con el kit WAV de `web/public/drums`. Si el
+  proyecto contiene pistas de audio, ▶ usa el player interno hasta completar `AudioFileBox`.
+  El servidor de Vite envía `COOP/COEP` para habilitar `SharedArrayBuffer`.
 - **Chat**: los prompts de samples (“crea un kick industrial”, “lo mismo para batería y bajo”)
   van al planificador de samples + sandbox Python; los prompts de canción/edición MIDI van al
   planner/agente. También puede cambiar una sección: “cambia los compases 25 a 29 del Bass con
@@ -242,7 +248,10 @@ web/
   src/main.ts     chat, estado, exportaciones
   src/timeline.ts timeline + piano roll de clips
   src/editor.ts   editor de notas (modal)
-  src/player.ts   reproducción WebAudio
+  src/player.ts   reproducción WebAudio (fallback con audio)
+  src/opendaw-engine.ts playback MIDI con WasmEngine + EngineWorklet
+  public/drums/   kit WAV para Playfield
+  public/opendaw-wasm/  engine.wasm + plugins del engine
   src/render.ts   mixdown offline a WAV
   src/synth.ts    síntesis compartida preview/mixdown
   src/audio-store.ts  WAV decodificados, peaks y rehidratación
@@ -303,8 +312,9 @@ docs/
 - Si solo sobreviven los WAV, el recuperador los coloca al inicio como pistas sueltas; no puede
   reconstruir la posición original de los clips.
 - El export a openDAW no incluye las pistas de audio (`SampleService`/`AudioFileBox` pendiente).
-- El preview reproduce MIDI con WebAudio y audio con clips; Rendered es un motor distinto y no
-  lee la cadena de FX de la pista MIDI.
+- El playback de proyectos MIDI usa openDAW; los proyectos con audio o mezclas siguen en el
+  player WebAudio hasta completar el `SampleService`. Rendered es un motor distinto y no lee la
+  cadena de FX de la pista MIDI.
 - El motor de sintetizador es procedural, no neural: no imita instrumentos acústicos reales ni
   tiene capas de velocidad/round-robin. Para guitarras, voces o pianos reales hace falta una
   librería multimuestra o un modelo de audio con licencia adecuada.
@@ -325,6 +335,7 @@ docs/
 | Edición de audio ("mueve el audio al compás 9") | Movió el clip de 0 a 32 beats, 5,2 s |
 | Piano roll manual | Añadir nota + aplicar → 468 → 469 notas, sin errores |
 | Export openDAW (navegador) | 5 pistas, 25 clips, 1.385 notas, 10 FX, 2 s |
+| Playback engine openDAW | “La estática como oración”: 10 pistas MIDI, 6.192 notas; ▶ sin fallback, batería sampleada, pico de máster ≈0,46 |
 | Ida y vuelta openDAW (Node) | 6 pistas, 24 clips, 666 notas preservadas, 11 FX |
 | Mixdown WAV | 2:06 → 21,5 MB, cabecera RIFF/PCM válida |
 

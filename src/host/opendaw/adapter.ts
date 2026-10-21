@@ -43,10 +43,26 @@ export interface OpenDawImport {
   stats: { tracks: number; regions: number; notes: number };
 }
 
+export interface OpenDawDrumSample {
+  note: number;
+  uuid: Uint8Array;
+  name: string;
+  durationInSeconds: number;
+  exclude: boolean;
+}
+
+export interface OpenDawBuildOptions {
+  /** Muestras del kit para las pistas Playfield. */
+  drumSamples?: OpenDawDrumSample[];
+}
+
 interface HostEnv {
   audioContext: unknown;
   audioWorklets: { context: unknown };
-  sampleManager: { register: () => { terminate: () => void } };
+  sampleManager: {
+    register: () => { terminate: () => void };
+    getOrCreate: (uuid: unknown) => unknown;
+  };
   soundfontManager: unknown;
   sampleService: unknown;
   soundfontService: unknown;
@@ -58,10 +74,25 @@ function createHeadlessEnv(): HostEnv {
     sampleRate: 48_000,
     destination: { maxChannelCount: 2 },
   };
+  const noopTerminable = { terminate: () => {} };
+  // En Node no hay audio real. El adaptador de openDAW pide un loader para
+  // precalentar las muestras Playfield; le damos uno vacío para serializar.
+  const emptyLoader = {
+    state: { type: "error", reason: "headless" },
+    data: { isEmpty: () => true },
+    peaks: { isEmpty: () => true },
+    subscribe: (observer: (state: unknown) => void) => {
+      observer({ type: "error", reason: "headless" });
+      return noopTerminable;
+    },
+  };
   return {
     audioContext,
     audioWorklets: { context: audioContext },
-    sampleManager: { register: () => ({ terminate: () => {} }) },
+    sampleManager: {
+      register: () => noopTerminable,
+      getOrCreate: () => emptyLoader,
+    },
     soundfontManager: {},
     sampleService: {},
     soundfontService: {},
@@ -92,7 +123,10 @@ function setParameter(root: Record<string, unknown>, path: string, value: number
 }
 
 /** Convierte nuestro IR en un proyecto de openDAW serializado. */
-export async function projectToOpenDaw(source: MiuzikaProject): Promise<OpenDawExport> {
+export async function projectToOpenDaw(
+  source: MiuzikaProject,
+  options: OpenDawBuildOptions = {},
+): Promise<OpenDawExport> {
   const { core, adapters } = await loadSdk();
   const env = createHeadlessEnv();
   const project = core.Project.new(env as never);
@@ -129,7 +163,9 @@ export async function projectToOpenDaw(source: MiuzikaProject): Promise<OpenDawE
 
         const product = project.api.createInstrument(factory as never, {
           name: track.name,
-          ...(instrument.factory === "Playfield" ? { attachment: [] } : {}),
+          ...(instrument.factory === "Playfield"
+            ? { attachment: options.drumSamples ?? [] }
+            : {}),
         } as never);
 
         const unit = project.boxAdapters.adapterFor(
