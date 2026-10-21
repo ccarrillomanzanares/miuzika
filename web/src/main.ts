@@ -1,4 +1,4 @@
-import type { InstrumentType, Project, Track } from "../../src/core/types.ts";
+import type { CodeSource, InstrumentType, Project, Track } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
 import type { SampleRequest } from "../../src/agent/sample-plan.ts";
 import { MIDI_ENABLED } from "../../src/config.ts";
@@ -25,6 +25,9 @@ import { loadDrumKit } from "./drum-kit.ts";
 import { openPianoRoll } from "./editor.ts";
 import { openBounceDialog } from "./bounce-dialog.ts";
 import { openSampleLab } from "./sample-lab.ts";
+import { openCodeLab } from "./code-lab.ts";
+import type { CodeCompileRequest } from "./code-lab.ts";
+import { compileStrudelInWorker } from "./strudel-client.ts";
 import { TimelineView, escapeHtml } from "./timeline.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 
@@ -227,6 +230,7 @@ function updateActions(): void {
   $<HTMLInputElement>("open").disabled = !enabled;
   $<HTMLSelectElement>("master-target").disabled = !enabled || !hasTracks;
   $<HTMLButtonElement>("sample-lab").disabled = !enabled;
+  $<HTMLButtonElement>("code-lab").disabled = !enabled;
   $<HTMLButtonElement>("new-song").disabled = !enabled;
   playButton.disabled = !enabled || !hasTracks;
   stopButton.disabled = !ready || !hasTracks;
@@ -601,6 +605,7 @@ async function api<T>(url: string, body: unknown, timeoutMs = 130_000): Promise<
 
 const NEW_SONG = /\b(otra canci[oó]n|nueva canci[oó]n|canci[oó]n nueva|desde cero|de cero|empezar de nuevo|empieza de nuevo)\b/i;
 const SAMPLE_INTENT = /\b(samples?|muestras?|wav)\b/i;
+const STRUDEL_INTENT = /\b(strudel|patr[oó]n(es)? de c[oó]digo|c[oó]digo generativo)\b/i;
 
 async function convertToSamples(base: Project, ids: string[]): Promise<void> {
   setBusy(true, "Congelando pistas a audio…");
@@ -1173,11 +1178,12 @@ async function send(prompt: string): Promise<void> {
     }
 
     const wantsTrack = /\b(añade|añadir|agrega|agregar|crea|crear)\b[\s\S]*\b(pista|track|parte)\b/i.test(text);
-    if (!project && wantsTrack) {
-      setProject(createProject({ name: "Nuevo proyecto" }));
+    const wantsCode = STRUDEL_INTENT.test(text);
+    if (!project && (wantsTrack || wantsCode)) {
+      setProject(createProject({ name: wantsCode ? "Strudel" : "Nuevo proyecto", bpm: wantsCode ? 120 : undefined }));
     }
     const startsEmpty = project !== null && project.tracks.length === 0;
-    const generateSong = !project || (startsEmpty && !wantsTrack) || NEW_SONG.test(text);
+    const generateSong = !wantsCode && (!project || (startsEmpty && !wantsTrack) || NEW_SONG.test(text));
 
     if (generateSong) {
       const data = await api<{ project: Project; warnings?: string[] }>("/api/generate", { prompt: text });
@@ -1192,7 +1198,11 @@ async function send(prompt: string): Promise<void> {
         "/api/chat",
         { prompt: text, project },
       );
-      setProject(data.project);
+      if ((data.project.codeSources ?? []).some((source) => source.compiledAt === "")) {
+        setBusy(true, "Compilando Strudel…");
+      }
+      const next = await compilePendingCodeSources(data.project);
+      setProject(next);
       addMessage("assistant", data.text || "Hecho.");
       const failed = data.toolLog.filter((entry) => !entry.ok);
       if (failed.length > 0) addMessage("system", `Herramientas con error: ${failed.map((entry) => entry.name).join(", ")}`);
@@ -1225,6 +1235,118 @@ function slug(name: string): string {
   );
 }
 
+/** Inserta una compilación Strudel en un proyecto; no toca el estado global. */
+function buildStrudelProject(
+  base: Project,
+  request: CodeCompileRequest,
+): { project: Project; source: CodeSource; notes: number } {
+  const previous = base.codeSources?.find((source) => source.id === request.sourceId);
+  const previousTrackIds = previous?.trackIds.filter((id) =>
+    base.tracks.some((track) => track.id === id),
+  ) ?? [];
+  const newTrackIds = request.result.groups.map((group) =>
+    `trk_${request.sourceId}_${slug(group.key)}`.slice(0, 64),
+  );
+  const removeIds = [...new Set([...previousTrackIds, ...newTrackIds])].filter((id) =>
+    base.tracks.some((track) => track.id === id),
+  );
+  const ops: Op[] = removeIds.map((trackId) => ({ op: "remove_track", trackId }));
+
+  request.result.groups.forEach((group, index) => {
+    if (group.notes.length === 0) return;
+    if (group.notes.length > 2000) {
+      throw new Error(
+        `El grupo "${group.label}" genera ${group.notes.length} notas; el máximo por pista es 2000. Reduce los compases o la densidad.`,
+      );
+    }
+    const trackId = newTrackIds[index]!;
+    const trackName = `${request.name} · ${group.label}`.slice(0, 60);
+    ops.push({
+      op: "add_track",
+      id: trackId,
+      name: trackName,
+      kind: "midi",
+      instrument: { type: group.instrument },
+    });
+    ops.push({
+      op: "add_notes",
+      trackId,
+      startBar: 0,
+      name: trackName,
+      notes: group.notes,
+    });
+  });
+
+  const notes = request.result.groups.reduce((sum, group) => sum + group.notes.length, 0);
+  if (notes === 0) throw new Error("El patrón no generó ninguna nota.");
+  const { project: next } = applyOps(base, ops);
+  const source: CodeSource = {
+    id: request.sourceId,
+    name: request.name,
+    language: "strudel",
+    code: request.code,
+    bars: request.bars,
+    trackIds: newTrackIds.filter((_, index) => request.result.groups[index]!.notes.length > 0),
+    compiledAt: new Date().toISOString(),
+  };
+  next.codeSources = [
+    ...(next.codeSources ?? []).filter((candidate) => candidate.id !== source.id),
+    source,
+  ];
+  return { project: next, source, notes };
+}
+
+function announceStrudel(source: CodeSource, result: { groups: Array<{ notes: unknown[] }>; warnings: string[] }, notes: number): void {
+  addMessage(
+    "assistant",
+    `Strudel “${source.name}”: ${result.groups.length} pista(s) y ${notes} notas. Ya puedes reproducir, editar o renderizar con Rendered.`,
+  );
+  for (const warning of result.warnings) addMessage("system", `Strudel: ${warning}`);
+}
+
+/** Compilación pedida desde el editor de código. */
+async function applyStrudelCompilation(request: CodeCompileRequest): Promise<void> {
+  const base = project;
+  if (!base) throw new Error("No hay proyecto abierto.");
+  const built = buildStrudelProject(base, request);
+  setProject(built.project);
+  announceStrudel(built.source, request.result, built.notes);
+}
+
+/** Compila las fuentes que el agente añadió mediante add_code_source. */
+async function compilePendingCodeSources(sourceProject: Project): Promise<Project> {
+  const pending = (sourceProject.codeSources ?? []).filter((source) => source.compiledAt === "");
+  if (pending.length === 0) return sourceProject;
+  let next = sourceProject;
+  for (const source of pending) {
+    try {
+      const result = await compileStrudelInWorker(source.code, source.bars, beatsPerBar(next));
+      const built = buildStrudelProject(next, {
+        sourceId: source.id,
+        name: source.name,
+        code: source.code,
+        bars: source.bars,
+        result,
+      });
+      next = built.project;
+      announceStrudel(built.source, result, built.notes);
+    } catch (error) {
+      addMessage(
+        "system",
+        `No se pudo compilar la fuente Strudel “${source.name}”: ${error instanceof Error ? error.message : String(error)}. Abre «Código» para corregirla.`,
+      );
+    }
+  }
+  return next;
+}
+
+function openCodeEditor(): void {
+  if (!ready) return;
+  if (!project) setProject(createProject({ name: "Strudel", bpm: 120 }));
+  if (!project) return;
+  openCodeLab({ project, onCompile: applyStrudelCompilation });
+}
+
 // --- Eventos ---------------------------------------------------------------
 
 playButton.addEventListener("click", () => {
@@ -1255,6 +1377,8 @@ $("new-song").addEventListener("click", () => {
 });
 
 $("export-stems").addEventListener("click", () => void exportStems());
+
+$("code-lab").addEventListener("click", () => openCodeEditor());
 
 $("sample-lab").addEventListener("click", () => {
   if (!ready) return;

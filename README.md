@@ -23,10 +23,11 @@ lo que no existe en ningún DAW: **el puente entre el lenguaje natural y el mode
 | Interfaz web: chat, timeline, piano roll | ✅ |
 | Adaptador openDAW (export + import) | ✅ 11 FX mapeados, ida y vuelta verificada |
 | Playback MIDI con el engine WASM de openDAW | ✅ `WasmEngine` + `EngineWorklet`; batería Playfield con samples |
+| Strudel: código → pistas MIDI editables | ✅ `note`/`s`/`stack`/`slow`/`fast`/`euclid`; worker aislado |
 | Audio WAV: import, waveform, playback | ✅ |
 | Mixdown a WAV | ✅ |
 | Evaluación automática (8 prompts) | ✅ 8/8 |
-| Tests | ✅ 110 + integración real de openDAW |
+| Tests | ✅ 113 + integración real de openDAW |
 | Pistas/clips de audio dentro de openDAW | ✅ `AudioFileBox` + `AudioRegionBox`, WAV partidos en bloques de 2 min |
 
 ## Arranque
@@ -79,8 +80,8 @@ válido para no separar el almacenamiento.
 composición/edición y el audio (samples + Rendered) la capa de sonido. Si se pone a `false`
 queda el modo audio-only anterior, sin MIDI visible ni enviado al LLM.
 
-- **Reproducción**: en proyectos MIDI puros, ▶ carga el proyecto en el engine WASM de
-  openDAW (`WasmEngine` + `EngineWorklet`), no en el reproductor WebAudio casero. Las pistas de
+- **Reproducción**: ▶ carga el proyecto en el engine WASM de openDAW (`WasmEngine` +
+  `EngineWorklet`), no en un reproductor WebAudio casero. Las pistas de
   batería usan Playfield y un `SampleProvider` con el kit WAV de `web/public/drums`. Las pistas
   de audio (incluidos los `[Rendered]`) se cargan como `AudioFileBox`/`AudioRegionBox`; los WAV
   largos se parten en bloques de 2 minutos porque el engine no carga samples de canción completa
@@ -103,6 +104,13 @@ queda el modo audio-only anterior, sin MIDI visible ni enviado al LLM.
   (`Drums Samples`, `Bass Samples`…), así que cada sample va a su propia pista. También puedes
   **descargar el WAV** sin insertarlo. En la UI solo eliges **Sonido (one-shot)** o **Loop**;
   el motor/macro concreto lo decide el LLM según la petición.
+- **Código / Strudel**: botón «Código». Escribes un patrón Strudel y se compila en el worker a
+  pistas MIDI normales (`note`, `s`, `stack`, `slow`, `fast`, `euclid`…). Un ciclo Strudel = un
+  compás. Las notas quedan editables en el piano roll y se reproducen/renderizan como cualquier
+  otra pista. La fuente, el número de compases y los ids de pista se guardan en el proyecto; al
+  recompilar se sustituyen esas pistas. No se ejecuta el motor de audio de Strudel. El LLM también
+  puede escribir la fuente: usa la op `add_code_source` y el navegador la compila al recibir la
+  respuesta. El digest incluye las fuentes `CODE` para que pueda editarlas.
 - **Motor de sintetizador**: no es un modelo neural ni una librería fija. El LLM compone capas
   con osciladores, unísono/detune, FM, pitch envelope, filter envelope, ruido, drive, bitcrush,
   EQ, delay y reverb. Con esos primitivos puede pedir kicks, snares, bajos, plucks, pads, risers,
@@ -252,6 +260,10 @@ web/
   src/timeline.ts timeline + piano roll de clips
   src/editor.ts   editor de notas (modal)
   src/opendaw-engine.ts playback único con WasmEngine + EngineWorklet
+  src/code-lab.ts editor Strudel
+  src/strudel-compiler.ts patrón Strudel → notas MIDI
+  src/strudel-worker.ts worker aislado de Strudel
+  src/strudel-client.ts puente UI ↔ worker
   public/drums/   kit WAV para Playfield
   public/opendaw-wasm/  engine.wasm + plugins del engine
   src/render.ts   mixdown offline a WAV
@@ -317,6 +329,8 @@ docs/
 - Todo el playback (MIDI, batería y WAV) usa openDAW. Los WAV largos se copian a memoria y se
   parten en bloques: el primer ▶ de una canción con 10 stems puede tardar varios segundos.
   Rendered es un motor distinto y no lee la cadena de FX de la pista MIDI.
+- Strudel está integrado como compilador de patrones, no como motor de audio: no soporta
+  samples/efectos propios de `superdough` ni señales continuas. Sonidos desconocidos se avisan.
 - El motor de sintetizador es procedural, no neural: no imita instrumentos acústicos reales ni
   tiene capas de velocidad/round-robin. Para guitarras, voces o pianos reales hace falta una
   librería multimuestra o un modelo de audio con licencia adecuada.

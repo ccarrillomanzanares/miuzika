@@ -600,6 +600,94 @@ textarea:focus {
   border-color: #3a4a6b;
 }
 
+.code-card {
+  width: min(900px, 96vw);
+}
+
+.code-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  overflow: auto;
+}
+
+.code-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.code-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-family: ui-monospace, monospace;
+}
+
+.code-row input,
+.code-row select {
+  background: #12151d;
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 7px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.code-row input.code-name {
+  width: 180px;
+}
+
+.code-row input.code-bars {
+  width: 72px;
+}
+
+.code-row select.code-source {
+  width: 190px;
+}
+
+.code-editor {
+  width: 100%;
+  min-height: 260px;
+  resize: vertical;
+  background: #0d1016;
+  color: #d7e0ee;
+  border: 1px solid #2a3040;
+  border-radius: 8px;
+  padding: 12px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+.code-editor:focus {
+  border-color: #4c6a9a;
+  outline: none;
+}
+
+.code-help {
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-family: ui-monospace, monospace;
+}
+
+.code-help button {
+  font-size: 10.5px;
+  padding: 3px 7px;
+}
+
+.code-status {
+  flex: 1;
+  text-align: right;
+}
+
 .sample-track-label {
   display: flex;
   align-items: center;

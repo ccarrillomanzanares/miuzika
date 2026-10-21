@@ -56,6 +56,13 @@ export function projectDigest(project: Project, options: DigestOptions = {}): st
         .join(" · ")}`,
     );
   }
+  if (project.codeSources && project.codeSources.length > 0) {
+    for (const source of project.codeSources) {
+      lines.push(
+        `CODE ${source.id} "${source.name}" ${source.language} ${source.bars} compases | pistas: ${source.trackIds.join(", ") || "pendiente"} | código: ${source.code.slice(0, 1200)}`,
+      );
+    }
+  }
   lines.push("PISTAS:");
 
   project.tracks.forEach((track, index) => {

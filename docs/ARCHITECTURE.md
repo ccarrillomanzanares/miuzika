@@ -175,6 +175,12 @@ Decisiones:
 - Las pistas de audio se cargan como `AudioFileBox` + `AudioRegionBox`. Los WAV de canción
   completa se parten en bloques de 2 minutos porque el engine no los carga de forma fiable.
   No queda reproductor WebAudio alternativo.
+- Strudel (`web/src/strudel-compiler.ts`) se ejecuta en un worker y se compila a notas MIDI del
+  IR. No se usa su motor de audio; un ciclo equivale a un compás. La fuente queda en
+  `project.codeSources` y las notas generadas son normales y editables.
+- El LLM escribe fuentes con la op `add_code_source` (code + bars); el agente no puede ejecutar
+  Strudel en Node, así que el navegador compila las fuentes pendientes (`compiledAt: ""`) después
+  de `/api/chat`. El digest incluye las fuentes CODE para que el modelo pueda modificarlas.
 
 ## Audio
 

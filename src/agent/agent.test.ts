@@ -58,6 +58,24 @@ test("una op inválida devuelve error y no toca el proyecto", () => {
   assert.equal(session.project.tracks.length, 0);
 });
 
+test("la herramienta apply_ops guarda una fuente Strudel pendiente", () => {
+  const session = new ToolSession(createProject({ name: "Código" }));
+  const result = session.exec("apply_ops", {
+    ops: [
+      {
+        op: "add_code_source",
+        name: "Strudel bass",
+        code: 'note("c2 e2").s("sawtooth")',
+        bars: 8,
+      },
+    ],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(session.project.codeSources?.length, 1);
+  assert.equal(session.project.codeSources?.[0]?.compiledAt, "");
+  assert.match(result.content, /compilará|navegador/i);
+});
+
 test("argumentos no JSON se reportan de forma accionable", () => {
   const session = new ToolSession(createProject());
   const result = session.exec("apply_ops", "{ops: bad}");

@@ -22,6 +22,10 @@
   },
   "dependencies": {
     "@opendaw/studio-sdk": "^0.0.175",
+    "@strudel/core": "^1.2.6",
+    "@strudel/mini": "^1.2.6",
+    "@strudel/tonal": "^1.2.6",
+    "@strudel/transpiler": "^1.2.6",
     "fflate": "^0.8.3",
     "zod": "^4.1.0"
   },

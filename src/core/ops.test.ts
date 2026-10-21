@@ -27,6 +27,34 @@ test("crea pista y genera una parte MIDI", () => {
   assert.deepEqual(project.tracks[0]!.clips[0]!.origin?.section, "intro");
 });
 
+test("add_code_source guarda la fuente pendiente de compilar", () => {
+  const { project } = applyOps(baseProject(), [
+    {
+      op: "add_code_source",
+      name: "Strudel bass",
+      code: 'note("c2 e2 g2").s("sawtooth")',
+      bars: 8,
+    },
+  ]);
+  assert.equal(project.codeSources?.length, 1);
+  assert.equal(project.codeSources?.[0]?.id, "code_strudel_strudel_bass");
+  assert.equal(project.codeSources?.[0]?.trackIds.length, 0);
+  assert.equal(project.codeSources?.[0]?.bars, 8);
+  assert.equal(project.tracks.length, 0);
+});
+
+test("add_code_source con el mismo id reemplaza el código", () => {
+  const first = applyOps(baseProject(), [
+    { op: "add_code_source", id: "code_bass", name: "Bass", code: 's("bd")', bars: 4 },
+  ]).project;
+  const { project } = applyOps(first, [
+    { op: "add_code_source", id: "code_bass", name: "Bass", code: 's("sd")', bars: 8 },
+  ]);
+  assert.equal(project.codeSources?.length, 1);
+  assert.equal(project.codeSources?.[0]?.code, 's("sd")');
+  assert.equal(project.codeSources?.[0]?.bars, 8);
+});
+
 test("generate_part sin trackId crea la pista", () => {
   const { project } = applyOps(baseProject(), [
     {

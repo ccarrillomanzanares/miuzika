@@ -118,6 +118,18 @@ export interface Track {
   clips: Clip[];
 }
 
+export interface CodeSource {
+  id: string;
+  name: string;
+  language: "strudel";
+  code: string;
+  /** Compases que se consultan al patrón. 1 ciclo Strudel = 1 compás. */
+  bars: number;
+  /** Pistas generadas por la última compilación. */
+  trackIds: string[];
+  compiledAt: string;
+}
+
 export interface Project {
   schemaVersion: 1;
   id: string;
@@ -131,6 +143,8 @@ export interface Project {
   tracks: Track[];
   /** Metadatos de los WAV importados (los bytes viven fuera del proyecto). */
   audioAssets?: AudioAsset[];
+  /** Fuentes de código que generaron pistas; las notas viven en tracks. */
+  codeSources?: CodeSource[];
   master: { gainDb: number };
   meta: {
     prompt?: string;
