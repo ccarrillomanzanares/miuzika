@@ -27,7 +27,7 @@ lo que no existe en ningún DAW: **el puente entre el lenguaje natural y el mode
 | Audio WAV: import, waveform, playback | ✅ |
 | Mixdown a WAV | ✅ |
 | Evaluación automática (8 prompts) | ✅ 8/8 |
-| Tests | ✅ 113 + integración real de openDAW |
+| Tests | ✅ 115 + integración real de openDAW |
 | Pistas/clips de audio dentro de openDAW | ✅ `AudioFileBox` + `AudioRegionBox`, WAV partidos en bloques de 2 min |
 
 ## Arranque
@@ -104,9 +104,10 @@ queda el modo audio-only anterior, sin MIDI visible ni enviado al LLM.
   (`Drums Samples`, `Bass Samples`…), así que cada sample va a su propia pista. También puedes
   **descargar el WAV** sin insertarlo. En la UI solo eliges **Sonido (one-shot)** o **Loop**;
   el motor/macro concreto lo decide el LLM según la petición.
-- **Código / Strudel**: botón «Código». Escribes un patrón Strudel y se compila en el worker a
-  pistas MIDI normales (`note`, `s`, `stack`, `slow`, `fast`, `euclid`…). Un ciclo Strudel = un
-  compás. Las notas quedan editables en el piano roll y se reproducen/renderizan como cualquier
+- **Código / Strudel**: botón «Código». Escribes un patrón Strudel (también bloques `$:`) y se
+  compila en el worker a pistas MIDI normales (`note`, `s`, `stack`, `slow`, `fast`, `euclid`…).
+  Un ciclo Strudel = un compás. Las notas quedan editables en el piano roll y se
+  reproducen/renderizan como cualquier
   otra pista. La fuente, el número de compases y los ids de pista se guardan en el proyecto; al
   recompilar se sustituyen esas pistas. No se ejecuta el motor de audio de Strudel. El LLM también
   puede escribir la fuente: usa la op `add_code_source` y el navegador la compila al recibir la
@@ -330,7 +331,9 @@ docs/
   parten en bloques: el primer ▶ de una canción con 10 stems puede tardar varios segundos.
   Rendered es un motor distinto y no lee la cadena de FX de la pista MIDI.
 - Strudel está integrado como compilador de patrones, no como motor de audio: no soporta
-  samples/efectos propios de `superdough` ni señales continuas. Sonidos desconocidos se avisan.
+  samples/efectos propios de `superdough` ni señales continuas. Los sonidos de sample sin `note`
+  (por ejemplo `s("gm_acoustic_bass")` o `s("wt_vgame")`) no se pueden convertir a MIDI y se avisan;
+  usa `note(...).s(...)` o sonidos de kit.
 - El motor de sintetizador es procedural, no neural: no imita instrumentos acústicos reales ni
   tiene capas de velocidad/round-robin. Para guitarras, voces o pianos reales hace falta una
   librería multimuestra o un modelo de audio con licencia adecuada.

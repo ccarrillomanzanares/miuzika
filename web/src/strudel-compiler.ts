@@ -150,6 +150,37 @@ function timeValue(value: any): number | null {
 }
 
 /**
+ * El REPL de Strudel convierte `$: patron` en `patron.p("label")`, un método
+ * de reproducción que aquí no existe. Antes de transpilar, convertimos todos
+ * esos bloques en un único `stack(...)`.
+ */
+export function expandLabeledPatterns(code: string): string {
+  const lines = code.split(/\r?\n/);
+  const blocks: string[] = [];
+  const preamble: string[] = [];
+  let current: string[] | null = null;
+  for (const line of lines) {
+    const label = line.match(/^\s*\$:\s?(.*)$/);
+    if (label) {
+      if (current) blocks.push(current.join("\n").trim());
+      current = [label[1] ?? ""];
+    } else if (current) {
+      current.push(line);
+    } else {
+      preamble.push(line);
+    }
+  }
+  if (current) blocks.push(current.join("\n").trim());
+  if (blocks.length === 0) return code;
+  const intro = preamble.join("\n").trim();
+  const body = blocks
+    .filter((block) => block.length > 0)
+    .map((block) => `  (${block})`)
+    .join(",\n");
+  return `${intro ? `${intro}\n` : ""}stack(\n${body}\n)`;
+}
+
+/**
  * Evalúa `code` en el worker y consulta `bars` ciclos. Un ciclo Strudel se
  * interpreta como un compás del proyecto; `slow(2)` dura dos compases.
  */
@@ -158,7 +189,7 @@ export async function compileStrudelSource(
   bars: number,
   beatsPerBar: number,
 ): Promise<StrudelCompileResult> {
-  const source = code.trim();
+  const source = expandLabeledPatterns(code.trim());
   if (!source) throw new Error("El código Strudel está vacío.");
   if (!(bars >= 1 && bars <= 64)) throw new Error("Los compases deben estar entre 1 y 64.");
   const { transpiler } = await getScope();
@@ -186,12 +217,17 @@ export async function compileStrudelSource(
     const value = hap.value;
     if (!value || typeof value !== "object") continue;
     const sound = value.s ?? value.sound ?? "";
-    const noteRaw = value.note ?? value.n;
+    // `n` en Strudel suele ser el índice del sample (s("kick:2")), no una nota.
+    // Solo convertimos notas explícitas; las muestras sin nota se avisan.
+    const noteRaw = value.note;
     const hasNote = noteRaw !== undefined && noteRaw !== null;
     const target = groupFor(String(sound), hasNote);
     if (!target) {
-      if (String(sound).trim()) {
-        warnings.add(`Sonido sin nota ni kit reconocido: "${String(sound)}"`);
+      const base = soundBase(String(sound));
+      if (base) {
+        warnings.add(
+          `Sample "s:${base}" sin note: no se puede convertir a MIDI. Usa note(...).s(...) o un sonido de kit.`,
+        );
       }
       continue;
     }

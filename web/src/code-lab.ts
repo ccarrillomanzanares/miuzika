@@ -83,7 +83,7 @@ export function openCodeLab(options: CodeLabOptions): void {
         </div>
       </div>
       <footer>
-        <span class="hint">Soporta note/n, s (bd/sd/sawtooth/square/sine…), gain, slow, fast, stack, seq, euclid. 1 ciclo = 1 compás.</span>
+        <span class="hint">Soporta note, s (bd/sd/sawtooth/square/sine…) y bloques $:. 1 ciclo = 1 compás. Los samples tipo gm_…/wt_… sin note no se pueden convertir a MIDI.</span>
         <button class="compile apply">Compilar a pistas</button>
       </footer>
     </div>`;
