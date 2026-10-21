@@ -1,10 +1,10 @@
 /**
  * Reproducción con el motor real de openDAW (WASM si está disponible).
- * Sustituye al PreviewPlayer casero para proyectos MIDI.
+ * Único camino de playback: MIDI, batería Playfield y pistas WAV.
  */
 
 import type { Project as MiuzikaProject } from "../../src/core/types.ts";
-import type { OpenDawDrumSample } from "../../src/host/opendaw/adapter.ts";
+import type { OpenDawAudioAsset, OpenDawDrumSample } from "../../src/host/opendaw/adapter.ts";
 import { projectToOpenDaw } from "../../src/host/opendaw/adapter.ts";
 import workletsUrl from "@opendaw/studio-core/processors.js?url";
 import workersUrl from "@opendaw/studio-core/workers-main.js?worker&url";
@@ -25,6 +25,7 @@ interface EngineBoot {
   context: AudioContext;
   core: typeof import("@opendaw/studio-core");
   UUID: typeof import("@opendaw/lib-std").UUID;
+  Option: typeof import("@opendaw/lib-std").Option;
   AudioData: typeof import("@opendaw/lib-dsp").AudioData;
 }
 
@@ -41,7 +42,7 @@ async function bootEngine(): Promise<EngineBoot> {
       { Project, AudioWorklets, Workers, GlobalSampleLoaderManager },
       { WasmEngine },
       { AnimationFrame },
-      { UUID },
+      { UUID, Option },
       { AudioData },
     ] = await Promise.all([
       import("@opendaw/studio-core"),
@@ -72,6 +73,7 @@ async function bootEngine(): Promise<EngineBoot> {
       context,
       core: { Project, AudioWorklets, Workers, GlobalSampleLoaderManager } as typeof import("@opendaw/studio-core"),
       UUID,
+      Option,
       AudioData,
     };
   })();
@@ -100,15 +102,23 @@ const DRUM_FILES: ReadonlyArray<{ note: number; file: string; name: string }> = 
   { note: 56, file: "cowbell.wav", name: "Cowbell" },
 ];
 
-async function prepareDrumSamples(
+export interface OpenDawAudioInput {
+  name: string;
+  buffer: AudioBuffer;
+}
+
+async function prepareSamples(
   context: AudioContext,
   bpm: number,
   core: typeof import("@opendaw/studio-core"),
   UUID: typeof import("@opendaw/lib-std").UUID,
+  Option: typeof import("@opendaw/lib-std").Option,
   AudioData: typeof import("@opendaw/lib-dsp").AudioData,
   hasDrums: boolean,
+  audioAssets: ReadonlyMap<string, OpenDawAudioInput>,
 ): Promise<{
   attachments: OpenDawDrumSample[];
+  audioFiles: Map<string, OpenDawAudioAsset>;
   sampleManager: unknown;
 }> {
   const samples = new Map<
@@ -119,6 +129,7 @@ async function prepareDrumSamples(
     }
   >();
   const attachments: OpenDawDrumSample[] = [];
+  const audioFiles = new Map<string, OpenDawAudioAsset>();
   if (hasDrums) {
     for (const entry of DRUM_FILES) {
       try {
@@ -152,14 +163,79 @@ async function prepareDrumSamples(
       }
     }
   }
-  const manager = new core.GlobalSampleLoaderManager({
-    fetch: async (uuid: Uint8Array) => {
-      const found = samples.get(UUID.toString(uuid));
-      if (!found) throw new Error(`Sample no registrado: ${UUID.toString(uuid)}`);
-      return [found.data, found.meta];
+  for (const [id, asset] of audioAssets) {
+    const buffer = asset.buffer;
+    const chunks: OpenDawAudioAsset["chunks"][number][] = [];
+    // El engine no carga fiablemente samples de ~4 minutos; partimos los WAV
+    // en bloques de 2 minutos. Sigue siendo el mismo audio, sin recompresión.
+    const chunkFrames = Math.max(1, Math.floor(buffer.sampleRate * 120));
+    const chunkCount = Math.ceil(buffer.length / chunkFrames);
+    for (let index = 0; index < chunkCount; index++) {
+      const startFrame = index * chunkFrames;
+      const frames = Math.min(chunkFrames, buffer.length - startFrame);
+      if (frames <= 0) continue;
+      const data = AudioData.create(buffer.sampleRate, frames, buffer.numberOfChannels);
+      for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+        data.frames[channel]!.set(
+          buffer.getChannelData(channel).subarray(startFrame, startFrame + frames),
+        );
+      }
+      const uuid = UUID.generate();
+      const name = chunkCount > 1 ? `${asset.name} #${index + 1}` : asset.name;
+      const durationInSeconds = frames / buffer.sampleRate;
+      samples.set(UUID.toString(uuid), {
+        data,
+        meta: {
+          name,
+          bpm,
+          duration: durationInSeconds,
+          sample_rate: buffer.sampleRate,
+          origin: "import",
+        },
+      });
+      chunks.push({
+        uuid,
+        name,
+        durationInSeconds,
+        startInSeconds: startFrame / buffer.sampleRate,
+      });
+    }
+    audioFiles.set(id, { chunks, durationInSeconds: buffer.duration });
+  }
+  const loaders = new Map<string, unknown>();
+  for (const [key, { data, meta }] of samples) {
+    const terminator = { terminate: () => {} };
+    const loader = {
+      uuid: key,
+      data: Option.wrap(data),
+      peaks: Option.None,
+      meta: Option.wrap(meta),
+      state: { type: "loaded" as const },
+      subscribe: (observer: (state: unknown) => void) => {
+        observer({ type: "loaded" });
+        return terminator;
+      },
+    };
+    loaders.set(key, loader);
+  }
+  // No usamos GlobalSampleLoaderManager aquí: calcula peaks en un worker y
+  // tarda decenas de segundos con los WAV de canción completa. El engine solo
+  // necesita los datos, y ya están en memoria.
+  const manager = {
+    register: () => ({ terminate: () => {} }),
+    record: () => {},
+    invalidate: () => {},
+    remove: (uuid: Uint8Array) => {
+      loaders.delete(UUID.toString(uuid));
     },
-  } as never);
-  return { attachments, sampleManager: manager };
+    getOrCreate: (uuid: Uint8Array) => {
+      const key = UUID.toString(uuid);
+      const loader = loaders.get(key);
+      if (!loader) throw new Error(`Sample no registrado: ${key}`);
+      return loader;
+    },
+  };
+  return { attachments, audioFiles, sampleManager: manager };
 }
 
 /**
@@ -169,11 +245,24 @@ async function prepareDrumSamples(
 export async function playWithOpenDaw(
   source: MiuzikaProject,
   onTick: (beat: number) => void,
+  audioAssets: ReadonlyMap<string, OpenDawAudioInput> = new Map(),
 ): Promise<OpenDawPlaybackHandle> {
-  const { context, core, UUID, AudioData } = await bootEngine();
+  const { context, core, UUID, Option, AudioData } = await bootEngine();
   const hasDrums = source.tracks.some((track) => track.instrument.type === "drumkit");
-  const prepared = await prepareDrumSamples(context, source.bpm, core, UUID, AudioData, hasDrums);
-  const exported = await projectToOpenDaw(source, { drumSamples: prepared.attachments });
+  const prepared = await prepareSamples(
+    context,
+    source.bpm,
+    core,
+    UUID,
+    Option,
+    AudioData,
+    hasDrums,
+    audioAssets,
+  );
+  const exported = await projectToOpenDaw(source, {
+    drumSamples: prepared.attachments,
+    audioAssets: prepared.audioFiles,
+  });
   const { Project } = core;
 
   const env = {

@@ -172,8 +172,9 @@ Decisiones:
   engine. Hay un solo `AudioContext` por página; `COOP/COEP` viven en `vite.config.ts`.
 - Las pistas de batería Playfield reciben un `SampleProvider` con el kit WAV de
   `web/public/drums`; sin él, Playfield queda en silencio.
-- El audio no se exporta a openDAW: requiere `AudioFileBox` y `SampleService`. Por eso los
-  proyectos con pistas de audio siguen usando el player WebAudio interno.
+- Las pistas de audio se cargan como `AudioFileBox` + `AudioRegionBox`. Los WAV de canción
+  completa se parten en bloques de 2 minutos porque el engine no los carga de forma fiable.
+  No queda reproductor WebAudio alternativo.
 
 ## Audio
 
@@ -214,7 +215,7 @@ Implementado en el spike:
   almacenamiento sea único. Si no hay proyecto pero sí WAV, se crea un proyecto de recuperación.
 - **Modo híbrido** (`src/config.ts`): `MIDI_ENABLED=true` mantiene MIDI como capa de
   composición/edición y audio como capa de sonido. Con `false` se ocultan MIDI, Congelar y
-  openDAW, se filtran pistas MIDI de la timeline/player y se bloquean `/api/generate` y
+  openDAW, se filtran pistas MIDI de la timeline y se bloquean `/api/generate` y
   `/api/chat`. El código y los tests MIDI se conservan.
 - **Edición de secciones de audio** (`web/src/main.ts`): `parseAudioEdit` detecta pista + rango
   de compases y `replaceAudioRange` genera una variación con el sandbox, elimina/parte los clips

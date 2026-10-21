@@ -25,7 +25,6 @@ import { loadDrumKit } from "./drum-kit.ts";
 import { openPianoRoll } from "./editor.ts";
 import { openBounceDialog } from "./bounce-dialog.ts";
 import { openSampleLab } from "./sample-lab.ts";
-import { PreviewPlayer } from "./player.ts";
 import { TimelineView, escapeHtml } from "./timeline.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 
@@ -45,7 +44,6 @@ const statusEl = $("status");
 const songInfo = $("song-info");
 const examples = $("examples");
 
-const player = new PreviewPlayer();
 const timeline = new TimelineView(canvas, wrap, heads);
 
 let project: Project | null = loadStored();
@@ -138,16 +136,15 @@ function renderExamples(): void {
   examples.appendChild(shuffle);
 }
 
+function currentBeat(): number {
+  return openDawHandle?.beat ?? timeline.currentBeat;
+}
+
 timeline.onSeek = (beat) => {
   const view = activeProject(project);
   if (!view) return;
-  if (openDawHandle) {
-    openDawHandle.seek(beat);
-    timeline.draw(beat);
-    return;
-  }
-  if (player.isPlaying) player.play(view, beat);
-  else player.seek(view, beat);
+  if (openDawHandle) openDawHandle.seek(beat);
+  timeline.draw(beat);
 };
 
 timeline.onToggleMute = (trackId) => toggleTracksFlag([trackId], "muted");
@@ -176,8 +173,6 @@ timeline.onEditClip = (trackId, clipId) => {
   });
 };
 
-player.onTick = (beat) => timeline.draw(beat);
-player.onEnd = () => setPlaying(false);
 
 function setStatus(text: string): void {
   statusEl.textContent = text;
@@ -260,18 +255,20 @@ function stopOpenDaw(): void {
 async function startOpenDawPlayback(view: Project): Promise<void> {
   if (openDawHandle) stopOpenDaw();
   const generation = ++openDawGeneration;
-  if (player.isPlaying) {
-    player.stop();
-    setPlaying(false);
-  }
-  setBusy(true, "Arrancando engine openDAW…");
+  setBusy(true, "Cargando WAVs y arrancando openDAW…");
   try {
+    const { missing } = await hydrateProjectAudio(view);
+    warnMissingAudio(missing);
     const { playWithOpenDaw } = await import("./opendaw-engine.ts");
     const endBeat = view.lengthBars * beatsPerBar(view);
-    const handle = await playWithOpenDaw(view, (beat) => {
-      timeline.draw(beat);
-      if (openDawHandle && beat >= endBeat - 0.05) stopOpenDaw();
-    });
+    const handle = await playWithOpenDaw(
+      view,
+      (beat) => {
+        timeline.draw(beat);
+        if (openDawHandle && beat >= endBeat - 0.05) stopOpenDaw();
+      },
+      audioAssets,
+    );
     if (generation !== openDawGeneration) {
       handle.stop();
       return;
@@ -281,13 +278,11 @@ async function startOpenDawPlayback(view: Project): Promise<void> {
     addMessage("assistant", "Reproduciendo con el engine de openDAW.");
   } catch (error) {
     if (generation !== openDawGeneration) return;
+    setPlaying(false);
     addMessage(
       "system",
-      `Engine openDAW no disponible (${error instanceof Error ? error.message : String(error)}). Uso el player interno.`,
+      `No se pudo arrancar el engine de openDAW: ${error instanceof Error ? error.message : String(error)}`,
     );
-    const from = player.beat >= view.lengthBars * beatsPerBar(view) - 0.25 ? 0 : player.beat;
-    player.play(view, from);
-    setPlaying(true);
   } finally {
     setBusy(false);
   }
@@ -509,7 +504,7 @@ function setProject(next: Project | null, record = true): void {
   updateHistoryButtons();
 }
 
-/** Cambio en vivo (mute/solo): no reinicia el player ni el playhead. */
+/** Cambio en vivo (mute/solo): no reinicia el engine ni el playhead. */
 function commitLive(next: Project): void {
   if (!project) return;
   const view = activeProject(next);
@@ -518,7 +513,6 @@ function commitLive(next: Project): void {
   project = next;
   persist();
   timeline.refresh(view);
-  player.setMuteState(view);
   openDawHandle?.syncMix(view);
   updateActions();
   updateHistoryButtons();
@@ -544,10 +538,7 @@ function toggleTracksFlag(ids: string[], flag: "muted" | "solo"): void {
 function applyProject(next: Project | null): void {
   if (openDawHandle) stopOpenDaw();
   else openDawGeneration++;
-  if (player.isPlaying) {
-    player.stop();
-    setPlaying(false);
-  }
+  setPlaying(false);
   project = next;
   persist();
   updateActions();
@@ -1243,34 +1234,13 @@ playButton.addEventListener("click", () => {
     stopOpenDaw();
     return;
   }
-  if (player.isPlaying) {
-    player.stop();
-    setPlaying(false);
-    return;
-  }
-
-  // MIDI puro: engine de openDAW. Mezclas con audio: player interno (SampleService pendiente).
-  if (!view.tracks.some((track) => track.kind === "audio") && view.tracks.some((track) => track.kind === "midi")) {
-    void startOpenDawPlayback(view);
-    return;
-  }
-
-  const end = view.lengthBars * beatsPerBar(view);
-  const from = player.beat >= end - 0.25 ? 0 : player.beat;
-  player.play(view, from);
-  setPlaying(true);
+  void startOpenDawPlayback(view);
 });
 
 stopButton.addEventListener("click", () => {
-  if (openDawHandle) {
-    stopOpenDaw();
-    return;
-  }
+  stopOpenDaw();
   openDawGeneration++;
-  player.stop();
-  setPlaying(false);
-  const view = activeProject(project);
-  if (view) player.seek(view, 0);
+  timeline.draw(0);
 });
 
 undoButton.addEventListener("click", () => void undo());
@@ -1307,7 +1277,7 @@ $("sample-lab").addEventListener("click", () => {
         peaks: computePeaks(result.buffer),
       });
 
-      const bar = Math.min(511, Math.floor(player.beat / beatsPerBar(base)));
+      const bar = Math.min(511, Math.floor(currentBeat() / beatsPerBar(base)));
       const existing = base.tracks.find(
         (track) => track.kind === "audio" && track.name === trackName,
       );
@@ -1436,7 +1406,7 @@ $<HTMLInputElement>("audio-file").addEventListener("change", async (event) => {
   try {
     let current = project;
     let persisted = true;
-    const bar = Math.floor(player.beat / beatsPerBar(current));
+    const bar = Math.floor(currentBeat() / beatsPerBar(current));
     const maxLength = 16 * beatsPerBar(current);
     for (const file of files) {
       const asset = await loadAudioFile(file, current.bpm);
@@ -1631,12 +1601,10 @@ async function boot(): Promise<void> {
 applyMode();
 updateActions();
 void loadDrumKit();
-void player.prepare();
 void boot();
 
 if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__miuzika = {
-    player,
     timeline,
     undo,
     redo,

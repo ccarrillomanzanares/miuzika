@@ -40,6 +40,10 @@ export class TimelineView {
   private selected = new Set<string>();
   private anchor: string | null = null;
 
+  get currentBeat(): number {
+    return this.beat;
+  }
+
   onSeek: (beat: number) => void = () => {};
   onToggleMute: (trackId: string) => void = () => {};
   onToggleSolo: (trackId: string) => void = () => {};

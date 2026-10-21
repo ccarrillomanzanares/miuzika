@@ -19,7 +19,7 @@ mezcla). Lo que sigue explica las decisiones y lo que queda pendiente.
 | Batería Playfield con samples WAV | ✅ `SampleProvider` sobre `web/public/drums` |
 | Mute/solo/volumen/pan en caliente | ✅ `syncMix` actualiza los `AudioUnitBox` del engine |
 | Import de dispositivos | 📋 (se conservan las notas; los FX no se reconstruyen) |
-| Pistas/regiones de audio dentro del engine | 📋 (necesita `AudioFileBox`/`SampleService`; hoy usan el player interno) |
+| Pistas/regiones de audio dentro del engine | ✅ `AudioFileBox` + `AudioRegionBox`; WAV largos partidos en bloques de 2 min |
 
 Comandos:
 
@@ -213,8 +213,8 @@ propios; si no, mantener una tabla `miuzikaId ↔ hostId`.
 
 1. ~~**Spike de SDK**: montar un proyecto en blanco, cargar el WASM y reproducir.~~
    Hecho: `web/src/opendaw-engine.ts` carga el IR como `.odw`, arranca `EngineWorklet` y suena
-   con `WasmEngine`. Las pistas MIDI puras usan este camino; audio/mixto sigue en el player
-   interno.
+   con `WasmEngine`. MIDI, batería Playfield y pistas WAV usan el mismo camino; ya no hay
+   reproductor WebAudio alternativo.
 2. ~~**Adaptador de lectura**: volcar un `Project` nuestro a openDAW.~~ Hecho.
 3. ~~**Adaptador de escritura**: leer un proyecto de openDAW y convertirlo a IR.~~ Hecho para
    notas/pistas/mezcla; los FX no se reconstruyen.
@@ -222,7 +222,9 @@ propios; si no, mantener una tabla `miuzikaId ↔ hostId`.
 5. **Piano roll**: hecho en miuzika (edita el IR); falta sincronizar con el editor de openDAW.
 6. **Render offline**: `OfflineEngineRenderer` para previsualizar dentro de openDAW. Mientras
    tanto, el mixdown usa nuestro renderizador WebAudio (`web/src/render.ts`).
-7. **Audio**: `AudioFileBox` + `SampleService` para exportar los WAV importados.
+7. ~~**Audio**: `AudioFileBox` + `SampleService` para reproducir los WAV.~~
+   Hecho en playback con `AudioFileBox`/`AudioRegionBox`; los WAV largos se parten en chunks
+   de 2 minutos. Falta exportar audio en `.odw`/DAWproject standalone.
 
 ## Checklist de verificación contra el SDK real
 

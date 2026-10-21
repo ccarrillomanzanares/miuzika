@@ -51,9 +51,25 @@ export interface OpenDawDrumSample {
   exclude: boolean;
 }
 
+export interface OpenDawAudioChunk {
+  uuid: Uint8Array;
+  name: string;
+  /** Duración del chunk en segundos. */
+  durationInSeconds: number;
+  /** Offset del chunk dentro del WAV original, en segundos. */
+  startInSeconds: number;
+}
+
+export interface OpenDawAudioAsset {
+  chunks: ReadonlyArray<OpenDawAudioChunk>;
+  durationInSeconds: number;
+}
+
 export interface OpenDawBuildOptions {
   /** Muestras del kit para las pistas Playfield. */
   drumSamples?: OpenDawDrumSample[];
+  /** WAV de las pistas de audio, por id de asset del IR. */
+  audioAssets?: ReadonlyMap<string, OpenDawAudioAsset>;
 }
 
 interface HostEnv {
@@ -73,6 +89,17 @@ function createHeadlessEnv(): HostEnv {
     currentTime: 0,
     sampleRate: 48_000,
     destination: { maxChannelCount: 2 },
+    // CaptureAudio se instancia al crear una pista Tape aunque no se grabe.
+    createGain: () => ({
+      gain: { value: 1 },
+      connect: () => {},
+      disconnect: () => {},
+    }),
+    createStereoPanner: () => ({
+      pan: { value: 0 },
+      connect: () => {},
+      disconnect: () => {},
+    }),
   };
   const noopTerminable = { terminate: () => {} };
   // En Node no hay audio real. El adaptador de openDAW pide un loader para
@@ -127,12 +154,13 @@ export async function projectToOpenDaw(
   source: MiuzikaProject,
   options: OpenDawBuildOptions = {},
 ): Promise<OpenDawExport> {
-  const { core, adapters } = await loadSdk();
+  const { core, adapters, boxes } = await loadSdk();
   const env = createHeadlessEnv();
   const project = core.Project.new(env as never);
   const warnings: string[] = [];
   const stats = { tracks: 0, regions: 0, notes: 0, devices: 0, skippedDevices: 0 };
   const audioUnitByTrack = new Map<string, unknown>();
+  const audioFileByAsset = new Map<string, unknown>();
 
   try {
     project.editing.modify(() => {
@@ -149,7 +177,81 @@ export async function projectToOpenDaw(
 
       for (const track of source.tracks) {
         if (track.kind === "audio") {
-          warnings.push(`"${track.name}": las pistas de audio todavía no se exportan a openDAW`);
+          const product = project.api.createInstrument(
+            adapters.InstrumentFactories.Tape as never,
+            { name: track.name } as never,
+          );
+          const unit = project.boxAdapters.adapterFor(
+            product.audioUnitBox,
+            adapters.AudioUnitBoxAdapter,
+          );
+          unit.namedParameter.volume.setValue(track.gainDb);
+          unit.namedParameter.panning.setValue(track.pan);
+          unit.namedParameter.mute.setValue(track.muted);
+          unit.namedParameter.solo.setValue(track.solo);
+          audioUnitByTrack.set(track.id, product.audioUnitBox);
+          const secondsPerBeat = 60 / source.bpm;
+
+          for (const clip of track.clips) {
+            if (!clip.audio) continue;
+            const info = options.audioAssets?.get(clip.audio.assetId);
+            if (!info) {
+              warnings.push(
+                `"${track.name}" / "${clip.name}": falta el WAV "${clip.audio.assetId}" para openDAW`,
+              );
+              continue;
+            }
+            const offsetSeconds = clip.audio.offset * secondsPerBeat;
+            const lengthSeconds = clip.length * secondsPerBeat;
+            const clipEnd = offsetSeconds + lengthSeconds;
+            for (const chunk of info.chunks) {
+              const overlapStart = Math.max(offsetSeconds, chunk.startInSeconds);
+              const overlapEnd = Math.min(clipEnd, chunk.startInSeconds + chunk.durationInSeconds);
+              if (overlapEnd <= overlapStart) continue;
+              const fileKey = `${clip.audio.assetId}:${chunk.uuid.join("-")}`;
+              let audioFile = audioFileByAsset.get(fileKey);
+              if (!audioFile) {
+                audioFile = boxes.AudioFileBox.create(project.boxGraph, chunk.uuid, (box) => {
+                  box.fileName.setValue(chunk.name);
+                  box.endInSeconds.setValue(chunk.durationInSeconds);
+                });
+                audioFileByAsset.set(fileKey, audioFile);
+              }
+              const regionStartBeats = clip.start + (overlapStart - offsetSeconds) / secondsPerBeat;
+              const regionDurationSeconds = overlapEnd - overlapStart;
+              const waveformOffset = overlapStart - chunk.startInSeconds;
+              const region = project.api.createNotStretchedRegion({
+                boxGraph: project.boxGraph,
+                targetTrack: product.trackBox,
+                audioFileBox: audioFile as never,
+                sample: {
+                  name: chunk.name,
+                  duration: chunk.durationInSeconds,
+                  bpm: 0,
+                  sample_rate: 48_000,
+                  origin: "import",
+                  uuid: chunk.uuid as never,
+                },
+                position: beatsToPulses(regionStartBeats),
+                name: clip.name,
+                gainInDb: clip.audio.gainDb,
+                waveformOffset,
+              });
+              // clip.length/offset viven en beats; la región no estirada usa segundos.
+              region.duration.setValue(regionDurationSeconds);
+              region.loopDuration.setValue(regionDurationSeconds);
+              region.waveformOffset.setValue(waveformOffset);
+              region.gain.setValue(clip.audio.gainDb);
+              stats.regions++;
+            }
+          }
+
+          if (track.devices.length > 0) {
+            warnings.push(
+              `"${track.name}": los FX de pistas de audio aún no se exportan a openDAW`,
+            );
+          }
+          stats.tracks++;
           continue;
         }
 

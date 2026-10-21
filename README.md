@@ -27,7 +27,7 @@ lo que no existe en ningún DAW: **el puente entre el lenguaje natural y el mode
 | Mixdown a WAV | ✅ |
 | Evaluación automática (8 prompts) | ✅ 8/8 |
 | Tests | ✅ 110 + integración real de openDAW |
-| Pistas/clips de audio dentro de openDAW | 📋 pendiente (`AudioFileBox`); de momento usan el player interno |
+| Pistas/clips de audio dentro de openDAW | ✅ `AudioFileBox` + `AudioRegionBox`, WAV partidos en bloques de 2 min |
 
 ## Arranque
 
@@ -81,10 +81,12 @@ queda el modo audio-only anterior, sin MIDI visible ni enviado al LLM.
 
 - **Reproducción**: en proyectos MIDI puros, ▶ carga el proyecto en el engine WASM de
   openDAW (`WasmEngine` + `EngineWorklet`), no en el reproductor WebAudio casero. Las pistas de
-  batería usan Playfield y un `SampleProvider` con el kit WAV de `web/public/drums`. Mute, solo,
-  volumen y pan se aplican en caliente al proyecto vivo del engine. Si el proyecto contiene
-  pistas de audio, ▶ usa el player interno hasta completar `AudioFileBox`. El servidor de Vite
-  envía `COOP/COEP` para habilitar `SharedArrayBuffer`.
+  batería usan Playfield y un `SampleProvider` con el kit WAV de `web/public/drums`. Las pistas
+  de audio (incluidos los `[Rendered]`) se cargan como `AudioFileBox`/`AudioRegionBox`; los WAV
+  largos se parten en bloques de 2 minutos porque el engine no carga samples de canción completa
+  de forma fiable. No hay reproductor WebAudio alternativo. Mute, solo, volumen y pan se aplican
+  en caliente al proyecto vivo del engine. El servidor de Vite envía `COOP/COEP` para habilitar
+  `SharedArrayBuffer`.
 - **Chat**: los prompts de samples (“crea un kick industrial”, “lo mismo para batería y bajo”)
   van al planificador de samples + sandbox Python; los prompts de canción/edición MIDI van al
   planner/agente. También puede cambiar una sección: “cambia los compases 25 a 29 del Bass con
@@ -249,8 +251,7 @@ web/
   src/main.ts     chat, estado, exportaciones
   src/timeline.ts timeline + piano roll de clips
   src/editor.ts   editor de notas (modal)
-  src/player.ts   reproducción WebAudio (fallback con audio)
-  src/opendaw-engine.ts playback MIDI con WasmEngine + EngineWorklet
+  src/opendaw-engine.ts playback único con WasmEngine + EngineWorklet
   public/drums/   kit WAV para Playfield
   public/opendaw-wasm/  engine.wasm + plugins del engine
   src/render.ts   mixdown offline a WAV
@@ -313,9 +314,9 @@ docs/
 - Si solo sobreviven los WAV, el recuperador los coloca al inicio como pistas sueltas; no puede
   reconstruir la posición original de los clips.
 - El export a openDAW no incluye las pistas de audio (`SampleService`/`AudioFileBox` pendiente).
-- El playback de proyectos MIDI usa openDAW; los proyectos con audio o mezclas siguen en el
-  player WebAudio hasta completar el `SampleService`. Rendered es un motor distinto y no lee la
-  cadena de FX de la pista MIDI.
+- Todo el playback (MIDI, batería y WAV) usa openDAW. Los WAV largos se copian a memoria y se
+  parten en bloques: el primer ▶ de una canción con 10 stems puede tardar varios segundos.
+  Rendered es un motor distinto y no lee la cadena de FX de la pista MIDI.
 - El motor de sintetizador es procedural, no neural: no imita instrumentos acústicos reales ni
   tiene capas de velocidad/round-robin. Para guitarras, voces o pianos reales hace falta una
   librería multimuestra o un modelo de audio con licencia adecuada.
