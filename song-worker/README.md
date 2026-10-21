@@ -5,9 +5,10 @@ agente de canción; no es un sintetizador en tiempo real.
 
 ## Composición
 
-- `template/song_data.py`: plantilla de composición. Define secciones, acordes,
-  patrones y capas.
-- `examples/filament_song_data.py`: ejemplo completo de 140 compases.
+- `template/song_data.py`: plantilla **neutra** de 8 compases. Solo muestra el
+  contrato; no contiene la composición de Filament.
+- `examples/filament_song_data.py`: ejemplo completo de 140 compases, fuera del
+  workspace del agente.
 - El agente escribe `song_data.py` en un workspace y ejecuta el renderer.
 
 ## Render
