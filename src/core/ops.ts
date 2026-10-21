@@ -624,6 +624,7 @@ function applyOne(project: Project, op: ParsedOp): string {
         // reemplazarlas; compiledAt vacío marca la fuente como pendiente.
         trackIds: index >= 0 ? sources[index]!.trackIds : [],
         compiledAt: "",
+        mode: "midi" as const,
       };
       if (index >= 0) sources[index] = source;
       else sources.push(source);

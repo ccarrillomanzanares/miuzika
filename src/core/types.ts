@@ -128,6 +128,10 @@ export interface CodeSource {
   /** Pistas generadas por la última compilación. */
   trackIds: string[];
   compiledAt: string;
+  /** MIDI editable o audio renderizado con el motor real de Strudel. */
+  mode?: "midi" | "audio";
+  /** Asset WAV cuando mode es audio. */
+  assetId?: string;
 }
 
 export interface Project {

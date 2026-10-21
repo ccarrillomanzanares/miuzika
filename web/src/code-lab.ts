@@ -13,9 +13,17 @@ export interface CodeCompileRequest {
   result: StrudelCompileResult;
 }
 
+export interface CodeAudioRequest {
+  sourceId: string;
+  name: string;
+  code: string;
+  bars: number;
+}
+
 export interface CodeLabOptions {
   project: Project;
   onCompile: (request: CodeCompileRequest) => Promise<void>;
+  onRenderAudio: (request: CodeAudioRequest) => Promise<void>;
 }
 
 const DEFAULT_CODE = `stack(
@@ -58,7 +66,7 @@ export function openCodeLab(options: CodeLabOptions): void {
   overlay.innerHTML = `
     <div class="modal-card code-card">
       <header>
-        <div><strong>Strudel → pistas</strong><span>1 ciclo = 1 compás · el código solo genera notas MIDI</span></div>
+        <div><strong>Strudel → pistas</strong><span>1 ciclo = 1 compás · MIDI editable o audio con samples</span></div>
         <button class="close" title="Cerrar">×</button>
       </header>
       <div class="code-body">
@@ -83,7 +91,8 @@ export function openCodeLab(options: CodeLabOptions): void {
         </div>
       </div>
       <footer>
-        <span class="hint">Soporta note, s (bd/sd/sawtooth/square/sine…) y bloques $:. 1 ciclo = 1 compás. Los samples tipo gm_…/wt_… sin note no se pueden convertir a MIDI.</span>
+        <span class="hint">Compilar = MIDI editable (sin samples). Renderizar audio = motor real de Strudel con samples y efectos.</span>
+        <button class="render-audio">Renderizar audio</button>
         <button class="compile apply">Compilar a pistas</button>
       </footer>
     </div>`;
@@ -95,6 +104,7 @@ export function openCodeLab(options: CodeLabOptions): void {
   const editor = overlay.querySelector<HTMLTextAreaElement>(".code-editor")!;
   const status = overlay.querySelector<HTMLElement>(".code-status")!;
   const compile = overlay.querySelector<HTMLButtonElement>(".compile")!;
+  const renderAudio = overlay.querySelector<HTMLButtonElement>(".render-audio")!;
   const example = overlay.querySelector<HTMLButtonElement>(".code-example")!;
 
   const fill = (source?: CodeSource): void => {
@@ -141,6 +151,7 @@ export function openCodeLab(options: CodeLabOptions): void {
       ? sourceSelect.value
       : `code_strudel_${slug(name)}`;
     compile.disabled = true;
+    renderAudio.disabled = true;
     status.textContent = "Compilando en el worker…";
     try {
       const result = await compileStrudelInWorker(code, bars, beatsPerBar(options.project));
@@ -156,6 +167,40 @@ export function openCodeLab(options: CodeLabOptions): void {
       status.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
       compile.disabled = false;
+      renderAudio.disabled = false;
+    }
+  });
+
+  renderAudio.addEventListener("click", async () => {
+    const name = nameInput.value.trim();
+    const code = editor.value.trim();
+    const bars = Number(barsInput.value);
+    if (!name) {
+      status.textContent = "Pon un nombre a la fuente.";
+      return;
+    }
+    if (!Number.isInteger(bars) || bars < 1 || bars > 64) {
+      status.textContent = "Compases debe ser un entero entre 1 y 64.";
+      return;
+    }
+    if (!code) {
+      status.textContent = "El código está vacío.";
+      return;
+    }
+    const sourceId = sourceSelect.value
+      ? sourceSelect.value
+      : `code_strudel_${slug(name)}`;
+    compile.disabled = true;
+    renderAudio.disabled = true;
+    status.textContent = "Renderizando audio con Strudel…";
+    try {
+      await options.onRenderAudio({ sourceId, name, code, bars });
+      status.textContent = "Audio renderizado e insertado como pista de audio.";
+    } catch (error) {
+      status.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
+    } finally {
+      compile.disabled = false;
+      renderAudio.disabled = false;
     }
   });
 }

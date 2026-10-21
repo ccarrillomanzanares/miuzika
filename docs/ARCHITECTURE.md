@@ -181,6 +181,9 @@ Decisiones:
 - El LLM escribe fuentes con la op `add_code_source` (code + bars); el agente no puede ejecutar
   Strudel en Node, así que el navegador compila las fuentes pendientes (`compiledAt: ""`) después
   de `/api/chat`. El digest incluye las fuentes CODE para que el modelo pueda modificarlas.
+- Para samples/efectos reales, `web/src/strudel-audio.ts` ejecuta `superdough` en un
+  `OfflineAudioContext`, renderiza la ventana de compases y registra el WAV como audio asset +
+  pista de audio de openDAW. El código queda en `codeSources` con `mode: "audio"`.
 
 ## Audio
 

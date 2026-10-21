@@ -26,8 +26,9 @@ import { openPianoRoll } from "./editor.ts";
 import { openBounceDialog } from "./bounce-dialog.ts";
 import { openSampleLab } from "./sample-lab.ts";
 import { openCodeLab } from "./code-lab.ts";
-import type { CodeCompileRequest } from "./code-lab.ts";
+import type { CodeAudioRequest, CodeCompileRequest } from "./code-lab.ts";
 import { compileStrudelInWorker } from "./strudel-client.ts";
+import { renderStrudelAudio } from "./strudel-audio.ts";
 import { TimelineView, escapeHtml } from "./timeline.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 
@@ -1288,6 +1289,7 @@ function buildStrudelProject(
     bars: request.bars,
     trackIds: newTrackIds.filter((_, index) => request.result.groups[index]!.notes.length > 0),
     compiledAt: new Date().toISOString(),
+    mode: "midi",
   };
   next.codeSources = [
     ...(next.codeSources ?? []).filter((candidate) => candidate.id !== source.id),
@@ -1315,7 +1317,9 @@ async function applyStrudelCompilation(request: CodeCompileRequest): Promise<voi
 
 /** Compila las fuentes que el agente añadió mediante add_code_source. */
 async function compilePendingCodeSources(sourceProject: Project): Promise<Project> {
-  const pending = (sourceProject.codeSources ?? []).filter((source) => source.compiledAt === "");
+  const pending = (sourceProject.codeSources ?? []).filter(
+    (source) => source.compiledAt === "" && (source.mode ?? "midi") === "midi",
+  );
   if (pending.length === 0) return sourceProject;
   let next = sourceProject;
   for (const source of pending) {
@@ -1340,11 +1344,86 @@ async function compilePendingCodeSources(sourceProject: Project): Promise<Projec
   return next;
 }
 
+/** Renderiza con el motor real de Strudel y lo inserta como pista de audio. */
+async function renderStrudelAudioSource(request: CodeAudioRequest): Promise<void> {
+  const base = project;
+  if (!base) throw new Error("No hay proyecto abierto.");
+  const barBeats = beatsPerBar(base);
+  const rendered = await renderStrudelAudio(request.code, request.bars, base.bpm, barBeats);
+  const assetId = `aud_strudel_${request.sourceId}_${Date.now().toString(36)}`;
+  const assetName = `${request.name} [Strudel]`;
+  audioAssets.set(assetId, {
+    id: assetId,
+    name: assetName,
+    buffer: rendered.buffer,
+    durationBeats: request.bars * barBeats,
+    peaks: computePeaks(rendered.buffer),
+  });
+  if (!(await persistAudioAsset(assetId, assetName, request.bars * barBeats, rendered.blob))) {
+    addMessage("system", "El audio Strudel suena en esta sesión, pero no se pudo guardar en IndexedDB.");
+  }
+
+  const previous = base.codeSources?.find((source) => source.id === request.sourceId);
+  const oldTrackIds = previous?.trackIds.filter((id) =>
+    base.tracks.some((track) => track.id === id),
+  ) ?? [];
+  const trackId = `trk_${request.sourceId}_audio`.slice(0, 64);
+  const removeIds = [...new Set([...oldTrackIds, ...(base.tracks.some((t) => t.id === trackId) ? [trackId] : [])])];
+  const ops: Op[] = removeIds.map((id) => ({ op: "remove_track", trackId: id }));
+  ops.push({
+    op: "register_audio_asset",
+    assetId,
+    name: assetName,
+    durationBeats: request.bars * barBeats,
+  });
+  ops.push({
+    op: "add_track",
+    id: trackId,
+    name: `${request.name} · audio`.slice(0, 60),
+    kind: "audio",
+    instrument: { type: "sampler" },
+  });
+  ops.push({
+    op: "add_audio_clip",
+    trackId,
+    assetId,
+    startBar: 0,
+    lengthBeats: request.bars * barBeats,
+    name: assetName.slice(0, 60),
+  });
+  const { project: next } = applyOps(base, ops);
+  const source: CodeSource = {
+    id: request.sourceId,
+    name: request.name,
+    language: "strudel",
+    code: request.code,
+    bars: request.bars,
+    trackIds: [trackId],
+    compiledAt: new Date().toISOString(),
+    mode: "audio",
+    assetId,
+  };
+  next.codeSources = [
+    ...(next.codeSources ?? []).filter((candidate) => candidate.id !== source.id),
+    source,
+  ];
+  setProject(next);
+  addMessage(
+    "assistant",
+    `Strudel audio “${request.name}”: ${rendered.durationSeconds.toFixed(1)} s renderizados con el motor real y añadidos como pista de audio.`,
+  );
+  for (const warning of rendered.warnings) addMessage("system", `Strudel audio: ${warning}`);
+}
+
 function openCodeEditor(): void {
   if (!ready) return;
   if (!project) setProject(createProject({ name: "Strudel", bpm: 120 }));
   if (!project) return;
-  openCodeLab({ project, onCompile: applyStrudelCompilation });
+  openCodeLab({
+    project,
+    onCompile: applyStrudelCompilation,
+    onRenderAudio: renderStrudelAudioSource,
+  });
 }
 
 // --- Eventos ---------------------------------------------------------------
