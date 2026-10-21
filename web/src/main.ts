@@ -29,6 +29,7 @@ import { openCodeLab } from "./code-lab.ts";
 import type { CodeAudioRequest, CodeCompileRequest } from "./code-lab.ts";
 import { compileStrudelInWorker } from "./strudel-client.ts";
 import { renderStrudelAudio } from "./strudel-audio.ts";
+import { exportProjectBundle, importProjectBundle } from "./project-bundle.ts";
 import { TimelineView, escapeHtml } from "./timeline.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 
@@ -227,6 +228,7 @@ function updateActions(): void {
   $<HTMLButtonElement>("export-midi").disabled = !enabled || !hasMidi;
   $<HTMLButtonElement>("export-opendaw").disabled = !enabled || !hasMidi;
   $<HTMLButtonElement>("export-json").disabled = !enabled || !hasProject;
+  $<HTMLButtonElement>("save-bundle").disabled = !enabled || !hasProject;
   $<HTMLInputElement>("audio-file").disabled = !enabled || !hasProject;
   $<HTMLInputElement>("open").disabled = !enabled;
   $<HTMLSelectElement>("master-target").disabled = !enabled || !hasTracks;
@@ -1553,6 +1555,25 @@ $("export-json").addEventListener("click", () => {
   );
 });
 
+$("save-bundle").addEventListener("click", async () => {
+  const view = activeProject(project);
+  if (!ready || !view || busy) return;
+  setBusy(true, "Empaquetando proyecto y WAVs…");
+  try {
+    const result = await exportProjectBundle(view);
+    download(result.blob, `${slug(view.name)}.miuzika.zip`);
+    addMessage(
+      "assistant",
+      `Proyecto guardado con MIDI, metadatos y WAVs (${(result.blob.size / 1024 / 1024).toFixed(1)} MB).`,
+    );
+    for (const warning of result.warnings) addMessage("system", warning);
+  } catch (error) {
+    addMessage("system", `No se pudo empaquetar el proyecto: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    setBusy(false);
+  }
+});
+
 $("export-opendaw").addEventListener("click", async () => {
   if (!ready || !project || project.tracks.length === 0) return;
   setBusy(true, "Generando proyecto openDAW…");
@@ -1659,13 +1680,24 @@ $<HTMLInputElement>("open").addEventListener("change", async (event) => {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   if (!ready || !file) return;
-  setBusy(true, "Cargando audio…");
+  setBusy(true, "Cargando proyecto…");
   try {
-    const parsed = JSON.parse(await file.text()) as Project;
-    if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.tracks)) throw new Error("Formato no reconocido");
+    let parsed: Project;
+    let bundleWarnings: string[] = [];
+    if (/\.(miuzika\.)?zip$/i.test(file.name)) {
+      const imported = await importProjectBundle(file);
+      parsed = imported.project;
+      bundleWarnings = imported.warnings;
+    } else {
+      parsed = JSON.parse(await file.text()) as Project;
+      if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.tracks)) {
+        throw new Error("Formato no reconocido");
+      }
+    }
     const { missing } = await hydrateProjectAudio(parsed);
     setProject(parsed);
     addMessage("assistant", `Abierto “${parsed.name}”.`);
+    for (const warning of bundleWarnings) addMessage("system", warning);
     warnMissingAudio(missing);
   } catch (error) {
     addMessage("system", `No se pudo abrir: ${error instanceof Error ? error.message : String(error)}`);

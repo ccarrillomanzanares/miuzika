@@ -213,6 +213,10 @@ Estas deben pasar antes de considerar la build publicable.
 - [ ] **J4. WAV ausente**
   - Pasos: borrar un asset de IndexedDB y abrir el proyecto.
   - Esperado: aviso de audio faltante; no crash.
+- [ ] **J5. Bundle completo MIDI + WAV**
+  - Pasos: pulsar **Proyecto**, crear otro proyecto y abrir el `.miuzika.zip`.
+  - Esperado: MIDI, WAVs, clips y disposición vuelven con sus ids originales;
+  abrir el JSON solo no debe prometer los WAVs.
 
 ### Errores y seguridad
 

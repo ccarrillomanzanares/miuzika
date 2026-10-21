@@ -36,7 +36,8 @@
           <button id="export-midi" title="Exportar MIDI (solo pistas MIDI)" data-midi-only hidden disabled>MIDI</button>
           <button id="export-opendaw" title="Exportar a openDAW (solo pistas MIDI por ahora)" data-midi-only hidden disabled>openDAW</button>
           <button id="export-json" title="Proyecto canónico: metadatos; no incluye los WAV" disabled>JSON</button>
-          <label class="file">Abrir<input id="open" type="file" accept=".json,application/json" /></label>
+          <button id="save-bundle" title="Guardar proyecto completo: JSON + WAVs en un ZIP" disabled>Proyecto</button>
+          <label class="file" title="Abrir JSON o bundle .miuzika.zip">Abrir<input id="open" type="file" accept=".json,.zip,.miuzika.zip,application/json,application/zip" /></label>
           <label class="file">Audio<input id="audio-file" type="file" accept="audio/*" multiple /></label>
           <button id="sample-lab" title="Diseñar un sample con el LLM">Sample Lab</button>
           <button id="code-lab" title="Escribir un patrón Strudel y convertirlo en pistas MIDI">Código</button>

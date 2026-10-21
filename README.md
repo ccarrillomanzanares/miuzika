@@ -28,7 +28,8 @@ y Rendered añade un motor Python para stems de sonido.
 - **Sample Lab**: el LLM diseña un sample, Python lo renderiza y se inserta como
   clip de audio.
 - **Audio WAV**: importación, waveform, clips, persistencia en IndexedDB.
-- **Exportación**: WAV, stems por pista, MIDI SMF tipo 1, JSON y `.odw` de openDAW.
+- **Exportación**: WAV, stems por pista, MIDI SMF tipo 1, JSON, bundle de proyecto
+  `.miuzika.zip` y `.odw` de openDAW.
 - **Persistencia**: proyecto e historial en `localStorage` + IndexedDB; WAVs en
   IndexedDB y recuperación de assets huérfanos.
 
@@ -200,6 +201,9 @@ docs/                   arquitectura y notas de openDAW
   (`miuzika-projects`).
 - Los WAVs viven en IndexedDB (`miuzika` / `audio-assets`).
 - El JSON del proyecto guarda metadatos, no los bytes de audio.
+- **Proyecto** descarga un `.miuzika.zip` autocontenido con `project.json` + todos los
+  WAVs. **Abrir** acepta ese ZIP y restaura MIDI, audio y assets con sus ids
+  originales. Es la forma recomendada de cambiar de proyecto o moverlo de máquina.
 - Al arrancar se recupera la última copia de IndexedDB y se rehidratan los WAVs.
 - Si solo quedan WAVs, se crea un proyecto de recuperación con una pista por WAV.
 - El origen importa: usa siempre `http://localhost:5173`.
