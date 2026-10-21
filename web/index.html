@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>miuzika · asistente de composición</title>
+    <script>
+      // Un único origen de almacenamiento: siempre localhost, nunca 127.0.0.1.
+      if (location.hostname === "127.0.0.1" || location.hostname === "[::1]") {
+        location.replace(
+          `http://localhost${location.port ? `:${location.port}` : ""}${location.pathname}${location.search}${location.hash}`,
+        );
+      }
+    </script>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>

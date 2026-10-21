@@ -10,7 +10,7 @@ export interface StoredAudioAsset {
 
 const DB_NAME = "miuzika";
 const STORE_NAME = "audio-assets";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let database: Promise<IDBDatabase | null> | null = null;
 
@@ -90,4 +90,9 @@ export async function putAudioAsset(asset: StoredAudioAsset): Promise<boolean> {
 
 export async function getAudioAsset(id: string): Promise<StoredAudioAsset | null> {
   return readAsset((store) => store.get(id));
+}
+
+export async function listAudioAssets(): Promise<StoredAudioAsset[]> {
+  const result = await readAsset((store) => store.getAll());
+  return Array.isArray(result) ? (result as StoredAudioAsset[]) : [];
 }

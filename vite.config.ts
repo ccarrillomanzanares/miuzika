@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [miuzikaApi()],
   server: {
     port: 5173,
-    host: "127.0.0.1",
+    host: "localhost",
   },
   preview: {
     port: 4173,

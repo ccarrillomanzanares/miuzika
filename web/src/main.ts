@@ -2,6 +2,13 @@ import type { InstrumentType, Project, Track } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
 import type { SampleRequest } from "../../src/agent/sample-plan.ts";
 import { MIDI_ENABLED } from "../../src/config.ts";
+import { listAudioAssets } from "./audio-db.ts";
+import {
+  loadHistoryFromDb,
+  loadProjectFromDb,
+  saveHistoryToDb,
+  saveProjectToDb,
+} from "./project-db.ts";
 import { createProject, projectStats } from "../../src/core/project.ts";
 import { projectToMidi } from "../../src/core/midi.ts";
 import { applyOps } from "../../src/core/ops.ts";
@@ -45,6 +52,7 @@ let busy = false;
 let ready = false;
 let restoring = false;
 let selectedTrackIds: string[] = [];
+let persistenceWarned = false;
 
 const HISTORY_KEY = "miuzika.history";
 const HISTORY_LIMIT = 8;
@@ -261,9 +269,36 @@ function addAudioMessage(blob: Blob, text: string): void {
   messages.scrollTop = messages.scrollHeight;
 }
 
+function warnPersistence(message: string): void {
+  if (persistenceWarned) return;
+  persistenceWarned = true;
+  addMessage("system", message);
+}
+
 function persist(): void {
-  if (project) localStorage.setItem("miuzika.project", JSON.stringify(project));
-  else localStorage.removeItem("miuzika.project");
+  if (project) {
+    try {
+      localStorage.setItem("miuzika.project", JSON.stringify(project));
+    } catch {
+      // Evita que al recargar se lea una versión vieja de localStorage.
+      try {
+        localStorage.removeItem("miuzika.project");
+      } catch {
+        /* noop */
+      }
+      warnPersistence("No se pudo guardar el proyecto en localStorage; se guardará en IndexedDB.");
+    }
+    void saveProjectToDb(project).then((ok) => {
+      if (!ok) warnPersistence("No se pudo guardar el proyecto en IndexedDB. Exporta el JSON cuanto antes.");
+    });
+  } else {
+    try {
+      localStorage.removeItem("miuzika.project");
+    } catch {
+      /* noop */
+    }
+    void saveProjectToDb(null);
+  }
 }
 
 function loadStored(): Project | null {
@@ -291,17 +326,69 @@ function loadHistory(): Project[] {
   }
 }
 
+interface AudioRecovery {
+  project: Project;
+  assets: number;
+}
+
+/** Si el proyecto se perdió pero los WAV siguen en IndexedDB, crea pistas recuperables. */
+async function recoverOrphanAudio(): Promise<AudioRecovery | null> {
+  const stored = await listAudioAssets();
+  if (stored.length === 0) return null;
+  const base = createProject({ name: "Audio recuperado", lengthBars: 32 });
+  const barBeats = beatsPerBar(base);
+  const ops: Op[] = [];
+  const limit = Math.min(stored.length, 32);
+  for (let index = 0; index < limit; index++) {
+    const asset = stored[index]!;
+    if (!(asset.blob instanceof Blob)) continue;
+    const name = (asset.name || `Audio ${index + 1}`).slice(0, 60);
+    const trackId = `trk_recover_${index}`;
+    const durationBeats = Math.max(1, asset.durationBeats || barBeats);
+    ops.push(
+      {
+        op: "add_track",
+        id: trackId,
+        name,
+        kind: "audio",
+        instrument: { type: sampleInstrument(undefined, name) },
+        gainDb: 0,
+        pan: 0,
+      },
+      {
+        op: "register_audio_asset",
+        assetId: asset.id,
+        name: asset.name,
+        durationBeats,
+      },
+      {
+        op: "add_audio_clip",
+        trackId,
+        assetId: asset.id,
+        startBar: 0,
+        offsetBeats: 0,
+        lengthBeats: Math.min(durationBeats, 64 * barBeats),
+        gainDb: 0,
+        name,
+      },
+    );
+  }
+  if (ops.length === 0) return null;
+  try {
+    return { project: applyOps(base, ops).project, assets: stored.length };
+  } catch {
+    return null;
+  }
+}
+
 function saveHistory(): void {
   try {
     while (history.length > 0 && JSON.stringify(history).length > 4_000_000) history.shift();
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
   } catch {
-    try {
-      localStorage.removeItem(HISTORY_KEY);
-    } catch {
-      /* sin historial persistente */
-    }
+    warnPersistence("El historial no cabe en localStorage; queda en memoria e IndexedDB.");
   }
+  void saveHistoryToDb(history);
 }
 
 function updateHistoryButtons(): void {
@@ -1385,6 +1472,28 @@ renderExamples();
 // --- Arranque --------------------------------------------------------------
 
 async function boot(): Promise<void> {
+  let restoredFromDb = false;
+  let recoveredAssets = 0;
+
+  if (!project) {
+    const stored = await loadProjectFromDb();
+    if (stored) {
+      project = stored;
+      restoredFromDb = true;
+    }
+  }
+  if (history.length === 0) {
+    const storedHistory = await loadHistoryFromDb();
+    if (storedHistory.length > 0) history = storedHistory.slice(-HISTORY_LIMIT);
+  }
+  if (!project) {
+    const recovered = await recoverOrphanAudio();
+    if (recovered) {
+      project = recovered.project;
+      recoveredAssets = recovered.assets;
+    }
+  }
+
   const hasAudio = Boolean(
     project &&
       ((project.audioAssets?.length ?? 0) > 0 ||
@@ -1407,6 +1516,15 @@ async function boot(): Promise<void> {
   if (project) {
     setProject(project, false);
     addMessage("assistant", `Proyecto cargado: “${project.name}”. Pide cambios o pulsa ▶.`);
+    if (restoredFromDb) {
+      addMessage("system", "Proyecto recuperado desde IndexedDB (localStorage no tenía una copia).");
+    }
+    if (recoveredAssets > 0) {
+      addMessage(
+        "system",
+        `He encontrado ${recoveredAssets} WAV sueltos en IndexedDB y he creado un proyecto de recuperación con una pista por WAV. La disposición original no se puede reconstruir.`,
+      );
+    }
     if (!MIDI_ENABLED && project.tracks.some((track) => track.kind === "midi")) {
       addMessage(
         "system",

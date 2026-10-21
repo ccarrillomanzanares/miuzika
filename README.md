@@ -70,7 +70,9 @@ npm run compose -- --agent --project out/noche.json "sube el reverb del track 2"
 
 ### La app web
 
-`npm run dev` levanta Vite y la API local (la clave del LLM nunca llega al navegador).
+`npm run dev` levanta Vite y la API local en **`http://localhost:5173`** (la clave del LLM
+nunca llega al navegador). El servidor escucha solo en `localhost`; `127.0.0.1` no es un origen
+válido para no separar el almacenamiento.
 
 **Modo actual: híbrido.** `src/config.ts` tiene `MIDI_ENABLED=true`: MIDI es la capa de
 composición/edición y el audio (samples + Rendered) la capa de sonido. Si se pone a `false`
@@ -113,10 +115,13 @@ queda el modo audio-only anterior, sin MIDI visible ni enviado al LLM.
 - **Rendered**: con pistas MIDI seleccionadas, renderiza una pista Python por track con las
   voces de Rendered, añade una pista `[Rendered]` y silencia la MIDI original para comparar.
   Es el A/B contra el motor WebAudio; se puede deshacer.
-- **Audio persistente**: los WAV importados, los del Sample Lab y las pistas congeladas se
-  guardan en IndexedDB (`miuzika` / `audio-assets`) y se rehidratan al recargar, también al
-  deshacer/rehacer. El JSON solo lleva metadatos: al abrirlo en otro navegador hay que reimportar
-  los WAV.
+- **Proyecto persistente**: el proyecto y el historial se guardan en `localStorage` y también en
+  IndexedDB (`miuzika-projects`). Si `localStorage` falla por cuota, la copia de IndexedDB sigue.
+  Al arrancar, si no hay proyecto local, se recupera la última copia de IndexedDB.
+- **WAV persistentes**: los importados, los del Sample Lab y los de Congelar/Rendered viven en
+  IndexedDB (`miuzika` / `audio-assets`) y se rehidratan al recargar. Si se perdió el proyecto
+  pero quedan WAV, se crea un proyecto de recuperación con una pista por WAV al inicio (la
+  disposición original no se reconstruye). El JSON solo lleva metadatos.
 - **Audio**: botón «Audio» importa WAV al playhead, dibuja la forma de onda y lo reproduce.
 - **WAV**: mixdown final del proyecto con master, limitador y normalización de loudness.
 - **Stems**: un WAV por pista, con sus FX y sin máster; exporta todas o solo la selección.
@@ -242,6 +247,7 @@ web/
   src/synth.ts    síntesis compartida preview/mixdown
   src/audio-store.ts  WAV decodificados, peaks y rehidratación
   src/audio-db.ts IndexedDB de bytes WAV
+  src/project-db.ts IndexedDB de proyecto + historial
   src/industrial.ts   motor DSP de one-shot industrial (Sample Lab)
   src/config.ts       flag MIDI_ENABLED / AUDIO_ONLY
 rendered/             motor Python Rendered (dsp_core + voces + mezcla)
@@ -292,6 +298,10 @@ docs/
 - IndexedDB puede llenarse con proyectos largos (un stem de 2:40 ronda 30 MB); el navegador puede
   pedir más espacio o rechazar la escritura, y en ese caso la app avisa y mantiene el audio solo en
   la sesión.
+- El proyecto se guarda por origen. Usa siempre `http://localhost:5173`; `127.0.0.1` y otros
+  puertos tienen otro almacenamiento. Si se borran los datos del sitio, no hay recuperación.
+- Si solo sobreviven los WAV, el recuperador los coloca al inicio como pistas sueltas; no puede
+  reconstruir la posición original de los clips.
 - El export a openDAW no incluye las pistas de audio (`SampleService`/`AudioFileBox` pendiente).
 - El preview reproduce MIDI con WebAudio y audio con clips; Rendered es un motor distinto y no
   lee la cadena de FX de la pista MIDI.

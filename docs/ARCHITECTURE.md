@@ -202,6 +202,10 @@ Implementado en el spike:
 - **Rendered** (`src/agent/rendered-track.ts`, `sandbox/sound/render_track.py`): renderiza las
   pistas MIDI seleccionadas con las voces Python de `rendered/`; añade una pista `[Rendered]` y
   silencia la MIDI original para comparar. Es el A/B contra Congelar/WebAudio.
+- **Persistencia**: `localStorage` guarda proyecto/historial para arranque rápido; IndexedDB
+  (`miuzika-projects`) mantiene una copia del proyecto y del historial si la cuota falla. Los WAV
+  viven en `miuzika/audio-assets`. El servidor escucha solo en `localhost` para que el origen de
+  almacenamiento sea único. Si no hay proyecto pero sí WAV, se crea un proyecto de recuperación.
 - **Modo híbrido** (`src/config.ts`): `MIDI_ENABLED=true` mantiene MIDI como capa de
   composición/edición y audio como capa de sonido. Con `false` se ocultan MIDI, Congelar y
   openDAW, se filtran pistas MIDI de la timeline/player y se bloquean `/api/generate` y
