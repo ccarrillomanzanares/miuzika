@@ -115,8 +115,10 @@ queda el modo audio-only anterior, sin MIDI visible ni enviado al LLM.
   fuentes `CODE` para que pueda editarlas.
   **Renderizar audio** ejecuta el motor real de Strudel (`superdough`) con samples y efectos,
   renderiza la ventana de compases a WAV y lo inserta como pista de audio en openDAW. Esa pista
-  ya no es MIDI editable, pero conserva el sonido exacto de Strudel. Los samples de batería de
-  Dirt se cargan automáticamente; para otros packs usa `samples("github:...")` en el código.
+  ya no es MIDI editable, pero conserva el sonido exacto de Strudel. Carga automáticamente los
+  mapas de Strudel: Uzu drumkit, Tidal drum machines, VCSL, wavetables (`wt_*`) y soundfonts GM
+  (`gm_*`). Para packs propios usa `samples("github:...")` en el código. `_punchcard()` y otros
+  métodos visuales se ignoran porque solo existen en el REPL.
 - **Motor de sintetizador**: no es un modelo neural ni una librería fija. El LLM compone capas
   con osciladores, unísono/detune, FM, pitch envelope, filter envelope, ruido, drive, bitcrush,
   EQ, delay y reverb. Con esos primitivos puede pedir kicks, snares, bajos, plucks, pads, risers,
@@ -339,8 +341,8 @@ docs/
 - Strudel tiene dos caminos. **Compilar** es MIDI y no soporta samples sin `note`
   (por ejemplo `s("gm_acoustic_bass")` o `s("wt_vgame")`); usa `note(...).s(...)` o sonidos de
   kit. **Renderizar audio** sí ejecuta `superdough`, samples y efectos, pero produce una pista de
-  audio no editable. Los sample packs remotos dependen de red/CORS/licencias; Dirt se carga
-  automáticamente y el resto se declara con `samples(...)`.
+  audio no editable. Carga los mapas por defecto de Strudel desde `strudel.b-cdn.net`; si no hay
+  red, esos samples fallarán. Los packs propios se declaran con `samples(...)`; revisa su licencia.
 - El motor de sintetizador es procedural, no neural: no imita instrumentos acústicos reales ni
   tiene capas de velocidad/round-robin. Para guitarras, voces o pianos reales hace falta una
   librería multimuestra o un modelo de audio con licencia adecuada.

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { expandLabeledPatterns } from "./strudel-compiler.ts";
+import { expandLabeledPatterns, stripVisualMethods } from "./strudel-compiler.ts";
 
 test("convierte bloques $: en un stack", () => {
   const expanded = expandLabeledPatterns(`
@@ -12,6 +12,11 @@ $: s("bd sd")
   assert.match(expanded, /stack\(/);
   assert.match(expanded, /s\("hh\*8"\)/);
   assert.match(expanded, /s\("bd sd"\)/);
+});
+
+test("quita métodos visuales como _punchcard", () => {
+  const code = 's("bd")._punchcard()';
+  assert.equal(stripVisualMethods(code), 's("bd")');
 });
 
 test("deja intacto un patrón normal", () => {

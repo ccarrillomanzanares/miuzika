@@ -3,7 +3,7 @@
  * No usa las notas MIDI: produce un WAV para insertarlo como pista de audio.
  */
 
-import { expandLabeledPatterns } from "./strudel-compiler.ts";
+import { expandLabeledPatterns, stripVisualMethods } from "./strudel-compiler.ts";
 import { audioBufferToWav } from "./render.ts";
 
 export interface RenderedStrudelAudio {
@@ -14,6 +14,8 @@ export interface RenderedStrudelAudio {
 }
 
 let dirtySamplesLoaded = false;
+let soundfontsLoaded = false;
+const CDN = "https://strudel.b-cdn.net";
 
 const hapValue = (hap: any): Record<string, unknown> => {
   hap.ensureObjectValue();
@@ -26,7 +28,7 @@ export async function renderStrudelAudio(
   bpm: number,
   beatsPerBar: number,
 ): Promise<RenderedStrudelAudio> {
-  const source = expandLabeledPatterns(code.trim());
+  const source = stripVisualMethods(expandLabeledPatterns(code.trim()));
   if (!source) throw new Error("El código Strudel está vacío.");
   if (!(bars >= 1 && bars <= 64)) throw new Error("Los compases deben estar entre 1 y 64.");
 
@@ -40,16 +42,35 @@ export async function renderStrudelAudio(
   await core.evalScope(core, mini, tonal, webaudio);
   const warnings: string[] = [];
 
-  // El REPL de Strudel carga por defecto los samples de batería de Dirt.
-  // Lo intentamos una vez; si no hay red, los samples personalizados del
-  // código siguen funcionando si están disponibles.
+  // Mismos sample maps por defecto que el REPL de Strudel.
   if (!dirtySamplesLoaded) {
+    const maps: Array<[string, string]> = [
+      [`${CDN}/tidal-drum-machines.json`, `${CDN}/tidal-drum-machines/machines/`],
+      [`${CDN}/uzu-drumkit.json`, `${CDN}/uzu-drumkit/`],
+      [`${CDN}/vcsl.json`, `${CDN}/VCSL/`],
+      [`${CDN}/uzu-wavetables.json`, `${CDN}/uzu-wavetables/`],
+      [`${CDN}/piano.json`, `${CDN}/piano/`],
+    ];
+    const results = await Promise.allSettled(
+      maps.map(([json, base]) => webaudio.samples(json, base)),
+    );
+    for (const result of results) {
+      if (result.status === "rejected") {
+        warnings.push(
+          `No se cargó un sample map por defecto: ${String(result.reason)}`,
+        );
+      }
+    }
+    dirtySamplesLoaded = true;
+  }
+  if (!soundfontsLoaded) {
     try {
-      await webaudio.samples("github:tidalcycles/dirt-samples");
-      dirtySamplesLoaded = true;
+      const soundfonts: any = await import("@strudel/soundfonts");
+      soundfonts.registerSoundfonts?.();
+      soundfontsLoaded = true;
     } catch (error) {
       warnings.push(
-        `No se cargaron los samples por defecto: ${error instanceof Error ? error.message : String(error)}`,
+        `No se cargaron los soundfonts GM: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

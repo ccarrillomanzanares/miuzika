@@ -154,6 +154,14 @@ function timeValue(value: any): number | null {
  * de reproducción que aquí no existe. Antes de transpilar, convertimos todos
  * esos bloques en un único `stack(...)`.
  */
+/** Quita métodos visuales del REPL que no existen en el motor de audio. */
+export function stripVisualMethods(code: string): string {
+  return code.replace(
+    /\.?_(punchcard|scope|spiral|pianoroll|wordfall|spectrum|pitchwheel)\s*\([^)]*\)/g,
+    "",
+  );
+}
+
 export function expandLabeledPatterns(code: string): string {
   const lines = code.split(/\r?\n/);
   const blocks: string[] = [];
@@ -189,7 +197,7 @@ export async function compileStrudelSource(
   bars: number,
   beatsPerBar: number,
 ): Promise<StrudelCompileResult> {
-  const source = expandLabeledPatterns(code.trim());
+  const source = stripVisualMethods(expandLabeledPatterns(code.trim()));
   if (!source) throw new Error("El código Strudel está vacío.");
   if (!(bars >= 1 && bars <= 64)) throw new Error("Los compases deben estar entre 1 y 64.");
   const { transpiler } = await getScope();

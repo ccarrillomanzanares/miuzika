@@ -184,6 +184,8 @@ Decisiones:
 - Para samples/efectos reales, `web/src/strudel-audio.ts` ejecuta `superdough` en un
   `OfflineAudioContext`, renderiza la ventana de compases y registra el WAV como audio asset +
   pista de audio de openDAW. El código queda en `codeSources` con `mode: "audio"`.
+  Carga los mapas por defecto de Strudel (Uzu/Tidal drums, VCSL, wavetables y soundfonts GM) y
+  elimina métodos visuales como `_punchcard`. Los packs propios se declaran con `samples(...)`.
 
 ## Audio
 
