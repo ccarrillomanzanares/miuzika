@@ -54,7 +54,25 @@ export async function renderStrudelAudio(
     }
   }
 
-  const evaluated = await transpiler.evaluate(source, transpiler.transpiler);
+  // El transpiler trata las URLs de samples() como mini-notation y falla.
+  // Extraemos las llamadas de URL simple, las precargamos y las quitamos.
+  const sampleCalls = [
+    ...source.matchAll(/samples\s*\(\s*(['"])([^'"]+)\1\s*\)/g),
+  ];
+  let renderSource = source;
+  for (const match of sampleCalls) {
+    const url = match[2]!;
+    try {
+      await webaudio.samples(url);
+    } catch (error) {
+      warnings.push(
+        `No se pudo cargar el sample pack "${url}": ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    renderSource = renderSource.replace(match[0]!, "");
+  }
+
+  const evaluated = await transpiler.evaluate(renderSource, transpiler.transpiler);
   const pattern = evaluated?.pattern;
   if (!pattern || typeof pattern.queryArc !== "function") {
     throw new Error("El código no devuelve un patrón Strudel.");
