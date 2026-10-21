@@ -235,6 +235,8 @@ correspondiente. Si se usa la licencia comercial de openDAW, revisa `NOTICE.md` 
 
 ## Contribuir
 
+El plan de pruebas funcionales está en [docs/TEST_PLAN.md](docs/TEST_PLAN.md).
+
 Antes de un PR:
 
 ```bash
