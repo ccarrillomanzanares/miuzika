@@ -85,6 +85,14 @@ test("las restricciones se cumplen con el plan correcto y fallan con otro", () =
   assert.ok(checkConstraints(wrongKey, constraints).some((issue) => issue.includes("tonalidad")));
 });
 
+test("una canción larga con 'bucles' no se confunde con un loop", () => {
+  const constraints = extractConstraints(
+    "canción de 140 compases, 90 BPM, con bucles de sintetizador y percusión; no un loop",
+  );
+  assert.equal(constraints.bars, 140);
+  assert.equal(constraints.loop, undefined);
+});
+
 test("un loop exige una sola sección y solo los roles pedidos", () => {
   const constraints = extractConstraints("loop de bajo y batería estilo siniestro punk español");
   assert.equal(constraints.loop, true);

@@ -183,6 +183,13 @@ function detectBars(text: string): number | null {
   return bars >= 1 && bars <= 256 ? bars : null;
 }
 
+function isLoopIntent(text: string): boolean {
+  return (
+    /\b(?:loop|bucle)\b/.test(text) &&
+    !/\b(?:no|sin)\s+(?:un\s+)?(?:loop|bucle)\b/.test(text)
+  );
+}
+
 function detectRoles(text: string): Role[] {
   const roles: Role[] = [];
   for (const [role, pattern] of ROLE_HINTS) {
@@ -283,7 +290,7 @@ export function extractConstraints(prompt: string): PromptConstraints {
   if (bars) constraints.bars = bars;
   if (/sin bateria|no drums|sin percusion/.test(text)) constraints.noDrums = true;
 
-  if (/loop|bucle/.test(text)) {
+  if (isLoopIntent(text)) {
     constraints.loop = true;
     if (roles.length > 0) constraints.roles = roles;
     constraints.bars = Math.min(bars ?? 4, 64);
@@ -388,7 +395,7 @@ export function parsePrompt(prompt: string): ParsedPrompt {
   if (tempo.hint) hints.push(tempo.hint);
 
   const bars = detectBars(text);
-  const isLoop = /loop|bucle/.test(text);
+  const isLoop = isLoopIntent(text);
   const roles = detectRoles(text);
 
   let plan: SongPlan;
