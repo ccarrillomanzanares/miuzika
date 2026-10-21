@@ -1,19 +1,21 @@
 # Informe de pruebas — P0
 
 Fecha: 2026-10-21  
-Commit probado: `54d1cd0`  
+Commit probado: `e48f2f5`  
 Entorno: Windows, Node 24, Vite en `http://localhost:5173`, Chromium automatizado.
 
 ## Resumen
 
-- **P0:** 11 PASS, 1 PARTIAL, 2 NOT RUN.
+- **P0:** 12 PASS, 1 PARTIAL, 1 NOT RUN.
 - **P1/P2:** no ejecutados completos; se han probado los flujos relacionados con
-  Strudel, bundle y export openDAW.
+  Strudel, bundle, generación larga y export openDAW.
 - **Bugs corregidos durante la sesión:**
   1. No había forma de guardar/abrir un proyecto MIDI+WAV completo.
   2. El export a openDAW omitía las referencias de audio.
+  3. La palabra “bucles” en el arreglo se interpretaba como petición de loop y
+     recortaba el plan a 64 compases.
 - **Funcionalidad añadida:** bundle `.miuzika.zip` con `project.json` + WAVs.
-- `npm test`: **116/116**.
+- `npm test`: **117/117**.
 - `npm run typecheck`: OK.
 - `npm run build:web`: OK (avisos de `eval` de terceros y tamaño de chunks).
 
@@ -25,7 +27,7 @@ Entorno: Windows, Node 24, Vite en `http://localhost:5173`, Chromium automatizad
 | A2 Origen único | PASS | `127.0.0.1:5173` devuelve 502; no sirve la app ni crea origen usable |
 | A3 Sin clave LLM | NOT RUN | requiere reiniciar sin `.env`; no se hizo para no tocar la sesión |
 | A4 Persistencia básica | PASS | recarga restaura “Strudel” y 2 WAVs desde IndexedDB |
-| B1 Crear canción por chat | NOT RUN | no se lanzó una generación nueva para no sustituir el proyecto de prueba |
+| B1 Crear canción por chat | PASS | “Fundición Cromática”: 140 compases, 90 BPM, 6 pistas; antes corrigió el falso loop de 64 |
 | B2 Editar por chat | PASS | “baja QA MIDI 3 dB” → track de `0` a `−3 dB` |
 | B3 Undo/redo | PASS | undo recuperó la pista de audio tras una recompilación accidental |
 | B4 Op inválida | PASS | tests unitarios de `applyOps` transaccional |
@@ -46,6 +48,8 @@ Entorno: Windows, Node 24, Vite en `http://localhost:5173`, Chromium automatizad
 | Strudel audio con `gm_acoustic_bass` + `wt_vgame` | PASS | render de 8 s, pico ≈0,869, sin warnings |
 | Strudel audio con `s("bd sd hh")` | PASS | WAV generado, pico ≈0,79 |
 | Export openDAW con audio | PASS | 2 pistas, 2 clips, 4 notas, sin warning de WAV ausente |
+| Prompt largo de 6:13 | PASS | “Fundición Cromática”: 140 compases, 6 pistas, ~8.000 notas; playback inicia |
+| Bug “bucles” → loop | PASS | primer intento 64 compases; corregido y segundo intento 140 |
 | JSON / MIDI / WAV / stems | NOT RUN | pendientes de una pasada P1 |
 | Sample Lab / Rendered | NOT RUN | requieren Docker/WSL y una sesión más larga |
 | Persistencia cuota llena / huérfanos | NOT RUN | P2 |
