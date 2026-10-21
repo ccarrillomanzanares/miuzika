@@ -55,6 +55,7 @@ let restoring = false;
 let selectedTrackIds: string[] = [];
 let persistenceWarned = false;
 let openDawHandle: OpenDawPlaybackHandle | null = null;
+let openDawGeneration = 0;
 
 const HISTORY_KEY = "miuzika.history";
 const HISTORY_LIMIT = 8;
@@ -243,6 +244,7 @@ function setPlaying(value: boolean): void {
 }
 
 function stopOpenDaw(): void {
+  openDawGeneration++;
   const handle = openDawHandle;
   openDawHandle = null;
   if (handle) {
@@ -257,6 +259,7 @@ function stopOpenDaw(): void {
 
 async function startOpenDawPlayback(view: Project): Promise<void> {
   if (openDawHandle) stopOpenDaw();
+  const generation = ++openDawGeneration;
   if (player.isPlaying) {
     player.stop();
     setPlaying(false);
@@ -269,10 +272,15 @@ async function startOpenDawPlayback(view: Project): Promise<void> {
       timeline.draw(beat);
       if (openDawHandle && beat >= endBeat - 0.05) stopOpenDaw();
     });
+    if (generation !== openDawGeneration) {
+      handle.stop();
+      return;
+    }
     openDawHandle = handle;
     setPlaying(true);
     addMessage("assistant", "Reproduciendo con el engine de openDAW.");
   } catch (error) {
+    if (generation !== openDawGeneration) return;
     addMessage(
       "system",
       `Engine openDAW no disponible (${error instanceof Error ? error.message : String(error)}). Uso el player interno.`,
@@ -534,6 +542,7 @@ function toggleTracksFlag(ids: string[], flag: "muted" | "solo"): void {
 
 function applyProject(next: Project | null): void {
   if (openDawHandle) stopOpenDaw();
+  else openDawGeneration++;
   if (player.isPlaying) {
     player.stop();
     setPlaying(false);
@@ -1256,6 +1265,7 @@ stopButton.addEventListener("click", () => {
     stopOpenDaw();
     return;
   }
+  openDawGeneration++;
   player.stop();
   setPlaying(false);
   const view = activeProject(project);
