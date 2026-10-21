@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { projectToMidi } from "./midi.ts";
-import { composePlan, presetPlan } from "./plan.ts";
 import { applyOps } from "./ops.ts";
 import { createProject } from "./project.ts";
 
@@ -84,8 +83,26 @@ function parseMidi(bytes: Uint8Array): ParsedMidi {
   return { format, trackCount, ppq, noteOns, tempos, titles, endOfTrack };
 }
 
+function fixture() {
+  return applyOps(createProject({ name: "MIDI test", lengthBars: 4 }), [
+    { op: "add_track", id: "trk_drums", name: "Drums", instrument: { type: "drumkit" } },
+    { op: "add_notes", trackId: "trk_drums", startBar: 0, notes: [
+      { pitch: 36, start: 0, duration: 0.25, velocity: 100 },
+      { pitch: 38, start: 1, duration: 0.25, velocity: 100 },
+    ] },
+    { op: "add_track", id: "trk_bass", name: "Bass", instrument: { type: "bass" } },
+    { op: "add_notes", trackId: "trk_bass", startBar: 0, notes: [
+      { pitch: 38, start: 0, duration: 2, velocity: 90 },
+    ] },
+    { op: "add_track", id: "trk_pad", name: "Pad", instrument: { type: "pad" } },
+    { op: "add_notes", trackId: "trk_pad", startBar: 0, notes: [
+      { pitch: 62, start: 0, duration: 4, velocity: 80 },
+    ] },
+  ]).project;
+}
+
 test("el MIDI es formato 1 con conductor y una pista por track", () => {
-  const { project } = applyOps(createProject(), composePlan(presetPlan("synthpop80s")));
+  const project = fixture();
   const parsed = parseMidi(projectToMidi(project));
   assert.equal(parsed.format, 1);
   assert.equal(parsed.trackCount, project.tracks.length + 1);
@@ -97,7 +114,7 @@ test("el MIDI es formato 1 con conductor y una pista por track", () => {
 });
 
 test("el número de note-on coincide con las notas del proyecto", () => {
-  const { project } = applyOps(createProject(), composePlan(presetPlan("siniestroPunk")));
+  const project = fixture();
   const expected = project.tracks.reduce(
     (sum, track) => sum + track.clips.reduce((clipSum, clip) => clipSum + clip.notes.length, 0),
     0,
@@ -106,7 +123,7 @@ test("el número de note-on coincide con las notas del proyecto", () => {
 });
 
 test("la batería va al canal 10", () => {
-  const { project } = applyOps(createProject(), composePlan(presetPlan("techno", { bars: 8 })));
+  const project = fixture();
   const bytes = projectToMidi(project);
   // Busca un note-on con canal 9 (0x99).
   assert.ok(bytes.some((byte) => byte === 0x99), "debe haber note-on en el canal 10");

@@ -1,5 +1,5 @@
 /**
- * Operaciones: el único vocabulario con el que el asistente puede modificar
+ * Operaciones: el vocabulario con el que la GUI modifica
  * el proyecto. Todo es validable, transaccional y reversible.
  */
 
@@ -11,10 +11,7 @@ import type { Device, DeviceType, Note, Project, Track } from "./types.ts";impor
   INSTRUMENT_PROGRAM,
   INSTRUMENT_TYPES,
   beatsPerBar,
-  barsToBeats,
 } from "./types.ts";
-import type { Role } from "./patterns.ts";
-import { expandPattern } from "./patterns.ts";
 import { MODE_NAMES, canonicalPitchClass, pitchClass } from "./theory.ts";
 import { validateProject } from "./project.ts";
 import type { Issue } from "./project.ts";
@@ -42,28 +39,6 @@ export const InstrumentSchema = z.object({
   type: z.enum(INSTRUMENT_TYPES),
   preset: z.string().max(64).optional(),
   program: z.number().int().min(0).max(127).optional(),
-});
-
-export const PatternSchema = z.object({
-  role: z.enum(["drums", "bass", "chords", "lead", "arp", "pad"]),
-  style: z
-    .string()
-    .max(32)
-    .optional()
-    .describe(
-      "Batería: gated_80s, siniestro_punk, four_on_floor, half_time, breakbeat, driving, ambient. " +
-        "Bajo: straight8, driving8, syncopated, quarters, punk, ambient, sub. " +
-        "Acordes: pad, gated, stab, offbeat, power, sustained.",
-    ),
-  bars: z.number().int().min(1).max(64).default(8),
-  chords: z.array(z.string().min(1).max(16)).max(32).optional().describe("Un acorde por compás, se cicla"),
-  octave: z.number().int().min(0).max(8).optional().describe("Octava de la fundamental (bajo: 2, pads: 4, lead: 5)"),
-  density: z.number().min(0).max(1).optional(),
-  energy: z.number().min(0).max(1).optional().describe("Energía de la sección; cambia fills y movimiento"),
-  root: z.string().max(4).optional(),
-  motif: z.array(z.number().int().min(-14).max(21)).max(32).optional().describe("Grados de escala del motivo"),
-  seed: z.number().int().optional(),
-  swing: z.number().min(0).max(1).optional(),
 });
 
 const KeySchema = z.object({
@@ -103,21 +78,6 @@ const SetTrackOp = z.object({
 const RemoveTrackOp = z.object({
   op: z.literal("remove_track"),
   trackId: IdSchema,
-});
-
-const GeneratePartOp = z.object({
-  op: z.literal("generate_part"),
-  trackId: IdSchema.optional().describe("Si falta, se crea una pista con el campo track"),
-  track: z
-    .object({
-      name: z.string().min(1).max(60),
-      kind: z.enum(["midi", "audio"]).default("midi"),
-      instrument: InstrumentSchema.optional(),
-    })
-    .optional(),
-  startBar: z.number().int().min(0).max(511).describe("Compás donde empieza el clip (0-based)"),
-  section: z.string().max(32).optional().describe("Etiqueta: intro, verse, chorus..."),
-  pattern: PatternSchema,
 });
 
 const AddNotesOp = z.object({
@@ -204,7 +164,6 @@ export const OpSchema = z.discriminatedUnion("op", [
   AddTrackOp,
   SetTrackOp,
   RemoveTrackOp,
-  GeneratePartOp,
   AddNotesOp,
   ReplaceClipNotesOp,
   RemoveClipOp,
@@ -223,7 +182,7 @@ export type Op = z.input<typeof OpSchema>;
 export type ParsedOp = z.output<typeof OpSchema>;
 export type OpName = Op["op"];
 
-/** Valida y normaliza operaciones venidas del LLM. */
+/** Valida y normaliza operaciones del proyecto. */
 export function parseOps(value: unknown): ParsedOp[] {
   const result = OpsSchema.safeParse(value);
   if (!result.success) {
@@ -233,13 +192,6 @@ export function parseOps(value: unknown): ParsedOp[] {
     throw new OpError(`Operaciones inválidas: ${detail}`);
   }
   return result.data;
-}
-
-/** JSON Schema para el tool-calling del LLM. */
-export function opsJsonSchema(): Record<string, unknown> {
-  const schema = z.toJSONSchema(z.object({ ops: OpsSchema })) as Record<string, unknown>;
-  delete schema.$schema;
-  return schema;
 }
 
 // ---------------------------------------------------------------------------
@@ -320,15 +272,6 @@ function nextClipId(project: Project): string {
   while (used.has(`clp_${index}`)) index++;
   return `clp_${index}`;
 }
-
-const ROLE_DEFAULTS: Record<Role, { name: string; instrument: Track["instrument"] }> = {
-  drums: { name: "Drums", instrument: { type: "drumkit" } },
-  bass: { name: "Bass", instrument: { type: "bass" } },
-  chords: { name: "Chords", instrument: { type: "pad" } },
-  pad: { name: "Pad", instrument: { type: "pad" } },
-  lead: { name: "Lead", instrument: { type: "lead" } },
-  arp: { name: "Arp", instrument: { type: "arp" } },
-};
 
 function createTrack(project: Project, name: string, instrument?: Track["instrument"]): Track {
   const track: Track = {
@@ -425,47 +368,6 @@ function applyOne(project: Project, op: ParsedOp): string {
       const track = resolveTrack(project, op.trackId);
       project.tracks = project.tracks.filter((existing) => existing !== track);
       return `Pista eliminada: ${track.name} (${track.id})`;
-    }
-
-    case "generate_part": {
-      const pattern = op.pattern;
-      const bars = Math.max(1, Math.min(64, pattern.bars));
-      let track = op.trackId ? resolveTrack(project, op.trackId) : undefined;
-      if (!track) {
-        const fallback = ROLE_DEFAULTS[pattern.role];
-        const name = op.track?.name ?? fallback.name;
-        track = createTrack(project, name, op.track?.instrument ?? fallback.instrument);
-        if (op.track?.kind) track.kind = op.track.kind;
-      }
-      if (track.kind !== "midi") {
-        throw new OpError(`"${track.name}" es una pista de audio; generate_part solo genera MIDI`);
-      }
-
-      const barBeats = beatsPerBar(project);
-      const start = op.startBar * barBeats;
-      const length = barsToBeats(project, bars);
-      const notes = expandPattern(pattern, {
-        key: project.key,
-        beatsPerBar: barBeats,
-        stepsPerBar: 16,
-        seed: project.seed,
-      });
-
-      const clip = {
-        id: nextClipId(project),
-        name: `${op.section ?? pattern.role} ${op.startBar + 1}`,
-        start,
-        length,
-        notes,
-        origin: {
-          op: "generate_part",
-          ...(op.section ? { section: op.section } : {}),
-          ...(pattern.seed !== undefined ? { seed: pattern.seed } : {}),
-        },
-      };
-      track.clips.push(clip);
-      project.lengthBars = Math.max(project.lengthBars, op.startBar + bars);
-      return `Generado ${pattern.role}/${pattern.style ?? "por defecto"} · ${bars} compases · ${notes.length} notas en ${track.name}`;
     }
 
     case "add_notes": {

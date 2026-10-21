@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>miuzika · DAW con asistente musical</title>
+    <title>miuzika - GUI + Strudel</title>
     <script>
       // Un único origen de almacenamiento: siempre localhost, nunca 127.0.0.1.
       if (location.hostname === "127.0.0.1" || location.hostname === "[::1]") {
@@ -33,13 +33,12 @@
           </select>
           <button id="export-wav" title="Mixdown del proyecto a WAV" disabled>WAV</button>
           <button id="export-stems" title="WAV por pista, con sus FX y sin máster" disabled>Stems</button>
-          <button id="export-midi" title="Exportar MIDI (solo pistas MIDI)" data-midi-only hidden disabled>MIDI</button>
-          <button id="export-opendaw" title="Exportar a openDAW (solo pistas MIDI por ahora)" data-midi-only hidden disabled>openDAW</button>
+          <button id="export-midi" title="Exportar MIDI (solo pistas MIDI)" disabled>MIDI</button>
+          <button id="export-opendaw" title="Exportar a openDAW (solo pistas MIDI por ahora)" disabled>openDAW</button>
           <button id="export-json" title="Proyecto canónico: metadatos; no incluye los WAV" disabled>JSON</button>
           <button id="save-bundle" title="Guardar proyecto completo: JSON + WAVs en un ZIP" disabled>Proyecto</button>
           <label class="file" title="Abrir JSON o bundle .miuzika.zip">Abrir<input id="open" type="file" accept=".json,.zip,.miuzika.zip,application/json,application/zip" /></label>
           <label class="file">Audio<input id="audio-file" type="file" accept="audio/*" multiple /></label>
-          <button id="song-agent" title="Componer una canción completa con el agente y el worker Python">Canción</button>
           <button id="code-lab" title="Escribir un patrón Strudel y renderizarlo a WAV">Strudel</button>
           <button id="new-song" title="Empezar de cero">Nueva</button>
         </div>
@@ -66,17 +65,7 @@
 
         <aside class="chat">
           <div class="messages" id="messages"></div>
-          <div class="examples" id="examples"></div>
-          <form id="composer">
-            <textarea
-              id="prompt"
-              rows="2"
-              placeholder="Describe la canción o el cambio…"
-              autocomplete="off"
-            ></textarea>
-            <button id="send" type="submit">Enviar</button>
-          </form>
-          <div class="status" id="status">Enter envía · doble clic en un clip = piano roll · Ctrl+rueda = zoom</div>
+          <div class="status" id="status">Doble clic en un clip = piano roll - Ctrl+rueda = zoom</div>
         </aside>
       </main>
     </div>

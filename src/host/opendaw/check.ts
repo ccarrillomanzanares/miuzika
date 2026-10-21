@@ -6,7 +6,6 @@
 import assert from "node:assert/strict";
 
 import { applyOps } from "../../core/ops.ts";
-import { composePlan, presetPlan } from "../../core/plan.ts";
 import { createProject } from "../../core/project.ts";
 import { projectToOpenDaw, openDawToProject } from "./adapter.ts";
 
@@ -17,7 +16,27 @@ function countNotes(project: ReturnType<typeof createProject>): number {
   );
 }
 
-const source = applyOps(createProject(), composePlan(presetPlan("synthpop80s", { bars: 16 }))).project;
+const source = applyOps(createProject({ name: "openDAW check", lengthBars: 4 }), [
+  { op: "add_track", id: "trk_drums", name: "Drums", instrument: { type: "drumkit" }, gainDb: -2 },
+  { op: "add_device", trackId: "trk_drums", device: { type: "compressor", params: { threshold: 0.6, ratio: 4 } } },
+  { op: "add_notes", trackId: "trk_drums", startBar: 0, notes: [
+    { pitch: 36, start: 0, duration: 0.25, velocity: 110 },
+    { pitch: 38, start: 1, duration: 0.25, velocity: 100 },
+    { pitch: 36, start: 2, duration: 0.25, velocity: 110 },
+    { pitch: 38, start: 3, duration: 0.25, velocity: 100 },
+  ] },
+  { op: "add_track", id: "trk_bass", name: "Bass", instrument: { type: "bass" } },
+  { op: "add_notes", trackId: "trk_bass", startBar: 0, notes: [
+    { pitch: 38, start: 0, duration: 1, velocity: 90 },
+    { pitch: 41, start: 1, duration: 1, velocity: 90 },
+    { pitch: 43, start: 2, duration: 2, velocity: 90 },
+  ] },
+  { op: "add_track", id: "trk_pad", name: "Pad", instrument: { type: "pad" } },
+  { op: "add_device", trackId: "trk_pad", device: { type: "reverb", params: { wet: 0.3 } } },
+  { op: "add_notes", trackId: "trk_pad", startBar: 0, notes: [
+    { pitch: 62, start: 0, duration: 4, velocity: 80 },
+  ] },
+]).project;
 const expectedNotes = countNotes(source);
 console.log(`origen: ${source.tracks.length} pistas, ${expectedNotes} notas`);
 

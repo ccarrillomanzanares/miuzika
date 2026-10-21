@@ -1,6 +1,5 @@
 import type { CodeSource, Project } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
-import { MIDI_ENABLED } from "../../src/config.ts";
 import { listAudioAssets } from "./audio-db.ts";
 import {
   loadHistoryFromDb,
@@ -25,7 +24,6 @@ import { openCodeLab } from "./code-lab.ts";
 import type { CodeAudioRequest } from "./code-lab.ts";
 import { renderStrudelAudio } from "./strudel-audio.ts";
 import { exportProjectBundle, importProjectBundle } from "./project-bundle.ts";
-import { fetchSongArtifact, openSongAgent } from "./song-agent.ts";
 import { TimelineView, escapeHtml } from "./timeline.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 import type { OpenDawAudioAsset } from "../../src/host/opendaw/adapter.ts";
@@ -36,15 +34,12 @@ const canvas = $<HTMLCanvasElement>("timeline");
 const wrap = $("canvas-wrap");
 const heads = $("track-heads");
 const messages = $("messages");
-const promptInput = $<HTMLTextAreaElement>("prompt");
-const sendButton = $<HTMLButtonElement>("send");
 const playButton = $<HTMLButtonElement>("play");
 const stopButton = $<HTMLButtonElement>("stop");
 const undoButton = $<HTMLButtonElement>("undo");
 const redoButton = $<HTMLButtonElement>("redo");
 const statusEl = $("status");
 const songInfo = $("song-info");
-const examples = $("examples");
 
 const timeline = new TimelineView(canvas, wrap, heads);
 
@@ -61,70 +56,6 @@ const HISTORY_KEY = "miuzika.history";
 const HISTORY_LIMIT = 8;
 let history: Project[] = loadHistory();
 let future: Project[] = [];
-
-interface Example {
-  text: string;
-  tag: string;
-}
-
-const EXAMPLE_POOL: Example[] = [
-  { tag: "synthpop", text: "créame una canción synth pop 80's oscura en re menor, lenta" },
-  { tag: "synthpop", text: "synthpop cálido en la menor con pads y bajo pulsante" },
-  { tag: "punk", text: "punk siniestro español de los 80, en mi menor" },
-  { tag: "punk", text: "loop de bajo y batería estilo siniestro punk" },
-  { tag: "techno", text: "techno hipnótico en la menor a 132 bpm, 32 compases" },
-  { tag: "techno", text: "techno industrial oscuro con arp y kick contundente" },
-  { tag: "ambient", text: "ambient melancólico para estudiar, sin batería" },
-  { tag: "ambient", text: "drone ambient en do lidio, muy lento y sin percusión" },
-  { tag: "rock", text: "rock en mi menor con guitarras distorsionadas" },
-  { tag: "hiphop", text: "hip hop con swing en fa menor, 88 bpm" },
-  { tag: "pop", text: "canción de 16 compases en do mayor, alegre" },
-  { tag: "textura", text: "crea un loop de arp y pads en la menor" },
-];
-
-function pickExamples(pool: Example[], count = 4): Example[] {
-  const shuffled = [...pool];
-  for (let index = shuffled.length - 1; index > 0; index--) {
-    const swap = Math.floor(Math.random() * (index + 1));
-    [shuffled[index], shuffled[swap]] = [shuffled[swap]!, shuffled[index]!];
-  }
-  const chosen: Example[] = [];
-  const tags = new Set<string>();
-  for (const example of shuffled) {
-    if (tags.has(example.tag)) continue;
-    chosen.push(example);
-    tags.add(example.tag);
-    if (chosen.length === count) return chosen;
-  }
-  for (const example of shuffled) {
-    if (chosen.length >= count) break;
-    if (!chosen.includes(example)) chosen.push(example);
-  }
-  return chosen;
-}
-
-function renderExamples(): void {
-  examples.innerHTML = "";
-  for (const example of pickExamples(EXAMPLE_POOL, 4)) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = example.text;
-    button.title = example.text;
-    button.addEventListener("click", () => {
-      promptInput.value = example.text;
-      promptInput.focus();
-    });
-    examples.appendChild(button);
-  }
-  const shuffle = document.createElement("button");
-  shuffle.type = "button";
-  shuffle.className = "shuffle";
-  shuffle.title = "Otras ideas";
-  shuffle.setAttribute("aria-label", "Otras ideas");
-  shuffle.textContent = "↻";
-  shuffle.addEventListener("click", renderExamples);
-  examples.appendChild(shuffle);
-}
 
 function currentBeat(): number {
   return openDawHandle?.beat ?? timeline.currentBeat;
@@ -170,29 +101,12 @@ function setStatus(text: string): void {
 
 function setBusy(value: boolean, text = ""): void {
   busy = value;
-  sendButton.disabled = value;
-  sendButton.textContent = value ? "…" : "Enviar";
   setStatus(text);
   updateActions();
 }
 
-/** Activa solo las acciones que tienen sentido para el proyecto actual. */
-/** En modo audio oculta las pistas MIDI legacy sin borrarlas del proyecto guardado. */
 function activeProject(source: Project | null): Project | null {
-  if (!source || MIDI_ENABLED) return source;
-  const tracks = source.tracks.filter((track) => track.kind === "audio");
-  return tracks.length === source.tracks.length ? source : { ...source, tracks };
-}
-
-function applyMode(): void {
-  for (const element of document.querySelectorAll<HTMLElement>("[data-midi-only]")) {
-    element.hidden = !MIDI_ENABLED;
-  }
-  if (!MIDI_ENABLED) {
-    promptInput.placeholder = "Describe el cambio que quieres hacer…";
-    statusEl.textContent = "Enter envía · Ctrl+rueda = zoom";
-    document.body.classList.add("audio-only");
-  }
+  return source;
 }
 
 function updateActions(): void {
@@ -201,10 +115,9 @@ function updateActions(): void {
   const hasProject = project !== null;
   const hasTracks = Boolean(view && view.tracks.length > 0);
   const hasMidi = Boolean(
-    MIDI_ENABLED &&
-      project?.tracks.some(
-        (track) => track.kind === "midi" && track.clips.some((clip) => clip.notes.length > 0),
-      ),
+    project?.tracks.some(
+      (track) => track.kind === "midi" && track.clips.some((clip) => clip.notes.length > 0),
+    ),
   );
 
   $<HTMLButtonElement>("export-wav").disabled = !enabled || !hasTracks;
@@ -217,7 +130,6 @@ function updateActions(): void {
   $<HTMLInputElement>("open").disabled = !enabled;
   $<HTMLSelectElement>("master-target").disabled = !enabled || !hasTracks;
   $<HTMLButtonElement>("code-lab").disabled = !enabled;
-  $<HTMLButtonElement>("song-agent").disabled = !enabled;
   $<HTMLButtonElement>("fit-timeline").disabled = !enabled || !hasProject;
   $<HTMLButtonElement>("new-song").disabled = !enabled;
   playButton.disabled = !enabled || !hasTracks;
@@ -559,41 +471,6 @@ function applyProject(next: Project | null): void {
   songInfo.innerHTML = `<strong>${escapeHtml(view.name)}</strong><span>${view.bpm} BPM · ${view.key.tonic} ${view.key.mode} · ${view.lengthBars} compases · ${stats.tracks} pistas · ${stats.notes} notas · ${minutes}:${seconds}</span>`;
 }
 
-async function api<T>(url: string, body: unknown, timeoutMs = 130_000): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "TimeoutError") {
-      throw new Error("El asistente tardó demasiado. Inténtalo de nuevo.");
-    }
-    throw new Error("No se pudo contactar con el servidor local. ¿Sigue corriendo `npm run dev`?");
-  }
-
-  const raw = await response.text();
-  if (!raw.trim()) {
-    throw new Error(
-      `El servidor no devolvió respuesta (${response.status}). Puede haber reiniciado; vuelve a intentarlo.`,
-    );
-  }
-  let data: T & { error?: string };
-  try {
-    data = JSON.parse(raw) as T & { error?: string };
-  } catch {
-    throw new Error(`Respuesta inválida del servidor (${response.status}). Revisa la terminal de Vite.`);
-  }
-  if (!response.ok) throw new Error(data.error ?? `Error ${response.status}`);
-  return data;
-}
-
-const NEW_SONG = /\b(otra canci[oó]n|nueva canci[oó]n|canci[oó]n nueva|desde cero|de cero|empezar de nuevo|empieza de nuevo)\b/i;
-const STRUDEL_INTENT = /\b(strudel|patr[oó]n(es)? de c[oó]digo|c[oó]digo generativo)\b/i;
-
 function updateSelectionBar(): void {
   const selected = project?.tracks.filter((track) => selectedTrackIds.includes(track.id)) ?? [];
   const bar = $<HTMLElement>("selection-bar");
@@ -643,53 +520,6 @@ async function exportStems(trackIds?: string[]): Promise<void> {
     addMessage("assistant", `Stems listos: ${files.length} pista(s) (pre-máster, con sus FX).`);
   } catch (error) {
     addMessage("system", `No se pudieron renderizar los stems: ${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    setBusy(false);
-  }
-}
-
-async function send(prompt: string): Promise<void> {
-  const text = prompt.trim();
-  if (!text || busy || !ready) return;
-  addMessage("user", text);
-  promptInput.value = "";
-  setBusy(true, "Pensando…");
-
-  try {
-    if (STRUDEL_INTENT.test(text)) {
-      openCodeEditor();
-      addMessage("assistant", "Abre el editor Strudel y pulsa «Renderizar WAV» para insertar el audio.");
-      return;
-    }
-
-    const wantsTrack = /\b(añade|añadir|agrega|agregar|crea|crear)\b[\s\S]*\b(pista|track|parte)\b/i.test(text);
-    if (!project && wantsTrack) {
-      setProject(createProject({ name: "Nuevo proyecto" }));
-    }
-    const startsEmpty = project !== null && project.tracks.length === 0;
-    const generateSong = !project || (startsEmpty && !wantsTrack) || NEW_SONG.test(text);
-
-    if (generateSong) {
-      const data = await api<{ project: Project; warnings?: string[] }>("/api/generate", { prompt: text });
-      setProject(data.project);
-      addMessage(
-        "assistant",
-        `Listo: “${data.project.name}”. ${data.project.tracks.length} pistas, ${data.project.lengthBars} compases. Pulsa ▶ para escucharlo.`,
-      );
-      for (const warning of data.warnings ?? []) addMessage("system", warning);
-    } else {
-      const data = await api<{ project: Project; text: string; toolLog: Array<{ name: string; ok: boolean }> }>(
-        "/api/chat",
-        { prompt: text, project },
-      );
-      setProject(data.project);
-      addMessage("assistant", data.text || "Hecho.");
-      const failed = data.toolLog.filter((entry) => !entry.ok);
-      if (failed.length > 0) addMessage("system", `Herramientas con error: ${failed.map((entry) => entry.name).join(", ")}`);
-    }
-  } catch (error) {
-    addMessage("system", `Error: ${error instanceof Error ? error.message : String(error)}`);
-    if (!promptInput.value.trim()) promptInput.value = text;
   } finally {
     setBusy(false);
   }
@@ -797,25 +627,6 @@ function openCodeEditor(): void {
   });
 }
 
-function openSongAgentDialog(): void {
-  if (!ready) return;
-  openSongAgent({
-    onOpen: async (job) => {
-      if (!job.bundle) throw new Error("El job no tiene bundle.");
-      const blob = await fetchSongArtifact(job.id, job.bundle);
-      const imported = await importProjectBundle(blob);
-      const { missing } = await hydrateProjectAudio(imported.project);
-      setProject(imported.project);
-      addMessage(
-        "assistant",
-        `Canción abierta: “${imported.project.name}”. ${imported.project.tracks.length} pistas, ${imported.project.lengthBars} compases.`,
-      );
-      for (const warning of imported.warnings) addMessage("system", `Canción: ${warning}`);
-      warnMissingAudio(missing);
-    },
-  });
-}
-
 // --- Eventos ---------------------------------------------------------------
 
 playButton.addEventListener("click", () => {
@@ -848,7 +659,6 @@ $("new-song").addEventListener("click", () => {
 
 $("export-stems").addEventListener("click", () => void exportStems());
 
-$("song-agent").addEventListener("click", () => openSongAgentDialog());
 $("code-lab").addEventListener("click", () => openCodeEditor());
 
 $("sel-mute").addEventListener("click", () => toggleTracksFlag(selectedTrackIds, "muted"));
@@ -1047,18 +857,6 @@ $<HTMLInputElement>("open").addEventListener("change", async (event) => {
   }
 });
 
-$("composer").addEventListener("submit", (event) => {
-  event.preventDefault();
-  void send(promptInput.value);
-});
-
-promptInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && !event.shiftKey) {
-    event.preventDefault();
-    void send(promptInput.value);
-  }
-});
-
 window.addEventListener("keydown", (event) => {
   const target = event.target as HTMLElement | null;
   if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
@@ -1093,8 +891,6 @@ window.addEventListener("keydown", (event) => {
     void redo();
   }
 });
-
-renderExamples();
 
 // --- Arranque --------------------------------------------------------------
 
@@ -1152,12 +948,6 @@ async function boot(): Promise<void> {
         `He encontrado ${recoveredAssets} WAV sueltos en IndexedDB y he creado un proyecto de recuperación con una pista por WAV. La disposición original no se puede reconstruir.`,
       );
     }
-    if (!MIDI_ENABLED && project.tracks.some((track) => track.kind === "midi")) {
-      addMessage(
-        "system",
-        "Este proyecto tiene pistas MIDI legacy: están ocultas y no se usan en modo audio.",
-      );
-    }
     if (result.missing.length > 0) {
       warnMissingAudio(result.missing);
     } else if (result.loaded > 0) {
@@ -1167,9 +957,7 @@ async function boot(): Promise<void> {
     setProject(null, false);
     addMessage(
       "assistant",
-      MIDI_ENABLED
-        ? "Soy Mizu, tu coproductor. Pídeme una canción completa o un loop: “synth pop 80s oscuro en re menor, lenta”."
-        : "Soy Mizu, tu coproductor. Pídeme cambios sobre el proyecto.",
+      "Proyecto nuevo. Usa Strudel para renderizar un WAV o importa audio para empezar.",
     );
   }
 
@@ -1178,7 +966,6 @@ async function boot(): Promise<void> {
   updateActions();
 }
 
-applyMode();
 updateActions();
 void loadDrumKit();
 void boot();

@@ -2,44 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { createProject } from "./project.ts";
-import { OpError, applyOps, opsJsonSchema, parseOps } from "./ops.ts";
+import { OpError, applyOps, parseOps } from "./ops.ts";
 import type { Op } from "./ops.ts";
 
 function baseProject() {
   return createProject({ name: "Test", bpm: 100, key: { tonic: "D", mode: "minor" }, lengthBars: 8, seed: 1 });
 }
-
-test("crea pista y genera una parte MIDI", () => {
-  const ops: Op[] = [
-    { op: "add_track", id: "trk_drums", name: "Drums", kind: "midi", instrument: { type: "drumkit" } },
-    {
-      op: "generate_part",
-      trackId: "trk_drums",
-      startBar: 0,
-      section: "intro",
-      pattern: { role: "drums", style: "gated_80s", bars: 2, density: 0.8 },
-    },
-  ];
-  const { project } = applyOps(baseProject(), ops);
-  assert.equal(project.tracks.length, 1);
-  assert.equal(project.tracks[0]!.clips.length, 1);
-  assert.ok(project.tracks[0]!.clips[0]!.notes.length > 0);
-  assert.deepEqual(project.tracks[0]!.clips[0]!.origin?.section, "intro");
-});
-
-test("generate_part sin trackId crea la pista", () => {
-  const { project } = applyOps(baseProject(), [
-    {
-      op: "generate_part",
-      track: { name: "Bajo", kind: "midi", instrument: { type: "bass" } },
-      startBar: 0,
-      pattern: { role: "bass", style: "driving8", bars: 4, octave: 2, chords: ["Dm"] },
-    },
-  ]);
-  assert.equal(project.tracks.length, 1);
-  assert.equal(project.tracks[0]!.instrument.type, "bass");
-  assert.ok(project.tracks[0]!.clips[0]!.notes.length >= 8);
-});
 
 test("resuelve pistas por índice 1-based", () => {
   const { project } = applyOps(baseProject(), [
@@ -89,20 +57,6 @@ test("parseOps rechaza operaciones desconocidas y campos fuera de rango", () => 
   assert.throws(() => parseOps([{ op: "hackear" }]), /inválidas/i);
   assert.throws(() => parseOps([{ op: "set_song", bpm: 900 }]), /bpm/i);
   assert.throws(() => parseOps([]), /inválidas/i);
-});
-
-test("parseOps normaliza defaults", () => {
-  const [op] = parseOps([{ op: "generate_part", startBar: 0, pattern: { role: "bass", bars: 4 } }]);
-  assert.equal(op!.op, "generate_part");
-  if (op!.op === "generate_part") assert.equal(op!.pattern.bars, 4);
-});
-
-test("el JSON Schema de ops es un objeto con anyOf", () => {
-  const schema = opsJsonSchema();
-  assert.equal(schema.type, "object");
-  const properties = schema.properties as Record<string, { items?: { oneOf?: unknown[]; anyOf?: unknown[] } }>;
-  const variants = properties.ops?.items?.oneOf ?? properties.ops?.items?.anyOf;
-  assert.ok(variants && variants.length >= 10);
 });
 
 test("registra un asset y coloca un clip de audio", () => {

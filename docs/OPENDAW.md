@@ -60,7 +60,7 @@ La licencia comercial **excluye** componentes con copyleft de terceros o servici
 - detección de tempo TempoCNN (AGPL-3.0) → sustituir
 
 Como el producto va a ser abierto, la ruta es AGPL: hay que mantener avisos de copyright y
-publicar las modificaciones de openDAW. Nuestro código (`src/core`, `src/agent`) también se
+publicar las modificaciones de openDAW. Nuestro código (`src/core`) también se
 licencia AGPL-3.0 para que el conjunto sea coherente.
 
 ## Arranque técnico
@@ -103,14 +103,14 @@ await WasmEngine.ensureReady(audioContext) // añade wasm-processor.js
 ### A. SDK embebido (recomendada)
 
 Nuestra app (React/Solid/vanilla) monta el `Project` del SDK y usa sus dispositivos. Mantenemos
-nuestra UI de chat y el piano roll puede ser propio o reutilizado.
+nuestra timeline y el piano roll puede ser propio o reutilizado.
 
-- Ventaja: control total del producto y del asistente.
+- Ventaja: control total del producto.
 - Coste: hay que construir timeline, mixer y piano roll, o adaptar los del estudio.
 
 ### B. Fork del estudio
 
-Se parte del repo de openDAW y se añade el panel del asistente.
+Se parte del repo de openDAW y se añade el panel de la GUI.
 
 - Ventaja: DAW completo desde el día 1.
 - Coste: mantener un fork grande, UI no basada en React, y todo el código queda AGPL.
@@ -168,7 +168,7 @@ const REVERB: ParamMap = {
 ```
 
 Regla: si un parámetro no tiene mapeo, **fallar** en vez de adivinar. Es preferible que el
-asistente reciba "no puedo mapear ese parámetro" a que genere un proyecto silencioso.
+usuario reciba "no puedo mapear ese parámetro" a que genere un proyecto silencioso.
 
 ## Contrato del adaptador
 
@@ -182,13 +182,12 @@ interface HostAdapter {
 }
 ```
 
-Flujo con el asistente:
+Flujo con la GUI:
 
-1. `runAgent()` produce un `Project` nuevo (inmutable).
-2. `adapter.apply(project)` reconcilia por id: crea lo que falta, actualiza lo que cambió,
-   borra lo que desapareció.
-3. La UI escucha el resultado; el undo del asistente y el undo del DAW deben compartir pila
-   (o el asistente empuja una transacción al historial del host).
+1. Una operaci?n produce un `Project` nuevo (inmutable).
+2. `adapter.apply(project)` reconcilia por id: crea lo que falta, actualiza lo que cambi?,
+   borra lo que desapareci?.
+3. La UI escucha el resultado y mantiene su propia pila de undo.
 
 ### Sincronización
 

@@ -1,27 +1,25 @@
 {
   "name": "miuzika",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "private": true,
   "type": "module",
-  "description": "DAW web con asistente LLM, Strudel y motor de audio openDAW",
+  "description": "GUI de DAW con openDAW y Strudel a WAV",
   "license": "AGPL-3.0-or-later",
   "keywords": [
     "daw",
     "music",
-    "llm",
     "strudel",
     "opendaw",
-    "midi"
+    "midi",
+    "gui"
   ],
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "compose": "node src/cli/index.ts",
     "test": "node --test \"src/**/*.test.ts\" \"web/**/*.test.ts\" && node scripts/bundle-run.mjs src/host/opendaw/check.ts tmp/opendaw-check.mjs",
     "test:unit": "node --test \"src/**/*.test.ts\" \"web/**/*.test.ts\"",
     "test:opendaw": "node scripts/bundle-run.mjs src/host/opendaw/check.ts tmp/opendaw-check.mjs",
-    "eval": "node src/cli/eval.ts",
     "typecheck": "tsc --noEmit",
     "dev": "vite",
     "preview": "vite preview",

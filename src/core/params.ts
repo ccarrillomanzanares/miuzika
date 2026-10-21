@@ -1,4 +1,4 @@
-/** Parámetros de dispositivo: el LLM a veces manda booleanos (pingPong: true). */
+/** Parámetros de dispositivo: acepta n?meros y booleanos (pingPong: true). */
 
 import { z } from "zod";
 

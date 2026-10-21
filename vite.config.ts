@@ -1,5 +1,4 @@
 import { defineConfig } from "vite";
-import { miuzikaApi } from "./vite-plugin-api.ts";
 
 const isolationHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
@@ -8,7 +7,6 @@ const isolationHeaders = {
 
 export default defineConfig({
   root: "web",
-  plugins: [miuzikaApi()],
   server: {
     port: 5173,
     host: "localhost",
