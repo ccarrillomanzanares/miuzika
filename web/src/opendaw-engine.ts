@@ -102,7 +102,7 @@ const DRUM_FILES: ReadonlyArray<{ note: number; file: string; name: string }> = 
   { note: 56, file: "cowbell.wav", name: "Cowbell" },
 ];
 
-export interface OpenDawAudioInput {
+interface OpenDawAudioInput {
   name: string;
   buffer: AudioBuffer;
 }

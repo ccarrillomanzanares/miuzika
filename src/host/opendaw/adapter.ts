@@ -25,7 +25,7 @@ import {
 } from "./mapping.ts";
 import { installNodeShims } from "./shims.ts";
 
-export interface OpenDawExport {
+interface OpenDawExport {
   bytes: ArrayBuffer;
   warnings: string[];
   stats: {
@@ -37,7 +37,7 @@ export interface OpenDawExport {
   };
 }
 
-export interface OpenDawImport {
+interface OpenDawImport {
   project: MiuzikaProject;
   warnings: string[];
   stats: { tracks: number; regions: number; notes: number };
@@ -51,7 +51,7 @@ export interface OpenDawDrumSample {
   exclude: boolean;
 }
 
-export interface OpenDawAudioChunk {
+interface OpenDawAudioChunk {
   uuid: Uint8Array;
   name: string;
   /** Duración del chunk en segundos. */
@@ -65,7 +65,7 @@ export interface OpenDawAudioAsset {
   durationInSeconds: number;
 }
 
-export interface OpenDawBuildOptions {
+interface OpenDawBuildOptions {
   /** Muestras del kit para las pistas Playfield. */
   drumSamples?: OpenDawDrumSample[];
   /** WAV de las pistas de audio, por id de asset del IR. */

@@ -2,24 +2,25 @@
 
 **GUI de DAW con openDAW y Strudel → WAV.**
 
-Esta versión es deliberadamente pequeña:
+Alcance actual, deliberadamente pequeño:
 
 ```text
-GUI / openDAW          timeline, piano roll, audio, mezcla y export
+GUI / openDAW          timeline, piano roll, audio y reproducción
 Strudel → WAV          código generativo convertido en pista de audio
 ```
 
-No hay LLM, ni planner, ni agente, ni worker Python.
+No hay LLM, planner, agente, worker Python ni exportadores.
 
 ## Qué incluye
 
 - **Timeline y piano roll**: edición de clips y notas, mute/solo, selección,
   undo/redo.
-- **openDAW WASM**: reproducción, Playfield para batería, pistas de audio y FX.
+- **openDAW WASM**: reproducción, batería Playfield y pistas de audio.
 - **Strudel → WAV**: editor de patrones y render con `superdough` en un
   `OfflineAudioContext`.
 - **Audio WAV**: importación, waveform, clips y persistencia en IndexedDB.
-- **Export**: WAV, stems, MIDI, JSON, bundle `.miuzika.zip` y `.odw`.
+- **Abrir**: JSON o bundle `.miuzika.zip` existente.
+- **Persistencia automática** en localStorage + IndexedDB.
 
 ## Arranque
 
@@ -64,9 +65,8 @@ stack(
 
 - El proyecto y el historial viven en `localStorage` e IndexedDB.
 - Los WAVs viven en IndexedDB (`miuzika` / `audio-assets`).
-- **Proyecto** descarga un `.miuzika.zip` con `project.json` + WAVs.
-- **Abrir** acepta ese ZIP y restaura MIDI, audio y assets.
-- El JSON no incluye los bytes de audio.
+- **Abrir** acepta un `.json` o un `.miuzika.zip` existente.
+- No hay botón de exportación; la app no descarga el proyecto.
 
 ## Scripts
 
@@ -77,14 +77,12 @@ stack(
 | `npm run test:unit` | Solo tests de `src/` y `web/` |
 | `npm run typecheck` | TypeScript sin emitir |
 | `npm run build:web` | Build de producción |
-| `npm run drums:build` | Regenera el kit WAV de batería |
-| `npm run export:opendaw -- out/song.json` | Exporta `.odw` |
 
 ## Estructura
 
 ```text
 src/
-  core/             IR, teoría, ops, MIDI, proyecto
+  core/             IR, teoría, ops, proyecto
   host/opendaw/     mapping + adapter + checks del SDK
 web/
   src/
@@ -94,10 +92,8 @@ web/
     opendaw-engine.ts    playback WASM
     code-lab.ts          editor Strudel → WAV
     strudel-audio.ts     render con superdough
-    render.ts            mixdown offline de la GUI
     audio-store.ts       assets y rehidratación
     audio-db.ts          IndexedDB de WAVs
-    project-bundle.ts    export/import .miuzika.zip
   public/drums/          kit WAV para Playfield
   public/opendaw-wasm/   engine.wasm y plugins
 docs/                   arquitectura, openDAW y plan de pruebas
@@ -108,7 +104,7 @@ docs/                   arquitectura, openDAW y plan de pruebas
 - Strudel → WAV: máximo 64 compases por render.
 - Strudel depende de sample maps remotos y de sus licencias.
 - openDAW puede consumir CPU/memoria con muchos WAV largos.
-- El proyecto usa 4/4 en el motor de patrones clásico.
+- El motor de patrones clásico asume 4/4.
 
 ## Licencia
 

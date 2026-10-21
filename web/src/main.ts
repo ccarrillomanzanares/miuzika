@@ -8,7 +8,6 @@ import {
   saveProjectToDb,
 } from "./project-db.ts";
 import { createProject, projectStats } from "../../src/core/project.ts";
-import { projectToMidi } from "../../src/core/midi.ts";
 import { applyOps } from "../../src/core/ops.ts";
 import type { Op } from "../../src/core/ops.ts";
 import {
@@ -18,15 +17,13 @@ import {
   loadAudioFile,
   persistAudioAsset,
 } from "./audio-store.ts";
-import { loadDrumKit } from "./drum-kit.ts";
 import { openPianoRoll } from "./editor.ts";
 import { openCodeLab } from "./code-lab.ts";
 import type { CodeAudioRequest } from "./code-lab.ts";
 import { renderStrudelAudio } from "./strudel-audio.ts";
-import { exportProjectBundle, importProjectBundle } from "./project-bundle.ts";
+import { importProjectBundle } from "./project-bundle.ts";
 import { TimelineView, escapeHtml } from "./timeline.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
-import type { OpenDawAudioAsset } from "../../src/host/opendaw/adapter.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -114,23 +111,10 @@ function updateActions(): void {
   const view = activeProject(project);
   const hasProject = project !== null;
   const hasTracks = Boolean(view && view.tracks.length > 0);
-  const hasMidi = Boolean(
-    project?.tracks.some(
-      (track) => track.kind === "midi" && track.clips.some((clip) => clip.notes.length > 0),
-    ),
-  );
 
-  $<HTMLButtonElement>("export-wav").disabled = !enabled || !hasTracks;
-  $<HTMLButtonElement>("export-stems").disabled = !enabled || !hasTracks;
-  $<HTMLButtonElement>("export-midi").disabled = !enabled || !hasMidi;
-  $<HTMLButtonElement>("export-opendaw").disabled = !enabled || !hasMidi;
-  $<HTMLButtonElement>("export-json").disabled = !enabled || !hasProject;
-  $<HTMLButtonElement>("save-bundle").disabled = !enabled || !hasProject;
   $<HTMLInputElement>("audio-file").disabled = !enabled || !hasProject;
   $<HTMLInputElement>("open").disabled = !enabled;
-  $<HTMLSelectElement>("master-target").disabled = !enabled || !hasTracks;
   $<HTMLButtonElement>("code-lab").disabled = !enabled;
-  $<HTMLButtonElement>("fit-timeline").disabled = !enabled || !hasProject;
   $<HTMLButtonElement>("new-song").disabled = !enabled;
   playButton.disabled = !enabled || !hasTracks;
   stopButton.disabled = !ready || !hasTracks;
@@ -192,7 +176,7 @@ async function startOpenDawPlayback(view: Project): Promise<void> {
   }
 }
 
-function addMessage(role: "user" | "assistant" | "system", text: string): void {
+function addMessage(role: "assistant" | "system", text: string): void {
   const div = document.createElement("div");
   div.className = `msg ${role}`;
   div.innerHTML = escapeHtml(text).replace(/\n/g, "<br>");
@@ -208,22 +192,6 @@ function warnMissingAudio(missing: string[]): void {
     "system",
     `Faltan ${missing.length} WAV (${shown}${rest}). El proyecto los referencia, pero no están guardados en este navegador; vuelve a importarlos con «Audio».`,
   );
-}
-
-/** Mensaje con reproductor para escuchar el render sin salir de la app. */
-function addAudioMessage(blob: Blob, text: string): void {
-  const div = document.createElement("div");
-  div.className = "msg assistant";
-  const caption = document.createElement("div");
-  caption.innerHTML = escapeHtml(text).replace(/\n/g, "<br>");
-  const audio = document.createElement("audio");
-  audio.controls = true;
-  audio.preload = "metadata";
-  audio.src = URL.createObjectURL(blob);
-  audio.className = "render-audio";
-  div.append(caption, audio);
-  messages.appendChild(div);
-  messages.scrollTop = messages.scrollHeight;
 }
 
 function warnPersistence(message: string): void {
@@ -479,7 +447,6 @@ function updateSelectionBar(): void {
   const enabled = ready && !busy;
   $<HTMLButtonElement>("sel-mute").disabled = !enabled || selected.length === 0;
   $<HTMLButtonElement>("sel-solo").disabled = !enabled || selected.length === 0;
-  $<HTMLButtonElement>("sel-stems").disabled = !enabled || selected.length === 0;
   $<HTMLButtonElement>("sel-delete").disabled = !enabled || selected.length === 0;
   $<HTMLButtonElement>("sel-all").disabled = !enabled || !project || project.tracks.length === 0;
   $<HTMLButtonElement>("sel-clear").disabled = selected.length === 0;
@@ -503,49 +470,6 @@ function deleteSelectedTracks(): void {
   }
 }
 
-async function exportStems(trackIds?: string[]): Promise<void> {
-  const base = activeProject(project);
-  if (busy || !base || base.tracks.length === 0) return;
-  setBusy(true, "Renderizando stems…");
-  try {
-    const { renderStems } = await import("./render.ts");
-    const files = await renderStems(base, {
-      ...(trackIds && trackIds.length > 0 ? { trackIds } : {}),
-      onProgress: (index, total, name) => setStatus(`Stem ${index}/${total}: ${name}…`),
-    });
-    const { zipStems } = await import("./stems-zip.ts");
-    const archive = await zipStems(files);
-    const suffix = trackIds && trackIds.length > 0 ? "-seleccion" : "-stems";
-    download(archive, `${slug(base.name)}${suffix}.zip`);
-    addMessage("assistant", `Stems listos: ${files.length} pista(s) (pre-máster, con sus FX).`);
-  } catch (error) {
-    addMessage("system", `No se pudieron renderizar los stems: ${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    setBusy(false);
-  }
-}
-
-function download(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 5_000);
-}
-
-function slug(name: string): string {
-  return (
-    name
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-zA-Z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .toLowerCase() || "miuzika"
-  );
-}
-
-/** Inserta una compilación Strudel en un proyecto; no toca el estado global. */
 /** Renderiza con el motor real de Strudel y lo inserta como pista de audio. */
 async function renderStrudelAudioSource(request: CodeAudioRequest): Promise<void> {
   const base = project;
@@ -647,125 +571,22 @@ stopButton.addEventListener("click", () => {
 
 undoButton.addEventListener("click", () => void undo());
 redoButton.addEventListener("click", () => void redo());
-$("fit-timeline").addEventListener("click", () => timeline.fitToProject());
 
 $("new-song").addEventListener("click", () => {
   if (!ready) return;
   if (project && project.tracks.length > 0 && !confirm("¿Empezar una canción nueva? Se perderá la actual.")) return;
   setProject(null);
   messages.innerHTML = "";
-  addMessage("assistant", "Cuéntame qué quieres crear: género, tonalidad, tempo, instrumentos o una referencia.");
+  addMessage("assistant", "Proyecto nuevo. Usa Strudel para renderizar un WAV o importa audio.");
 });
-
-$("export-stems").addEventListener("click", () => void exportStems());
 
 $("code-lab").addEventListener("click", () => openCodeEditor());
 
 $("sel-mute").addEventListener("click", () => toggleTracksFlag(selectedTrackIds, "muted"));
 $("sel-solo").addEventListener("click", () => toggleTracksFlag(selectedTrackIds, "solo"));
-$("sel-stems").addEventListener("click", () => void exportStems(selectedTrackIds));
 $("sel-delete").addEventListener("click", deleteSelectedTracks);
 $("sel-all").addEventListener("click", () => timeline.selectAll());
 $("sel-clear").addEventListener("click", () => timeline.clearSelection());
-
-$("export-midi").addEventListener("click", () => {
-  if (!ready || !project || project.tracks.length === 0) return;
-  const bytes = projectToMidi(project);
-  download(new Blob([bytes as BlobPart], { type: "audio/midi" }), `${slug(project.name)}.mid`);
-});
-
-$("export-json").addEventListener("click", () => {
-  const view = activeProject(project);
-  if (!ready || !view) return;
-  download(
-    new Blob([JSON.stringify(view, null, 2)], { type: "application/json" }),
-    `${slug(view.name)}.json`,
-  );
-});
-
-$("save-bundle").addEventListener("click", async () => {
-  const view = activeProject(project);
-  if (!ready || !view || busy) return;
-  setBusy(true, "Empaquetando proyecto y WAVs…");
-  try {
-    const result = await exportProjectBundle(view);
-    download(result.blob, `${slug(view.name)}.miuzika.zip`);
-    addMessage(
-      "assistant",
-      `Proyecto guardado con MIDI, metadatos y WAVs (${(result.blob.size / 1024 / 1024).toFixed(1)} MB).`,
-    );
-    for (const warning of result.warnings) addMessage("system", warning);
-  } catch (error) {
-    addMessage("system", `No se pudo empaquetar el proyecto: ${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    setBusy(false);
-  }
-});
-
-function openDawAudioFiles(source: Project): Map<string, OpenDawAudioAsset> {
-  const files = new Map<string, OpenDawAudioAsset>();
-  for (const asset of source.audioAssets ?? []) {
-    const loaded = audioAssets.get(asset.id);
-    if (!loaded) continue;
-    const uuid = new Uint8Array(16);
-    crypto.getRandomValues(uuid);
-    files.set(asset.id, {
-      chunks: [
-        {
-          uuid,
-          name: asset.name,
-          durationInSeconds: loaded.buffer.duration,
-          startInSeconds: 0,
-        },
-      ],
-      durationInSeconds: loaded.buffer.duration,
-    });
-  }
-  return files;
-}
-
-$("export-opendaw").addEventListener("click", async () => {
-  if (!ready || !project || project.tracks.length === 0) return;
-  setBusy(true, "Generando proyecto openDAW…");
-  try {
-    const { projectToOpenDaw } = await import("../../src/host/opendaw/adapter.ts");
-    const result = await projectToOpenDaw(project, { audioAssets: openDawAudioFiles(project) });
-    download(new Blob([result.bytes], { type: "application/octet-stream" }), `${slug(project.name)}.odw`);
-    addMessage(
-      "assistant",
-      `Proyecto openDAW generado: ${result.stats.tracks} pistas, ${result.stats.regions} clips, ${result.stats.notes} notas, ${result.stats.devices} FX.`,
-    );
-    for (const warning of result.warnings) addMessage("system", `openDAW: ${warning}`);
-  } catch (error) {
-    addMessage("system", `No se pudo exportar a openDAW: ${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    setBusy(false);
-  }
-});
-
-$("export-wav").addEventListener("click", async () => {
-  const view = activeProject(project);
-  if (!ready || !view || view.tracks.length === 0) return;
-  setBusy(true, "Renderizando WAV…");
-  try {
-    const target = $<HTMLSelectElement>("master-target").value;
-    const options =
-      target === "raw"
-        ? { normalize: false }
-        : { targetLufs: target === "commercial" ? -10 : -14 };
-    const { renderProject } = await import("./render.ts");
-    const result = await renderProject(view, options);
-    download(result.blob, `${slug(view.name)}.wav`);
-    addAudioMessage(
-      result.blob,
-      `WAV renderizado (${(result.blob.size / 1024 / 1024).toFixed(1)} MB) · ${result.loudness.lufs.toFixed(1)} LUFS · pico ${result.loudness.truePeakDb.toFixed(1)} dBTP. Reproducción aquí abajo; el archivo también se ha descargado.`,
-    );
-  } catch (error) {
-    addMessage("system", `No se pudo renderizar: ${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    setBusy(false);
-  }
-});
 
 $<HTMLInputElement>("audio-file").addEventListener("change", async (event) => {
   const input = event.target as HTMLInputElement;
@@ -938,7 +759,7 @@ async function boot(): Promise<void> {
 
   if (project) {
     setProject(project, false);
-    addMessage("assistant", `Proyecto cargado: “${project.name}”. Pide cambios o pulsa ▶.`);
+    addMessage("assistant", `Proyecto cargado: "${project.name}". Pulsa play para escuchar.`);
     if (restoredFromDb) {
       addMessage("system", "Proyecto recuperado desde IndexedDB (localStorage no tenía una copia).");
     }
@@ -967,7 +788,6 @@ async function boot(): Promise<void> {
 }
 
 updateActions();
-void loadDrumKit();
 void boot();
 
 if (import.meta.env.DEV) {

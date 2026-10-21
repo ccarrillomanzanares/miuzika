@@ -1,12 +1,9 @@
 /** Proyecto autocontenido: project.json + WAVs, en un ZIP. */
 
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { strFromU8, unzipSync } from "fflate";
 import type { Project } from "../../src/core/types.ts";
 import { audioAssets, computePeaks, decodeAudioBlob } from "./audio-store.ts";
-import { getAudioAsset, putAudioAsset } from "./audio-db.ts";
-import { audioBufferToWav } from "./wav.ts";
-
-const MANIFEST_VERSION = 1;
+import { putAudioAsset } from "./audio-db.ts";
 
 interface BundleAsset {
   id: string;
@@ -21,18 +18,9 @@ interface BundleManifest {
   assets: BundleAsset[];
 }
 
-export interface ProjectBundleResult {
-  blob: Blob;
-  warnings: string[];
-}
-
-export interface ImportedProjectBundle {
+interface ImportedProjectBundle {
   project: Project;
   warnings: string[];
-}
-
-function safeFile(id: string): string {
-  return id.replace(/[^a-zA-Z0-9_.-]+/g, "_");
 }
 
 function collectAssetIds(project: Project): string[] {
@@ -44,52 +32,6 @@ function collectAssetIds(project: Project): string[] {
     }
   }
   return [...ids];
-}
-
-export async function exportProjectBundle(project: Project): Promise<ProjectBundleResult> {
-  const warnings: string[] = [];
-  const entries: Record<string, Uint8Array> = {
-    "project.json": strToU8(JSON.stringify(project, null, 2)),
-  };
-  const assets: BundleAsset[] = [];
-  for (const id of collectAssetIds(project)) {
-    const meta =
-      project.audioAssets?.find((asset) => asset.id === id) ??
-      ({ id, name: id, durationBeats: 1 } as const);
-    let blob: Blob | null = null;
-    const stored = await getAudioAsset(id);
-    if (stored) {
-      blob = stored.blob;
-    } else {
-      const loaded = audioAssets.get(id);
-      if (loaded) {
-        blob = new Blob([audioBufferToWav(loaded.buffer)], { type: "audio/wav" });
-      }
-    }
-    if (!blob) {
-      warnings.push(`No se encontró el WAV de "${meta.name}"; el bundle lo omitirá.`);
-      continue;
-    }
-    const file = `audio/${safeFile(id)}.wav`;
-    entries[file] = new Uint8Array(await blob.arrayBuffer());
-    assets.push({
-      id,
-      name: meta.name,
-      durationBeats: meta.durationBeats,
-      file,
-    });
-  }
-  const manifest: BundleManifest = {
-    format: "miuzika-project",
-    version: MANIFEST_VERSION,
-    assets,
-  };
-  entries["manifest.json"] = strToU8(JSON.stringify(manifest, null, 2));
-  const archive = zipSync(entries, { level: 0 });
-  return {
-    blob: new Blob([archive as BlobPart], { type: "application/zip" }),
-    warnings,
-  };
 }
 
 export async function importProjectBundle(file: Blob): Promise<ImportedProjectBundle> {

@@ -4,16 +4,16 @@
 
 ```text
 GUI (web/)
-  ├── openDAW WASM: reproducción, timeline, piano roll, mezcla
+  ├── openDAW WASM: reproducción, timeline, piano roll
   ├── Strudel → WAV: código generativo a pista de audio
   ├── audio WAV: importación y clips
-  └── export: WAV, stems, MIDI, JSON, .miuzika.zip, .odw
+  └── persistencia: localStorage + IndexedDB
 
 Core (src/core/)
   ├── Project IR
   ├── ops transaccionales
-  ├── teoría y MIDI
-  └── persistencia
+  ├── teoría
+  └── proyecto
 
 Host (src/host/opendaw/)
   ├── mapping.ts
@@ -27,7 +27,7 @@ Host (src/host/opendaw/)
 2. openDAW reproduce pistas MIDI y audio.
 3. Strudel renderiza un patrón a WAV en el navegador.
 4. El WAV se registra como asset y se inserta como pista de audio.
-5. La GUI mezcla y exporta.
+5. La GUI reproduce, edita y persiste.
 
 ## Strudel
 
@@ -42,10 +42,10 @@ Host (src/host/opendaw/)
 
 - `Project` e historial: localStorage + IndexedDB (`miuzika-projects`).
 - WAVs: IndexedDB (`miuzika/audio-assets`).
-- Bundle `.miuzika.zip`: `project.json` + manifest + WAVs.
-- El JSON no contiene los bytes de audio.
+- **Abrir** importa un JSON o un bundle `.miuzika.zip` existente.
+- No hay exportación de proyecto desde esta versión.
 
 ## Lo que no existe
 
-No hay planner, LLM, agente de canción, worker Python ni motor Rendered. La app
-solo necesita Node para la GUI y el navegador para el audio.
+No hay planner, LLM, agente, worker Python, motor Rendered, Sample Lab,
+exportadores ni compilación Strudel → MIDI.

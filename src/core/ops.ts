@@ -8,7 +8,6 @@ import type { Device, DeviceType, Note, Project, Track } from "./types.ts";impor
   DEVICE_DEFAULTS,
   DEVICE_PARAMS,
   DEVICE_TYPES,
-  INSTRUMENT_PROGRAM,
   INSTRUMENT_TYPES,
   beatsPerBar,
 } from "./types.ts";
@@ -35,7 +34,7 @@ const NoteSchema = z.object({
   velocity: z.number().int().min(1).max(127).default(96),
 });
 
-export const InstrumentSchema = z.object({
+const InstrumentSchema = z.object({
   type: z.enum(INSTRUMENT_TYPES),
   preset: z.string().max(64).optional(),
   program: z.number().int().min(0).max(127).optional(),
@@ -159,7 +158,7 @@ const SetMasterOp = z.object({
   gainDb: GainSchema,
 });
 
-export const OpSchema = z.discriminatedUnion("op", [
+const OpSchema = z.discriminatedUnion("op", [
   SetSongOp,
   AddTrackOp,
   SetTrackOp,
@@ -176,11 +175,10 @@ export const OpSchema = z.discriminatedUnion("op", [
   SetMasterOp,
 ]);
 
-export const OpsSchema = z.array(OpSchema).min(1).max(200);
+const OpsSchema = z.array(OpSchema).min(1).max(200);
 
 export type Op = z.input<typeof OpSchema>;
-export type ParsedOp = z.output<typeof OpSchema>;
-export type OpName = Op["op"];
+type ParsedOp = z.output<typeof OpSchema>;
 
 /** Valida y normaliza operaciones del proyecto. */
 export function parseOps(value: unknown): ParsedOp[] {
@@ -513,7 +511,7 @@ function applyOne(project: Project, op: ParsedOp): string {
   }
 }
 
-export interface ApplyResult {
+interface ApplyResult {
   project: Project;
   results: string[];
   warnings: Issue[];
@@ -548,6 +546,4 @@ export function applyOps(project: Project, ops: Op[]): ApplyResult {
   return { project: draft, results, warnings: issues.filter((issue) => issue.severity === "warning") };
 }
 
-export function instrumentProgram(track: Track): number {
-  return track.instrument.program ?? INSTRUMENT_PROGRAM[track.instrument.type] ?? 0;
-}
+

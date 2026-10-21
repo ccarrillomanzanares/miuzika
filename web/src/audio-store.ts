@@ -3,7 +3,7 @@
 import type { Project } from "../../src/core/types.ts";
 import { getAudioAsset, putAudioAsset } from "./audio-db.ts";
 
-export interface LoadedAsset {
+interface LoadedAsset {
   id: string;
   name: string;
   buffer: AudioBuffer;
@@ -60,7 +60,7 @@ export async function persistAudioAsset(
   return putAudioAsset({ id, name, durationBeats, blob });
 }
 
-export interface HydrateResult {
+interface HydrateResult {
   loaded: number;
   missing: string[];
 }

@@ -23,9 +23,7 @@
     "typecheck": "tsc --noEmit",
     "dev": "vite",
     "preview": "vite preview",
-    "build:web": "vite build",
-    "drums:build": "node scripts/make-drums.ts",
-    "export:opendaw": "node scripts/bundle-run.mjs src/host/opendaw/export-cli.ts tmp/opendaw-export.mjs"
+    "build:web": "vite build"
   },
   "dependencies": {
     "@opendaw/lib-dom": "^0.0.92",

@@ -1,6 +1,6 @@
 # Plan de pruebas de miuzika
 
-Versión objetivo: **0.11.0 alpha**. Alcance: GUI/openDAW + Strudel → WAV.
+Versión objetivo: **0.11.0**. Alcance: GUI/openDAW + Strudel → WAV.
 
 Se ejecuta en `http://localhost:5173`. Evidencia por caso: resultado, mensajes de
 la UI, errores de consola y estado de `window.__miuzika`.
@@ -20,7 +20,7 @@ la UI, errores de consola y estado de `window.__miuzika`.
 - [ ] **D3. Mute/solo en caliente**: no se reinicia el playhead.
 - [ ] **D4. Stop/seek**.
 - [ ] **D5. WAV**: importar audio, colocarlo y reproducirlo.
-- [ ] **C1. Timeline**: zoom, seek, ajustar.
+- [ ] **C1. Timeline**: zoom, seek.
 - [ ] **C2. Piano roll**: añadir/mover/borrar notas.
 - [ ] **C3. Selección y borrado**.
 
@@ -33,13 +33,9 @@ la UI, errores de consola y estado de `window.__miuzika`.
 - [ ] **F5. Reproducción**: el WAV suena vía openDAW.
 - [ ] **F6. Sin red**: error/warnings claros; no se cuelga.
 
-## Export y persistencia
+## Persistencia
 
-- [ ] **H1. WAV**: mixdown válido.
-- [ ] **H2. Stems**: un WAV por pista; ZIP válido.
-- [ ] **H3. MIDI**: SMF tipo 1 válido.
-- [ ] **H4. JSON**: IR completo; sin bytes WAV.
-- [ ] **H5. Bundle**: **Proyecto** y **Abrir** conservan MIDI, WAV y disposición.
-- [ ] **H6. openDAW `.odw`**: exportar y reimportar.
 - [ ] **J1. Recarga** con proyecto y audio.
 - [ ] **J2. Asset ausente**: aviso, sin crash.
+- [ ] **J3. Abrir JSON** existente.
+- [ ] **J4. Abrir bundle `.miuzika.zip`** existente.

@@ -9,7 +9,7 @@ export interface CodeAudioRequest {
   bars: number;
 }
 
-export interface CodeLabOptions {
+interface CodeLabOptions {
   project: Project;
   onRenderAudio: (request: CodeAudioRequest) => Promise<void>;
 }

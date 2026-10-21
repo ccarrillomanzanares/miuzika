@@ -4,7 +4,7 @@ import { z } from "zod";
 
 export const ParamValueSchema = z.union([z.number(), z.boolean()]);
 
-export type ParamValue = z.infer<typeof ParamValueSchema>;
+type ParamValue = z.infer<typeof ParamValueSchema>;
 
 /** true/false → 1/0; el resto pasa tal cual. */
 export function numericParam(value: ParamValue): number {

@@ -7,7 +7,7 @@
 
 import type { Device, InstrumentType } from "../../core/types.ts";
 
-export type OpenDawEffectFactory =
+type OpenDawEffectFactory =
   | "Reverb"
   | "Delay"
   | "Waveshaper"
@@ -17,13 +17,13 @@ export type OpenDawEffectFactory =
   | "StereoTool"
   | "Revamp";
 
-export interface MappedParam {
+interface MappedParam {
   /** Ruta con puntos para parámetros anidados (p. ej. "lowShelf.gain"). */
   name: string;
   value: number | boolean;
 }
 
-export interface MappedDevice {
+interface MappedDevice {
   factory: OpenDawEffectFactory | null;
   params: MappedParam[];
   /** Motivo cuando no hay equivalente en openDAW. */
@@ -178,7 +178,7 @@ export function dbToUnit(db: number): number {
   }
 }
 
-export interface InstrumentMapping {
+interface InstrumentMapping {
   factory: "Playfield" | "Vaporisateur";
   warning?: string;
 }
@@ -195,7 +195,7 @@ export function mapInstrument(type: InstrumentType): InstrumentMapping {
 }
 
 /** openDAW usa 960 pulsos por negra. */
-export const PULSES_PER_BEAT = 960;
+const PULSES_PER_BEAT = 960;
 
 export function beatsToPulses(beats: number): number {
   return Math.round(beats * PULSES_PER_BEAT);

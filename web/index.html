@@ -17,26 +17,13 @@
   <body>
     <div id="app">
       <header>
-        <div class="brand">miuzika <span>alpha</span></div>
+        <div class="brand">miuzika <span>spike</span></div>
         <div id="song-info" class="song-info"></div>
         <div class="actions">
           <button id="play" class="icon" title="Reproducir con el engine de openDAW">▶</button>
           <button id="stop" class="icon" title="Detener">■</button>
           <button id="undo" class="icon" title="Deshacer (Ctrl+Z)" disabled>↶</button>
           <button id="redo" class="icon" title="Rehacer (Ctrl+Shift+Z)" disabled>↷</button>
-          <button id="fit-timeline" title="Ajustar la timeline a toda la canción (Ctrl+0)" disabled>Ajustar</button>
-          <span class="sep"></span>
-          <select id="master-target" title="Objetivo de loudness del mixdown">
-            <option value="streaming">−14 LUFS</option>
-            <option value="commercial">−10 LUFS</option>
-            <option value="raw">Sin normalizar</option>
-          </select>
-          <button id="export-wav" title="Mixdown del proyecto a WAV" disabled>WAV</button>
-          <button id="export-stems" title="WAV por pista, con sus FX y sin máster" disabled>Stems</button>
-          <button id="export-midi" title="Exportar MIDI (solo pistas MIDI)" disabled>MIDI</button>
-          <button id="export-opendaw" title="Exportar a openDAW (solo pistas MIDI por ahora)" disabled>openDAW</button>
-          <button id="export-json" title="Proyecto canónico: metadatos; no incluye los WAV" disabled>JSON</button>
-          <button id="save-bundle" title="Guardar proyecto completo: JSON + WAVs en un ZIP" disabled>Proyecto</button>
           <label class="file" title="Abrir JSON o bundle .miuzika.zip">Abrir<input id="open" type="file" accept=".json,.zip,.miuzika.zip,application/json,application/zip" /></label>
           <label class="file">Audio<input id="audio-file" type="file" accept="audio/*" multiple /></label>
           <button id="code-lab" title="Escribir un patrón Strudel y renderizarlo a WAV">Strudel</button>
@@ -48,7 +35,6 @@
         <strong id="selection-count">0 pistas</strong>
         <button id="sel-mute">Mute</button>
         <button id="sel-solo">Solo</button>
-        <button id="sel-stems">Stems</button>
         <button id="sel-delete">Borrar</button>
         <span class="spacer"></span>
         <button id="sel-all">Todas</button>

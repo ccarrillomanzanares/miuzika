@@ -12,7 +12,7 @@ export interface Issue {
   message: string;
 }
 
-export interface CreateProjectInput {
+interface CreateProjectInput {
   name?: string;
   bpm?: number;
   key?: { tonic: string; mode: Mode };
@@ -168,7 +168,7 @@ function validateNote(note: Note, path: string, error: (path: string, message: s
   }
 }
 
-export interface ProjectStats {
+interface ProjectStats {
   tracks: number;
   clips: number;
   notes: number;

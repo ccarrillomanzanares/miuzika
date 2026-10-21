@@ -26,7 +26,6 @@ Comandos:
 
 ```bash
 npm run test:opendaw                       # ida y vuelta contra el SDK real
-npm run export:opendaw -- out/noche.json   # escribe out/noche.odw
 ```
 
 Resultado medido: 6 pistas, 24 clips, 666 notas y 11 FX exportados; al reimportar se conservan
@@ -201,13 +200,11 @@ clips:  added / removed / updated(notes)
 Nuestros ids (`trk_bass`, `clp_3`) se pueden mapear 1:1 a ids del host si el SDK acepta UUIDs
 propios; si no, mantener una tabla `miuzikaId ↔ hostId`.
 
-## Import/export hoy
+## Import hoy
 
-- **MIDI**: ya implementado (`src/core/midi.ts`). Formato 1, PPQN 960, canal 10 para batería,
-  armadura y tempo. Sirve para validar el resultado en cualquier DAW antes de integrar.
-- **DAWproject**: siguiente export. El SDK trae `lib-dawproject`; habría que generar el XML y
-  empaquetar assets.
-- **JSON**: el IR completo, pensado para versionar y depurar.
+- **Abrir**: la GUI importa un JSON o un bundle `.miuzika.zip` existente con sus WAVs.
+- **openDAW**: el adaptador convierte el `Project` a un proyecto del engine para reproducir.
+- No hay exportaci?n de proyecto ni MIDI desde la interfaz.
 
 ## Plan de implementación
 
@@ -220,11 +217,10 @@ propios; si no, mantener una tabla `miuzikaId ↔ hostId`.
    notas/pistas/mezcla; los FX no se reconstruyen.
 4. **Reconciliación**: diff por id + undo compartido entre la UI y openDAW.
 5. **Piano roll**: hecho en miuzika (edita el IR); falta sincronizar con el editor de openDAW.
-6. **Render offline**: `OfflineEngineRenderer` para previsualizar dentro de openDAW. Mientras
-   tanto, el mixdown usa nuestro renderizador WebAudio (`web/src/render.ts`).
+6. **Render offline**: no implementado; la app reproduce con el engine.
 7. ~~**Audio**: `AudioFileBox` + `SampleService` para reproducir los WAV.~~
    Hecho en playback con `AudioFileBox`/`AudioRegionBox`; los WAV largos se parten en chunks
-   de 2 minutos. Falta exportar audio en `.odw`/DAWproject standalone.
+   de 2 minutos. 
 
 ## Checklist de verificación contra el SDK real
 

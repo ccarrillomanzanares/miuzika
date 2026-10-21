@@ -1,6 +1,6 @@
 /** Persistencia de WAV en IndexedDB (los metadatos siguen en el proyecto). */
 
-export interface StoredAudioAsset {
+interface StoredAudioAsset {
   id: string;
   name: string;
   durationBeats: number;

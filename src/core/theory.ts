@@ -2,9 +2,9 @@
 
 import type { KeySignature, Mode } from "./types.ts";
 
-export class MusicError extends Error {}
+class MusicError extends Error {}
 
-export const PITCH_CLASSES = [
+const PITCH_CLASSES = [
   "C",
   "C#",
   "D",
@@ -40,7 +40,7 @@ const SOLFEGE: Record<string, string> = {
   si: "B",
 };
 
-export const SCALES: Record<Mode, readonly number[]> = {
+const SCALES: Record<Mode, readonly number[]> = {
   major: [0, 2, 4, 5, 7, 9, 11],
   minor: [0, 2, 3, 5, 7, 8, 10],
   dorian: [0, 2, 3, 5, 7, 9, 10],
@@ -73,9 +73,6 @@ export function noteToMidi(pitchClassName: string, octave: number): number {
   return (octave + 1) * 12 + pitchClass(pitchClassName);
 }
 
-export function midiToName(midi: number): string {
-  return `${PITCH_CLASSES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
-}
 
 export function canonicalPitchClass(name: string): string {
   return PITCH_CLASSES[pitchClass(name)]!;
@@ -86,7 +83,7 @@ export function normalizeKey(key: KeySignature): KeySignature {
 }
 
 /** Semitonos desde la tónica para un grado (0 = tónica, 7 = octava). */
-export function degreeToSemitones(mode: Mode, degree: number): number {
+function degreeToSemitones(mode: Mode, degree: number): number {
   const scale = SCALES[mode];
   const size = scale.length;
   const octave = Math.floor(degree / size);
@@ -130,7 +127,7 @@ const CHORD_QUALITIES: Record<string, readonly number[]> = {
   "13": [0, 4, 7, 10, 14, 21],
 };
 
-export interface Chord {
+interface Chord {
   symbol: string;
   /** Pitch class de la fundamental. */
   root: number;
@@ -166,14 +163,7 @@ export function chordToMidi(chord: Chord, octave: number, inversion = 0): number
 }
 
 /** Acorde por defecto si el prompt no especifica progresión. */
-export function tonicChordSymbol(key: KeySignature): string {
-  const tonic = canonicalPitchClass(key.tonic);
-  return key.mode === "major" ? tonic : `${tonic}m`;
-}
 
-export function describeKey(key: KeySignature): string {
-  return `${canonicalPitchClass(key.tonic)} ${key.mode}`;
-}
 
 /** Nombres con bemoles para tonalidades de bemoles (más legible que A#). */
 const MAJOR_SIGNATURE_BY_PC: Record<number, number> = {
@@ -192,7 +182,7 @@ const MAJOR_SIGNATURE_BY_PC: Record<number, number> = {
 };
 
 /** Armadura: positivo = sostenidos, negativo = bemoles. */
-export function keyAccidentals(key: KeySignature): number {
+function keyAccidentals(key: KeySignature): number {
   const pc = pitchClass(key.tonic);
   if (key.mode === "major") return MAJOR_SIGNATURE_BY_PC[pc] ?? 0;
   if (key.mode === "minor" || key.mode === "harmonicMinor") {
@@ -201,17 +191,14 @@ export function keyAccidentals(key: KeySignature): number {
   return 0;
 }
 
-export function prefersFlats(key: KeySignature): boolean {
+function prefersFlats(key: KeySignature): boolean {
   return keyAccidentals(key) < 0;
 }
 
-export function isMajorFamily(mode: Mode): boolean {
-  return mode === "major" || mode === "lydian" || mode === "mixolydian";
-}
 
 const FLAT_PITCH_CLASSES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"] as const;
 
-export function pitchClassName(pc: number, flats: boolean): string {
+function pitchClassName(pc: number, flats: boolean): string {
   const normalized = ((pc % 12) + 12) % 12;
   return flats ? FLAT_PITCH_CLASSES[normalized]! : PITCH_CLASSES[normalized]!;
 }

@@ -22,9 +22,9 @@ export interface KeySignature {
   mode: Mode;
 }
 
-export type TrackKind = "midi" | "audio";
+type TrackKind = "midi" | "audio";
 
-export interface InstrumentSpec {
+interface InstrumentSpec {
   type: InstrumentType;
   /** Nombre del preset en el host (p. ej. "Vaporisateur"). */
   preset?: string;
@@ -78,14 +78,14 @@ export interface Note {
   velocity: number;
 }
 
-export interface AudioAsset {
+interface AudioAsset {
   id: string;
   name: string;
   /** Duración en beats al tempo del proyecto. */
   durationBeats: number;
 }
 
-export interface AudioRef {
+interface AudioRef {
   assetId: string;
   /** Desplazamiento dentro del fichero, en beats. */
   offset: number;
@@ -185,22 +185,7 @@ export const DEVICE_DEFAULTS: Record<DeviceType, Record<string, number>> = {
   width: { width: 1.2 },
 };
 
-export const INSTRUMENT_PROGRAM: Record<InstrumentType, number> = {
-  drumkit: 0,
-  bass: 38, // Synth Bass 1
-  synth: 81, // Lead 2 (sawtooth)
-  pad: 89, // Pad 2 (warm)
-  lead: 81,
-  arp: 82,
-  soundfont: 0,
-  sampler: 0,
-};
-
 export function beatsPerBar(project: Project): number {
   const { numerator, denominator } = project.timeSignature;
   return (numerator * 4) / denominator;
-}
-
-export function barsToBeats(project: Project, bars: number): number {
-  return bars * beatsPerBar(project);
 }

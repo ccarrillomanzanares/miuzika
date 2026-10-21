@@ -153,13 +153,6 @@ button.icon.active {
   color: var(--accent);
 }
 
-.sep {
-  width: 1px;
-  height: 20px;
-  background: var(--line);
-  margin: 0 4px;
-}
-
 .file {
   position: relative;
   overflow: hidden;
@@ -359,13 +352,6 @@ main {
   }
 }
 
-.msg.user {
-  background: #1c2740;
-  align-self: flex-end;
-  max-width: 92%;
-  border: 1px solid #273552;
-}
-
 .msg.assistant {
   background: #161a23;
   border: 1px solid #242938;
@@ -376,12 +362,6 @@ main {
   border: 1px solid #3a2a2e;
   color: #e7b4b4;
   font-size: 11.5px;
-}
-
-.render-audio {
-  width: 100%;
-  margin-top: 8px;
-  height: 34px;
 }
 
 .status {
@@ -575,4 +555,7 @@ main {
     min-height: 0;
   }
 }
+
+
+.code-card .render-audio { height: 34px; padding: 0 14px; }
 
