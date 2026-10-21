@@ -32,6 +32,7 @@ import { renderStrudelAudio } from "./strudel-audio.ts";
 import { exportProjectBundle, importProjectBundle } from "./project-bundle.ts";
 import { TimelineView, escapeHtml } from "./timeline.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
+import type { OpenDawAudioAsset } from "../../src/host/opendaw/adapter.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -1574,12 +1575,34 @@ $("save-bundle").addEventListener("click", async () => {
   }
 });
 
+function openDawAudioFiles(source: Project): Map<string, OpenDawAudioAsset> {
+  const files = new Map<string, OpenDawAudioAsset>();
+  for (const asset of source.audioAssets ?? []) {
+    const loaded = audioAssets.get(asset.id);
+    if (!loaded) continue;
+    const uuid = new Uint8Array(16);
+    crypto.getRandomValues(uuid);
+    files.set(asset.id, {
+      chunks: [
+        {
+          uuid,
+          name: asset.name,
+          durationInSeconds: loaded.buffer.duration,
+          startInSeconds: 0,
+        },
+      ],
+      durationInSeconds: loaded.buffer.duration,
+    });
+  }
+  return files;
+}
+
 $("export-opendaw").addEventListener("click", async () => {
   if (!ready || !project || project.tracks.length === 0) return;
   setBusy(true, "Generando proyecto openDAW…");
   try {
     const { projectToOpenDaw } = await import("../../src/host/opendaw/adapter.ts");
-    const result = await projectToOpenDaw(project);
+    const result = await projectToOpenDaw(project, { audioAssets: openDawAudioFiles(project) });
     download(new Blob([result.bytes], { type: "application/octet-stream" }), `${slug(project.name)}.odw`);
     addMessage(
       "assistant",
