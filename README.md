@@ -239,7 +239,8 @@ correspondiente. Si se usa la licencia comercial de openDAW, revisa `NOTICE.md` 
 
 ## Contribuir
 
-El plan de pruebas funcionales está en [docs/TEST_PLAN.md](docs/TEST_PLAN.md).
+El plan de pruebas funcionales está en [docs/TEST_PLAN.md](docs/TEST_PLAN.md) y el
+último informe P0 en [docs/TEST_REPORT.md](docs/TEST_REPORT.md).
 
 Antes de un PR:
 

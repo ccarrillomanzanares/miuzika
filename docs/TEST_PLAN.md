@@ -40,7 +40,8 @@ Estas deben pasar antes de considerar la build publicable.
   - Esperado: UI carga, sin errores de consola no controlados, `crossOriginIsolated === true`.
 - [ ] **A2. Origen único**
   - Pasos: abrir `http://127.0.0.1:5173`.
-  - Esperado: redirige a `localhost`; no se crea almacenamiento separado.
+  - Esperado: la app no se sirve desde `127.0.0.1` (Vite escucha en `localhost`);
+    no se crea almacenamiento separado.
 - [ ] **A3. Sin clave LLM**
   - Pasos: arrancar sin `OLLAMA_API_KEY`.
   - Esperado: la app abre; los flujos LLM muestran un error claro, no se rompe la UI.
