@@ -166,6 +166,16 @@ export class TimelineView {
   }
 
   /** Actualiza el proyecto sin resetear el playhead ni la selección (mute/solo en vivo). */
+  /**
+   * Reajusta el lienzo al tamaño actual de su contenedor.
+   * Hace falta cuando algo cambia el layout sin tocar la ventana (plegar el chat).
+   */
+  relayout(): void {
+    this.resize();
+    this.renderStatic();
+    this.draw(this.beat);
+  }
+
   refresh(project?: Project): void {
     if (project) this.project = project;
     this.pruneSelection();

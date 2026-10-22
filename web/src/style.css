@@ -365,8 +365,12 @@ main {
 }
 
 .status {
+  display: flex;
+  align-items: center;
   min-height: 26px;
-  padding: 0 12px 8px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--panel);
   color: var(--muted);
   font-size: 10.5px;
   font-family: ui-monospace, monospace;
@@ -558,4 +562,88 @@ main {
 
 
 .code-card .render-audio { height: 34px; padding: 0 14px; }
+
+/* ── Panel de chat del agente ─────────────────────────────────────────────── */
+
+button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.chat-head strong {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+ .chat-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.chat-composer textarea {
+  flex: 1;
+  min-height: 32px;
+  max-height: 140px;
+  resize: none;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #171a23;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+  padding: 7px 9px;
+}
+
+.chat-composer textarea:focus {
+  outline: none;
+  border-color: #3d4657;
+}
+
+#chat-send {
+  height: 32px;
+  min-width: 40px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+/* Mientras el agente trabaja, la caja se ve inactiva. */
+.chat-composer.busy textarea,
+.chat-composer.busy #chat-send {
+  opacity: 0.55;
+}
+
+.msg.user {
+  background: #1a2438;
+  border: 1px solid #2a3a55;
+  align-self: flex-end;
+  max-width: 96%;
+}
+
+/* El panel se puede esconder sin mover el resto de la aplicación. */
+#app.chat-collapsed main {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+#app.chat-collapsed .chat {
+  display: none;
+}
 

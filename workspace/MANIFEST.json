@@ -1,0 +1,405 @@
+{
+ "generado": "2026-10-22T22:53:13",
+ "raiz": "workspace/",
+ "regla": "Estos simbolos YA existen. Reutilizalos con 'from <modulo> import <simbolo>'. Escribir un fichero nuevo que los redefina sera rechazado (409).",
+ "modulos": {
+  "cancion": {
+   "archivo": "codigo/cancion.py",
+   "importa_de": [],
+   "simbolos": {
+    "bar_de": {
+     "tipo": "funcion",
+     "firma": "(t)",
+     "doc": ""
+    },
+    "t_de": {
+     "tipo": "funcion",
+     "firma": "(bar)",
+     "doc": ""
+    },
+    "acorde_de": {
+     "tipo": "funcion",
+     "firma": "(bar)",
+     "doc": ""
+    },
+    "silabas": {
+     "tipo": "funcion",
+     "firma": "(palabra)",
+     "doc": ""
+    },
+    "desglosar": {
+     "tipo": "funcion",
+     "firma": "(texto)",
+     "doc": "devuelve [(vocal, consonante_inicial)] por silaba"
+    },
+    "ajustar": {
+     "tipo": "funcion",
+     "firma": "(cont, n)",
+     "doc": ""
+    },
+    "linea": {
+     "tipo": "funcion",
+     "firma": "(texto, bar, beats, cont, vel=1.0)",
+     "doc": "devuelve [(t_seg, dur_seg, midi, vocal, cons, vel)]"
+    },
+    "silabas_voz": {
+     "tipo": "funcion",
+     "firma": "()",
+     "doc": ""
+    }
+   }
+  },
+  "dsp": {
+   "archivo": "codigo/dsp.py",
+   "importa_de": [],
+   "simbolos": {
+    "db2lin": {
+     "tipo": "funcion",
+     "firma": "(db)",
+     "doc": ""
+    },
+    "lin2db": {
+     "tipo": "funcion",
+     "firma": "(x)",
+     "doc": ""
+    },
+    "note_hz": {
+     "tipo": "funcion",
+     "firma": "(m)",
+     "doc": ""
+    },
+    "white": {
+     "tipo": "funcion",
+     "firma": "(n, seed=0)",
+     "doc": ""
+    },
+    "fade": {
+     "tipo": "funcion",
+     "firma": "(x, ms_in=5.0, ms_out=5.0)",
+     "doc": ""
+    },
+    "biquad": {
+     "tipo": "funcion",
+     "firma": "(kind, f0, Q=0.70710678, gain_db=0.0, fs=SR)",
+     "doc": ""
+    },
+    "fftconvolve": {
+     "tipo": "funcion",
+     "firma": "(x, h, block=1 << 16)",
+     "doc": ""
+    },
+    "filt": {
+     "tipo": "funcion",
+     "firma": "(x, b, a)",
+     "doc": ""
+    },
+    "lp": {
+     "tipo": "funcion",
+     "firma": "(x, f, Q=0.7071)",
+     "doc": ""
+    },
+    "hp": {
+     "tipo": "funcion",
+     "firma": "(x, f, Q=0.7071)",
+     "doc": ""
+    },
+    "bp": {
+     "tipo": "funcion",
+     "firma": "(x, f, Q=1.0)",
+     "doc": ""
+    },
+    "stft": {
+     "tipo": "funcion",
+     "firma": "(x, n=1024, hop=256)",
+     "doc": ""
+    },
+    "istft": {
+     "tipo": "funcion",
+     "firma": "(X, w, pad, length, n=1024, hop=256)",
+     "doc": ""
+    },
+    "tv_filter": {
+     "tipo": "funcion",
+     "firma": "(x, env_func, n=1024, hop=256, chunk=1024)",
+     "doc": "Filtro variante en el tiempo: env_func(times, freqs) -> (nframes, nbins)."
+    },
+    "pan": {
+     "tipo": "funcion",
+     "firma": "(x, p)",
+     "doc": ""
+    },
+    "soft_clip": {
+     "tipo": "funcion",
+     "firma": "(x, drive=2.0)",
+     "doc": ""
+    },
+    "moving_avg": {
+     "tipo": "funcion",
+     "firma": "(x, ms=50.0)",
+     "doc": ""
+    },
+    "moving_rms": {
+     "tipo": "funcion",
+     "firma": "(x, ms=50.0)",
+     "doc": ""
+    },
+    "compress": {
+     "tipo": "funcion",
+     "firma": "(x, thresh_db=-18.0, ratio=2.0, win_ms=40.0, makeup_db=0.0)",
+     "doc": ""
+    },
+    "reverb_ir": {
+     "tipo": "funcion",
+     "firma": "(dur=2.5, decay=0.55, seed=1, lp_hz=6000.0)",
+     "doc": ""
+    },
+    "reverb": {
+     "tipo": "funcion",
+     "firma": "(x, ir)",
+     "doc": ""
+    },
+    "delay": {
+     "tipo": "funcion",
+     "firma": "(x, time_s, fb=0.35, mix=0.3, taps=5, lp_hz=4000.0)",
+     "doc": ""
+    },
+    "vinyl_noise": {
+     "tipo": "funcion",
+     "firma": "(n, seed=0, hiss=0.02, crackle=0.6)",
+     "doc": ""
+    },
+    "tape_hiss": {
+     "tipo": "funcion",
+     "firma": "(n, seed=0, level=0.01)",
+     "doc": ""
+    },
+    "lufs_integrated": {
+     "tipo": "funcion",
+     "firma": "(x, fs=SR)",
+     "doc": ""
+    },
+    "true_peak_db": {
+     "tipo": "funcion",
+     "firma": "(x, fs=SR)",
+     "doc": ""
+    },
+    "rms_db": {
+     "tipo": "funcion",
+     "firma": "(x)",
+     "doc": ""
+    },
+    "crest_db": {
+     "tipo": "funcion",
+     "firma": "(x)",
+     "doc": ""
+    },
+    "normalize_peak": {
+     "tipo": "funcion",
+     "firma": "(x, target_db=-1.0)",
+     "doc": ""
+    }
+   }
+  },
+  "instruments": {
+   "archivo": "codigo/instruments.py",
+   "importa_de": [
+    "dsp"
+   ],
+   "simbolos": {
+    "kick": {
+     "tipo": "funcion",
+     "firma": "(vel=1.0, seed=0)",
+     "doc": ""
+    },
+    "snare": {
+     "tipo": "funcion",
+     "firma": "(vel=1.0, seed=0)",
+     "doc": ""
+    },
+    "hat": {
+     "tipo": "funcion",
+     "firma": "(vel=1.0, seed=0, open_=False)",
+     "doc": ""
+    },
+    "metal_hit": {
+     "tipo": "funcion",
+     "firma": "(vel=1.0, seed=0, pitch=1.0, dur=0.9)",
+     "doc": ""
+    },
+    "shaker": {
+     "tipo": "funcion",
+     "firma": "(vel=1.0, seed=0)",
+     "doc": ""
+    },
+    "bass_note": {
+     "tipo": "funcion",
+     "firma": "(midi, dur, vel=1.0, seed=0, squelch=0.0, bright=1.0)",
+     "doc": ""
+    },
+    "drone_note": {
+     "tipo": "funcion",
+     "firma": "(midi, dur, vel=1.0, seed=0, cutoff=320.0)",
+     "doc": ""
+    },
+    "organ_chord": {
+     "tipo": "funcion",
+     "firma": "(midis, dur, vel=1.0, seed=0)",
+     "doc": ""
+    },
+    "guitar_loop": {
+     "tipo": "funcion",
+     "firma": "(beats, bpm, pattern, vel=1.0, seed=0, drive=7.0)",
+     "doc": "pattern: [(beat, dur_beats, midi, vel, mute)] -> buffer de 'beats' pulsos."
+    },
+    "piano_note": {
+     "tipo": "funcion",
+     "firma": "(midi, dur, vel=1.0, seed=0, detune=0.0)",
+     "doc": ""
+    },
+    "reverse_swell": {
+     "tipo": "funcion",
+     "firma": "(src, dur=None)",
+     "doc": ""
+    },
+    "squelch": {
+     "tipo": "funcion",
+     "firma": "(vel=1.0, seed=0, dur=0.35, f_lo=180.0, f_hi=1800.0)",
+     "doc": ""
+    },
+    "feedback_growl": {
+     "tipo": "funcion",
+     "firma": "(vel=1.0, seed=0, dur=1.6, f0=196.0)",
+     "doc": ""
+    },
+    "voice": {
+     "tipo": "funcion",
+     "firma": "(syllables, seed=0, f0_base=98.0, breath=0.1, drive=1.0, whisper=False, jitter=0.35, tail=0.35, tilt=1.0)",
+     "doc": "syllables: [(t0, dur, midi, vowel, cons, vel)] -> mono float array."
+    }
+   }
+  },
+  "midi": {
+   "archivo": "codigo/midi.py",
+   "importa_de": [],
+   "simbolos": {
+    "write_midi": {
+     "tipo": "funcion",
+     "firma": "(path, tracks, bpm=90.0, ppq=480, name='miuzika')",
+     "doc": "tracks: lista de dicts {name, channel, program, notes=[(start_beats, dur_beats, pitch, vel)]}"
+    }
+   }
+  },
+  "render": {
+   "archivo": "codigo/render.py",
+   "importa_de": [
+    "dsp",
+    "midi"
+   ],
+   "simbolos": {
+    "log": {
+     "tipo": "funcion",
+     "firma": "(msg)",
+     "doc": ""
+    },
+    "pcm_bytes": {
+     "tipo": "funcion",
+     "firma": "(x, width=3)",
+     "doc": ""
+    },
+    "riff_header": {
+     "tipo": "funcion",
+     "firma": "(sr, ch, width, data_size)",
+     "doc": ""
+    },
+    "StemWriter": {
+     "tipo": "clase",
+     "doc": "",
+     "metodos": {
+      "write_at": "(self, start, x)",
+      "close": "(self)"
+     }
+    },
+    "write_wav": {
+     "tipo": "funcion",
+     "firma": "(path, x, width=3)",
+     "doc": ""
+    },
+    "env_fn": {
+     "tipo": "funcion",
+     "firma": "(pts)",
+     "doc": ""
+    },
+    "place": {
+     "tipo": "funcion",
+     "firma": "(dst, sig, t, gain=1.0, panp=0.0)",
+     "doc": ""
+    },
+    "reverb_st": {
+     "tipo": "funcion",
+     "firma": "(x, ir_l, ir_r, mix=0.2)",
+     "doc": ""
+    },
+    "actividad": {
+     "tipo": "funcion",
+     "firma": "(sil, n)",
+     "doc": ""
+    },
+    "midi_add": {
+     "tipo": "funcion",
+     "firma": "(track, start_beat, dur_beat, pitch, vel)",
+     "doc": ""
+    },
+    "gen_bateria": {
+     "tipo": "funcion",
+     "firma": "(stem, master)",
+     "doc": ""
+    },
+    "gen_bajo": {
+     "tipo": "funcion",
+     "firma": "(stem, master)",
+     "doc": ""
+    },
+    "gen_drone": {
+     "tipo": "funcion",
+     "firma": "(stem, master)",
+     "doc": ""
+    },
+    "gen_organo": {
+     "tipo": "funcion",
+     "firma": "(stem, master)",
+     "doc": ""
+    },
+    "gen_guitarra": {
+     "tipo": "funcion",
+     "firma": "(stem, master)",
+     "doc": ""
+    },
+    "cadena_voz": {
+     "tipo": "funcion",
+     "firma": "(x, drive=1.0, rev_mix=0.16, dly_mix=0.2, sil=None, bright=1.0)",
+     "doc": ""
+    },
+    "gen_voz": {
+     "tipo": "funcion",
+     "firma": "(stem, master)",
+     "doc": ""
+    },
+    "gen_piano": {
+     "tipo": "funcion",
+     "firma": "(stem, master)",
+     "doc": ""
+    },
+    "gen_fx": {
+     "tipo": "funcion",
+     "firma": "(stem, master)",
+     "doc": ""
+    },
+    "masterizar": {
+     "tipo": "funcion",
+     "firma": "(master)",
+     "doc": ""
+    }
+   }
+  }
+ }
+}

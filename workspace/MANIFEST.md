@@ -1,0 +1,81 @@
+# Motor disponible en workspace/codigo/
+
+Reutiliza estos simbolos; NO los redefinas.
+
+- **codigo/cancion.py**  (importa de: -)
+    - `bar_de(t)`
+    - `t_de(bar)`
+    - `acorde_de(bar)`
+    - `silabas(palabra)`
+    - `desglosar(texto)`  -- devuelve [(vocal, consonante_inicial)] por silaba
+    - `ajustar(cont, n)`
+    - `linea(texto, bar, beats, cont, vel=1.0)`  -- devuelve [(t_seg, dur_seg, midi, vocal, cons, vel)]
+    - `silabas_voz()`
+- **codigo/dsp.py**  (importa de: -)
+    - `db2lin(db)`
+    - `lin2db(x)`
+    - `note_hz(m)`
+    - `white(n, seed=0)`
+    - `fade(x, ms_in=5.0, ms_out=5.0)`
+    - `biquad(kind, f0, Q=0.70710678, gain_db=0.0, fs=SR)`
+    - `fftconvolve(x, h, block=1 << 16)`
+    - `filt(x, b, a)`
+    - `lp(x, f, Q=0.7071)`
+    - `hp(x, f, Q=0.7071)`
+    - `bp(x, f, Q=1.0)`
+    - `stft(x, n=1024, hop=256)`
+    - `istft(X, w, pad, length, n=1024, hop=256)`
+    - `tv_filter(x, env_func, n=1024, hop=256, chunk=1024)`  -- Filtro variante en el tiempo: env_func(times, freqs) -> (nframes, nbins).
+    - `pan(x, p)`
+    - `soft_clip(x, drive=2.0)`
+    - `moving_avg(x, ms=50.0)`
+    - `moving_rms(x, ms=50.0)`
+    - `compress(x, thresh_db=-18.0, ratio=2.0, win_ms=40.0, makeup_db=0.0)`
+    - `reverb_ir(dur=2.5, decay=0.55, seed=1, lp_hz=6000.0)`
+    - `reverb(x, ir)`
+    - `delay(x, time_s, fb=0.35, mix=0.3, taps=5, lp_hz=4000.0)`
+    - `vinyl_noise(n, seed=0, hiss=0.02, crackle=0.6)`
+    - `tape_hiss(n, seed=0, level=0.01)`
+    - `lufs_integrated(x, fs=SR)`
+    - `true_peak_db(x, fs=SR)`
+    - `rms_db(x)`
+    - `crest_db(x)`
+    - `normalize_peak(x, target_db=-1.0)`
+- **codigo/instruments.py**  (importa de: dsp)
+    - `kick(vel=1.0, seed=0)`
+    - `snare(vel=1.0, seed=0)`
+    - `hat(vel=1.0, seed=0, open_=False)`
+    - `metal_hit(vel=1.0, seed=0, pitch=1.0, dur=0.9)`
+    - `shaker(vel=1.0, seed=0)`
+    - `bass_note(midi, dur, vel=1.0, seed=0, squelch=0.0, bright=1.0)`
+    - `drone_note(midi, dur, vel=1.0, seed=0, cutoff=320.0)`
+    - `organ_chord(midis, dur, vel=1.0, seed=0)`
+    - `guitar_loop(beats, bpm, pattern, vel=1.0, seed=0, drive=7.0)`  -- pattern: [(beat, dur_beats, midi, vel, mute)] -> buffer de 'beats' pulsos.
+    - `piano_note(midi, dur, vel=1.0, seed=0, detune=0.0)`
+    - `reverse_swell(src, dur=None)`
+    - `squelch(vel=1.0, seed=0, dur=0.35, f_lo=180.0, f_hi=1800.0)`
+    - `feedback_growl(vel=1.0, seed=0, dur=1.6, f0=196.0)`
+    - `voice(syllables, seed=0, f0_base=98.0, breath=0.1, drive=1.0, whisper=False, jitter=0.35, tail=0.35, tilt=1.0)`  -- syllables: [(t0, dur, midi, vowel, cons, vel)] -> mono float array.
+- **codigo/midi.py**  (importa de: -)
+    - `write_midi(path, tracks, bpm=90.0, ppq=480, name='miuzika')`  -- tracks: lista de dicts {name, channel, program, notes=[(start_beats, dur_beats, pitch, vel)]}
+- **codigo/render.py**  (importa de: dsp, midi)
+    - `log(msg)`
+    - `pcm_bytes(x, width=3)`
+    - `riff_header(sr, ch, width, data_size)`
+    - clase `StemWriter`: write_at(self, start, x), close(self)
+    - `write_wav(path, x, width=3)`
+    - `env_fn(pts)`
+    - `place(dst, sig, t, gain=1.0, panp=0.0)`
+    - `reverb_st(x, ir_l, ir_r, mix=0.2)`
+    - `actividad(sil, n)`
+    - `midi_add(track, start_beat, dur_beat, pitch, vel)`
+    - `gen_bateria(stem, master)`
+    - `gen_bajo(stem, master)`
+    - `gen_drone(stem, master)`
+    - `gen_organo(stem, master)`
+    - `gen_guitarra(stem, master)`
+    - `cadena_voz(x, drive=1.0, rev_mix=0.16, dly_mix=0.2, sil=None, bright=1.0)`
+    - `gen_voz(stem, master)`
+    - `gen_piano(stem, master)`
+    - `gen_fx(stem, master)`
+    - `masterizar(master)`

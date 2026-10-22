@@ -23,6 +23,10 @@ import type { CodeAudioRequest } from "./code-lab.ts";
 import { renderStrudelAudio } from "./strudel-audio.ts";
 import { importProjectBundle } from "./project-bundle.ts";
 import { TimelineView, escapeHtml } from "./timeline.ts";
+import { initChat } from "./chat.ts";
+import { getModel, health, listModels, setModel } from "./llm.ts";
+import type { ChatMessage } from "./llm.ts";
+import { ejecutarAgente } from "./agent/agent.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -30,7 +34,6 @@ const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) 
 const canvas = $<HTMLCanvasElement>("timeline");
 const wrap = $("canvas-wrap");
 const heads = $("track-heads");
-const messages = $("messages");
 const playButton = $<HTMLButtonElement>("play");
 const stopButton = $<HTMLButtonElement>("stop");
 const undoButton = $<HTMLButtonElement>("undo");
@@ -38,7 +41,95 @@ const redoButton = $<HTMLButtonElement>("redo");
 const statusEl = $("status");
 const songInfo = $("song-info");
 
+const chat = initChat();
+
 const timeline = new TimelineView(canvas, wrap, heads);
+
+// Al plegar el chat se libera espacio: el lienzo tiene que reajustarse.
+chat.onLayout(() => timeline.relayout());
+
+// ── Agente: piensa y actúa (la clave la pone el servidor; las manos, el workspace)
+const AGENTE_SISTEMA = [
+  "Eres el agente musical de miuzika, un DAW que corre en el navegador.",
+  "Trabajas en espanol: breve al hablar, pero con datos reales al informar.",
+  "El MOTOR YA EXISTE en codigo/ (dsp, instruments, render, midi, cancion). NO escribas otro",
+  "motor ni redefinas sus funciones: importalas (from instruments import kick).",
+  "El servidor RECHAZA (409) un fichero nuevo que redefina un simbolo del motor, y tambien",
+  "los scripts patch*/parche*, y las escrituras con contenido vacio.",
+  "FLUJO obligatorio, en este orden: (1) el manifiesto de abajo YA te da las firmas, no leas",
+  "dsp.py/instruments.py/render.py para descubrirlas; (2) escribe el script COMPLETO una sola vez,",
+  "importando el motor; (3) ejecutalo con ejecutar_python en el paso siguiente; (4) si falla,",
+  "corrige con editar_fichero(busca, reemplaza) y vuelve a ejecutar -- NUNCA reescribas el fichero",
+  "entero; (5) verifica el WAV con verificar_audio; (6) responde con las metricas medidas.",
+  "No ejecutes ficheros ajenos para 'ver que hacen': ejecuta solo los scripts que escribas tu.",
+  "Para corregir una linea usa editar_fichero(path, busca, reemplaza). Para medir un WAV usa",
+  "verificar_audio(path). Para un sample rapido copia plantillas/one_shot.py y cambia PARAMS.",
+  "Si de verdad hace falta algo nuevo, crealo en codigo/experimental/ con nombres nuevos.",
+  "Directorio de trabajo: workspace/. Python 3 con numpy (sin scipy).",
+  "No inventes resultados: si algo falla, ensena el error y corrigelo.",
+].join(" ");
+
+let manifiestoMotor = "";
+
+/** Trae el manifiesto del motor y lo deja disponible para el prompt. */
+async function refrescarManifiesto(): Promise<void> {
+  try {
+    const res = await fetch("/api/manifiesto");
+    if (!res.ok) return;
+    const datos = (await res.json()) as { manifiesto?: string };
+    manifiestoMotor = datos.manifiesto ?? "";
+    const sistema = conversacion[0];
+    if (sistema && sistema.role === "system") {
+      sistema.content =
+        AGENTE_SISTEMA + (manifiestoMotor ? `\n\n=== MOTOR DISPONIBLE ===\n${manifiestoMotor}` : "");
+    }
+  } catch {
+    /* sin manifiesto: se trabaja con el prompt basico */
+  }
+}
+
+const conversacion: ChatMessage[] = [{ role: "system", content: AGENTE_SISTEMA }];
+
+let trabajando = false;
+
+async function responderAlUsuario(texto: string): Promise<void> {
+  if (trabajando) {
+    chat.add("system", "Sigo trabajando en el turno anterior: espera a que termine.");
+    return;
+  }
+  trabajando = true;
+  chat.setBusy(true);
+  await refrescarManifiesto();
+  conversacion.push({ role: "user", content: texto });
+  const burbuja = chat.add("assistant", "…");
+  setStatus(`Agente ${getModel()}: pensando…`);
+  try {
+    const resultado = await ejecutarAgente(conversacion, {
+      alEvento: (evento) => {
+        if (evento.tipo === "herramienta") chat.add("system", `⚙ ${evento.texto}`);
+        else setStatus(evento.texto);
+      },
+    });
+    chat.update(burbuja, resultado.texto || "(sin respuesta final)");
+    setStatus(
+      `Agente ${getModel()} · ${resultado.pasos} paso(s) · ${resultado.llamadas} herramienta(s) · ` +
+        `${(resultado.ms / 1000).toFixed(1)} s`,
+    );
+  } catch (error) {
+    const mensaje = error instanceof Error ? error.message : String(error);
+    chat.update(burbuja, `No he podido completar el turno: ${mensaje}`);
+    setStatus(`Agente error: ${mensaje.slice(0, 140)}`);
+  } finally {
+    trabajando = false;
+    chat.setBusy(false);
+  }
+  // El historial no puede crecer sin limite: sistema + los ultimos turnos.
+  if (conversacion.length > 30) conversacion.splice(1, conversacion.length - 25);
+}
+
+chat.onSend((texto) => {
+  void responderAlUsuario(texto);
+});
 
 let project: Project | null = loadStored();
 let busy = false;
@@ -177,11 +268,7 @@ async function startOpenDawPlayback(view: Project): Promise<void> {
 }
 
 function addMessage(role: "assistant" | "system", text: string): void {
-  const div = document.createElement("div");
-  div.className = `msg ${role}`;
-  div.innerHTML = escapeHtml(text).replace(/\n/g, "<br>");
-  messages.appendChild(div);
-  messages.scrollTop = messages.scrollHeight;
+  chat.add(role, text);
 }
 
 function warnMissingAudio(missing: string[]): void {
@@ -576,8 +663,7 @@ $("new-song").addEventListener("click", () => {
   if (!ready) return;
   if (project && project.tracks.length > 0 && !confirm("¿Empezar una canción nueva? Se perderá la actual.")) return;
   setProject(null);
-  messages.innerHTML = "";
-  addMessage("assistant", "Proyecto nuevo. Usa Strudel para renderizar un WAV o importa audio.");
+  chat.clear();
 });
 
 $("code-lab").addEventListener("click", () => openCodeEditor());
@@ -776,10 +862,6 @@ async function boot(): Promise<void> {
     }
   } else {
     setProject(null, false);
-    addMessage(
-      "assistant",
-      "Proyecto nuevo. Usa Strudel para renderizar un WAV o importa audio para empezar.",
-    );
   }
 
   setPlaying(false);
@@ -793,6 +875,7 @@ void boot();
 if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__miuzika = {
     timeline,
+    llm: { getModel, setModel, health, listModels },
     undo,
     redo,
     get project() {

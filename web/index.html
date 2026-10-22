@@ -27,6 +27,7 @@
           <label class="file" title="Abrir JSON o bundle .miuzika.zip">Abrir<input id="open" type="file" accept=".json,.zip,.miuzika.zip,application/json,application/zip" /></label>
           <label class="file">Audio<input id="audio-file" type="file" accept="audio/*" multiple /></label>
           <button id="code-lab" title="Escribir un patrón Strudel y renderizarlo a WAV">Strudel</button>
+          <button id="chat-toggle" class="active" title="Mostrar u ocultar el chat del agente">Chat</button>
           <button id="new-song" title="Empezar de cero">Nueva</button>
         </div>
       </header>
@@ -50,10 +51,22 @@
         </section>
 
         <aside class="chat">
+          <div class="chat-head">
+            <strong>Agente</strong>
+          </div>
           <div class="messages" id="messages"></div>
-          <div class="status" id="status">Doble clic en un clip = piano roll - Ctrl+rueda = zoom</div>
+          <form class="chat-composer" id="chat-form">
+            <textarea
+              id="chat-input"
+              rows="1"
+              placeholder="Pídele algo al agente… (Enter envía, Shift+Enter salto de línea)"
+            ></textarea>
+            <button id="chat-send" type="submit" title="Enviar">➤</button>
+          </form>
         </aside>
       </main>
+
+      <footer class="status" id="status">Doble clic en un clip = piano roll - Ctrl+rueda = zoom</footer>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

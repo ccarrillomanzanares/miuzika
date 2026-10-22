@@ -1,0 +1,250 @@
+/**
+ * Herramientas del agente: sus "manos".
+ *
+ * El navegador no toca el disco: pide al servidor de desarrollo, que es quien
+ * ejecuta y escribe, y SIEMPRE dentro de <proyecto>/workspace. Los esquemas de
+ * abajo son los que ve el LLM.
+ */
+
+import type { ToolSpec } from "../llm.ts";
+
+export interface ResultadoHerramienta {
+  ok: boolean;
+  /** Texto que vuelve al modelo como resultado de la herramienta. */
+  texto: string;
+}
+
+/** Peticion con limite de tiempo: el chat nunca se queda colgado esperando. */
+async function pedirJson(
+  ruta: string,
+  cuerpo?: unknown,
+  limiteMs = 45000,
+): Promise<Record<string, unknown>> {
+  const control = new AbortController();
+  const temporizador = setTimeout(() => control.abort(), limiteMs);
+  try {
+    const res = await fetch(ruta, {
+      method: cuerpo === undefined ? "GET" : "POST",
+      headers: cuerpo === undefined ? undefined : { "Content-Type": "application/json" },
+      body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
+      signal: control.signal,
+    });
+    const texto = await res.text();
+    const datos = texto === "" ? {} : (JSON.parse(texto) as Record<string, unknown>);
+    if (!res.ok) throw new Error(String(datos.error ?? `HTTP ${res.status}`));
+    return datos;
+  } finally {
+    clearTimeout(temporizador);
+  }
+}
+
+export const HERRAMIENTAS: ToolSpec[] = [
+  {
+    type: "function",
+    function: {
+      name: "escribir_fichero",
+      description:
+        "Escribe o sobrescribe un fichero de texto dentro de 'workspace/'. El MOTOR YA EXISTE " +
+        "en codigo/ (dsp, instruments, render, midi, cancion): NO lo reescribas ni redefinas sus " +
+        "funciones, importalas. Un fichero nuevo que redefina un simbolo del motor es RECHAZADO " +
+        "(409), igual que los scripts patch*/parche* (para eso esta editar_fichero). " +
+        "Para un sample rapido: copia plantillas/one_shot.py y cambia PARAMS.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "Ruta relativa dentro de workspace/, con /" },
+          contenido: { type: "string", description: "Contenido completo del fichero" },
+        },
+        required: ["path", "contenido"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "leer_fichero",
+      description: "Devuelve el contenido de un fichero de workspace/ (hasta 20.000 caracteres).",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "listar_ficheros",
+      description:
+        "Lista los ficheros de workspace/ con su tamano en bytes. Usalo para comprobar " +
+        "que lo que has generado existe de verdad.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "ejecutar_python",
+      description:
+        "Ejecuta con Python un script que ya este en workspace/ ('codigo/render.py') y " +
+        "devuelve su salida, sus errores y el codigo de salida. El directorio de trabajo " +
+        "del proceso es workspace/ y hay numpy disponible. Para trabajos largos sube " +
+        "timeout_segundos (por defecto 300, maximo 1800).",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "Ruta del script dentro de workspace/" },
+          argumentos: {
+            type: "array",
+            items: { type: "string" },
+            description: "Argumentos de linea de comandos",
+          },
+          timeout_segundos: {
+            type: "number",
+            description: "Limite de tiempo en segundos (por defecto 300, maximo 1800)",
+          },
+        },
+        required: ["path"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "editar_fichero",
+      description:
+        "Reemplaza un fragmento EXACTO de un fichero (busca -> reemplaza). Es la forma correcta " +
+        "de corregir codigo existente: atomica, auditable y sin scripts de parche. Si el texto no " +
+        "aparece devuelve 409; usa leer_fichero para copiar el fragmento exacto.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "Ruta del fichero en workspace/" },
+          busca: { type: "string", description: "Fragmento exacto a localizar (con su indentacion)" },
+          reemplaza: { type: "string", description: "Texto por el que se sustituye (vacio para borrarlo)" },
+          todas: { type: "boolean", description: "Reemplazar todas las apariciones (por defecto true)" },
+        },
+        required: ["path", "busca", "reemplaza"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "verificar_audio",
+      description:
+        "Mide un WAV de workspace/ y devuelve formato, duracion, pico, RMS, crest, DC, muestras " +
+        "clipeadas y correlacion estereo. Usala en vez de escribir tu propio analizador.",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string", description: "Ruta del WAV en workspace/" } },
+        required: ["path"],
+      },
+    },
+  },
+];
+
+export async function ejecutarHerramienta(
+  nombre: string,
+  argumentosJson: string,
+): Promise<ResultadoHerramienta> {
+  let args: Record<string, unknown> = {};
+  try {
+    args = argumentosJson.trim() === "" ? {} : (JSON.parse(argumentosJson) as Record<string, unknown>);
+  } catch (error) {
+    return {
+      ok: false,
+      texto: `Los argumentos no son JSON valido: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
+  try {
+    switch (nombre) {
+      case "escribir_fichero": {
+        const datos = await pedirJson("/api/fs/write", {
+          path: args.path,
+          contenido: args.contenido,
+        });
+        return { ok: true, texto: `Escrito ${datos.path} (${datos.bytes} bytes).` };
+      }
+      case "leer_fichero": {
+        const datos = await pedirJson("/api/fs/read", { path: args.path });
+        return { ok: true, texto: String(datos.contenido ?? "") };
+      }
+      case "listar_ficheros": {
+        const datos = await pedirJson("/api/fs/list");
+        const ficheros = (datos.ficheros ?? []) as { path: string; bytes: number }[];
+        if (ficheros.length === 0) return { ok: true, texto: "workspace/ esta vacio." };
+        return {
+          ok: true,
+          texto: ficheros.map((f) => `${f.path} (${f.bytes} B)`).join("\n"),
+        };
+      }
+      case "editar_fichero": {
+        const datos = await pedirJson("/api/fs/edit", {
+          path: args.path,
+          busca: args.busca,
+          reemplaza: args.reemplaza,
+          todas: args.todas,
+        });
+        return { ok: true, texto: `Editado ${datos.path}: ${datos.reemplazos} reemplazo(s).` };
+      }
+      case "verificar_audio": {
+        const datos = await pedirJson(
+          "/api/verificar",
+          { path: args.path },
+          Number(args.timeout_segundos) * 1000 + 45000 || 225000,
+        );
+        return { ok: datos.ok === true, texto: String(datos.informe ?? "(sin informe)") };
+      }
+      case "ejecutar_python": {
+        const segundos = Number(args.timeout_segundos) || 300;
+        const datos = await pedirJson(
+          "/api/run/python",
+          {
+            path: args.path,
+            argumentos: args.argumentos,
+            timeout_segundos: args.timeout_segundos,
+          },
+          segundos * 1000 + 45000,
+        );
+        const salida = String(datos.salida ?? "").trim();
+        const errores = String(datos.errores ?? "").trim();
+        const partes = [`exit=${datos.codigo} en ${datos.ms} ms`];
+        if (salida !== "") partes.push(`salida:\n${salida}`);
+        if (errores !== "") partes.push(`errores:\n${errores}`);
+        return { ok: datos.ok === true, texto: partes.join("\n") };
+      }
+      default:
+        return { ok: false, texto: `Herramienta desconocida: ${nombre}` };
+    }
+  } catch (error) {
+    const abortado = error instanceof Error && error.name === "AbortError";
+    return {
+      ok: false,
+      texto: abortado
+        ? "Se agoto el tiempo de espera de la herramienta y se corto el proceso."
+        : `Error: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/** Resumen de una llamada, para ensenarlo en el chat. */
+export function resumenLlamada(nombre: string, argumentosJson: string): string {
+  try {
+    const args = JSON.parse(argumentosJson === "" ? "{}" : argumentosJson) as Record<string, unknown>;
+    if (nombre === "escribir_fichero") {
+      return `${nombre}(${String(args.path)}, ${String(args.contenido ?? "").length} chars)`;
+    }
+    if (nombre === "ejecutar_python") {
+      const extra = args.argumentos ? ` ${JSON.stringify(args.argumentos)}` : "";
+      return `${nombre}(${String(args.path)}${extra})`;
+    }
+    if (nombre === "leer_fichero") return `${nombre}(${String(args.path)})`;
+    if (nombre === "editar_fichero") return `${nombre}(${String(args.path)}, ${String(args.busca).length} chars)`;
+    if (nombre === "verificar_audio") return `${nombre}(${String(args.path)})`;
+    return nombre;
+  } catch {
+    return nombre;
+  }
+}
