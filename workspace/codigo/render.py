@@ -115,14 +115,17 @@ def place(dst, sig, t, gain=1.0, panp=0.0):
 
 
 def reverb_st(x, ir_l, ir_r, mix=0.2):
+    # reverb() devuelve len(x) + len(ir) - 1 (convolucion completa): hay que
+    # recortar la cola o la mezcla no suma (mismo bug que en dsp.filt).
     x = np.asarray(x, np.float32)
+    n = len(x)
     if x.ndim == 1:
-        w = reverb(x, ir_l)
-        y = reverb(x, ir_r)
+        w = reverb(x, ir_l)[:n]
+        y = reverb(x, ir_r)[:n]
         wet = np.stack([w, y], axis=1)
         dry = np.stack([x, x], axis=1)
     else:
-        wet = np.stack([reverb(x[:, 0], ir_l), reverb(x[:, 1], ir_r)], axis=1)
+        wet = np.stack([reverb(x[:, 0], ir_l)[:n], reverb(x[:, 1], ir_r)[:n]], axis=1)
         dry = x
     return dry * (1.0 - mix) + wet * mix
 

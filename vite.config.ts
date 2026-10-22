@@ -437,6 +437,44 @@ export default defineConfig(({ mode }) => {
             });
           });
 
+          // Sirve un WAV de workspace/ para que el navegador lo importe al proyecto.
+          server.middlewares.use("/api/audio", (req, res) => {
+            const url = new URL(req.url ?? "/", "http://localhost");
+            const rel = url.searchParams.get("path") ?? "";
+            const destino = rel ? resolverEnTrabajo(rel) : null;
+            if (!destino || !existsSync(destino)) {
+              responderJson(res, 404, { error: "no existe" });
+              return;
+            }
+            const datos = readFileSync(destino);
+            res.statusCode = 200;
+            res.setHeader("Content-Type", "audio/wav");
+            res.setHeader("Content-Length", String(datos.length));
+            res.end(datos);
+          });
+
+          // Devuelve las notas de un .mid ya normalizadas a beats (op add_notes).
+          server.middlewares.use("/api/midi", async (req, res) => {
+            const url = new URL(req.url ?? "/", "http://localhost");
+            const rel = url.searchParams.get("path") ?? "";
+            const destino = rel ? resolverEnTrabajo(rel) : null;
+            if (!destino || !existsSync(destino)) {
+              responderJson(res, 404, { error: "no existe" });
+              return;
+            }
+            const r = await correr("herramientas/midi_lector.py", [destino], 60);
+            if (r.codigo !== 0) {
+              responderJson(res, 400, { error: (r.errores || r.salida).slice(-800) });
+              return;
+            }
+            try {
+              const datos = JSON.parse(r.salida) as Record<string, unknown>;
+              responderJson(res, 200, { ok: true, ...datos });
+            } catch (error) {
+              responderJson(res, 500, { error: "salida no es JSON: " + String(error) });
+            }
+          });
+
           // verificar_audio: metricas objetivas de un WAV (no reescribir analizadores).
           server.middlewares.use("/api/verificar", (req, res) => {
             if (req.method !== "POST") {

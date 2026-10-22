@@ -1,5 +1,5 @@
 {
- "generado": "2026-10-22T22:53:13",
+ "generado": "2026-10-22T23:18:27",
  "raiz": "workspace/",
  "regla": "Estos simbolos YA existen. Reutilizalos con 'from <modulo> import <simbolo>'. Escribir un fichero nuevo que los redefina sera rechazado (409).",
  "modulos": {

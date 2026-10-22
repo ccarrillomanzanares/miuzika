@@ -38,6 +38,22 @@ async function pedirJson(
   }
 }
 
+/** Peticion de pistas reales al proyecto del DAW (se ejecuta en el navegador). */
+export interface PeticionPistas {
+  midis: string[];
+  wavs: string[];
+  inicioCompas: number;
+}
+
+type ImportadorLocal = (peticion: PeticionPistas) => Promise<{ ok: boolean; texto: string }>;
+
+let importadorLocal: ImportadorLocal | null = null;
+
+/** main.ts registra aqui como se crean pistas de verdad (necesita el proyecto). */
+export function registrarImportador(fn: ImportadorLocal | null): void {
+  importadorLocal = fn;
+}
+
 export const HERRAMIENTAS: ToolSpec[] = [
   {
     type: "function",
@@ -131,6 +147,35 @@ export const HERRAMIENTAS: ToolSpec[] = [
   {
     type: "function",
     function: {
+      name: "anadir_pistas",
+      description:
+        "Crea pistas REALES en el proyecto del DAW: cada .mid entra como pista MIDI con sus notas y cada " +
+        ".wav como pista de audio. Es la entrega de una cancion: deja los ficheros en salida/ y llamala. " +
+        "NO masterices ni normalices la mezcla final: el master se hace en el DAW.",
+      parameters: {
+        type: "object",
+        properties: {
+          midis: {
+            type: "array",
+            items: { type: "string" },
+            description: "Rutas .mid de workspace/ (p.ej. ['salida/tema_multitrack.mid'])",
+          },
+          wavs: {
+            type: "array",
+            items: { type: "string" },
+            description: "Rutas .wav para pistas de audio (cada minuto estereo ocupa ~10 MB de RAM)",
+          },
+          inicio_compas: {
+            type: "integer",
+            description: "Compas donde empiezan las pistas (0 = principio)",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "verificar_audio",
       description:
         "Mide un WAV de workspace/ y devuelve formato, duracion, pico, RMS, crest, DC, muestras " +
@@ -189,6 +234,16 @@ export async function ejecutarHerramienta(
         });
         return { ok: true, texto: `Editado ${datos.path}: ${datos.reemplazos} reemplazo(s).` };
       }
+      case "anadir_pistas": {
+        if (!importadorLocal) {
+          return { ok: false, texto: "No hay proyecto abierto donde crear pistas (genera uno antes)." };
+        }
+        return importadorLocal({
+          midis: Array.isArray(args.midis) ? (args.midis as unknown[]).map(String) : [],
+          wavs: Array.isArray(args.wavs) ? (args.wavs as unknown[]).map(String) : [],
+          inicioCompas: Number(args.inicio_compas ?? 0) || 0,
+        });
+      }
       case "verificar_audio": {
         const datos = await pedirJson(
           "/api/verificar",
@@ -243,6 +298,11 @@ export function resumenLlamada(nombre: string, argumentosJson: string): string {
     if (nombre === "leer_fichero") return `${nombre}(${String(args.path)})`;
     if (nombre === "editar_fichero") return `${nombre}(${String(args.path)}, ${String(args.busca).length} chars)`;
     if (nombre === "verificar_audio") return `${nombre}(${String(args.path)})`;
+    if (nombre === "anadir_pistas") {
+      const m = Array.isArray(args.midis) ? (args.midis as unknown[]).length : 0;
+      const w = Array.isArray(args.wavs) ? (args.wavs as unknown[]).length : 0;
+      return `${nombre}(${m} midi, ${w} wav)`;
+    }
     return nombre;
   } catch {
     return nombre;

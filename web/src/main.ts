@@ -1,4 +1,4 @@
-import type { CodeSource, Project } from "../../src/core/types.ts";
+import type { CodeSource, InstrumentType, Project } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
 import { listAudioAssets } from "./audio-db.ts";
 import {
@@ -27,6 +27,8 @@ import { initChat } from "./chat.ts";
 import { getModel, health, listModels, setModel } from "./llm.ts";
 import type { ChatMessage } from "./llm.ts";
 import { ejecutarAgente } from "./agent/agent.ts";
+import { registrarImportador } from "./agent/tools.ts";
+import type { PeticionPistas } from "./agent/tools.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -62,6 +64,9 @@ const AGENTE_SISTEMA = [
   "corrige con editar_fichero(busca, reemplaza) y vuelve a ejecutar -- NUNCA reescribas el fichero",
   "entero; (5) verifica el WAV con verificar_audio; (6) responde con las metricas medidas.",
   "No ejecutes ficheros ajenos para 'ver que hacen': ejecuta solo los scripts que escribas tu.",
+  "Para ENTREGAR una cancion llama a anadir_pistas(midis=[...], wavs=[...]): crea pistas reales en el",
+  "DAW. Deja los .mid y los .wav (stems, no master) en salida/. NO masterices ni limitadores el stereo",
+  "final: el master se decide en el DAW con los faders; entrega pistas separadas.",
   "Para corregir una linea usa editar_fichero(path, busca, reemplaza). Para medir un WAV usa",
   "verificar_audio(path). Para un sample rapido copia plantillas/one_shot.py y cambia PARAMS.",
   "Si de verdad hace falta algo nuevo, crealo en codigo/experimental/ con nombres nuevos.",
@@ -520,6 +525,9 @@ function applyProject(next: Project | null): void {
     return;
   }
   timeline.setProject(view);
+  // setProject cambia los datos y los cabezales, pero no repinta el lienzo:
+  // sin esto, un proyecto aplicado por el agente deja la timeline vacia.
+  timeline.relayout();
   const stats = projectStats(view);
   const minutes = Math.floor(stats.seconds / 60);
   const seconds = String(Math.round(stats.seconds % 60)).padStart(2, "0");
@@ -674,52 +682,229 @@ $("sel-delete").addEventListener("click", deleteSelectedTracks);
 $("sel-all").addEventListener("click", () => timeline.selectAll());
 $("sel-clear").addEventListener("click", () => timeline.clearSelection());
 
-$<HTMLInputElement>("audio-file").addEventListener("change", async (event) => {
-  const input = event.target as HTMLInputElement;
-  const files = Array.from(input.files ?? []);
-  input.value = "";
-  if (!ready || files.length === 0) return;
-  if (!project) {
-    addMessage("system", "Genera una canción antes de importar audio.");
-    return;
+/**
+ * Crea pistas reales en el proyecto desde ficheros de workspace/: los .mid como
+ * pistas MIDI con sus notas y los .wav como pistas de audio. Reutiliza el mismo
+ * camino que el importador de «Audio» (loadAudioFile -> persistAudioAsset -> ops).
+ */
+async function importarPistasDesdeAgente(
+  peticion: PeticionPistas,
+): Promise<{ ok: boolean; texto: string }> {
+  const inicio = Math.max(0, Math.min(511, Math.trunc(peticion.inicioCompas)));
+  const MAX_NOTAS = 2000; // tope de la op add_notes
+  const hechas: string[] = [];
+  const fallos: string[] = [];
+
+  // 1) leer los MIDI primero: de ahi salen bpm y compases si no hay proyecto
+  interface PistaMidi {
+    name: string;
+    program?: number;
+    channel?: number;
+    notes: { pitch: number; start: number; duration: number; velocity: number }[];
   }
-  setBusy(true, "Importando audio…");
-  try {
-    let current = project;
-    let persisted = true;
-    const bar = Math.floor(currentBeat() / beatsPerBar(current));
-    const maxLength = 16 * beatsPerBar(current);
-    for (const file of files) {
+  const material: { ruta: string; bpm: number; tracks: PistaMidi[] }[] = [];
+  for (const ruta of peticion.midis) {
+    try {
+      const res = await fetch(`/api/midi?path=${encodeURIComponent(ruta)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const datos = (await res.json()) as { bpm?: number; tracks?: PistaMidi[] };
+      material.push({
+        ruta,
+        bpm: Number(datos.bpm) || 120,
+        tracks: (datos.tracks ?? []).filter((pista) => (pista.notes?.length ?? 0) > 0),
+      });
+    } catch (error) {
+      fallos.push(`${ruta}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // 2) si no hay proyecto, se crea con el tempo y la duracion del propio material
+  if (!project) {
+    let finBeat = 0;
+    for (const bloque of material) {
+      for (const pista of bloque.tracks) {
+        for (const nota of pista.notes) finBeat = Math.max(finBeat, nota.start + nota.duration);
+      }
+    }
+    const bpm = material[0]?.bpm ?? 120;
+    const compases = Math.max(4, Math.min(512, Math.ceil(finBeat / 4) + 1));
+    setProject(createProject({ name: "Del agente", bpm, lengthBars: compases }));
+  }
+  if (!project) {
+    return { ok: false, texto: "No se pudo crear el proyecto." };
+  }
+
+  let current: Project = project;
+  let contador = current.tracks.length;
+
+  for (const bloque of material) {
+    {
+      const pistas = bloque.tracks;
+      for (const pista of pistas) {
+        const prog = pista.program ?? 0;
+        const canal = pista.channel ?? 0;
+        const tipo: InstrumentType =
+          canal === 9
+            ? "drumkit"
+            : prog === 38
+              ? "bass"
+              : prog === 89 || prog === 91
+                ? "pad"
+                : prog === 53
+                  ? "lead"
+                  : "synth";
+        const id = `trk_ag_${contador++}`;
+        const nombre = pista.name.slice(0, 60);
+        current = applyOps(current, [
+          { op: "add_track", id, name: nombre, kind: "midi", instrument: { type: tipo, program: prog } },
+        ]).project;
+        for (let i = 0; i < pista.notes.length; i += MAX_NOTAS) {
+          current = applyOps(current, [
+            {
+              op: "add_notes",
+              trackId: id,
+              startBar: inicio,
+              name: nombre,
+              notes: pista.notes.slice(i, i + MAX_NOTAS),
+            },
+          ]).project;
+        }
+        hechas.push(`${nombre} (MIDI, ${pista.notes.length} notas)`);
+      }
+    }
+  }
+
+  // prefijo comun de los WAV, para que las pistas no se llamen "tema_bateria"
+  let prefijo = "";
+  if (peticion.wavs.length > 1) {
+    const bases = peticion.wavs.map((r) => (r.split("/").pop() ?? r).replace(/\.[^.]+$/, ""));
+    let comun = bases[0] ?? "";
+    for (const base of bases.slice(1)) {
+      while (comun.length > 0 && !base.startsWith(comun)) comun = comun.slice(0, -1);
+    }
+    if (comun.includes("_")) prefijo = comun.slice(0, comun.lastIndexOf("_") + 1);
+  }
+
+  for (const ruta of peticion.wavs) {
+    try {
+      const res = await fetch(`/api/audio?path=${encodeURIComponent(ruta)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const fichero = ruta.split("/").pop() ?? "audio.wav";
+      const file = new File([blob], fichero, { type: "audio/wav" });
       const asset = await loadAudioFile(file, current.bpm);
-      if (!(await persistAudioAsset(asset.id, asset.name, asset.durationBeats, file))) persisted = false;
-      const existing = current.tracks.find((track) => track.kind === "audio" && track.name === "Audio");
-      const base = {
-        op: "add_audio_clip" as const,
-        assetId: asset.id,
-        startBar: bar,
-        lengthBeats: Math.min(asset.durationBeats, maxLength),
-        gainDb: 0,
-        name: asset.name,
-      };
-      const addOp: Op = existing
-        ? { ...base, trackId: existing.id }
-        : { ...base, track: { name: "Audio" } };
-      const ops: Op[] = [
+      const guardado = await persistAudioAsset(asset.id, asset.name, asset.durationBeats, file);
+      const recortado =
+        prefijo && asset.name.startsWith(prefijo) ? asset.name.slice(prefijo.length) : asset.name;
+      const nombre = recortado.slice(0, 60) || asset.name.slice(0, 60);
+      current = applyOps(current, [
         {
           op: "register_audio_asset",
           assetId: asset.id,
           name: asset.name,
           durationBeats: asset.durationBeats,
         },
-        addOp,
-      ];
-      current = applyOps(current, ops).project;
+        {
+          op: "add_audio_clip",
+          assetId: asset.id,
+          startBar: inicio,
+          lengthBeats: asset.durationBeats,
+          gainDb: 0,
+          name: nombre,
+          track: { name: nombre },
+        },
+      ]).project;
+      hechas.push(
+        `${nombre} (audio, ${asset.durationBeats.toFixed(1)} beats${guardado ? "" : ", NO guardado en IndexedDB"})`,
+      );
+    } catch (error) {
+      fallos.push(`${ruta}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (hechas.length > 0) {
+    setProject(current);
+    addMessage("system", `Pistas anadidas al proyecto: ${hechas.length}.`);
+  }
+  const texto = [
+    hechas.length > 0 ? `Anadidas ${hechas.length} pistas:` : "No se anadio ninguna pista.",
+    ...hechas.map((linea) => `- ${linea}`),
+    ...(fallos.length > 0 ? ["Fallos:", ...fallos.map((linea) => `- ${linea}`)] : []),
+  ].join("\n");
+  return { ok: hechas.length > 0, texto };
+}
+
+registrarImportador(importarPistasDesdeAgente);
+
+/** ¿Es un fichero de audio? (por MIME o por extension) */
+function esAudio(file: File): boolean {
+  return file.type.startsWith("audio/") || /\.(wav|mp3|ogg|oga|flac|aif|aiff|m4a)$/i.test(file.name);
+}
+
+/** RAM que ocupan los audio ya decodificados (Float32 intercalado). */
+function ramAudioBytes(): number {
+  let total = 0;
+  for (const asset of audioAssets.values()) {
+    total += asset.buffer.length * asset.buffer.numberOfChannels * 4;
+  }
+  return total;
+}
+
+/**
+ * Mete ficheros de audio en el proyecto: una pista por fichero, en el compas actual.
+ * Lo usan tanto el boton «Audio» como «Abrir» (una sola via para lo mismo).
+ */
+async function importarAudio(files: File[]): Promise<void> {
+  if (!ready || files.length === 0) return;
+  if (!project) {
+    addMessage("system", "Genera una canción antes de importar audio.");
+    return;
+  }
+  const LIMITE_RAM = 900 * 1024 * 1024; // ~900 MB: por encima el navegador se cae
+  setBusy(true, "Importando audio…");
+  try {
+    let current = project;
+    let persisted = true;
+    let cortado = false;
+    const bar = Math.floor(currentBeat() / beatsPerBar(current));
+    for (const file of files) {
+      if (ramAudioBytes() > LIMITE_RAM) {
+        cortado = true;
+        break;
+      }
+      const asset = await loadAudioFile(file, current.bpm);
+      if (!(await persistAudioAsset(asset.id, asset.name, asset.durationBeats, file))) persisted = false;
+      // pista propia por fichero: asi cada stem tiene su fader
+      current = applyOps(current, [
+        {
+          op: "register_audio_asset",
+          assetId: asset.id,
+          name: asset.name,
+          durationBeats: asset.durationBeats,
+        },
+        {
+          op: "add_audio_clip",
+          assetId: asset.id,
+          startBar: bar,
+          lengthBeats: asset.durationBeats,
+          gainDb: 0,
+          name: asset.name,
+          track: { name: asset.name.slice(0, 60) || "Audio" },
+        },
+      ]).project;
     }
     setProject(current);
     addMessage(
       "assistant",
-      `Añadidos ${files.length} audio(s) en el compás ${bar + 1}. Ahora puedes pedirme que los mueva, los recorte o los mezcle.`,
+      `Añadidos ${files.length - (cortado ? 1 : 0)} audio(s) en el compás ${bar + 1}, cada uno en su pista.`,
     );
+    if (cortado) {
+      addMessage(
+        "system",
+        `Paré en ${Math.round(ramAudioBytes() / 1048576)} MB de audio en memoria (límite ~900 MB): ` +
+          "el navegador se quedaría sin aire. Importa los stems restantes en otra tanda.",
+      );
+    }
     if (!persisted) {
       addMessage(
         "system",
@@ -731,37 +916,58 @@ $<HTMLInputElement>("audio-file").addEventListener("change", async (event) => {
   } finally {
     setBusy(false);
   }
+}
+
+$<HTMLInputElement>("audio-file").addEventListener("change", async (event) => {
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files ?? []);
+  input.value = "";
+  await importarAudio(files);
 });
 
 $<HTMLInputElement>("open").addEventListener("change", async (event) => {
   const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!ready || !file) return;
-  setBusy(true, "Cargando proyecto…");
-  try {
-    let parsed: Project;
-    let bundleWarnings: string[] = [];
-    if (/\.(miuzika\.)?zip$/i.test(file.name)) {
-      const imported = await importProjectBundle(file);
-      parsed = imported.project;
-      bundleWarnings = imported.warnings;
-    } else {
-      parsed = JSON.parse(await file.text()) as Project;
-      if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.tracks)) {
-        throw new Error("Formato no reconocido");
-      }
-    }
-    const { missing } = await hydrateProjectAudio(parsed);
-    setProject(parsed);
-    addMessage("assistant", `Abierto “${parsed.name}”.`);
-    for (const warning of bundleWarnings) addMessage("system", warning);
-    warnMissingAudio(missing);
-  } catch (error) {
-    addMessage("system", `No se pudo abrir: ${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    setBusy(false);
-    input.value = "";
+  const todos = Array.from(input.files ?? []);
+  input.value = "";
+  if (!ready || todos.length === 0) return;
+
+  // El mismo boton sirve para proyecto (.json/.zip) y para audio (WAV, uno o varios).
+  const audios = todos.filter(esAudio);
+  const proyectos = todos.filter((file) => !esAudio(file));
+
+  if (proyectos.length > 1) {
+    addMessage("system", `Solo se abre un proyecto a la vez: uso «${proyectos[0].name}».`);
   }
+
+  if (proyectos.length > 0) {
+    const file = proyectos[0];
+    setBusy(true, "Cargando proyecto…");
+    try {
+      let parsed: Project;
+      let bundleWarnings: string[] = [];
+      if (/\.(miuzika\.)?zip$/i.test(file.name)) {
+        const imported = await importProjectBundle(file);
+        parsed = imported.project;
+        bundleWarnings = imported.warnings;
+      } else {
+        parsed = JSON.parse(await file.text()) as Project;
+        if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.tracks)) {
+          throw new Error("Formato no reconocido");
+        }
+      }
+      const { missing } = await hydrateProjectAudio(parsed);
+      setProject(parsed);
+      addMessage("assistant", `Abierto “${parsed.name}”.`);
+      for (const warning of bundleWarnings) addMessage("system", warning);
+      warnMissingAudio(missing);
+    } catch (error) {
+      addMessage("system", `No se pudo abrir: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (audios.length > 0) await importarAudio(audios);
 });
 
 window.addEventListener("keydown", (event) => {
@@ -893,5 +1099,8 @@ if (import.meta.env.DEV) {
     get future() {
       return future;
     },
+    anadirPistas: importarPistasDesdeAgente,
+    nuevoProyecto: (nombre: string, bpm: number, lengthBars: number) =>
+      setProject(createProject({ name: nombre, bpm, lengthBars })),
   };
 }

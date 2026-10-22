@@ -43,6 +43,22 @@ def main() -> int:
                 f"pero cancion.BPM={cancion.BPM} implica SPB={spb:.6f}"
             )
             return 1
+
+        # reverb_st debe devolver la MISMA forma que la entrada: reverb() añade la
+        # cola del IR (len(ir)-1 muestras) y sin recortar la mezcla revienta.
+        golpe = np.asarray(instruments.snare(vel=1.0), dtype=np.float32)
+        largo = int(2.0 * dsp.SR)
+        estereo = np.zeros((largo, 2), np.float32)
+        m = min(len(golpe), largo)
+        estereo[:m, 0] = estereo[:m, 1] = golpe[:m]
+        ir = dsp.reverb_ir(1.0, 0.3, seed=7, lp_hz=6000.0)
+        mezcla = render.reverb_st(estereo, ir, ir, mix=0.3)
+        if mezcla.shape != estereo.shape:
+            print(f"FALLO: reverb_st devuelve {mezcla.shape}, se esperaba {estereo.shape}")
+            return 1
+        if not np.all(np.isfinite(mezcla)) or float(np.max(np.abs(mezcla))) < 0.01:
+            print("FALLO: reverb_st devuelve señal vacia o con NaN/inf")
+            return 1
         print(f"smoke OK: kick {len(x)} muestras, rms={rms:.4f}, pico={pico:.4f}, A3={hz:.2f}Hz")
         print("modulos importados: cancion, dsp, instruments, midi, render")
         return 0
