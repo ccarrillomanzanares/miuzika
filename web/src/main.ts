@@ -1,24 +1,19 @@
 import type { CodeSource, InstrumentType, Project } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
-import { listAudioAssets } from "./audio-db.ts";
-import {
-  loadHistoryFromDb,
-  loadProjectFromDb,
-  saveHistoryToDb,
-  saveProjectToDb,
-} from "./project-db.ts";
 import { createProject, projectStats } from "../../src/core/project.ts";
 import { applyOps } from "../../src/core/ops.ts";
 import type { Op } from "../../src/core/ops.ts";
 import {
-  assetsStreamingGuardados,
+  SEGUNDOS_STREAMING,
   audioAssets,
   computePeaks,
-  guardarAssetsStreaming,
-  hydrateProjectAudio,
+  hidratarAssets,
+  idDeAsset,
+  liberarAssetsNoUsados,
   loadAudioFile,
-  persistAudioAsset,
+  metadatosWav,
   registrarAssetStreaming,
+  rutaEnProyecto,
 } from "./audio-store.ts";
 import { StemPlayer } from "./stem-player.ts";
 import { openPianoRoll } from "./editor.ts";
@@ -26,6 +21,21 @@ import { openCodeLab } from "./code-lab.ts";
 import type { CodeAudioRequest } from "./code-lab.ts";
 import { renderStrudelAudio } from "./strudel-audio.ts";
 import { importProjectBundle } from "./project-bundle.ts";
+import {
+  carpetaDeRuta,
+  interpretarProyectoEnDisco,
+  nombreDeProyectoDesdeFicheros,
+  rutaDeProyecto,
+  serializarProyecto,
+  slugDeNombre,
+} from "./proyecto-archivo.ts";
+import {
+  guardarProyectoEnDisco,
+  leerProyectoDeDisco,
+  listarFicheros,
+  listarProyectos,
+  subirAudio,
+} from "./proyecto-disco.ts";
 import { TimelineView, escapeHtml } from "./timeline.ts";
 import { initChat } from "./chat.ts";
 import { initCosteGpu } from "./gpu-coste.ts";
@@ -214,7 +224,7 @@ chat.onSend((texto) => {
   void responderAlUsuario(texto);
 });
 
-let project: Project | null = loadStored();
+let project: Project | null = null;
 let busy = false;
 let ready = false;
 let restoring = false;
@@ -227,27 +237,11 @@ let openDawHandle: OpenDawPlaybackHandle | null = null;
 let openDawGeneration = 0;
 
 const stemPlayer = new StemPlayer();
-/** Por encima de estos segundos el WAV no se decodifica: se reproduce por streaming. */
-const SEGUNDOS_STREAMING = 30;
 
 /** Ruta completa (con la carpeta del proyecto) para <audio src>, que no manda cabeceras. */
 function rutaCompleta(src: string): string {
-  const compartido = /^(codigo|herramientas|plantillas|proyectos|_archivo)\//.test(src);
-  if (compartido || !project) return src;
-  return `proyectos/${slugDeProyecto(project)}/${src}`;
-}
-
-/** Duracion y picos de un WAV sin decodificarlo en el navegador. */
-async function metadatosWav(ruta: string): Promise<{
-  picos: number[];
-  duracionSeg: number;
-}> {
-  const res = await fetch(`/api/picos?path=${encodeURIComponent(ruta)}&cubos=1024`, {
-    headers: cabecerasProyecto(),
-  });
-  if (!res.ok) throw new Error(`no se pudo leer ${ruta}`);
-  const datos = (await res.json()) as { picos?: number[]; duracionSeg?: number };
-  return { picos: datos.picos ?? [], duracionSeg: Number(datos.duracionSeg ?? 0) };
+  if (!project) return src;
+  return rutaEnProyecto(src, slugDeProyecto(project));
 }
 
 /** Prepara los stems de streaming del proyecto abierto (los que no van por openDAW). */
@@ -287,9 +281,9 @@ function sincronizarStems(): void {
   stemPlayer.definir(defs);
 }
 
-const HISTORY_KEY = "miuzika.history";
 const HISTORY_LIMIT = 8;
-let history: Project[] = loadHistory();
+/** Historial de undo: en memoria, de la sesión. El disco guarda el estado, no los pasos. */
+let history: Project[] = [];
 let future: Project[] = [];
 
 /** Nombre de proyecto a partir del fichero entregado (salida/sacramento_multitrack.mid -> sacramento). */
@@ -305,15 +299,8 @@ function nombreDesdeRuta(ruta: string): string {
 
 /** Carpeta del proyecto en workspace/proyectos/: solo el nombre, en slug. */
 function slugDeProyecto(origen: Project): string {
-  const base = origen.name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-  // Solo el nombre: la carpeta es predecible ("sacramento" -> proyectos/sacramento/).
-  return base || "proyecto";
+  // Una sola regla para todos: la del fichero maestro (proyecto-archivo.ts).
+  return slugDeNombre(origen.name);
 }
 
 function currentBeat(): number {
@@ -423,8 +410,8 @@ async function startOpenDawPlayback(view: Project): Promise<void> {
   const generation = ++openDawGeneration;
   setBusy(true, "Cargando WAVs y arrancando openDAW…");
   try {
-    const { missing } = await hydrateProjectAudio(view);
-    warnMissingAudio(missing);
+    const { faltan } = await hidratarAssets(view, slugDeProyecto(view));
+    warnMissingAudio(faltan);
     const { playWithOpenDaw } = await import("./opendaw-engine.ts");
     const endBeat = view.lengthBars * beatsPerBar(view);
     // openDAW solo recibe lo que esta decodificado; los stems largos van aparte.
@@ -477,7 +464,8 @@ function warnMissingAudio(missing: string[]): void {
   const rest = missing.length > 3 ? ` y ${missing.length - 3} más` : "";
   addMessage(
     "system",
-    `Faltan ${missing.length} WAV (${shown}${rest}). El proyecto los referencia, pero no están guardados en este navegador; vuelve a importarlos con «Audio».`,
+    `Faltan ${missing.length} WAV (${shown}${rest}). El proyecto los referencia, pero no están en la carpeta del proyecto: ` +
+      "esas pistas sonarán vacías hasta que los WAV vuelvan a su sitio.",
   );
 }
 
@@ -487,121 +475,95 @@ function warnPersistence(message: string): void {
   addMessage("system", message);
 }
 
+/** Clave con el proyecto abierto: lo único que queda en el navegador. */
+const CLAVE_ABIERTO = "miuzika.proyecto-abierto";
+
+/**
+ * Un cambio del proyecto: apunta el proyecto abierto (para reabrirlo al
+ * recargar) y programa la escritura del fichero maestro. No hay más estado en
+ * el navegador: los datos y los WAV viven en el disco.
+ */
 function persist(): void {
-  if (project) {
-    try {
-      localStorage.setItem("miuzika.project", JSON.stringify(project));
-    } catch {
-      // Evita que al recargar se lea una versión vieja de localStorage.
-      try {
-        localStorage.removeItem("miuzika.project");
-      } catch {
-        /* noop */
-      }
-      warnPersistence("No se pudo guardar el proyecto en localStorage; se guardará en IndexedDB.");
-    }
-    void saveProjectToDb(project).then((ok) => {
-      if (!ok) warnPersistence("No se pudo guardar el proyecto en IndexedDB. Exporta el JSON cuanto antes.");
-    });
-  } else {
-    try {
-      localStorage.removeItem("miuzika.project");
-    } catch {
-      /* noop */
-    }
-    void saveProjectToDb(null);
-  }
-}
-
-function loadStored(): Project | null {
   try {
-    const raw = localStorage.getItem("miuzika.project");
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Project;
-    return parsed.schemaVersion === 1 ? parsed : null;
+    if (project) localStorage.setItem(CLAVE_ABIERTO, slugDeProyecto(project));
+    else localStorage.removeItem(CLAVE_ABIERTO);
   } catch {
-    return null;
+    warnPersistence("No se pudo apuntar el proyecto abierto en localStorage.");
   }
+  programarGuardado();
 }
 
-function loadHistory(): Project[] {
+// ── Fichero maestro en disco: proyectos/<slug>/proyecto.json ────────────────
+// Autoguardado con retardo: escribir en cada arrastre de fader sería un POST por
+// movimiento; 1,5 s tras el último cambio es invisible y no pierde nada. El botón
+// «Guardar» (y Ctrl+S) fuerza la escritura y lo cuenta en el chat.
+const RETARDO_GUARDADO = 1500;
+let guardadoTimer: number | null = null;
+let guardando = false;
+let guardadoPendiente = false;
+
+function programarGuardado(): void {
+  if (!ready || restoring || !project) return;
+  if (guardadoTimer !== null) window.clearTimeout(guardadoTimer);
+  guardadoTimer = window.setTimeout(() => {
+    guardadoTimer = null;
+    void guardarEnDisco(true);
+  }, RETARDO_GUARDADO);
+}
+
+function horaActual(): string {
+  return new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+/**
+ * Escribe el fichero maestro. `silencioso` (autoguardado) sólo deja el aviso en
+ * la barra de estado; el botón «Guardar» además lo cuenta en el chat.
+ */
+async function guardarEnDisco(silencioso: boolean): Promise<void> {
+  const vista = project;
+  if (!vista) {
+    if (!silencioso) addMessage("system", "No hay proyecto abierto que guardar.");
+    return;
+  }
+  if (!ready) return;
+  if (guardando) {
+    // Ya hay una escritura en vuelo: al terminar se relanza con el estado nuevo.
+    guardadoPendiente = true;
+    return;
+  }
+  guardando = true;
+  const ruta = rutaDeProyecto(slugDeProyecto(vista));
   try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((entry): entry is Project => Boolean(entry) && entry.schemaVersion === 1)
-      .slice(-HISTORY_LIMIT);
-  } catch {
-    return [];
-  }
-}
-
-interface AudioRecovery {
-  project: Project;
-  assets: number;
-}
-
-/** Si el proyecto se perdió pero los WAV siguen en IndexedDB, crea pistas recuperables. */
-async function recoverOrphanAudio(): Promise<AudioRecovery | null> {
-  const stored = await listAudioAssets();
-  if (stored.length === 0) return null;
-  const base = createProject({ name: "Audio recuperado", lengthBars: 32 });
-  const barBeats = beatsPerBar(base);
-  const ops: Op[] = [];
-  const limit = Math.min(stored.length, 32);
-  for (let index = 0; index < limit; index++) {
-    const asset = stored[index]!;
-    if (!(asset.blob instanceof Blob)) continue;
-    const name = (asset.name || `Audio ${index + 1}`).slice(0, 60);
-    const trackId = `trk_recover_${index}`;
-    const durationBeats = Math.max(1, asset.durationBeats || barBeats);
-    ops.push(
-      {
-        op: "add_track",
-        id: trackId,
-        name,
-        kind: "audio",
-        instrument: { type: "sampler" },
-        gainDb: 0,
-        pan: 0,
-      },
-      {
-        op: "register_audio_asset",
-        assetId: asset.id,
-        name: asset.name,
-        durationBeats,
-      },
-      {
-        op: "add_audio_clip",
-        trackId,
-        assetId: asset.id,
-        startBar: 0,
-        offsetBeats: 0,
-        lengthBeats: Math.min(durationBeats, 64 * barBeats),
-        gainDb: 0,
-        name,
-      },
+    const { datos, sinRuta } = serializarProyecto(vista, audioAssets);
+    await guardarProyectoEnDisco(ruta, JSON.stringify(datos, null, 2));
+    setStatus(`✓ guardado ${ruta} · ${horaActual()} · ${datos.proyecto.tracks.length} pistas`);
+    if (!silencioso) {
+      const conRuta = datos.proyecto.audioAssets?.filter((asset) => asset.ruta).length ?? 0;
+      addMessage(
+        "assistant",
+        `Guardado en ${ruta}: ${datos.proyecto.tracks.length} pista(s), ${datos.proyecto.bpm} BPM, ` +
+          `${datos.proyecto.lengthBars} compases, ${conRuta} WAV de la carpeta` +
+          (sinRuta.length > 0
+            ? `. ${sinRuta.length} sin fichero en disco (${sinRuta.slice(0, 3).join(", ")}): ésos no viajan con el proyecto.`
+            : "."),
+      );
+    }
+  } catch (error) {
+    addMessage(
+      "system",
+      `No se pudo guardar en disco: ${error instanceof Error ? error.message : String(error)}. ` +
+        "Los cambios están en pantalla, pero no en el fichero maestro.",
     );
-  }
-  if (ops.length === 0) return null;
-  try {
-    return { project: applyOps(base, ops).project, assets: stored.length };
-  } catch {
-    return null;
+    setStatus("✗ no se pudo guardar en disco");
+  } finally {
+    guardando = false;
+    if (guardadoPendiente) {
+      guardadoPendiente = false;
+      programarGuardado();
+    }
   }
 }
 
-function saveHistory(): void {
-  try {
-    while (history.length > 0 && JSON.stringify(history).length > 4_000_000) history.shift();
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-  } catch {
-    warnPersistence("El historial no cabe en localStorage; queda en memoria e IndexedDB.");
-  }
-  void saveHistoryToDb(history);
-}
 
 function updateHistoryButtons(): void {
   undoButton.disabled = history.length === 0;
@@ -613,7 +575,6 @@ function recordHistory(): void {
   history.push(structuredClone(project));
   if (history.length > HISTORY_LIMIT) history.shift();
   future = [];
-  saveHistory();
 }
 
 async function undo(): Promise<void> {
@@ -621,13 +582,12 @@ async function undo(): Promise<void> {
   const previous = history.pop();
   if (!previous) return;
   if (project) future.push(project);
-  saveHistory();
   restoring = true;
   setBusy(true, "Cargando audio…");
   try {
-    const { missing } = await hydrateProjectAudio(previous);
+    const { faltan } = await hidratarAssets(previous, slugDeProyecto(previous));
     applyProject(previous);
-    warnMissingAudio(missing);
+    warnMissingAudio(faltan);
   } finally {
     restoring = false;
     setBusy(false);
@@ -643,13 +603,12 @@ async function redo(): Promise<void> {
     history.push(project);
     if (history.length > HISTORY_LIMIT) history.shift();
   }
-  saveHistory();
   restoring = true;
   setBusy(true, "Cargando audio…");
   try {
-    const { missing } = await hydrateProjectAudio(next);
+    const { faltan } = await hidratarAssets(next, slugDeProyecto(next));
     applyProject(next);
-    warnMissingAudio(missing);
+    warnMissingAudio(faltan);
   } finally {
     restoring = false;
     setBusy(false);
@@ -700,6 +659,8 @@ function applyProject(next: Project | null): void {
   else openDawGeneration++;
   setPlaying(false);
   project = next;
+  // Cambiar de proyecto no debe dejar los WAV del anterior ocupando RAM.
+  liberarAssetsNoUsados(next);
   persist();
   updateActions();
   const view = activeProject(next);
@@ -860,16 +821,32 @@ async function renderStrudelAudioSource(request: CodeAudioRequest): Promise<void
   const rendered = await renderStrudelAudio(request.code, request.bars, base.bpm, barBeats);
   const assetId = `aud_strudel_${request.sourceId}_${Date.now().toString(36)}`;
   const assetName = `${request.name} [Strudel]`;
+  const duracionBeats = request.bars * barBeats;
+  // El WAV renderizado va al disco como cualquier otro audio del proyecto: si no,
+  // el fichero maestro no podría referenciarlo y se perdería al recargar.
+  let ruta: string | null = null;
+  try {
+    const fichero = new File([rendered.blob], `${slugDeProyecto(base)}_strudel_${request.sourceId}.wav`, {
+      type: "audio/wav",
+    });
+    ruta = (await subirAudio(fichero, slugDeProyecto(base))).path;
+  } catch (error) {
+    addMessage(
+      "system",
+      `El audio de Strudel no se pudo escribir en la carpeta del proyecto (${
+        error instanceof Error ? error.message : String(error)
+      }): sonará en esta sesión, pero el proyecto no lo referenciará.`,
+    );
+  }
   audioAssets.set(assetId, {
     id: assetId,
     name: assetName,
     buffer: rendered.buffer,
-    durationBeats: request.bars * barBeats,
+    durationBeats: duracionBeats,
     peaks: computePeaks(rendered.buffer),
+    src: ruta ?? "",
+    streaming: false,
   });
-  if (!(await persistAudioAsset(assetId, assetName, request.bars * barBeats, rendered.blob))) {
-    addMessage("system", "El audio Strudel suena en esta sesión, pero no se pudo guardar en IndexedDB.");
-  }
 
   const previous = base.codeSources?.find((source) => source.id === request.sourceId);
   const oldTrackIds = previous?.trackIds.filter((id) =>
@@ -882,7 +859,8 @@ async function renderStrudelAudioSource(request: CodeAudioRequest): Promise<void
     op: "register_audio_asset",
     assetId,
     name: assetName,
-    durationBeats: request.bars * barBeats,
+    durationBeats: duracionBeats,
+    ...(ruta ? { ruta } : {}),
   });
   ops.push({
     op: "add_track",
@@ -1123,7 +1101,7 @@ async function importarPistasDesdeAgente(
 
       // Los stems largos NO se decodifican: streaming con <audio> y picos del
       // servidor. Asi caben muchos a la vez (la RAM no crece con la duracion).
-      const meta = await metadatosWav(ruta);
+      const meta = await metadatosWav(rutaEnProyecto(ruta, slugDeProyecto(project)));
       if (meta.duracionSeg >= SEGUNDOS_STREAMING) {
         const durationBeats = (meta.duracionSeg * current.bpm) / 60;
         const assetId = `aud_st_${Date.now().toString(36)}_${contador++}`;
@@ -1134,10 +1112,9 @@ async function importarPistasDesdeAgente(
           src: ruta,
           peaks: Float32Array.from(meta.picos),
         });
-        guardarAssetsStreaming();
         const existente = current.tracks.find((t) => t.kind === "audio" && t.name === nombre);
         current = applyOps(current, [
-          { op: "register_audio_asset", assetId, name: nombre, durationBeats },
+          { op: "register_audio_asset", assetId, name: nombre, durationBeats, ruta },
           ...(existente
             ? [
                 // Reimportar REEMPLAZA los clips de esa pista: asi se corrige una
@@ -1175,20 +1152,19 @@ async function importarPistasDesdeAgente(
         continue;
       }
 
-      const res = await fetch(`/api/audio?path=${encodeURIComponent(ruta)}`, {
-        headers: cabecerasProyecto(),
-      });
+      const res = await fetch(`/api/audio?path=${encodeURIComponent(rutaEnProyecto(ruta, slugDeProyecto(project)))}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const file = new File([blob], fichero, { type: "audio/wav" });
-      const asset = await loadAudioFile(file, current.bpm);
-      const guardado = await persistAudioAsset(asset.id, asset.name, asset.durationBeats, file);
+      // El asset apunta a su ruta en disco: el proyecto es portable sin más.
+      const asset = await loadAudioFile(file, current.bpm, ruta);
       current = applyOps(current, [
         {
           op: "register_audio_asset",
           assetId: asset.id,
           name: asset.name,
           durationBeats: asset.durationBeats,
+          ruta,
         },
         {
           op: "add_audio_clip",
@@ -1200,9 +1176,7 @@ async function importarPistasDesdeAgente(
           track: { name: nombre },
         },
       ]).project;
-      hechas.push(
-        `${nombre} (audio, ${asset.durationBeats.toFixed(1)} beats${guardado ? "" : ", NO guardado en IndexedDB"})`,
-      );
+      hechas.push(`${nombre} (audio, ${asset.durationBeats.toFixed(1)} beats)`);
     } catch (error) {
       fallos.push(`${ruta}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -1331,64 +1305,108 @@ function ramAudioBytes(): number {
 /**
  * Mete ficheros de audio en el proyecto: una pista por fichero, en el compas actual.
  * Lo usan tanto el boton «Audio» como «Abrir» (una sola via para lo mismo).
+ *
+ * Cada fichero se copia primero a `proyectos/<slug>/entrada/`: el proyecto es
+ * portable porque referencia sus WAV por ruta, no por bytes en el navegador.
+ *
+ * `destino` decide dónde caen: «anadir» respeta el proyecto abierto y el cursor;
+ * «nuevo» empieza de cero con el nombre de la carpeta elegida (el caso de abrir
+ * la carpeta `salida/` de un proyecto, que antes se pegaba al proyecto viejo).
  */
-async function importarAudio(files: File[]): Promise<void> {
+async function importarAudio(files: File[], destino: "anadir" | "nuevo" = "anadir"): Promise<void> {
   if (!ready || files.length === 0) return;
-  if (!project) {
-    addMessage("system", "Genera una canción antes de importar audio.");
-    return;
-  }
+  const nuevo = destino === "nuevo" || !project;
   const LIMITE_RAM = 900 * 1024 * 1024; // ~900 MB: por encima el navegador se cae
-  setBusy(true, "Importando audio…");
+  const nombreNuevo = nombreDeProyectoDesdeFicheros(files);
+  setBusy(true, nuevo ? `Creando “${nombreNuevo}”…` : "Importando audio…");
   try {
-    let current = project;
-    let persisted = true;
+    let current =
+      nuevo
+        ? createProject({ name: nombreNuevo, bpm: 120, lengthBars: 32 })
+        : (project as Project);
+    const slug = slugDeProyecto(current);
     let cortado = false;
-    const bar = Math.floor(currentBeat() / beatsPerBar(current));
+    const sinDisco: string[] = [];
+    let metidos = 0;
+    const bar = nuevo ? 0 : Math.floor(currentBeat() / beatsPerBar(current));
+
     for (const file of files) {
       if (ramAudioBytes() > LIMITE_RAM) {
         cortado = true;
         break;
       }
-      const asset = await loadAudioFile(file, current.bpm);
-      if (!(await persistAudioAsset(asset.id, asset.name, asset.durationBeats, file))) persisted = false;
-      // pista propia por fichero: asi cada stem tiene su fader
+      // 1) al disco. Sin copia no hay nada que el fichero maestro pueda referenciar.
+      let ruta = "";
+      try {
+        ruta = (await subirAudio(file, slug)).path;
+      } catch (error) {
+        sinDisco.push(`${file.name}: ${error instanceof Error ? error.message : String(error)}`);
+        continue;
+      }
+
+      // 2) duración y onda las mide el servidor (el WAV ya está en su sitio).
+      const meta = await metadatosWav(rutaEnProyecto(ruta, slug));
+      const segundos = meta.duracionSeg;
+      let assetId: string;
+      let nombre = file.name.replace(/\.[^.]+$/, "").slice(0, 60) || "Audio";
+      let durationBeats = Math.max(0.25, (segundos * current.bpm) / 60);
+
+      if (segundos >= SEGUNDOS_STREAMING) {
+        // Largo: nunca se decodifica (así caben stems de 6 minutos).
+        assetId = idDeAsset(nombre);
+        registrarAssetStreaming({
+          id: assetId,
+          name: nombre,
+          durationBeats,
+          src: ruta,
+          peaks: Float32Array.from(meta.picos),
+        });
+      } else {
+        // Corto: decodificado para que openDAW lo pueda reproducir.
+        const asset = await loadAudioFile(file, current.bpm, ruta);
+        assetId = asset.id;
+        nombre = asset.name;
+        durationBeats = asset.durationBeats;
+      }
+
       current = applyOps(current, [
         {
           op: "register_audio_asset",
-          assetId: asset.id,
-          name: asset.name,
-          durationBeats: asset.durationBeats,
+          assetId,
+          name: nombre,
+          durationBeats,
+          ruta,
         },
         {
           op: "add_audio_clip",
-          assetId: asset.id,
+          assetId,
           startBar: bar,
-          lengthBeats: asset.durationBeats,
+          lengthBeats: durationBeats,
           gainDb: 0,
-          name: asset.name,
-          track: { name: asset.name.slice(0, 60) || "Audio" },
+          name: nombre,
+          track: { name: nombre },
         },
       ]).project;
+      metidos++;
     }
+
     setProject(current);
     addMessage(
       "assistant",
-      `Añadidos ${files.length - (cortado ? 1 : 0)} audio(s) en el compás ${bar + 1}, cada uno en su pista.`,
+      nuevo
+        ? `Proyecto nuevo “${current.name}” a ${current.bpm} BPM con ${metidos} audio(s) copiados a ` +
+            `proyectos/${slug}/entrada/, cada uno en su pista. Si los stems son de otro tempo, cámbialo antes de darle al play.`
+        : `${metidos} audio(s) copiados a proyectos/${slug}/entrada/ y añadidos en el compás ${bar + 1}, cada uno en su pista.`,
     );
     if (cortado) {
       addMessage(
         "system",
         `Paré en ${Math.round(ramAudioBytes() / 1048576)} MB de audio en memoria (límite ~900 MB): ` +
-          "el navegador se quedaría sin aire. Importa los stems restantes en otra tanda.",
+          "el navegador se quedaría sin aire. Importa los stems restantes en otra tanda (los largos no se decodifican, así que caben).",
       );
     }
-    if (!persisted) {
-      addMessage(
-        "system",
-        "El audio suena en esta sesión, pero no se pudo guardar en IndexedDB; se perderá al recargar.",
-      );
-    }
+    for (const fallo of sinDisco.slice(0, 4)) addMessage("system", `No se pudo copiar al disco: ${fallo}`);
+    if (sinDisco.length > 4) addMessage("system", `…y ${sinDisco.length - 4} más sin copiar.`);
   } catch (error) {
     addMessage("system", `No se pudo importar: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
@@ -1396,11 +1414,165 @@ async function importarAudio(files: File[]): Promise<void> {
   }
 }
 
+/**
+ * Pregunta qué hacer con los audios elegidos. Con proyecto abierto el usuario
+ * elige: añadirlos (como siempre) o empezar uno nuevo con el nombre de la carpeta.
+ */
+type DestinoAudio = "anadir" | "nuevo" | "cancelar";
+
+function preguntarDestinoAudio(files: File[]): Promise<DestinoAudio> {
+  const dialogo = $<HTMLDialogElement>("dialogo-audio");
+  const nombre = nombreDeProyectoDesdeFicheros(files);
+  $("audio-anadir").textContent = `Añadir a “${project?.name ?? "—"}”`;
+  $("audio-nuevo").textContent = `Proyecto nuevo “${nombre}”`;
+  $("dialogo-audio-detalle").textContent =
+    `${files.length} fichero(s). «Añadir» los mete en el proyecto abierto, en el compás del cursor; ` +
+    `«Proyecto nuevo» empieza de cero con el nombre de la carpeta (${nombre}).`;
+
+  return new Promise((resolver) => {
+    let contestado = false;
+    const terminar = (valor: DestinoAudio): void => {
+      if (contestado) return;
+      contestado = true;
+      dialogo.close();
+      resolver(valor);
+    };
+    // onclick/oncancel se reasignan (no se acumulan) en cada apertura.
+    $("audio-anadir").onclick = () => terminar("anadir");
+    $("audio-nuevo").onclick = () => terminar("nuevo");
+    $("audio-cancelar").onclick = () => terminar("cancelar");
+    dialogo.oncancel = (event) => {
+      event.preventDefault();
+      terminar("cancelar");
+    };
+    dialogo.onclose = () => {
+      if (!contestado) {
+        contestado = true;
+        resolver("cancelar");
+      }
+    };
+    dialogo.showModal();
+  });
+}
+
+/** Punto único para importar audio con el selector: pregunta el destino si hay proyecto. */
+async function importarAudioDesdeSelector(files: File[]): Promise<void> {
+  if (files.length === 0) return;
+  const destino: DestinoAudio = project ? await preguntarDestinoAudio(files) : "nuevo";
+  if (destino === "cancelar") return;
+  await importarAudio(files, destino);
+}
+
+/** Fecha corta para la lista de proyectos ("23 oct, 21:04"). */
+function fechaCorta(iso: string): string {
+  if (!iso) return "sin fecha";
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return "sin fecha";
+  return fecha.toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+/** Abre el diálogo con los proyectos que tienen proyecto.json en el disco. */
+async function abrirListaDeProyectos(): Promise<void> {
+  const dialogo = $<HTMLDialogElement>("dialogo-proyectos");
+  const lista = $("lista-proyectos");
+  lista.innerHTML = `<p class="vacio">Leyendo workspace/proyectos/…</p>`;
+  if (!dialogo.open) dialogo.showModal();
+  try {
+    const proyectos = await listarProyectos();
+    if (proyectos.length === 0) {
+      lista.innerHTML =
+        `<p class="vacio">Todavía no hay ningún <code>proyecto.json</code> en <code>workspace/proyectos/</code>. ` +
+        "Se crea con el botón «Guardar» o solo, 1,5 s después de cualquier cambio.</p>";
+      return;
+    }
+    lista.innerHTML = proyectos
+      .map((proyecto) => {
+        const detalle = proyecto.error
+          ? `ilegible: ${proyecto.error}`
+          : `${proyecto.bpm} BPM · ${proyecto.compases} compases · ${proyecto.pistas} pista(s)`;
+        return (
+          `<button class="proyecto-fila" data-ruta="${escapeHtml(proyecto.ruta)}"` +
+          `${proyecto.error ? ' data-error="1"' : ""}>` +
+          `<strong>${escapeHtml(proyecto.nombre)}</strong>` +
+          `<span>${escapeHtml(detalle)}</span>` +
+          `<em>proyectos/${escapeHtml(proyecto.slug)}/ · ${fechaCorta(proyecto.actualizado)} · ` +
+          `${Math.round(proyecto.bytes / 1024)} KB</em>` +
+          "</button>"
+        );
+      })
+      .join("");
+  } catch (error) {
+    lista.innerHTML = `<p class="vacio">No se pudo leer la lista: ${escapeHtml(
+      error instanceof Error ? error.message : String(error),
+    )}</p>`;
+  }
+}
+
+/**
+ * Abre un proyecto del disco: el fichero maestro manda y sus WAV se cargan de la
+ * carpeta (`/api/audio`), decodificados si son cortos y por streaming si son largos.
+ */
+async function abrirProyectoDeDisco(ruta: string): Promise<void> {
+  setBusy(true, "Abriendo proyecto de disco…");
+  restoring = true;
+  try {
+    const texto = await leerProyectoDeDisco(ruta);
+    const disco = interpretarProyectoEnDisco(texto);
+    const carpeta = carpetaDeRuta(ruta);
+    const { cargados, faltan } = await hidratarAssets(disco.proyecto, carpeta);
+    // `restoring` sigue en true al aplicar el proyecto: abrir no debe reescribir
+    // el fichero maestro (pisaría lo que haya en disco, incluido guardadoEn).
+    setProject(disco.proyecto);
+    addMessage(
+      "assistant",
+      `Abierto del disco “${disco.proyecto.name}” (proyectos/${carpeta}/): ` +
+        `${disco.proyecto.tracks.length} pista(s), ${disco.proyecto.bpm} BPM, ${disco.proyecto.lengthBars} compases` +
+        (cargados > 0 ? `, ${cargados} WAV cargado(s) de la carpeta.` : "."),
+    );
+    if (faltan.length > 0) warnMissingAudio(faltan);
+  } catch (error) {
+    restoring = false;
+    addMessage(
+      "system",
+      `No se pudo abrir ${ruta}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    restoring = false;
+    setBusy(false);
+  }
+}
+
+$("lista-proyectos").addEventListener("click", (event) => {
+  const boton = (event.target as HTMLElement).closest<HTMLElement>("[data-ruta]");
+  if (!boton) return;
+  if (boton.dataset.error === "1") {
+    addMessage("system", "Ese proyecto.json está ilegible: no se puede abrir.");
+    return;
+  }
+  const ruta = boton.dataset.ruta ?? "";
+  $<HTMLDialogElement>("dialogo-proyectos").close();
+  if (ruta) void abrirProyectoDeDisco(ruta);
+});
+
+$("proyectos-cerrar").addEventListener("click", () => {
+  $<HTMLDialogElement>("dialogo-proyectos").close();
+});
+
+$("proyectos").addEventListener("click", () => void abrirListaDeProyectos());
+
+$("guardar").addEventListener("click", () => {
+  if (guardadoTimer !== null) {
+    window.clearTimeout(guardadoTimer);
+    guardadoTimer = null;
+  }
+  void guardarEnDisco(false);
+});
+
 $<HTMLInputElement>("audio-file").addEventListener("change", async (event) => {
   const input = event.target as HTMLInputElement;
   const files = Array.from(input.files ?? []);
   input.value = "";
-  await importarAudio(files);
+  await importarAudioDesdeSelector(files);
 });
 
 $<HTMLInputElement>("open").addEventListener("change", async (event) => {
@@ -1420,32 +1592,54 @@ $<HTMLInputElement>("open").addEventListener("change", async (event) => {
   if (proyectos.length > 0) {
     const file = proyectos[0];
     setBusy(true, "Cargando proyecto…");
+    restoring = true;
     try {
       let parsed: Project;
-      let bundleWarnings: string[] = [];
-      if (/\.(miuzika\.)?zip$/i.test(file.name)) {
+      const avisos: string[] = [];
+      const esZip = /\.(miuzika\.)?zip$/i.test(file.name);
+      if (esZip) {
+        // Los WAV del bundle se escriben en la carpeta del proyecto y el proyecto
+        // se queda con sus rutas: así el bundle se convierte en un proyecto de disco.
         const imported = await importProjectBundle(file);
         parsed = imported.project;
-        bundleWarnings = imported.warnings;
-      } else {
-        parsed = JSON.parse(await file.text()) as Project;
-        if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.tracks)) {
-          throw new Error("Formato no reconocido");
+        avisos.push(...imported.warnings);
+        const slug = slugDeProyecto(parsed);
+        parsed.audioAssets ??= [];
+        for (const wav of imported.wavs) {
+          try {
+            const ficha = new File([wav.data as unknown as BlobPart], wav.nombre, { type: "audio/wav" });
+            const { path } = await subirAudio(ficha, slug);
+            const asset = parsed.audioAssets.find((candidato) => candidato.id === wav.assetId);
+            if (asset) asset.ruta = path;
+            else parsed.audioAssets.push({ id: wav.assetId, name: wav.nombre, durationBeats: 1, ruta: path });
+          } catch (error) {
+            avisos.push(
+              `No se pudo copiar ${wav.nombre} al proyecto: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
         }
+      } else {
+        // Un .json puede ser un fichero maestro, un bundle suelto o un Project.
+        const disco = interpretarProyectoEnDisco(await file.text());
+        parsed = disco.proyecto;
       }
-      const { missing } = await hydrateProjectAudio(parsed);
+      const { faltan } = await hidratarAssets(parsed, slugDeProyecto(parsed));
       setProject(parsed);
-      addMessage("assistant", `Abierto “${parsed.name}”.`);
-      for (const warning of bundleWarnings) addMessage("system", warning);
-      warnMissingAudio(missing);
+      addMessage(
+        "assistant",
+        `Abierto “${parsed.name}”. Sus WAV se buscan en proyectos/${slugDeProyecto(parsed)}/ por la ruta de cada asset.`,
+      );
+      for (const aviso of avisos) addMessage("system", aviso);
+      warnMissingAudio(faltan);
     } catch (error) {
       addMessage("system", `No se pudo abrir: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
+      restoring = false;
       setBusy(false);
     }
   }
 
-  if (audios.length > 0) await importarAudio(audios);
+  if (audios.length > 0) await importarAudioDesdeSelector(audios);
 });
 
 window.addEventListener("keydown", (event) => {
@@ -1487,6 +1681,14 @@ window.addEventListener("keydown", (event) => {
   } else if (key === "d") {
     event.preventDefault();
     duplicarClips();
+  } else if (key === "s") {
+    // Ctrl+S = escribir el fichero maestro ahora, sin esperar al autoguardado.
+    event.preventDefault();
+    if (guardadoTimer !== null) {
+      window.clearTimeout(guardadoTimer);
+      guardadoTimer = null;
+    }
+    void guardarEnDisco(false);
   } else if (key === "z") {
     event.preventDefault();
     if (event.shiftKey) void redo();
@@ -1499,71 +1701,149 @@ window.addEventListener("keydown", (event) => {
 
 // --- Arranque --------------------------------------------------------------
 
-async function boot(): Promise<void> {
-  // Los assets de streaming no estan en IndexedDB: viven en el servidor.
-  for (const guardado of assetsStreamingGuardados()) {
-    if (!audioAssets.has(guardado.id)) registrarAssetStreaming(guardado);
-  }
-  let restoredFromDb = false;
-  let recoveredAssets = 0;
-
-  if (!project) {
-    const stored = await loadProjectFromDb();
-    if (stored) {
-      project = stored;
-      restoredFromDb = true;
-    }
-  }
-  if (history.length === 0) {
-    const storedHistory = await loadHistoryFromDb();
-    if (storedHistory.length > 0) history = storedHistory.slice(-HISTORY_LIMIT);
-  }
-  if (!project) {
-    const recovered = await recoverOrphanAudio();
-    if (recovered) {
-      project = recovered.project;
-      recoveredAssets = recovered.assets;
-    }
-  }
-
-  const hasAudio = Boolean(
-    project &&
-      ((project.audioAssets?.length ?? 0) > 0 ||
-        project.tracks.some((track) => track.clips.some((clip) => clip.audio))),
-  );
-  let result: Awaited<ReturnType<typeof hydrateProjectAudio>> = { loaded: 0, missing: [] };
-
-  if (hasAudio) setBusy(true, "Cargando audio…");
+/**
+ * Migración de una sola vez. La versión anterior guardaba el proyecto en
+ * `localStorage` (`miuzika.project`) y los WAV en IndexedDB; ya no se leen. Si
+ * ese proyecto sigue ahí y su carpeta no tiene fichero maestro, se escribe a
+ * disco adoptando los WAV que se llamen igual en `salida/` o `entrada/`.
+ */
+async function migrarProyectoAntiguo(): Promise<string> {
+  let crudo: string | null = null;
   try {
-    if (project) result = await hydrateProjectAudio(project);
-  } catch (error) {
-    addMessage(
-      "system",
-      `No se pudo cargar el audio guardado: ${error instanceof Error ? error.message : String(error)}`,
+    crudo = localStorage.getItem("miuzika.project");
+  } catch {
+    return "";
+  }
+  if (!crudo) return "";
+
+  let viejo: Project;
+  try {
+    viejo = JSON.parse(crudo) as Project;
+  } catch {
+    return "";
+  }
+  if (!viejo || viejo.schemaVersion !== 1 || !Array.isArray(viejo.tracks)) return "";
+
+  const slug = slugDeProyecto(viejo);
+  try {
+    // Si ya hay maestro, no hay nada que migrar: se tira la copia vieja.
+    await leerProyectoDeDisco(rutaDeProyecto(slug));
+    localStorage.removeItem("miuzika.project");
+    return "";
+  } catch {
+    /* no hay maestro: se migra */
+  }
+
+  try {
+    const ficheros = await listarFicheros();
+    const deLaCarpeta = ficheros.filter((f) => f.path.startsWith(`proyectos/${slug}/`));
+    const candidatos: { base: string; ruta: string }[] = [];
+    for (const fichero of deLaCarpeta) {
+      if (!/\.[^.]+$/.test(fichero.path)) continue;
+      const base = (fichero.path.split("/").pop() ?? "").replace(/\.[^.]+$/, "").toLowerCase();
+      candidatos.push({ base, ruta: fichero.path.slice(`proyectos/${slug}/`.length) });
+    }
+    // El nombre del asset puede venir sin el prefijo del proyecto ("bajo" para
+    // "vitrina_bajo.wav"), así que primero exacto y después por sufijo.
+    const buscarRuta = (nombre: string): string | undefined => {
+      const buscado = nombre.toLowerCase();
+      const exacto = candidatos.find((candidato) => candidato.base === buscado);
+      if (exacto) return exacto.ruta;
+      const sufijos = [`_${buscado}`, `-${buscado}`, ` ${buscado}`];
+      return candidatos.find((candidato) => sufijos.some((sufijo) => candidato.base.endsWith(sufijo)))?.ruta;
+    };
+    let adoptados = 0;
+    for (const asset of viejo.audioAssets ?? []) {
+      if (asset.ruta) continue;
+      const ruta = buscarRuta(asset.name);
+      if (ruta) {
+        asset.ruta = ruta;
+        adoptados++;
+      }
+    }
+    const { datos } = serializarProyecto(viejo, audioAssets);
+    await guardarProyectoEnDisco(rutaDeProyecto(slug), JSON.stringify(datos, null, 2));
+    localStorage.removeItem("miuzika.project");
+    return (
+      `Migrado a disco el proyecto “${viejo.name}” que estaba en el navegador: proyectos/${slug}/proyecto.json` +
+      (adoptados > 0
+        ? `, con ${adoptados} WAV adoptado(s) de la carpeta por su nombre.`
+        : ". Sus WAV viejos estaban en IndexedDB y no se pueden recuperar; vuelve a importarlos si faltan.")
     );
-  } finally {
-    if (hasAudio) setBusy(false);
+  } catch (error) {
+    return `No se pudo migrar el proyecto del navegador a disco: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
+  }
+}
+
+/**
+ * Arranque: el disco es la fuente de verdad. Se abre el último proyecto usado
+ * (queda apuntado en localStorage) leyendo su `proyecto.json`; si no hay apunte,
+ * el más reciente que haya en `workspace/proyectos/`.
+ */
+async function boot(): Promise<void> {
+  let aviso = "";
+  let cargados = 0;
+  let faltan: string[] = [];
+
+  // Proyecto de la versión anterior (localStorage + IndexedDB) -> disco.
+  const migracion = await migrarProyectoAntiguo();
+
+  const slugGuardado = ((): string => {
+    try {
+      return localStorage.getItem(CLAVE_ABIERTO) ?? "";
+    } catch {
+      return "";
+    }
+  })();
+
+  const abrir = async (slug: string): Promise<Project | null> => {
+    try {
+      return interpretarProyectoEnDisco(await leerProyectoDeDisco(rutaDeProyecto(slug))).proyecto;
+    } catch {
+      return null;
+    }
+  };
+
+  let slug = slugGuardado;
+  if (slug) project = await abrir(slug);
+  if (!project) {
+    // Sin apunte (o el fichero ya no está): el proyecto más reciente del disco.
+    try {
+      const lista = await listarProyectos();
+      const primero = lista.find((candidato) => !candidato.error);
+      if (primero) {
+        slug = primero.slug;
+        project = await abrir(slug);
+        if (project) aviso = `Abierto el proyecto más reciente del disco (${primero.ruta}).`;
+      }
+    } catch {
+      /* sin servidor no hay disco: se arranca vacío */
+    }
+  }
+
+  if (project) {
+    setBusy(true, "Cargando los WAV del proyecto…");
+    try {
+      const hidratado = await hidratarAssets(project, slug);
+      cargados = hidratado.cargados;
+      faltan = hidratado.faltan;
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (project) {
     setProject(project, false);
-    addMessage("assistant", `Proyecto cargado: "${project.name}". Pulsa play para escuchar.`);
-    if (restoredFromDb) {
-      addMessage("system", "Proyecto recuperado desde IndexedDB (localStorage no tenía una copia).");
-    }
-    if (recoveredAssets > 0) {
-      addMessage(
-        "system",
-        `He encontrado ${recoveredAssets} WAV sueltos en IndexedDB y he creado un proyecto de recuperación con una pista por WAV. La disposición original no se puede reconstruir.`,
-      );
-    }
-    if (result.missing.length > 0) {
-      warnMissingAudio(result.missing);
-    } else if (result.loaded > 0) {
-      addMessage("system", `Audio restaurado desde IndexedDB: ${result.loaded} WAV.`);
-    }
+    addMessage("assistant", `Proyecto cargado del disco: "${project.name}". Pulsa play para escuchar.`);
+    if (migracion) addMessage("system", migracion);
+    if (aviso) addMessage("system", aviso);
+    if (cargados > 0) addMessage("system", `WAV cargados de proyectos/${slug}/: ${cargados}.`);
+    if (faltan.length > 0) warnMissingAudio(faltan);
   } else {
     setProject(null, false);
+    if (migracion) addMessage("system", migracion);
   }
 
   setPlaying(false);

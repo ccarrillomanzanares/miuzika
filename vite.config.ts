@@ -70,10 +70,38 @@ export default defineConfig(({ mode }) => {
 
   const leerCuerpo = (req: IncomingMessage, alTerminar: (cuerpo: string) => void): void => {
     let cuerpo = "";
-    req.on("data", (trozo) => {
-      cuerpo += trozo;
+    req.on("data", (trozo: Buffer) => {
+      cuerpo += trozo.toString("utf8");
     });
     req.on("end", () => alTerminar(cuerpo));
+  };
+
+  /** Cuerpo binario (WAV subido desde el navegador), con tope de tamaño. */
+  const leerCuerpoBinario = (
+    req: IncomingMessage,
+    limite: number,
+    alTerminar: (datos: Buffer | null) => void,
+  ): void => {
+    const trozos: Buffer[] = [];
+    let total = 0;
+    let cortado = false;
+    let terminado = false;
+    const cerrar = (datos: Buffer | null): void => {
+      if (terminado) return;
+      terminado = true;
+      alTerminar(datos);
+    };
+    req.on("data", (trozo: Buffer) => {
+      total += trozo.length;
+      if (total > limite) {
+        cortado = true;
+        trozos.length = 0;
+        return;
+      }
+      trozos.push(trozo);
+    });
+    req.on("end", () => cerrar(cortado ? null : Buffer.concat(trozos)));
+    req.on("error", () => cerrar(null));
   };
 
   /** Carpetas compartidas por todos los proyectos: motor y utilidades. */
@@ -111,6 +139,54 @@ export default defineConfig(({ mode }) => {
     const destino = resolve(carpetaTrabajo, prefijado);
     const dentro = destino === carpetaTrabajo || destino.startsWith(carpetaTrabajo + sep);
     return dentro ? destino : null;
+  };
+
+  /** Inventario de los proyectos del disco: los que tienen proyecto.json. */
+  const listarProyectosDisco = (): Record<string, unknown>[] => {
+    const carpeta = resolve(carpetaTrabajo, "proyectos");
+    if (!existsSync(carpeta)) return [];
+    const salida: Record<string, unknown>[] = [];
+    for (const entrada of readdirSync(carpeta, { withFileTypes: true })) {
+      if (!entrada.isDirectory()) continue;
+      const maestro = resolve(carpeta, entrada.name, "proyecto.json");
+      if (!existsSync(maestro)) continue;
+      const ruta = `proyectos/${entrada.name}/proyecto.json`;
+      const bytes = statSync(maestro).size;
+      const actualizado = statSync(maestro).mtime.toISOString();
+      try {
+        // Sólo se lee la cabecera: el fichero con todas las notas puede ser grande.
+        const datos = JSON.parse(readFileSync(maestro, "utf8")) as {
+          guardadoEn?: string;
+          proyecto?: { name?: string; bpm?: number; lengthBars?: number; tracks?: unknown[] };
+        };
+        const proyecto = datos.proyecto ?? {};
+        salida.push({
+          slug: entrada.name,
+          ruta,
+          nombre: String(proyecto.name ?? entrada.name),
+          bpm: Number(proyecto.bpm ?? 0),
+          compases: Number(proyecto.lengthBars ?? 0),
+          pistas: Array.isArray(proyecto.tracks) ? proyecto.tracks.length : 0,
+          guardadoEn: String(datos.guardadoEn ?? ""),
+          actualizado,
+          bytes,
+        });
+      } catch (error) {
+        salida.push({
+          slug: entrada.name,
+          ruta,
+          nombre: entrada.name,
+          bpm: 0,
+          compases: 0,
+          pistas: 0,
+          guardadoEn: "",
+          actualizado,
+          bytes,
+          error: error instanceof Error ? error.message : "proyecto.json ilegible",
+        });
+      }
+    }
+    return salida.sort((a, b) => String(b.actualizado).localeCompare(String(a.actualizado)));
   };
 
   /** Inventario de lo que hay en workspace/ (lo ve el agente y lo ve la app). */
@@ -431,6 +507,84 @@ export default defineConfig(({ mode }) => {
             responderJson(res, 200, { ok: true, raiz: "workspace/", ficheros: listarTrabajo() });
           });
 
+          // Fichero maestro por proyecto: proyectos/<slug>/proyecto.json.
+          // GET sin path -> inventario; GET con path -> contenido completo (sin el
+          // recorte de 20 KB de /api/fs/read: un proyecto con miles de notas no cabe).
+          // POST -> escribe el maestro (crea la carpeta del proyecto).
+          server.middlewares.use("/api/proyectos", (req, res) => {
+            const url = new URL(req.url ?? "/", "http://localhost");
+            const rel = url.searchParams.get("path") ?? "";
+
+            if (req.method === "GET") {
+              if (!rel) {
+                responderJson(res, 200, { ok: true, raiz: "workspace/proyectos/", proyectos: listarProyectosDisco() });
+                return;
+              }
+              const destino = resolverEnTrabajo(rel);
+              if (!destino || !existsSync(destino)) {
+                responderJson(res, 404, { error: `no existe ${rel}` });
+                return;
+              }
+              if (!destino.endsWith("proyecto.json")) {
+                responderJson(res, 400, { error: "sólo se leen ficheros proyecto.json por aquí" });
+                return;
+              }
+              if (statSync(destino).size > 64 * 1024 * 1024) {
+                responderJson(res, 413, { error: "el proyecto pasa de 64 MB: no es un proyecto de miuzika" });
+                return;
+              }
+              responderJson(res, 200, { ok: true, path: rel, contenido: readFileSync(destino, "utf8") });
+              return;
+            }
+
+            if (req.method === "POST") {
+              leerCuerpo(req, (cuerpo) => {
+                try {
+                  const datos = JSON.parse(cuerpo) as { path?: string; contenido?: string };
+                  if (!datos.path || typeof datos.contenido !== "string" || datos.contenido.trim() === "") {
+                    responderJson(res, 400, { error: "faltan 'path' o 'contenido'" });
+                    return;
+                  }
+                  const destino = resolverEnTrabajo(datos.path);
+                  if (!destino || !destino.endsWith("proyecto.json")) {
+                    responderJson(res, 403, { error: "el fichero maestro tiene que ser proyectos/<slug>/proyecto.json" });
+                    return;
+                  }
+                  // No se escribe basura: si no parsea o no es de miuzika, no se toca el disco.
+                  let validado: { formato?: string; proyecto?: { schemaVersion?: number } };
+                  try {
+                    validado = JSON.parse(datos.contenido) as typeof validado;
+                  } catch (error) {
+                    responderJson(res, 400, {
+                      error: `el proyecto no es JSON válido: ${error instanceof Error ? error.message : String(error)}`,
+                    });
+                    return;
+                  }
+                  if (validado.formato !== "miuzika-proyecto" || validado.proyecto?.schemaVersion !== 1) {
+                    responderJson(res, 400, {
+                      error: 'el fichero maestro tiene que ser { formato: "miuzika-proyecto", proyecto: { schemaVersion: 1 } }',
+                    });
+                    return;
+                  }
+                  mkdirSync(dirname(destino), { recursive: true });
+                  writeFileSync(destino, datos.contenido, "utf8");
+                  responderJson(res, 200, {
+                    ok: true,
+                    path: datos.path,
+                    bytes: Buffer.byteLength(datos.contenido, "utf8"),
+                  });
+                } catch (error) {
+                  responderJson(res, 500, {
+                    error: error instanceof Error ? error.message : String(error),
+                  });
+                }
+              });
+              return;
+            }
+
+            responderJson(res, 405, { error: "usa GET o POST" });
+          });
+
           // El manifiesto del motor, regenerado al pedirlo (lo inyecta el prompt).
           server.middlewares.use("/api/manifiesto", async (req, res) => {
             if (req.method !== "GET") {
@@ -506,6 +660,52 @@ export default defineConfig(({ mode }) => {
                   }),
                 );
                 responderJson(res, 200, { ok: true, reemplazos: todas ? total : 1, bytes: Buffer.byteLength(despues, "utf8") });
+              } catch (error) {
+                responderJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
+              }
+            });
+          });
+
+          // WAV del navegador al disco: lo que el usuario importa con «Audio» se
+          // copia a proyectos/<slug>/entrada/ para que el fichero maestro lo pueda
+          // referenciar (si no, sólo viviría en IndexedDB y el proyecto no viajaría).
+          server.middlewares.use("/api/audio/subir", (req, res) => {
+            if (req.method !== "POST") {
+              responderJson(res, 405, { error: "usa POST" });
+              return;
+            }
+            const url = new URL(req.url ?? "/", "http://localhost");
+            const slug = slugProyecto(url.searchParams.get("slug") || req.headers["x-miuzika-proyecto"]);
+            const crudo = url.searchParams.get("nombre") ?? "";
+            const base = basename(crudo)
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .replace(/[^A-Za-z0-9._-]+/g, "_")
+              .slice(-80);
+            if (!/\.(wav|mp3|ogg|flac|aif|aiff|m4a)$/i.test(base)) {
+              responderJson(res, 400, { error: "sólo audio (.wav, .mp3, .ogg, .flac, .aif, .m4a)" });
+              return;
+            }
+            leerCuerpoBinario(req, 512 * 1024 * 1024, (datos) => {
+              if (!datos || datos.length === 0) {
+                responderJson(res, 413, { error: "audio vacío o mayor de 512 MB" });
+                return;
+              }
+              try {
+                const carpeta = resolve(carpetaProyecto(slug), "entrada");
+                mkdirSync(carpeta, { recursive: true });
+                let destino = resolve(carpeta, base);
+                let copia = 2;
+                while (existsSync(destino)) {
+                  destino = resolve(carpeta, base.replace(/(\.[^.]+)$/, `_${copia++}$1`));
+                }
+                writeFileSync(destino, datos);
+                responderJson(res, 200, {
+                  ok: true,
+                  path: `entrada/${basename(destino)}`,
+                  bytes: datos.length,
+                  slug,
+                });
               } catch (error) {
                 responderJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
               }

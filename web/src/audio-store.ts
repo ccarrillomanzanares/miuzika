@@ -1,7 +1,19 @@
-/** Assets de audio cargados en la sesión; los bytes se guardan en IndexedDB. */
+/**
+ * Audio del proyecto.
+ *
+ * Los WAV viven en el disco (`workspace/proyectos/<slug>/…`) y aquí sólo se
+ * cachean en memoria los que el engine necesita decodificados. No hay
+ * IndexedDB: el proyecto es el fichero maestro (`proyecto.json`) más sus WAV,
+ * así que lo que suena es exactamente lo que hay en la carpeta.
+ *
+ * Los ficheros largos (> SEGUNDOS_STREAMING) no se decodifican nunca: se
+ * reproducen con `<audio>` por streaming y la onda la calcula el servidor.
+ */
 
 import type { Project } from "../../src/core/types.ts";
-import { getAudioAsset, putAudioAsset } from "./audio-db.ts";
+
+/** Por encima de estos segundos el WAV no se decodifica: se reproduce por streaming. */
+export const SEGUNDOS_STREAMING = 30;
 
 interface LoadedAsset {
   id: string;
@@ -10,12 +22,13 @@ interface LoadedAsset {
   buffer: AudioBuffer | null;
   durationBeats: number;
   peaks: Float32Array;
-  /** Ruta en el servidor para los assets de streaming (/api/audio?path=...). */
-  src?: string;
-  streaming?: boolean;
+  /** Ruta dentro de la carpeta del proyecto ("entrada/kick.wav"). */
+  src: string;
+  streaming: boolean;
 }
 
 export const audioAssets = new Map<string, LoadedAsset>();
+
 let decodeContext: AudioContext | null = null;
 
 function slug(value: string): string {
@@ -28,6 +41,29 @@ function slug(value: string): string {
       .replace(/^_+|_+$/g, "")
       .slice(0, 40) || "audio"
   );
+}
+
+/** Id nuevo para un asset, con el nombre del fichero dentro (aud_kick_lz3k9). */
+export function idDeAsset(nombre: string): string {
+  const base = `aud_${slug(nombre)}_${Date.now().toString(36)}`;
+  let id = base;
+  let sufijo = 2;
+  while (audioAssets.has(id)) id = `${base}_${sufijo++}`;
+  return id;
+}
+
+/** Ruta que entiende el servidor: lo compartido tal cual y el resto en el proyecto. */
+export function rutaEnProyecto(ruta: string, slugProyecto: string): string {
+  if (/^(codigo|herramientas|plantillas|proyectos|_archivo)\//.test(ruta)) return ruta;
+  return `proyectos/${slugProyecto}/${ruta}`;
+}
+
+/** Duración y picos de un WAV sin decodificarlo en el navegador (los da el servidor). */
+export async function metadatosWav(ruta: string): Promise<{ picos: number[]; duracionSeg: number }> {
+  const res = await fetch(`/api/picos?path=${encodeURIComponent(ruta)}&cubos=1024`);
+  if (!res.ok) throw new Error(`no se pudo leer ${ruta}`);
+  const datos = (await res.json()) as { picos?: number[]; duracionSeg?: number };
+  return { picos: datos.picos ?? [], duracionSeg: Number(datos.duracionSeg ?? 0) };
 }
 
 /**
@@ -52,100 +88,58 @@ export function registrarAssetStreaming(datos: {
   });
 }
 
-const CLAVE_STREAM = "miuzika.assets.stream";
-
-/** Guarda en localStorage los assets de streaming para recuperarlos al recargar. */
-export function guardarAssetsStreaming(): void {
-  try {
-    const datos: Record<string, { name: string; durationBeats: number; src: string; peaks: number[] }> = {};
-    for (const asset of audioAssets.values()) {
-      if (!asset.streaming || !asset.src) continue;
-      datos[asset.id] = {
-        name: asset.name,
-        durationBeats: asset.durationBeats,
-        src: asset.src,
-        peaks: Array.from(asset.peaks),
-      };
-    }
-    localStorage.setItem(CLAVE_STREAM, JSON.stringify(datos));
-  } catch {
-    /* sin espacio o sin localStorage: se pierde el dibujo, no el audio */
-  }
-}
-
-/** Devuelve los assets de streaming guardados (main.ts los vuelve a registrar). */
-export function assetsStreamingGuardados(): {
-  id: string;
-  name: string;
-  durationBeats: number;
-  src: string;
-  peaks: Float32Array;
-}[] {
-  try {
-    const crudo = localStorage.getItem(CLAVE_STREAM);
-    if (!crudo) return [];
-    const datos = JSON.parse(crudo) as Record<
-      string,
-      { name: string; durationBeats: number; src: string; peaks: number[] }
-    >;
-    return Object.entries(datos).map(([id, valor]) => ({
-      id,
-      name: valor.name,
-      durationBeats: valor.durationBeats,
-      src: valor.src,
-      peaks: Float32Array.from(valor.peaks ?? []),
-    }));
-  } catch {
-    return [];
-  }
-}
-
 export async function decodeAudioBlob(blob: Blob): Promise<AudioBuffer> {
   decodeContext ??= new AudioContext();
   return decodeContext.decodeAudioData(await blob.arrayBuffer());
 }
 
-export async function loadAudioFile(file: File, bpm: number): Promise<LoadedAsset> {
+/** Trae un WAV del servidor y lo decodifica (sólo los cortos: openDAW los necesita en memoria). */
+async function decodificarDeDisco(datos: {
+  id: string;
+  name: string;
+  /** Ruta relativa a la carpeta del proyecto. */
+  ruta: string;
+  /** Ruta con la que se pide al servidor (con la carpeta del proyecto delante). */
+  completa: string;
+  bpm: number;
+  durationBeats?: number;
+  peaks?: Float32Array;
+}): Promise<LoadedAsset> {
+  const res = await fetch(`/api/audio?path=${encodeURIComponent(datos.completa)}`);
+  if (!res.ok) throw new Error(`no se pudo leer ${datos.ruta}`);
+  const buffer = await decodeAudioBlob(await res.blob());
+  const asset: LoadedAsset = {
+    id: datos.id,
+    name: datos.name,
+    buffer,
+    durationBeats: datos.durationBeats ?? (buffer.duration * datos.bpm) / 60,
+    peaks: datos.peaks ?? computePeaks(buffer, 1024),
+    src: datos.ruta,
+    streaming: false,
+  };
+  audioAssets.set(asset.id, asset);
+  return asset;
+}
+
+/** Decodifica un fichero local ya subido al disco y lo deja listo para openDAW. */
+export async function loadAudioFile(file: File, bpm: number, src: string): Promise<LoadedAsset> {
   const buffer = await decodeAudioBlob(file);
   const name = file.name.replace(/\.[^.]+$/, "");
-  const base = `aud_${slug(name)}_${Date.now().toString(36)}`;
-  let id = base;
-  let suffix = 2;
-  while (audioAssets.has(id)) id = `${base}_${suffix++}`;
-
   const asset: LoadedAsset = {
-    id,
+    id: idDeAsset(name),
     name,
     buffer,
     durationBeats: (buffer.duration * bpm) / 60,
     peaks: computePeaks(buffer, 1024),
+    src,
+    streaming: false,
   };
-  audioAssets.set(id, asset);
+  audioAssets.set(asset.id, asset);
   return asset;
 }
 
-/** Guarda los bytes de un asset para poder restaurarlo al recargar. */
-export async function persistAudioAsset(
-  id: string,
-  name: string,
-  durationBeats: number,
-  blob: Blob,
-): Promise<boolean> {
-  return putAudioAsset({ id, name, durationBeats, blob });
-}
-
-interface HydrateResult {
-  loaded: number;
-  missing: string[];
-}
-
-/**
- * Carga desde IndexedDB los WAV que referencia el proyecto. Se llama al arrancar y
- * antes de un undo/redo; si un asset no está guardado se devuelve en `missing`.
- */
-export async function hydrateProjectAudio(project: Project | null): Promise<HydrateResult> {
-  if (!project) return { loaded: 0, missing: [] };
-
+/** Ids de asset que el proyecto referencia (declarados o dentro de un clip). */
+export function idsDeAssets(project: Project): string[] {
   const ids = new Set<string>();
   for (const asset of project.audioAssets ?? []) ids.add(asset.id);
   for (const track of project.tracks) {
@@ -153,43 +147,73 @@ export async function hydrateProjectAudio(project: Project | null): Promise<Hydr
       if (clip.audio) ids.add(clip.audio.assetId);
     }
   }
+  return [...ids];
+}
 
-  const missing: string[] = [];
-  let loaded = 0;
-  for (const id of ids) {
+/**
+ * Carga del disco los WAV que el proyecto referencia y aún no están en memoria.
+ * Se llama al arrancar, al abrir un proyecto, antes de un undo/redo y al darle
+ * al play. Devuelve los que no están en la carpeta.
+ */
+export async function hidratarAssets(
+  project: Project | null,
+  slugProyecto: string,
+): Promise<{ cargados: number; faltan: string[] }> {
+  if (!project) return { cargados: 0, faltan: [] };
+  let cargados = 0;
+  const faltan: string[] = [];
+
+  for (const id of idsDeAssets(project)) {
     const meta = project.audioAssets?.find((asset) => asset.id === id);
-    const existing = audioAssets.get(id);
-    if (existing) {
-      if (meta) {
-        existing.name = meta.name;
-        existing.durationBeats = meta.durationBeats;
-      }
+    const enMemoria = audioAssets.get(id);
+    if (enMemoria) {
+      // Ya decodificado en esta sesión: sólo se refresca el nombre.
+      if (meta) enMemoria.name = meta.name;
       continue;
     }
-
-    const stored = await getAudioAsset(id);
-    if (!stored || !(stored.blob instanceof Blob)) {
-      missing.push(meta?.name ?? stored?.name ?? id);
+    if (!meta?.ruta) {
+      // Sin ruta no hay nada que buscar: el WAV era del navegador y ya no está.
+      faltan.push(meta?.name ?? id);
       continue;
     }
-
+    const completa = rutaEnProyecto(meta.ruta, slugProyecto);
     try {
-      decodeContext ??= new AudioContext();
-      const buffer = await decodeContext.decodeAudioData(await stored.blob.arrayBuffer());
-      audioAssets.set(id, {
-        id,
-        name: meta?.name ?? stored.name,
-        buffer,
-        durationBeats: meta?.durationBeats ?? stored.durationBeats,
-        peaks: computePeaks(buffer),
-      });
-      loaded++;
+      const { picos, duracionSeg } = await metadatosWav(completa);
+      const durationBeats =
+        meta.durationBeats > 0 ? meta.durationBeats : (duracionSeg * project.bpm) / 60;
+      if (duracionSeg > SEGUNDOS_STREAMING) {
+        registrarAssetStreaming({
+          id,
+          name: meta.name,
+          durationBeats,
+          src: meta.ruta,
+          peaks: Float32Array.from(picos),
+        });
+      } else {
+        await decodificarDeDisco({
+          id,
+          name: meta.name,
+          ruta: meta.ruta,
+          completa,
+          bpm: project.bpm,
+          durationBeats,
+          peaks: Float32Array.from(picos),
+        });
+      }
+      cargados++;
     } catch {
-      missing.push(meta?.name ?? stored.name);
+      faltan.push(meta.name);
     }
   }
+  return { cargados, faltan };
+}
 
-  return { loaded, missing };
+/** Suelta de la memoria lo que el proyecto actual ya no usa (al cambiar de proyecto). */
+export function liberarAssetsNoUsados(project: Project | null): void {
+  const vivos = new Set(project ? idsDeAssets(project) : []);
+  for (const id of [...audioAssets.keys()]) {
+    if (!vivos.has(id)) audioAssets.delete(id);
+  }
 }
 
 export function computePeaks(buffer: AudioBuffer, buckets = 1024): Float32Array {

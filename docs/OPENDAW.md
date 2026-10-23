@@ -126,7 +126,7 @@ Si se elige B, el adaptador sigue siendo el mismo; solo cambia dónde se enganch
 | `Track.instrument.type` | `InstrumentFactories` | drumkit→Playfield, bass/pad/lead/synth→Vaporisateur, soundfont→SoundFont player, sampler→Nano |
 | `Clip` (MIDI) | región MIDI + `ValueEventCollectionBox` | convertir `beat × PPQN` |
 | `Note` | note event (pitch, position, duration, velocity) | `lib-midi` puede ayudar |
-| `Clip` (audio) | `AudioRegionBox` + `AudioFileBox` | playback y referencias; los bytes WAV se cargan desde IndexedDB |
+| `Clip` (audio) | `AudioRegionBox` + `AudioFileBox` | playback y referencias; los bytes WAV se cargan del disco (`/api/audio`) |
 | `Device` | dispositivo del grafo | los nombres de parámetros **no** coinciden; hace falta tabla |
 | `Track.gainDb/pan` | gain/pan de la unidad | dB vs ganancia lineal: convertir |
 | `master.gainDb` | salida/master | ídem |

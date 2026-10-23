@@ -26,6 +26,8 @@
           <button id="redo" class="icon" title="Rehacer (Ctrl+Shift+Z)" disabled>↷</button>
           <label class="file" title="Abrir proyecto (.json/.zip) o audio (WAV, uno o varios)">Abrir<input id="open" type="file" multiple accept=".json,.zip,.miuzika.zip,application/json,application/zip,audio/*,.wav" /></label>
           <label class="file">Audio<input id="audio-file" type="file" accept="audio/*" multiple /></label>
+          <button id="guardar" title="Escribir el fichero maestro en workspace/proyectos/&lt;slug&gt;/proyecto.json (Ctrl+S)">Guardar</button>
+          <button id="proyectos" title="Abrir un proyecto guardado en workspace/proyectos/">Proyectos</button>
           <button id="code-lab" title="Escribir un patrón Strudel y renderizarlo a WAV">Strudel</button>
           <button id="chat-toggle" class="active" title="Mostrar u ocultar el chat del agente">Chat</button>
           <button id="new-song" title="Empezar de cero">Nueva</button>
@@ -75,6 +77,24 @@
           </form>
         </aside>
       </main>
+
+      <dialog id="dialogo-proyectos" class="dialogo">
+        <div class="dialogo-cabeza">
+          <strong>Proyectos en disco</strong>
+          <button id="proyectos-cerrar" class="icon" title="Cerrar">✕</button>
+        </div>
+        <div id="lista-proyectos" class="lista-proyectos"></div>
+      </dialog>
+
+      <dialog id="dialogo-audio" class="dialogo">
+        <strong>¿Qué hago con estos audios?</strong>
+        <p id="dialogo-audio-detalle"></p>
+        <div class="dialogo-acciones">
+          <button id="audio-anadir"></button>
+          <button id="audio-nuevo"></button>
+          <button id="audio-cancelar">Cancelar</button>
+        </div>
+      </dialog>
 
       <footer class="status" id="status">Doble clic en un clip = piano roll - Ctrl+rueda = zoom</footer>
     </div>

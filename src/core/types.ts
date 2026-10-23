@@ -78,11 +78,16 @@ export interface Note {
   velocity: number;
 }
 
-interface AudioAsset {
+export interface AudioAsset {
   id: string;
   name: string;
   /** Duración en beats al tempo del proyecto. */
   durationBeats: number;
+  /**
+   * Ruta del WAV dentro de la carpeta del proyecto ("salida/x.wav"). Es lo que
+   * hace el proyecto portable: los bytes viven en el disco, no en el navegador.
+   */
+  ruta?: string;
 }
 
 interface AudioRef {

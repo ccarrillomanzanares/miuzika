@@ -130,6 +130,8 @@ const RegisterAudioAssetOp = z.object({
   assetId: IdSchema,
   name: z.string().min(1).max(80),
   durationBeats: z.number().positive().max(4096),
+  /** Ruta del WAV en la carpeta del proyecto ("salida/x.wav"). */
+  ruta: z.string().min(1).max(200).optional(),
 });
 
 const AddAudioClipOp = z.object({
@@ -438,9 +440,15 @@ function applyOne(project: Project, op: ParsedOp): string {
       if (existing) {
         existing.name = op.name;
         existing.durationBeats = op.durationBeats;
+        if (op.ruta) existing.ruta = op.ruta;
         return `Asset actualizado: ${op.name} (${op.durationBeats.toFixed(2)} beats)`;
       }
-      assets.push({ id: op.assetId, name: op.name, durationBeats: op.durationBeats });
+      assets.push({
+        id: op.assetId,
+        name: op.name,
+        durationBeats: op.durationBeats,
+        ...(op.ruta ? { ruta: op.ruta } : {}),
+      });
       return `Asset registrado: ${op.name} (${op.durationBeats.toFixed(2)} beats)`;
     }
 

@@ -701,3 +701,102 @@ button.active {
   display: none;
 }
 
+
+/* ── Diálogos (proyectos del disco y destino del audio) ─────────────────────
+   <dialog> nativo: se centra solo y el backdrop oscurece sin capas propias. */
+.dialogo {
+  min-width: 420px;
+  max-width: min(720px, 92vw);
+  max-height: 80vh;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 24px 64px #0009;
+}
+
+.dialogo::backdrop {
+  background: #05070bcc;
+}
+
+.dialogo > strong,
+.dialogo-cabeza strong {
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.dialogo-cabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.dialogo p,
+#dialogo-audio-detalle {
+  margin: 8px 0 14px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.dialogo-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.lista-proyectos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 56vh;
+  overflow-y: auto;
+}
+
+.lista-proyectos .vacio {
+  margin: 4px 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.lista-proyectos .vacio code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: #1b1f29;
+  color: var(--text);
+}
+
+/* Una fila por proyecto: nombre arriba, datos y carpeta debajo. */
+.proyecto-fila {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 9px 12px;
+  text-align: left;
+  white-space: normal;
+}
+
+.proyecto-fila strong {
+  font-size: 13px;
+}
+
+.proyecto-fila span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.proyecto-fila em {
+  color: #5f6675;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.proyecto-fila[data-error="1"] strong {
+  color: var(--accent);
+}

@@ -7,7 +7,7 @@ GUI (web/)
   ├── openDAW WASM: reproducción, timeline, piano roll
   ├── Strudel → WAV: código generativo a pista de audio
   ├── audio WAV: importación y clips
-  └── persistencia: localStorage + IndexedDB
+  └── persistencia: disco (proyecto.json) + /api/*
 
 Core (src/core/)
   ├── Project IR
@@ -40,9 +40,14 @@ Host (src/host/opendaw/)
 
 ## Persistencia
 
-- `Project` e historial: localStorage + IndexedDB (`miuzika-projects`).
-- WAVs: IndexedDB (`miuzika/audio-assets`).
-- **Abrir** importa un JSON o un bundle `.miuzika.zip` existente.
+- El proyecto es su carpeta: `workspace/proyectos/<slug>/proyecto.json` (estado
+  completo, con la ruta de cada WAV) + `entrada/` y `salida/` con los WAV.
+- Cada asset guarda su `ruta` relativa; el audio no se incrusta en el JSON.
+- En el navegador sólo queda `miuzika.proyecto-abierto` (qué proyecto reabrir).
+  IndexedDB se retiró: existía porque los WAV no se grababan a disco.
+- El historial de undo (8 pasos) es de sesión, en memoria.
+- **Abrir** acepta un `.json`, un bundle `.miuzika.zip` (sus WAV se escriben en
+  la carpeta) o un `proyecto.json` elegido en el botón `Proyectos`.
 - No hay exportación de proyecto desde esta versión.
 
 ## Lo que no existe

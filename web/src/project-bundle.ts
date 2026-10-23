@@ -1,15 +1,24 @@
-/** Proyecto autocontenido: project.json + WAVs, en un ZIP. */
+/**
+ * Bundle autocontenido de un proyecto: `project.json` + WAVs en un ZIP.
+ *
+ * Sólo se lee (la app no exporta bundles). Los WAV que trae se devuelven para
+ * que main.ts los escriba en la carpeta del proyecto: aquí no se guarda nada.
+ */
 
 import { strFromU8, unzipSync } from "fflate";
 import type { Project } from "../../src/core/types.ts";
-import { audioAssets, computePeaks, decodeAudioBlob } from "./audio-store.ts";
-import { putAudioAsset } from "./audio-db.ts";
 
 interface BundleAsset {
   id: string;
   name: string;
-  durationBeats: number;
   file: string;
+}
+
+/** Un WAV del bundle, listo para subirlo a `proyectos/<slug>/entrada/`. */
+export interface WavDeBundle {
+  assetId: string;
+  nombre: string;
+  data: Uint8Array;
 }
 
 interface BundleManifest {
@@ -18,23 +27,17 @@ interface BundleManifest {
   assets: BundleAsset[];
 }
 
-interface ImportedProjectBundle {
+export interface BundleImportado {
   project: Project;
+  wavs: WavDeBundle[];
   warnings: string[];
 }
 
-function collectAssetIds(project: Project): string[] {
-  const ids = new Set<string>();
-  for (const asset of project.audioAssets ?? []) ids.add(asset.id);
-  for (const track of project.tracks) {
-    for (const clip of track.clips) {
-      if (clip.audio) ids.add(clip.audio.assetId);
-    }
-  }
-  return [...ids];
+function nombreDeFichero(ruta: string): string {
+  return (ruta.split("/").pop() ?? "audio.wav").replace(/[^\w.-]+/g, "_");
 }
 
-export async function importProjectBundle(file: Blob): Promise<ImportedProjectBundle> {
+export async function importProjectBundle(file: Blob): Promise<BundleImportado> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   let entries: Record<string, Uint8Array>;
   try {
@@ -61,35 +64,17 @@ export async function importProjectBundle(file: Blob): Promise<ImportedProjectBu
   if (manifest && manifest.format !== "miuzika-project") {
     throw new Error("El manifest del bundle no es de miuzika.");
   }
-  const assets = manifest?.assets ?? [];
-  for (const asset of assets) {
+
+  // Los WAV se devuelven con el id del asset al que pertenecen, para poder
+  // escribir su ruta en el proyecto.
+  const wavs: WavDeBundle[] = [];
+  for (const asset of manifest?.assets ?? []) {
     const data = entries[asset.file];
-    if (!data) {
+    if (!data || data.length === 0) {
       warnings.push(`Falta el WAV "${asset.name}" dentro del bundle.`);
       continue;
     }
-    const blob = new Blob([data as BlobPart], { type: "audio/wav" });
-    if (!(await putAudioAsset({ id: asset.id, name: asset.name, durationBeats: asset.durationBeats, blob }))) {
-      warnings.push(`No se pudo guardar "${asset.name}" en IndexedDB.`);
-      continue;
-    }
-    try {
-      const buffer = await decodeAudioBlob(blob);
-      audioAssets.set(asset.id, {
-        id: asset.id,
-        name: asset.name,
-        buffer,
-        durationBeats: asset.durationBeats,
-        peaks: computePeaks(buffer),
-      });
-    } catch {
-      warnings.push(`El WAV "${asset.name}" está dañado o no se puede decodificar.`);
-    }
+    wavs.push({ assetId: asset.id, nombre: nombreDeFichero(asset.file), data });
   }
-  for (const id of collectAssetIds(project)) {
-    if (!assets.some((asset) => asset.id === id)) {
-      warnings.push(`El proyecto referencia el WAV "${id}", pero no está en el bundle.`);
-    }
-  }
-  return { project, warnings };
+  return { project, wavs, warnings };
 }

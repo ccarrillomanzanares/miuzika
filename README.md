@@ -2,14 +2,18 @@
 
 **GUI de DAW con openDAW y Strudel → WAV.**
 
-Alcance actual, deliberadamente pequeño:
+Alcance actual:
 
 ```text
 GUI / openDAW          timeline, piano roll, audio y reproducción
 Strudel → WAV          código generativo convertido en pista de audio
+agente (LLM)           escribe y ejecuta los scripts de workspace/
+motor de GPU           DSP nativo en Lambda (torch)
+disco                  cada proyecto es su carpeta: proyecto.json + WAV
 ```
 
-No hay LLM, planner, agente, worker Python ni exportadores.
+No hay exportadores ni planner separado: el estado del proyecto *es* su
+`proyecto.json`.
 
 ## Qué incluye
 
@@ -18,9 +22,11 @@ No hay LLM, planner, agente, worker Python ni exportadores.
 - **openDAW WASM**: reproducción, batería Playfield y pistas de audio.
 - **Strudel → WAV**: editor de patrones y render con `superdough` en un
   `OfflineAudioContext`.
-- **Audio WAV**: importación, waveform, clips y persistencia en IndexedDB.
-- **Abrir**: JSON o bundle `.miuzika.zip` existente.
-- **Persistencia automática** en localStorage + IndexedDB.
+- **Audio WAV**: importación, waveform, clips. Los WAV se copian a la carpeta
+  del proyecto y se sirven desde el disco.
+- **Abrir**: JSON, bundle `.miuzika.zip` o **proyectos del disco** (`Proyectos`).
+- **Fichero maestro** `workspace/proyectos/<slug>/proyecto.json`, escrito solo
+  1,5 s después de cada cambio (o con «Guardar» / Ctrl+S).
 
 ## Arranque
 
@@ -64,10 +70,23 @@ stack(
 
 ## Persistencia
 
-- El proyecto y el historial viven en `localStorage` e IndexedDB.
-- Los WAVs viven en IndexedDB (`miuzika` / `audio-assets`).
-- **Abrir** acepta un `.json` o un `.miuzika.zip` existente.
-- No hay botón de exportación; la app no descarga el proyecto.
+**El disco es la única fuente de verdad.** No hay IndexedDB ni copia del
+proyecto en el navegador: se quitó a propósito, porque existía sólo porque los
+WAV no se grababan a disco.
+
+- Cada proyecto es una carpeta: `workspace/proyectos/<slug>/` con
+  - `proyecto.json` — el **fichero maestro**: pistas, clips, notas, faders,
+    mute/solo, BPM, tonalidad y la ruta de cada WAV;
+  - `entrada/` — los WAV que se importan con «Audio»;
+  - `salida/` — los que genera el motor o el agente;
+  - los `.py` del proyecto.
+- En el navegador sólo queda una clave: `miuzika.proyecto-abierto` (el slug del
+  último proyecto). Al arrancar se abre ese; si no existe, el `proyecto.json`
+  más reciente del disco.
+- El historial de undo/redo (8 pasos) vive en memoria: al recargar se pierde.
+- **Abrir** acepta `.json` (un fichero maestro o un `Project` suelto) y
+  `.miuzika.zip`, cuyos WAV se escriben en la carpeta antes de abrirlo.
+- La app no exporta: no hay botón de descarga, el proyecto ya está en disco.
 
 ## Scripts
 
@@ -93,8 +112,9 @@ web/
     opendaw-engine.ts    playback WASM
     code-lab.ts          editor Strudel → WAV
     strudel-audio.ts     render con superdough
-    audio-store.ts       assets y rehidratación
-    audio-db.ts          IndexedDB de WAVs
+    audio-store.ts       WAVs del disco: metadatos, streaming y decodificación
+    proyecto-archivo.ts  fichero maestro: serializar, validar y slug del proyecto
+    proyecto-disco.ts    /api/proyectos y /api/audio/subir desde el navegador
   public/drums/          kit WAV para Playfield
   public/opendaw-wasm/   engine.wasm y plugins
 docs/                   arquitectura, openDAW, plan de pruebas y notas legales
@@ -249,23 +269,28 @@ npm run typecheck && npm run test:unit
 
 En este portátil `npm run dev` escucha **sólo en `[::1]`**: `curl 127.0.0.1:5173`
 no conecta y `curl localhost:5173` sí. No cambies el binding a `127.0.0.1`: el
-proyecto y los WAV viven en IndexedDB/localStorage, que están atados al origen,
-y abrir `127.0.0.1` te deja con la app vacía.
+`localStorage` que apunta el proyecto abierto está atado al origen, así que abrir
+`127.0.0.1` te deja con la app «vacía» (sin proyecto apuntado; el disco sigue ahí,
+y el arranque abre el más reciente, pero el botón `Proyectos` te lo confirma).
 
-Estado al cerrar (2026-10-23, segunda sesión del día): typecheck 0, **45/45 unit +
-OPENDAW OK**, ninguna instancia encendida (sólo queda una A100 vieja en
-`terminating`, caso de soporte, que no factura). Último commit `bae9cb6` (tiempo por
-herramienta en la barra). El proyecto **Vitrina** está cargado en el navegador del
-usuario con la mezcla elegida en los faders.
+Estado al cerrar (2026-10-23, tercera sesión del día): typecheck 0, **55/55 unit +
+OPENDAW OK**. El fichero maestro, la apertura desde disco, la elección
+añadir/nuevo y la retirada de IndexedDB están hechos y probados en el navegador:
+proyecto abierto tras `localStorage.clear()`, WAV traído del disco
+(`/api/picos` 200 y `/api/audio` 200), reproducción con openDAW y autoguardado
+(`✓ guardado proyectos/demo-disco/proyecto.json · 2 pistas`).
 
-Commits de la jornada: `b5463e5` (motor GPU, buscador, faders por chat), `71aec76`
-(motor GPU en manifiesto y puerta 409, colores por pista), `376c42c` (contador de
-gasto y barra de actividad), `8fdd952` (manifiesto regenerado), `8c73531` (README),
-`bae9cb6` (tiempo por herramienta y línea de resumen del turno).
+Los proyectos de prueba de esta sesión (`demo-disco`, `tono`, `prueba-audio`,
+`prueba-dos`, `migracion-prueba`) se borraron al terminar. **Vitrina** sigue en
+`workspace/proyectos/vitrina/` con su `salida/` intacta.
 
-`workspace/gpu/prueba_nueva.py` (el fichero de 2 líneas de la prueba de la puerta
-409) se **borró con permiso del usuario**; era untracked, así que no hizo falta
-commitear nada por él.
+Al recargar la app, si el navegador todavía tiene el proyecto viejo en
+`localStorage` (`miuzika.project`), se **migra solo**: se escribe
+`proyectos/<slug>/proyecto.json` y se adoptan los WAV de `salida/`/`entrada/`
+cuyo nombre coincida con el del asset — primero exacto y después por sufijo,
+porque el asset puede llamarse `seno` y el fichero `vitrina_seno.wav`
+(probado con los dos casos). Los WAV que sólo existían en IndexedDB no se pueden
+recuperar; se avisa en el chat.
 
 **Aviso que cuesta un susto**: si el servidor de Vite se cae con la app abierta en el
 navegador, todo parece funcionar hasta que le das a **play**: arrancar el engine hace
@@ -276,49 +301,90 @@ y recargando la página. Y un servidor de dev lanzado **desde un turno del agent
 si ese turno se interrumpe**, así que conviene levantar el servidor en una terminal
 propia (o con `persist_on_release`) antes de ponerse a escuchar.
 
-### Fichero maestro por proyecto — lo siguiente (petición del usuario)
+### Fichero maestro por proyecto (hecho)
 
-Lo que pasó, con el código delante:
+El estado del proyecto ya no vive en el navegador: **cada carpeta de proyecto
+tiene su `proyecto.json`** y los WAV se quedan en su sitio.
 
-- **«Abrir» con WAV sueltos no abre un proyecto**: `importarAudio()` mete una pista
-  por fichero en el proyecto que ya está abierto, en el compás actual
-  (`web/src/main.ts`). Por eso el título (`#song-info`, que pinta `project.name`) siguió
-  mostrando el proyecto anterior y los clips viejos seguían ahí, para borrarlos a mano.
-  Funciona como está escrito, pero no es lo que uno espera al elegir la carpeta
-  `salida/` de un proyecto.
-- **El estado del proyecto vive sólo en el navegador** (localStorage + IndexedDB) y no
-  hay exportación. En disco, `workspace/proyectos/<slug>/` sólo tiene los `.py` y
-  `salida/` con los WAV: **no hay ningún fichero de estado** (los únicos `.json` bajo
-  `workspace/` son `MANIFEST.json` y `proyectos/vitrina/salida/vitrina_busqueda.json`,
-  que es la salida del buscador de mezclas, no un proyecto).
+```text
+workspace/proyectos/demo-disco/
+  proyecto.json      fichero maestro: pistas, clips, notas, faders, mute/solo,
+                     BPM, tonalidad y la ruta de cada WAV
+  entrada/           WAV traídos con «Audio» (y los de un .miuzika.zip)
+  salida/            WAV y MIDI que generan el motor o el agente
+  *.py               los scripts del proyecto
+```
 
-Petición del usuario, en sus palabras ordenadas:
+- **Referencia, no incrusta**: cada asset guarda `ruta` relativa a la carpeta
+  (`entrada/kick.wav`, `salida/vitrina_bajo.wav`). Los stems son de 95 MB: en
+  base64 un máster de 6 stems serían ~760 MB de JSON.
+- **Autoguardado con retardo** (1,5 s tras el último cambio) más `Guardar` y
+  `Ctrl+S`. Escribir en cada arrastre de fader sería un POST por movimiento. Un
+  cambio durante una escritura en vuelo se reencola en vez de perderse.
+- **Al abrir** un proyecto (botón `Proyectos`, que lista los `proyecto.json` del
+  disco) se cargan los WAV de la carpeta por `/api/audio`; los cortos se
+  decodifican para openDAW y los largos van por streaming. Abrir **no**
+  reescribe el fichero maestro (`restoring` lo impide): se respeta lo que hay.
+- **Al elegir WAV** con un proyecto abierto se pregunta (`<dialog>`): «Añadir a
+  …» los mete en el proyecto y en el compás del cursor; «Proyecto nuevo …»
+  empieza de cero con el nombre de la carpeta elegida. Si no hay proyecto, va
+  directo a «nuevo».
+- **Los WAV importados se copian al disco** (`POST /api/audio/subir`, hasta
+  512 MB) a `entrada/`, con nombre saneado y sufijo `_2`, `_3`… si ya existe. Sin
+  esa copia el proyecto no podría referenciarlos y morirían con el navegador.
+- **«Abrir»** acepta `.json` (fichero maestro o `Project` suelto) y
+  `.miuzika.zip`: los WAV del bundle se escriben en la carpeta y el proyecto se
+  queda con sus rutas.
+- El render de **Strudel** también va al disco (`salida/<slug>_strudel_*.wav`)
+  antes de entrar como pista.
 
-1. **Un fichero maestro en cada carpeta de proyecto** (`workspace/proyectos/<slug>/`)
-   con el último estado: pistas, clips, faders, mute/solo, BPM y tonalidad, más las
-   referencias a sus WAV y MIDI. Al abrir el proyecto se carga ese estado, y los WAV
-   se traen **del disco** (`/api/audio`), no sólo de IndexedDB.
-2. Poder **añadir WAV o MIDI a un proyecto ya abierto** sin perder lo que hay. El audio
-   ya se puede (botones «Audio» y «Abrir»); por el selector de ficheros no se puede
-   meter un `.mid` (el `accept` no lo incluye), aunque el agente sí sabe crear pistas
-   MIDI desde `workspace/` con `anadir_pistas(midis=[...])`.
+Decisiones tomadas (con el usuario delante):
 
-Decisiones que hay que cerrar antes de escribir código:
+- Ruta relativa, nunca base64.
+- Autoguardado con retardo + botón explícito.
+- `proyectos/<slug>/proyecto.json`, listado por un endpoint nuevo `/api/proyectos`
+  (`GET` lista, `GET ?path=` devuelve el fichero completo — `/api/fs/read` corta
+  a 20 000 caracteres y un proyecto con miles de notas no cabe —, `POST` escribe).
+- Preguntar cada vez al elegir WAV, en vez de recordar la última elección.
 
-- **¿Referencia o incrusta el audio?** Referenciar por ruta relativa (`salida/x.wav`) es
-  lo sensato: los stems son de 95 MB cada uno. Incrustar en base64 un máster de 6 stems
-  son ~760 MB de JSON.
-- **¿Autoguardado o botón?** Autoguardado con retardo (1-2 s tras el último cambio) es
-  cómodo, pero escribe con `/api/fs/write` en cada arrastre de fader; un «Guardar»
-  explícito no pierde nada porque localStorage/IndexedDB siguen ahí.
-- **¿Nombre y forma?** `proyectos/<slug>/proyecto.json` (y la app pide la lista de
-  proyectos a `/api/fs/list`) parece lo más simple; el `.miuzika.zip` que ya sabe
-  importar `project-bundle.ts` es la alternativa autocontenida.
-- **¿Y al elegir WAV con un proyecto abierto?** Hoy añade y lo dice en el chat; lo que
-  pide el usuario es que se pueda **elegir**: «añadir al proyecto abierto» o «empezar uno
-  nuevo con el nombre de la carpeta».
+**IndexedDB se quitó del todo** (`audio-db.ts` y `project-db.ts` ya no existen):
+existía sólo porque los WAV no se grababan a disco. Ahora el proyecto son el
+`proyecto.json` y sus WAV; lo único que queda en el navegador es
+`miuzika.proyecto-abierto`, el slug del último proyecto para reabrirlo.
 
-Nada de esto está implementado todavía.
+Lo que se perdió al quitarla, dicho claro: **la subida a disco es obligatoria**.
+Un WAV de más de 512 MB o en un formato que `herramientas/picos.py` no sepa leer
+no entra, y el proyecto no lo referenciará (se avisa en el chat). El historial
+de undo tampoco sobrevive a una recarga: son 8 pasos en memoria.
+
+### Pendiente
+
+- **Importar `.mid` por el selector de ficheros** (el `accept` no lo incluye).
+  El agente sí crea pistas MIDI con `anadir_pistas(midis=[...])`.
+- **DDSP** (Apache-2.0) entrenado con nuestros propios stems: timbre real de
+  instrumento en lugar de síntesis. Es el siguiente salto de calidad de verdad; el
+  resto (sobremuestreo, reverb, búsqueda de mezcla) ya está medido y en su sitio.
+- **Intentar de verdad que el agente reutilice el motor de GPU** en un script
+  nuevo: encender, pedir un sample al agente y mirar el log del turno.
+- **A/B ciego** GPU 1× vs 4× para confirmar de oído lo que dice el número.
+- Reverb con IR de 5 s sobre el pad, y escuchar si gana densidad.
+- El motor GPU no tiene todavía `midi` propio: los .mid salen del motor numpy.
+- El agente no sabe puntuar con CLAP desde dentro de la app (el piloto vive en
+  `tools/piloto-gpu/`).
+- Valorar meter `proyecto.json` en git: hoy `workspace/proyectos/` está ignorado
+  entero (los WAV pesan demasiado). Si se quiere versionar el estado, hay que
+  cambiar el `.gitignore` para ignorar sólo `entrada/`, `salida/` y `__pycache__/`.
+
+## Limitaciones
+
+- Hace falta el servidor de dev: `/api/*` (audio, picos, proyectos, agente) son
+  middlewares de Vite. Sin él la app no abre ni reproduce nada.
+- Strudel → WAV: máximo 64 compases por render.
+- Strudel depende de sample maps remotos y de sus licencias.
+- Los WAV de más de 30 s se reproducen por streaming (`<audio>`), no decodificados:
+  10 stems de 6 minutos ocupan ~20 MB en lugar de ~1,3 GB.
+- openDAW sigue decodificando los WAV cortos y los samples de batería.
+- El motor de patrones clásico asume 4/4.
 
 ### Pendiente
 
