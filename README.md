@@ -195,6 +195,39 @@ aplicando ops `set_track` en un solo lote: entra en el historial y se deshace co
 Ctrl+Z, y el audio se reajusta en vivo (no reinicia el engine). Verificado: 9 pistas
 ajustadas y deshechas en la prueba.
 
+### Que el agente NO reescriba el motor de GPU
+
+El mecanismo que ya protegía el motor numpy vale también para el de GPU, y sin él
+el agente reescribía `gpu/motor_gpu.py` en cada turno (no sabía que existía):
+
+- `herramientas/manifiesto.py` escanea **`codigo/` y `gpu/`**: `MANIFEST.json` pasa
+  a 108 símbolos y el agente ve `motor_gpu` con sus 36 funciones (`osc`, `saturar`,
+  `reverb`, `shimmer`, `congelar`, `granular`, `master`…).
+- La **puerta 409** de `/api/fs/write` cubre `gpu/`: un fichero nuevo que redefina
+  un símbolo del motor se rechaza con el aviso de importarlo.
+- El **prompt del sistema** describe los dos motores y cuándo usar cada uno: numpy
+  en CPU para samples y MIDI; `motor_gpu.py` con `destino="lambda"` para trabajo
+  pesado o calidad.
+- En `gpu/` no hay smoke posible (este portátil no tiene torch): al escribir se
+  comprueba que el fichero parsea y se avisa de que la validación real se hace en
+  la instancia.
+
+### Interfaz: colores por pista, contador de gasto y barra de actividad
+
+- **Un color por pista**, no por tipo de instrumento. Antes todos los WAV (sampler)
+  salían del mismo verde y todos los synth del mismo tono. Reparto por ángulo áureo
+  (137,5°) con luminosidad alterna y las pistas de audio algo más apagadas.
+- **Contador de gasto de la GPU** junto al selector CPU/GPU: `1,29 $/h · 00:01:02 ·
+  0,02 $ (sesión 0,01 $)`. Sale de `/api/gpu/estado`, cuya forma es genérica
+  (`precio_hora`, `moneda`, `proveedor`, `activo`, `desde`, `gastado`): otro
+  proveedor sólo tiene que rellenarla. Sólo cuentan las instancias `active` — una
+  colgada en `terminating` durante días metía 7.877 $ en el contador.
+- **Barra de actividad sin tarjetas**: las burbujas `⚙ herramienta(...)` ya no
+  ensucian el historial. La barra de abajo muestra la frase de lo que se está
+  haciendo y el reloj del turno; al cerrar resume `✓ listo · N paso(s) ·
+  N herramienta(s) · X s · modelo`, y si falla muestra `✗ error: …` en vez de
+  quedarse con los puntos suspensivos.
+
 ### Cómo retomar en otra sesión
 
 ```bash
@@ -203,15 +236,28 @@ npm run dev                      # http://localhost:5173
 npm run typecheck && npm run test:unit
 ```
 
-Estado al cerrar (2026-10-23): árbol limpio, typecheck 0, 34/34 tests, **instancia de
-Lambda terminada** (no hay nada encendido ni facturando). El proyecto **Vitrina** está
-cargado en el navegador del usuario con la mezcla elegida en los faders.
+Estado al cerrar (2026-10-23, última sesión): typecheck 0, 34/34 tests, **ninguna
+instancia encendida** (sólo queda una A100 vieja en `terminating`, caso de soporte, que
+no factura). El proyecto **Vitrina** está cargado en el navegador del usuario con la
+mezcla elegida en los faders.
+
+Commits de la tanda: `b5463e5` (motor GPU, buscador, faders por chat), `71aec76`
+(motor GPU en manifiesto y puerta 409, colores por pista), `376c42c` (contador de
+gasto y barra de actividad), `8fdd952` (manifiesto regenerado).
+
+Queda sin commitear `workspace/gpu/prueba_nueva.py`: es el fichero de 2 líneas que se
+usó para comprobar que la puerta 409 deja pasar código nuevo. **No se ha borrado
+porque el usuario no ha dado permiso**; se puede eliminar sin más cuando diga.
 
 ### Pendiente
 
 - **DDSP** (Apache-2.0) entrenado con nuestros propios stems: timbre real de
   instrumento en lugar de síntesis. Es el siguiente salto de calidad de verdad; el
   resto (sobremuestreo, reverb, búsqueda de mezcla) ya está medido y en su sitio.
+- **Probar en real que un script nuevo de GPU reutiliza el motor** en vez de
+  reescribirlo: encender, pedir un sample al agente y mirar el log del turno.
+- Barra de actividad: tiempo **por herramienta** (no sólo del turno) y una línea
+  discreta de resumen al final del historial.
 - **A/B ciego** GPU 1× vs 4× para confirmar de oído lo que dice el número.
 - Reverb con IR de 5 s sobre el pad, y escuchar si gana densidad.
 - El motor GPU no tiene todavía `midi` propio: los .mid salen del motor numpy.
