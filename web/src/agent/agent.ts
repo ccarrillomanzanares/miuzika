@@ -51,6 +51,8 @@ export async function ejecutarAgente(
   const herramientas: PasoHerramienta[] = [];
   /** Escrituras seguidas sin una ejecucion correcta: corta el bucle de parches. */
   let escriturasSinEjecutar = 0;
+  /** Fallos idénticos seguidos por herramienta: corta los reintentos ciegos. */
+  const fallosIguales = new Map<string, number>();
 
   /** Respuesta de cierre cuando el usuario cancela. */
   const cancelado = (): ResultadoAgente => ({
@@ -131,6 +133,29 @@ export async function ejecutarAgente(
         tool_call_id: llamada.id ?? `call_${pasos}_${i}`,
         content: resultado.texto.slice(0, 12000),
       });
+
+      // Reintentar exactamente lo que falla igual no arregla nada: corta el turno
+      // (pasó con crear_proyecto devolviendo 12 veces el mismo error).
+      if (!resultado.ok) {
+        const clave = `${nombre}|${resultado.texto.slice(0, 160)}`;
+        const veces = (fallosIguales.get(clave) ?? 0) + 1;
+        fallosIguales.set(clave, veces);
+        if (veces >= 3) {
+          alEvento?.({ tipo: "aviso", texto: `Corto: «${nombre}» falla igual 3 veces.` });
+          return {
+            texto:
+              `He parado: «${nombre}» da el mismo error tres veces seguidas y reintentarlo no lo arregla.\n\n` +
+              `> ${resultado.texto.split("\n")[0].slice(0, 300)}\n\n` +
+              "Dime cómo seguir (si es un fallo de la app, recarga la página y repite).",
+            pasos,
+            llamadas,
+            ms: Date.now() - t0,
+            herramientas,
+          };
+        }
+      } else {
+        fallosIguales.clear();
+      }
 
       if (nombre === "escribir_fichero" || nombre === "editar_fichero") {
         escriturasSinEjecutar += 1;

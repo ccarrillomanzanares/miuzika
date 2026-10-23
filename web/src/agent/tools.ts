@@ -94,14 +94,32 @@ type CreadorProyecto = (peticion: PeticionProyecto) => { ok: boolean; texto: str
 
 let creadorProyecto: CreadorProyecto | null = null;
 
+/**
+ * El registro vive también en `globalThis`. Con el servidor de dev, editar
+ * main.ts o este fichero puede dejar DOS copias del módulo cargadas a la vez: la
+ * que registra (main) y la que el bucle del agente consulta. Sin esto, la app
+ * dice «no puede crear proyectos» con la app perfectamente viva y el agente
+ * reintenta en bucle. Pasó el 23-oct y costó 12 pasos.
+ */
+interface RegistroGlobal {
+  creador?: CreadorProyecto | null;
+  importador?: ImportadorLocal | null;
+  ajustador?: Ajustador | null;
+}
+
+const registro: RegistroGlobal =
+  ((globalThis as unknown as { __miuzikaHerramientas?: RegistroGlobal }).__miuzikaHerramientas ??= {});
+
 /** main.ts registra aqui como se crea un proyecto con nombre. */
 export function registrarCreador(fn: CreadorProyecto | null): void {
   creadorProyecto = fn;
+  registro.creador = fn;
 }
 
 /** main.ts registra aqui como se crean pistas de verdad (necesita el proyecto). */
 export function registrarImportador(fn: ImportadorLocal | null): void {
   importadorLocal = fn;
+  registro.importador = fn;
 }
 
 /** Ajuste de una pista por su nombre: es como se aplica una mezcla. */
@@ -120,7 +138,21 @@ let ajustador: Ajustador | null = null;
 /** main.ts registra aqui como se mueven los faders (necesita el proyecto). */
 export function registrarAjustador(fn: Ajustador | null): void {
   ajustador = fn;
+  registro.ajustador = fn;
 }
+
+/** Lo registrado, mirando primero lo local y después el registro compartido. */
+const herramientaLocal = {
+  creador: (): CreadorProyecto | null => creadorProyecto ?? registro.creador ?? null,
+  importador: (): ImportadorLocal | null => importadorLocal ?? registro.importador ?? null,
+  ajustador: (): Ajustador | null => ajustador ?? registro.ajustador ?? null,
+};
+
+/** Mensaje único para el caso «la app no tiene este registro»: dice qué hacer. */
+const SIN_REGISTRO =
+  "La app no tiene registrada esta acción (pasa cuando el servidor de dev se reinicia o se " +
+  "edita código con la pestaña abierta y quedan dos copias del módulo). NO lo reintentes: " +
+  "pide al usuario que recargue la página (F5) y repite después.";
 
 export const HERRAMIENTAS: ToolSpec[] = [
   {
@@ -370,20 +402,22 @@ export async function ejecutarHerramienta(
         return { ok: true, texto: `Editado ${datos.path}: ${datos.reemplazos} reemplazo(s).` };
       }
       case "crear_proyecto": {
-        if (!creadorProyecto) {
-          return { ok: false, texto: "La app no puede crear proyectos ahora mismo." };
+        const creador = herramientaLocal.creador();
+        if (!creador) {
+          return { ok: false, texto: SIN_REGISTRO };
         }
-        return creadorProyecto({
+        return creador({
           nombre: String(args.nombre ?? "").trim(),
           bpm: Number(args.bpm ?? 120) || 120,
           compases: Number(args.compases ?? 32) || 32,
         });
       }
       case "anadir_pistas": {
-        if (!importadorLocal) {
-          return { ok: false, texto: "No hay proyecto abierto donde crear pistas (genera uno antes)." };
+        const importador = herramientaLocal.importador();
+        if (!importador) {
+          return { ok: false, texto: SIN_REGISTRO };
         }
-        return importadorLocal({
+        return importador({
           midis: Array.isArray(args.midis) ? (args.midis as unknown[]).map(String) : [],
           wavs: Array.isArray(args.wavs) ? (args.wavs as unknown[]).map(String) : [],
           inicioCompas: Number(args.inicio_compas ?? 0) || 0,
@@ -393,8 +427,9 @@ export async function ejecutarHerramienta(
         });
       }
       case "ajustar_pistas": {
-        if (!ajustador) {
-          return { ok: false, texto: "Ahora mismo la app no puede mover faders." };
+        const ajustar = herramientaLocal.ajustador();
+        if (!ajustar) {
+          return { ok: false, texto: SIN_REGISTRO };
         }
         const lista = Array.isArray(args.pistas) ? (args.pistas as Record<string, unknown>[]) : [];
         if (lista.length === 0) return { ok: false, texto: "No has dicho ninguna pista." };
@@ -406,7 +441,7 @@ export async function ejecutarHerramienta(
           if (typeof p.solo === "boolean") ajuste.solo = p.solo;
           return ajuste;
         });
-        return ajustador({ pistas });
+        return ajustar({ pistas });
       }
       case "verificar_audio": {
         const datos = await pedirJson(
