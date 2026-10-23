@@ -15,6 +15,18 @@ export interface ResultadoHerramienta {
 }
 
 /** Peticion con limite de tiempo: el chat nunca se queda colgado esperando. */
+/** Slug del proyecto abierto: el servidor resuelve ahi las rutas no compartidas. */
+let proyectoActivo = "";
+
+export function setProyectoActivo(slug: string): void {
+  proyectoActivo = slug;
+}
+
+/** Cabeceras con el proyecto activo (lo usa tambien main.ts). */
+export function cabecerasProyecto(extra?: Record<string, string>): Record<string, string> {
+  return { "x-miuzika-proyecto": proyectoActivo, ...(extra ?? {}) };
+}
+
 async function pedirJson(
   ruta: string,
   cuerpo?: unknown,
@@ -25,7 +37,9 @@ async function pedirJson(
   try {
     const res = await fetch(ruta, {
       method: cuerpo === undefined ? "GET" : "POST",
-      headers: cuerpo === undefined ? undefined : { "Content-Type": "application/json" },
+      headers: cabecerasProyecto(
+        cuerpo === undefined ? undefined : { "Content-Type": "application/json" },
+      ),
       body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
       signal: control.signal,
     });
@@ -43,11 +57,28 @@ export interface PeticionPistas {
   midis: string[];
   wavs: string[];
   inicioCompas: number;
+  /** Nombre del proyecto si hay que crearlo (lo pregunta el agente al usuario). */
+  nombreProyecto?: string;
 }
 
 type ImportadorLocal = (peticion: PeticionPistas) => Promise<{ ok: boolean; texto: string }>;
 
 let importadorLocal: ImportadorLocal | null = null;
+
+export interface PeticionProyecto {
+  nombre: string;
+  bpm: number;
+  compases: number;
+}
+
+type CreadorProyecto = (peticion: PeticionProyecto) => { ok: boolean; texto: string };
+
+let creadorProyecto: CreadorProyecto | null = null;
+
+/** main.ts registra aqui como se crea un proyecto con nombre. */
+export function registrarCreador(fn: CreadorProyecto | null): void {
+  creadorProyecto = fn;
+}
 
 /** main.ts registra aqui como se crean pistas de verdad (necesita el proyecto). */
 export function registrarImportador(fn: ImportadorLocal | null): void {
@@ -147,6 +178,25 @@ export const HERRAMIENTAS: ToolSpec[] = [
   {
     type: "function",
     function: {
+      name: "crear_proyecto",
+      description:
+        "Crea un proyecto vacio en el DAW. Llamala SOLO despues de preguntar al usuario como quiere " +
+        "llamarlo: su nombre es tambien el de su carpeta (proyectos/<nombre>/), y los ficheros que " +
+        "escribas en 'salida/...' iran ahi. Si ya hay un proyecto abierto, no la uses.",
+      parameters: {
+        type: "object",
+        properties: {
+          nombre: { type: "string", description: "Nombre que ha pedido el usuario" },
+          bpm: { type: "number", description: "Tempo (por defecto 120)" },
+          compases: { type: "integer", description: "Duracion en compases (por defecto 32)" },
+        },
+        required: ["nombre"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "anadir_pistas",
       description:
         "Crea pistas REALES en el proyecto del DAW: cada .mid entra como pista MIDI con sus notas y cada " +
@@ -168,6 +218,12 @@ export const HERRAMIENTAS: ToolSpec[] = [
           inicio_compas: {
             type: "integer",
             description: "Compas donde empiezan las pistas (0 = principio)",
+          },
+          nombre_proyecto: {
+            type: "string",
+            description:
+              "Solo si NO hay proyecto abierto: el nombre que ha pedido el usuario. Si no lo sabes, " +
+              "preguntamelo en el chat antes de llamar (no inventes el nombre).",
           },
         },
       },
@@ -234,6 +290,16 @@ export async function ejecutarHerramienta(
         });
         return { ok: true, texto: `Editado ${datos.path}: ${datos.reemplazos} reemplazo(s).` };
       }
+      case "crear_proyecto": {
+        if (!creadorProyecto) {
+          return { ok: false, texto: "La app no puede crear proyectos ahora mismo." };
+        }
+        return creadorProyecto({
+          nombre: String(args.nombre ?? "").trim(),
+          bpm: Number(args.bpm ?? 120) || 120,
+          compases: Number(args.compases ?? 32) || 32,
+        });
+      }
       case "anadir_pistas": {
         if (!importadorLocal) {
           return { ok: false, texto: "No hay proyecto abierto donde crear pistas (genera uno antes)." };
@@ -242,6 +308,9 @@ export async function ejecutarHerramienta(
           midis: Array.isArray(args.midis) ? (args.midis as unknown[]).map(String) : [],
           wavs: Array.isArray(args.wavs) ? (args.wavs as unknown[]).map(String) : [],
           inicioCompas: Number(args.inicio_compas ?? 0) || 0,
+          ...(typeof args.nombre_proyecto === "string" && args.nombre_proyecto.trim() !== ""
+            ? { nombreProyecto: args.nombre_proyecto.trim() }
+            : {}),
         });
       }
       case "verificar_audio": {

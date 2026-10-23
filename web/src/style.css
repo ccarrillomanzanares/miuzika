@@ -91,6 +91,12 @@ header {
   text-overflow: ellipsis;
 }
 
+.song-info .carpeta {
+  font-size: 10px;
+  opacity: 0.7;
+  letter-spacing: 0.02em;
+}
+
 .actions {
   display: flex;
   align-items: center;

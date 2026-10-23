@@ -27,8 +27,13 @@ import { initChat } from "./chat.ts";
 import { getModel, health, listModels, setModel } from "./llm.ts";
 import type { ChatMessage } from "./llm.ts";
 import { ejecutarAgente } from "./agent/agent.ts";
-import { registrarImportador } from "./agent/tools.ts";
-import type { PeticionPistas } from "./agent/tools.ts";
+import {
+  cabecerasProyecto,
+  registrarCreador,
+  registrarImportador,
+  setProyectoActivo,
+} from "./agent/tools.ts";
+import type { PeticionPistas, PeticionProyecto } from "./agent/tools.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -64,6 +69,9 @@ const AGENTE_SISTEMA = [
   "corrige con editar_fichero(busca, reemplaza) y vuelve a ejecutar -- NUNCA reescribas el fichero",
   "entero; (5) verifica el WAV con verificar_audio; (6) responde con las metricas medidas.",
   "No ejecutes ficheros ajenos para 'ver que hacen': ejecuta solo los scripts que escribas tu.",
+  "Si NO hay proyecto abierto, PREGUNTA al usuario como llamarlo (no lo inventes) y llama a",
+  "crear_proyecto(nombre) ANTES de escribir nada: su nombre es su carpeta (proyectos/<nombre>/) y",
+  "todo lo que escribas en 'salida/...' caera ahi.",
   "Para ENTREGAR una cancion llama a anadir_pistas(midis=[...], wavs=[...]): crea pistas reales en el",
   "DAW. Deja los .mid y los .wav (stems, no master) en salida/. NO masterices ni limitadores el stereo",
   "final: el master se decide en el DAW con los faders; entrega pistas separadas.",
@@ -85,8 +93,15 @@ async function refrescarManifiesto(): Promise<void> {
     manifiestoMotor = datos.manifiesto ?? "";
     const sistema = conversacion[0];
     if (sistema && sistema.role === "system") {
+      const carpeta = project
+        ? `\n\n=== PROYECTO ABIERTO ===\nCarpeta del proyecto: proyectos/${slugDeProyecto(project)}/\n` +
+          "Escribe ahi los WAV y MIDI con rutas como 'salida/tema.wav' (el servidor las resuelve " +
+          "dentro de la carpeta del proyecto). 'codigo/', 'herramientas/' y 'plantillas/' son comunes."
+        : "\n\n=== PROYECTO ===\nNo hay proyecto abierto: crea uno o usa anadir_pistas.";
       sistema.content =
-        AGENTE_SISTEMA + (manifiestoMotor ? `\n\n=== MOTOR DISPONIBLE ===\n${manifiestoMotor}` : "");
+        AGENTE_SISTEMA +
+        carpeta +
+        (manifiestoMotor ? `\n\n=== MOTOR DISPONIBLE ===\n${manifiestoMotor}` : "");
     }
   } catch {
     /* sin manifiesto: se trabaja con el prompt basico */
@@ -152,6 +167,30 @@ const HISTORY_KEY = "miuzika.history";
 const HISTORY_LIMIT = 8;
 let history: Project[] = loadHistory();
 let future: Project[] = [];
+
+/** Nombre de proyecto a partir del fichero entregado (salida/sacramento_multitrack.mid -> sacramento). */
+function nombreDesdeRuta(ruta: string): string {
+  const base = (ruta.split("/").pop() ?? "proyecto").replace(/\.[^.]+$/, "");
+  const limpio = base
+    .replace(/^midi_/i, "")
+    .replace(/_(multitrack|master|mix|stems?)$/i, "")
+    .replace(/[-_]+/g, " ")
+    .trim();
+  return (limpio || base || "proyecto").slice(0, 40);
+}
+
+/** Carpeta del proyecto en workspace/proyectos/: solo el nombre, en slug. */
+function slugDeProyecto(origen: Project): string {
+  const base = origen.name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  // Solo el nombre: la carpeta es predecible ("sacramento" -> proyectos/sacramento/).
+  return base || "proyecto";
+}
 
 function currentBeat(): number {
   return openDawHandle?.beat ?? timeline.currentBeat;
@@ -542,6 +581,7 @@ function applyProject(next: Project | null): void {
     songInfo.textContent = "";
     return;
   }
+  setProyectoActivo(slugDeProyecto(view));
   timeline.setProject(view);
   // setProject cambia los datos y los cabezales, pero no repinta el lienzo:
   // sin esto, un proyecto aplicado por el agente deja la timeline vacia.
@@ -549,7 +589,11 @@ function applyProject(next: Project | null): void {
   const stats = projectStats(view);
   const minutes = Math.floor(stats.seconds / 60);
   const seconds = String(Math.round(stats.seconds % 60)).padStart(2, "0");
-  songInfo.innerHTML = `<strong>${escapeHtml(view.name)}</strong><span>${view.bpm} BPM · ${view.key.tonic} ${view.key.mode} · ${view.lengthBars} compases · ${stats.tracks} pistas · ${stats.notes} notas · ${minutes}:${seconds}</span>`;
+  songInfo.innerHTML =
+    `<strong>${escapeHtml(view.name)}</strong>` +
+    `<span>${view.bpm} BPM · ${view.key.tonic} ${view.key.mode} · ${view.lengthBars} compases · ` +
+    `${stats.tracks} pistas · ${stats.notes} notas · ${minutes}:${seconds}</span>` +
+    `<span class="carpeta" title="Carpeta del proyecto en el servidor">proyectos/${escapeHtml(slugDeProyecto(view))}/</span>`;
 }
 
 function updateSelectionBar(): void {
@@ -801,7 +845,33 @@ async function importarPistasDesdeAgente(
   const hechas: string[] = [];
   const fallos: string[] = [];
 
-  // 1) leer los MIDI primero: de ahi salen bpm y compases si no hay proyecto
+  // 1) sin proyecto hace falta el nombre ANTES de leer nada: la carpeta del
+  //    proyecto es lo que permite resolver 'salida/...'. Se crea provisional y
+  //    luego se ajustan tempo y compases con set_song.
+  let creadoAqui = false;
+  if (!project) {
+    if (!peticion.nombreProyecto) {
+      const sugerencia = nombreDesdeRuta(peticion.midis[0] ?? peticion.wavs[0] ?? "");
+      return {
+        ok: false,
+        texto:
+          "No hay proyecto abierto y no me has dado nombre. PREGUNTA al usuario como quiere llamar el " +
+          "proyecto" +
+          (sugerencia ? ` (sugerencia: "${sugerencia}")` : "") +
+          " y vuelve a llamar con nombre_proyecto. No inventes el nombre.",
+      };
+    }
+    setProject(
+      createProject({
+        name: peticion.nombreProyecto.slice(0, 40),
+        bpm: 120,
+        lengthBars: 32,
+      }),
+    );
+    creadoAqui = true;
+  }
+
+  // 2) leer los MIDI (la carpeta del proyecto ya existe, asi que 'salida/...' resuelve)
   interface PistaMidi {
     name: string;
     program?: number;
@@ -811,7 +881,9 @@ async function importarPistasDesdeAgente(
   const material: { ruta: string; bpm: number; tracks: PistaMidi[] }[] = [];
   for (const ruta of peticion.midis) {
     try {
-      const res = await fetch(`/api/midi?path=${encodeURIComponent(ruta)}`);
+      const res = await fetch(`/api/midi?path=${encodeURIComponent(ruta)}`, {
+        headers: cabecerasProyecto(),
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const datos = (await res.json()) as { bpm?: number; tracks?: PistaMidi[] };
       material.push({
@@ -826,21 +898,26 @@ async function importarPistasDesdeAgente(
 
   // 2) si no hay proyecto, se crea con el tempo y la duracion del propio material
   if (!project) {
+    return { ok: false, texto: "No se pudo crear el proyecto." };
+  }
+
+  let current: Project = project;
+
+  // 3) si lo hemos creado aqui, ajustamos tempo y compases al material real
+  if (creadoAqui) {
     let finBeat = 0;
     for (const bloque of material) {
       for (const pista of bloque.tracks) {
         for (const nota of pista.notes) finBeat = Math.max(finBeat, nota.start + nota.duration);
       }
     }
-    const bpm = material[0]?.bpm ?? 120;
-    const compases = Math.max(4, Math.min(512, Math.ceil(finBeat / 4) + 1));
-    setProject(createProject({ name: "Del agente", bpm, lengthBars: compases }));
-  }
-  if (!project) {
-    return { ok: false, texto: "No se pudo crear el proyecto." };
+    if (material.length > 0) {
+      const bpm = material[0]?.bpm ?? project.bpm;
+      const compases = Math.max(4, Math.min(512, Math.ceil(finBeat / 4) + 1));
+      current = applyOps(current, [{ op: "set_song", bpm, lengthBars: compases }]).project;
+    }
   }
 
-  let current: Project = project;
   let contador = current.tracks.length;
 
   for (const bloque of material) {
@@ -893,7 +970,9 @@ async function importarPistasDesdeAgente(
 
   for (const ruta of peticion.wavs) {
     try {
-      const res = await fetch(`/api/audio?path=${encodeURIComponent(ruta)}`);
+      const res = await fetch(`/api/audio?path=${encodeURIComponent(ruta)}`, {
+        headers: cabecerasProyecto(),
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const fichero = ruta.split("/").pop() ?? "audio.wav";
@@ -940,7 +1019,27 @@ async function importarPistasDesdeAgente(
   return { ok: hechas.length > 0, texto };
 }
 
+/** Crea un proyecto vacio con el nombre pedido (lo llama el agente tras preguntar). */
+function crearProyectoDesdeAgente(peticion: PeticionProyecto): { ok: boolean; texto: string } {
+  const nombre = peticion.nombre.trim();
+  if (!nombre) return { ok: false, texto: "Falta el nombre del proyecto." };
+  const previo = project?.name ?? null;
+  const bpm = Math.min(300, Math.max(20, Math.round(peticion.bpm)));
+  const compases = Math.min(512, Math.max(4, Math.round(peticion.compases)));
+  setProject(createProject({ name: nombre.slice(0, 40), bpm, lengthBars: compases }));
+  const carpeta = project ? slugDeProyecto(project) : "?";
+  if (previo) {
+    addMessage("system", `Sustituido el proyecto “${previo}” por “${nombre}” (Ctrl+Z lo recupera).`);
+  }
+  addMessage("system", `Proyecto “${nombre}” creado (carpeta proyectos/${carpeta}/).`);
+  return {
+    ok: true,
+    texto: `Proyecto "${nombre}" creado. Carpeta: proyectos/${carpeta}/. Ahora escribe los .wav y .mid en salida/... y llamalos con anadir_pistas.`,
+  };
+}
+
 registrarImportador(importarPistasDesdeAgente);
+registrarCreador(crearProyectoDesdeAgente);
 
 /** ¿Es un fichero de audio? (por MIME o por extension) */
 function esAudio(file: File): boolean {
@@ -1220,6 +1319,7 @@ if (import.meta.env.DEV) {
       return future;
     },
     anadirPistas: importarPistasDesdeAgente,
+    crearProyecto: crearProyectoDesdeAgente,
     nuevoProyecto: (nombre: string, bpm: number, lengthBars: number) =>
       setProject(createProject({ name: nombre, bpm, lengthBars })),
   };

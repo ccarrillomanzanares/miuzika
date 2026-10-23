@@ -59,10 +59,39 @@ export default defineConfig(({ mode }) => {
     req.on("end", () => alTerminar(cuerpo));
   };
 
-  /** Ruta real dentro de workspace/ a partir de una relativa (null si se sale). */
-  const resolverEnTrabajo = (relativo: string): string | null => {
+  /** Carpetas compartidas por todos los proyectos: motor y utilidades. */
+  const COMPARTIDO = ["codigo/", "herramientas/", "plantillas/", "_archivo/", "proyectos/"];
+
+  /** Slug seguro del proyecto activo ("" -> "sin-proyecto"). */
+  const slugProyecto = (valor: unknown): string => {
+    const limpio = String(valor ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48);
+    return limpio || "sin-proyecto";
+  };
+
+  /** Carpeta del proyecto activo (se crea al usarla). */
+  const carpetaProyecto = (slug: string): string => {
+    mkdirSync(resolve(carpetaTrabajo, "proyectos", slug), { recursive: true });
+    return resolve(carpetaTrabajo, "proyectos", slug);
+  };
+
+  /**
+   * Ruta real a partir de una relativa. Lo que empieza por una carpeta
+   * compartida se resuelve en workspace/; el resto, en la carpeta del proyecto.
+   */
+  const resolverEnTrabajo = (relativo: string, slug = "sin-proyecto"): string | null => {
     if (relativo.includes("\\") || relativo.includes("..")) return null;
-    const destino = resolve(carpetaTrabajo, relativo.replace(/^\/+/, ""));
+    const limpio = relativo.replace(/^\/+/, "");
+    const esCompartido = COMPARTIDO.some(
+      (prefijo) => limpio === prefijo.slice(0, -1) || limpio.startsWith(prefijo),
+    );
+    const prefijado = esCompartido ? limpio : `proyectos/${slug}/${limpio}`;
+    const destino = resolve(carpetaTrabajo, prefijado);
     const dentro = destino === carpetaTrabajo || destino.startsWith(carpetaTrabajo + sep);
     return dentro ? destino : null;
   };
@@ -230,7 +259,7 @@ export default defineConfig(({ mode }) => {
                   responderJson(res, 400, { error: "faltan 'path' o 'contenido'" });
                   return;
                 }
-                const destino = resolverEnTrabajo(datos.path);
+                const destino = resolverEnTrabajo(datos.path, slugProyecto(req.headers["x-miuzika-proyecto"]));
                 if (!destino) {
                   responderJson(res, 403, { error: "ruta fuera de workspace/" });
                   return;
@@ -326,7 +355,7 @@ export default defineConfig(({ mode }) => {
             leerCuerpo(req, (cuerpo) => {
               try {
                 const datos = JSON.parse(cuerpo) as { path?: string };
-                const destino = datos.path ? resolverEnTrabajo(datos.path) : null;
+                const destino = datos.path ? resolverEnTrabajo(datos.path, slugProyecto(req.headers["x-miuzika-proyecto"])) : null;
                 if (!destino) {
                   responderJson(res, 403, { error: "ruta fuera de workspace/" });
                   return;
@@ -388,7 +417,7 @@ export default defineConfig(({ mode }) => {
                   responderJson(res, 400, { error: "faltan 'path', 'busca' o 'reemplaza'" });
                   return;
                 }
-                const destino = resolverEnTrabajo(d.path);
+                const destino = resolverEnTrabajo(d.path, slugProyecto(req.headers["x-miuzika-proyecto"]));
                 if (!destino) {
                   responderJson(res, 403, { error: "ruta fuera de workspace/" });
                   return;
@@ -441,7 +470,7 @@ export default defineConfig(({ mode }) => {
           server.middlewares.use("/api/audio", (req, res) => {
             const url = new URL(req.url ?? "/", "http://localhost");
             const rel = url.searchParams.get("path") ?? "";
-            const destino = rel ? resolverEnTrabajo(rel) : null;
+            const destino = rel ? resolverEnTrabajo(rel, slugProyecto(req.headers["x-miuzika-proyecto"])) : null;
             if (!destino || !existsSync(destino)) {
               responderJson(res, 404, { error: "no existe" });
               return;
@@ -457,7 +486,7 @@ export default defineConfig(({ mode }) => {
           server.middlewares.use("/api/midi", async (req, res) => {
             const url = new URL(req.url ?? "/", "http://localhost");
             const rel = url.searchParams.get("path") ?? "";
-            const destino = rel ? resolverEnTrabajo(rel) : null;
+            const destino = rel ? resolverEnTrabajo(rel, slugProyecto(req.headers["x-miuzika-proyecto"])) : null;
             if (!destino || !existsSync(destino)) {
               responderJson(res, 404, { error: "no existe" });
               return;
@@ -484,7 +513,7 @@ export default defineConfig(({ mode }) => {
             leerCuerpo(req, async (cuerpo) => {
               try {
                 const d = JSON.parse(cuerpo) as { path?: string };
-                const destino = d.path ? resolverEnTrabajo(d.path) : null;
+                const destino = d.path ? resolverEnTrabajo(d.path, slugProyecto(req.headers["x-miuzika-proyecto"])) : null;
                 if (!destino) {
                   responderJson(res, 403, { error: "ruta fuera de workspace/" });
                   return;
@@ -528,7 +557,8 @@ export default defineConfig(({ mode }) => {
                 responderJson(res, 400, { error: "falta 'path'" });
                 return;
               }
-              const script = resolverEnTrabajo(datos.path);
+              const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
+              const script = resolverEnTrabajo(datos.path, slug);
               if (!script) {
                 responderJson(res, 403, { error: "ruta fuera de workspace/" });
                 return;
@@ -542,12 +572,19 @@ export default defineConfig(({ mode }) => {
               const argumentos = Array.isArray(datos.argumentos)
                 ? datos.argumentos.map((a) => String(a))
                 : [];
-              mkdirSync(carpetaTrabajo, { recursive: true });
+              // cwd = carpeta del proyecto: los scripts escriben 'salida/...' ahi.
+              const cwdProyecto = carpetaProyecto(slug);
+              const motor = resolve(carpetaTrabajo, "codigo");
 
               const t0 = Date.now();
               const hijo = spawn(interprete, ["-u", script, ...argumentos], {
-                cwd: carpetaTrabajo,
-                env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUNBUFFERED: "1" },
+                cwd: cwdProyecto,
+                env: {
+                  ...process.env,
+                  PYTHONIOENCODING: "utf-8",
+                  PYTHONUNBUFFERED: "1",
+                  PYTHONPATH: [motor, process.env.PYTHONPATH].filter(Boolean).join(sep),
+                },
               });
               let salida = "";
               let errores = "";
