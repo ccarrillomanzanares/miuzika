@@ -1,0 +1,8 @@
+# Fijado: transformers 5.x rompe CLAP (processor sin tokenizer; get_text_features
+# devuelve un objeto). Con 4.46.3 funciona.
+torch
+transformers==4.46.3
+soundfile
+librosa
+numpy<2
+pillow>=10

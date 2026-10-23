@@ -107,7 +107,7 @@ Vetadas para el producto:
 |---|---|---|
 | DDSP (Magenta) | Apache-2.0 (código) | ✅ el código; los pesos que entrenemos son nuestros |
 | Demucs | MIT (código) | ✅ la herramienta; ❌ separar música ajena para el producto |
-| CLAP | **verificar** en la ficha del modelo (hay variantes con licencias distintas) | pendiente |
+| CLAP (`laion/larger_clap_music_and_speech`) | **Apache-2.0** (verificado 2026-10-23) | ✅ |
 | MusicGen (Meta) | pesos **CC-BY-NC 4.0** | ❌ |
 | Stable Audio | licencia de Stability, no abierta | ❌ |
 
@@ -121,11 +121,14 @@ consulta.** Si no está claro, no entra.
 | 2026-10-23 | No analizar ni entrenar con fonogramas comerciales | §3, §4 |
 | 2026-10-23 | El conocimiento de mezcla se extrae de material CC y de nuestros propios renders | §2 |
 | 2026-10-23 | No usar MusicGen/Stable Audio en el producto | §6 |
+| 2026-10-23 | CLAP admitido: Apache-2.0 verificado | §6 |
+| 2026-10-23 | El piloto de puntuación usa **sólo audio propio** (sin fonogramas ajenos) | §3, §4 |
 
 ## 8. Pendiente
 
 - [ ] Revisión por abogado de PI antes de cobrar por el servicio Pro.
 - [ ] `CREDITS.md` con atribuciones (modelos, datasets, samples).
-- [ ] Confirmar licencia de CLAP y de cada modelo que se integre.
+- [x] Confirmar licencia de CLAP: Apache-2.0.
+- [ ] Confirmar licencia de cada modelo que se integre (DDSP: Apache-2.0, comprobar).
 - [ ] Revisar si el servicio Pro requiere condiciones de uso y política de datos
       (sube audio del usuario: hay que decir qué se guarda y cuánto tiempo).
