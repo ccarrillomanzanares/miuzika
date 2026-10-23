@@ -598,6 +598,25 @@ button.active {
   color: var(--muted);
 }
 
+/* Destino de ejecucion: CPU del portatil o GPU en Lambda Cloud. */
+.chat-head .destino select {
+  font: inherit;
+  font-size: 10.5px;
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+.chat-head .destino select:hover {
+  border-color: var(--muted);
+}
+.chat-head .destino.gpu select {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
  .chat-composer {
   display: flex;
   align-items: flex-end;

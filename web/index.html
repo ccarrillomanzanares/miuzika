@@ -56,6 +56,12 @@
         <aside class="chat">
           <div class="chat-head">
             <strong>Agente</strong>
+            <label class="destino" title="Dónde ejecuta Python el agente: este portátil o una GPU de Lambda">
+              <select id="chat-destino">
+                <option value="cpu">CPU</option>
+                <option value="lambda">GPU Lambda</option>
+              </select>
+            </label>
           </div>
           <div class="messages" id="messages"></div>
           <form class="chat-composer" id="chat-form">

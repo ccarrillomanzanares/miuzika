@@ -7,6 +7,7 @@
  */
 
 import { escapeHtml } from "./timeline.ts";
+import { setDestino, type Destino } from "./agent/tools.ts";
 
 export type ChatRole = "user" | "assistant" | "system";
 
@@ -39,6 +40,8 @@ interface Entrada {
 const COLLAPSE_KEY = "miuzika.chat.collapsed";
 const LOG_KEY = "miuzika.chat.log";
 const DRAFT_KEY = "miuzika.chat.borrador";
+/** Donde ejecuta Python el agente: "cpu" (este portatil) o "lambda" (GPU). */
+const DESTINO_KEY = "miuzika.destino";
 /** Tope de mensajes guardados (no crece sin fin). */
 const MAX_ENTRADAS = 300;
 
@@ -160,6 +163,32 @@ export function initChat(): ChatApi {
       );
     }
   });
+
+  // Destino de ejecucion: se recuerda entre recargas y manda en las herramientas.
+  const selectorDestino = document.getElementById("chat-destino") as HTMLSelectElement | null;
+  const aplicarDestino = (valor: string): Destino => {
+    const destino: Destino = valor === "lambda" ? "lambda" : "cpu";
+    setDestino(destino);
+    selectorDestino?.parentElement?.classList.toggle("gpu", destino === "lambda");
+    return destino;
+  };
+  if (selectorDestino) {
+    let guardado = "cpu";
+    try {
+      guardado = localStorage.getItem(DESTINO_KEY) ?? "cpu";
+    } catch {
+      /* sin persistencia */
+    }
+    selectorDestino.value = aplicarDestino(guardado);
+    selectorDestino.addEventListener("change", () => {
+      const destino = aplicarDestino(selectorDestino.value);
+      try {
+        localStorage.setItem(DESTINO_KEY, destino);
+      } catch {
+        /* sin persistencia */
+      }
+    });
+  }
 
   // Estado guardado: plegado, historial y borrador.
   let startOpen = true;

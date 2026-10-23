@@ -22,6 +22,20 @@ export function setProyectoActivo(slug: string): void {
   proyectoActivo = slug;
 }
 
+/** Donde corre Python: en este portatil (cpu) o en una GPU de Lambda Cloud. */
+export type Destino = "cpu" | "lambda";
+
+let destinoPreferido: Destino = "cpu";
+
+/** La interfaz (o main.ts) fija aqui el destino por defecto de las herramientas. */
+export function setDestino(destino: Destino): void {
+  destinoPreferido = destino === "lambda" ? "lambda" : "cpu";
+}
+
+export function getDestino(): Destino {
+  return destinoPreferido;
+}
+
 /** Cabeceras con el proyecto activo (lo usa tambien main.ts). */
 export function cabecerasProyecto(extra?: Record<string, string>): Record<string, string> {
   return { "x-miuzika-proyecto": proyectoActivo, ...(extra ?? {}) };
@@ -135,8 +149,10 @@ export const HERRAMIENTAS: ToolSpec[] = [
       description:
         "Ejecuta con Python un script que ya este en workspace/ ('codigo/render.py') y " +
         "devuelve su salida, sus errores y el codigo de salida. El directorio de trabajo " +
-        "del proceso es workspace/ y hay numpy disponible. Para trabajos largos sube " +
-        "timeout_segundos (por defecto 300, maximo 1800).",
+        "del proceso es la carpeta del proyecto y hay numpy disponible. Para trabajos largos " +
+        "sube timeout_segundos (por defecto 300, maximo 1800). Con destino='lambda' el MISMO " +
+        "script corre en una GPU de Lambda Cloud (la primera vez tarda ~3 min en arrancar la " +
+        "maquina); los ficheros que escriba en salida/ vuelven solos al proyecto local.",
       parameters: {
         type: "object",
         properties: {
@@ -149,6 +165,13 @@ export const HERRAMIENTAS: ToolSpec[] = [
           timeout_segundos: {
             type: "number",
             description: "Limite de tiempo en segundos (por defecto 300, maximo 1800)",
+          },
+          destino: {
+            type: "string",
+            enum: ["cpu", "lambda"],
+            description:
+              "Donde ejecutar: 'cpu' (este portatil) o 'lambda' (GPU en la nube). Si se omite " +
+              "se usa lo que tenga elegido la persona en el panel; no lo cambies por tu cuenta.",
           },
         },
         required: ["path"],
@@ -323,18 +346,32 @@ export async function ejecutarHerramienta(
       }
       case "ejecutar_python": {
         const segundos = Number(args.timeout_segundos) || 300;
+        const destino: Destino =
+          args.destino === "lambda" || args.destino === "cpu" ? args.destino : destinoPreferido;
+        // En Lambda el primer arranque son ~3 minutos: el limite del cliente lo cubre.
+        const margen = destino === "lambda" ? segundos * 1000 + 15 * 60 * 1000 : segundos * 1000 + 45000;
         const datos = await pedirJson(
-          "/api/run/python",
+          destino === "lambda" ? "/api/run/lambda" : "/api/run/python",
           {
             path: args.path,
             argumentos: args.argumentos,
             timeout_segundos: args.timeout_segundos,
           },
-          segundos * 1000 + 45000,
+          margen,
         );
         const salida = String(datos.salida ?? "").trim();
         const errores = String(datos.errores ?? "").trim();
-        const partes = [`exit=${datos.codigo} en ${datos.ms} ms`];
+        const partes = [
+          `${destino === "lambda" ? "GPU" : "CPU"}: exit=${datos.codigo} en ${datos.ms} ms`,
+        ];
+        if (destino === "lambda") {
+          const info = (datos.lambda ?? {}) as { ip?: string; traidos?: string[]; nota?: string };
+          const traidos = Array.isArray(info.traidos) ? info.traidos : [];
+          partes.push(
+            `maquina ${String(info.ip ?? "?")} (${String(info.nota ?? "")})` +
+              (traidos.length > 0 ? `; devueltos: ${traidos.join(", ")}` : ""),
+          );
+        }
         if (salida !== "") partes.push(`salida:\n${salida}`);
         if (errores !== "") partes.push(`errores:\n${errores}`);
         return { ok: datos.ok === true, texto: partes.join("\n") };
@@ -362,7 +399,8 @@ export function resumenLlamada(nombre: string, argumentosJson: string): string {
     }
     if (nombre === "ejecutar_python") {
       const extra = args.argumentos ? ` ${JSON.stringify(args.argumentos)}` : "";
-      return `${nombre}(${String(args.path)}${extra})`;
+      const gpu = args.destino === "lambda" ? "@lambda" : "";
+      return `${nombre}${gpu}(${String(args.path)}${extra})`;
     }
     if (nombre === "leer_fichero") return `${nombre}(${String(args.path)})`;
     if (nombre === "editar_fichero") return `${nombre}(${String(args.path)}, ${String(args.busca).length} chars)`;
