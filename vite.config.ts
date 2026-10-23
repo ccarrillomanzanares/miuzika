@@ -643,11 +643,18 @@ export default defineConfig(({ mode }) => {
             }
             try {
               const e = await estadoLambda(cfgLambda);
+              // Forma generica de proveedor: la app solo necesita precio/hora y
+              // desde cuando cuenta para pintar el contador de gasto.
               responderJson(res, 200, {
                 configurado: e.configurado,
                 instancias: e.instancias,
                 ssh: e.ssh,
                 precio_hora: e.precioHora,
+                moneda: e.moneda,
+                proveedor: e.proveedor,
+                activo: e.activo,
+                desde: e.desde,
+                gastado: e.gastado,
                 tipo: cfgLambda.tipo,
                 region: cfgLambda.region,
                 nombre: cfgLambda.nombre,

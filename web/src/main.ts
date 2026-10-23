@@ -28,6 +28,7 @@ import { renderStrudelAudio } from "./strudel-audio.ts";
 import { importProjectBundle } from "./project-bundle.ts";
 import { TimelineView, escapeHtml } from "./timeline.ts";
 import { initChat } from "./chat.ts";
+import { initCosteGpu } from "./gpu-coste.ts";
 import { getModel, health, listModels, setModel } from "./llm.ts";
 import type { ChatMessage } from "./llm.ts";
 import { ejecutarAgente } from "./agent/agent.ts";
@@ -54,6 +55,8 @@ const statusEl = $("status");
 const songInfo = $("song-info");
 
 const chat = initChat();
+/** Contador de gasto de la GPU (generico: lo alimenta /api/gpu/estado). */
+const costeGpu = initCosteGpu(document.getElementById("gpu-coste"));
 
 const timeline = new TimelineView(canvas, wrap, heads);
 
@@ -124,6 +127,26 @@ const conversacion: ChatMessage[] = [{ role: "system", content: AGENTE_SISTEMA }
 
 let trabajando = false;
 
+// ── Barra de actividad: frase de lo que hace + reloj, sin llenar el chat.
+let latido: number | null = null;
+let pasoActual = "pensando";
+
+function pararLatido(): void {
+  if (latido !== null) {
+    clearInterval(latido);
+    latido = null;
+  }
+}
+
+/** Repinta la barra cada segundo con lo que esta haciendo y el tiempo del turno. */
+function arrancarLatido(desde: number): void {
+  pararLatido();
+  latido = window.setInterval(() => {
+    const segundos = Math.round((Date.now() - desde) / 1000);
+    setStatus(`${pasoActual} · ${segundos} s`);
+  }, 1000);
+}
+
 async function responderAlUsuario(texto: string): Promise<void> {
   if (trabajando) {
     chat.add("system", "Sigo trabajando en el turno anterior: espera a que termine.");
@@ -134,23 +157,31 @@ async function responderAlUsuario(texto: string): Promise<void> {
   await refrescarManifiesto();
   conversacion.push({ role: "user", content: texto });
   const burbuja = chat.add("assistant", "…");
-  setStatus(`Agente ${getModel()}: pensando…`);
+  const t0 = Date.now();
+  pasoActual = `Agente ${getModel()}: pensando`;
+  setStatus(pasoActual);
+  arrancarLatido(t0);
   try {
     const resultado = await ejecutarAgente(conversacion, {
       alEvento: (evento) => {
-        if (evento.tipo === "herramienta") chat.add("system", `⚙ ${evento.texto}`);
-        else setStatus(evento.texto);
+        // La actividad vive en la barra de abajo, no en tarjetas dentro del chat:
+        // cada herramienta actualiza la frase y el reloj sigue corriendo.
+        pasoActual = evento.texto;
+        if (evento.tipo === "herramienta") setStatus(`${pasoActual} · 0 s`);
       },
     });
     chat.update(burbuja, resultado.texto || "(sin respuesta final)");
+    pararLatido();
+    const segundos = (resultado.ms / 1000).toFixed(1);
     setStatus(
-      `Agente ${getModel()} · ${resultado.pasos} paso(s) · ${resultado.llamadas} herramienta(s) · ` +
-        `${(resultado.ms / 1000).toFixed(1)} s`,
+      `✓ listo · ${resultado.pasos} paso(s) · ${resultado.llamadas} herramienta(s) · ` +
+        `${segundos} s · ${getModel()}`,
     );
   } catch (error) {
     const mensaje = error instanceof Error ? error.message : String(error);
     chat.update(burbuja, `No he podido completar el turno: ${mensaje}`);
-    setStatus(`Agente error: ${mensaje.slice(0, 140)}`);
+    pararLatido();
+    setStatus(`✗ error: ${mensaje.slice(0, 140)}`);
   } finally {
     trabajando = false;
     chat.setBusy(false);
@@ -1548,6 +1579,7 @@ if (import.meta.env.DEV) {
     stems: stemPlayer,
     crearProyecto: crearProyectoDesdeAgente,
     ajustarPistas: ajustarPistasDesdeAgente,
+    costeGpu,
     nuevoProyecto: (nombre: string, bpm: number, lengthBars: number) =>
       setProject(createProject({ name: nombre, bpm, lengthBars })),
   };

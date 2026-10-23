@@ -598,6 +598,20 @@ button.active {
   color: var(--muted);
 }
 
+/* Contador de gasto de la GPU: en vivo mientras la maquina esta encendida. */
+.chat-head .coste {
+  margin-left: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-head .coste.activo {
+  color: var(--accent);
+}
+
 /* Destino de ejecucion: CPU del portatil o GPU en Lambda Cloud. */
 .chat-head .destino select {
   font: inherit;

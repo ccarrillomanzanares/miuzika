@@ -36,6 +36,11 @@ export interface Instancia {
   ip: string | null;
   nombre: string;
   tipo: string;
+  /** Cuando empezo a facturar (ISO). Base del contador de gasto. */
+  desde: string | null;
+  /** Horas desde que arranco y dinero acumulado a precio de tarifa. */
+  horas: number;
+  gastado: number;
 }
 
 const BASE = "https://cloud.lambda.ai/api/v1";
@@ -99,13 +104,21 @@ async function api(
 export async function instancias(cfg: ConfigLambda): Promise<Instancia[]> {
   const datos = (await api(cfg, "instances")) as { data?: Record<string, unknown>[] };
   return (datos.data ?? []).map((i) => {
-    const tipo = (i.instance_type ?? {}) as { name?: string };
+    const tipo = (i.instance_type ?? {}) as { name?: string; price_cents_per_hour?: number };
+    // first_healthy es cuando la maquina empezo a estar viva; a partir de ahi se
+    // factura. Si aun no arranco, se cuenta desde ahora (0 horas).
+    const desde = typeof i.first_healthy === "string" ? i.first_healthy : null;
+    const horas = desde ? Math.max(0, (Date.now() - Date.parse(desde)) / 3_600_000) : 0;
+    const precio = (tipo.price_cents_per_hour ?? cfg.precioHora * 100) / 100;
     return {
       id: String(i.id ?? ""),
       status: String(i.status ?? ""),
       ip: typeof i.ip === "string" ? i.ip : null,
       nombre: String(i.name ?? ""),
       tipo: String(tipo.name ?? ""),
+      desde,
+      horas: Math.round(horas * 1000) / 1000,
+      gastado: Math.round(horas * precio * 100) / 100,
     };
   });
 }
@@ -451,20 +464,43 @@ export async function ejecutarEnLambda(
 }
 
 /** Estado para la barra/el panel: configurado, viva, coste y ssh disponible. */
+/**
+ * Estado agregado. La forma es DELIBERADAMENTE generica: cualquier proveedor
+ * (Lambda, RunPod, Paperspace...) puede rellenarla y el contador de la app
+ * funciona igual, porque solo necesita precio/hora y desde cuando cuenta.
+ */
 export async function estado(cfg: ConfigLambda): Promise<{
   configurado: boolean;
   instancias: Instancia[];
   ssh: { ok: boolean; detalle: string };
   precioHora: number;
+  activo: boolean;
+  desde: string | null;
+  gastado: number;
+  moneda: string;
+  proveedor: string;
 }> {
   const [lista, sshOk] = await Promise.all([
     instancias(cfg).catch(() => [] as Instancia[]),
     comprobarSsh(),
   ]);
+  const vivas = lista.filter((i) => i.status !== "terminated");
+  // Solo cuentan las que estan ACTIVAS: una instancia colgada en "terminating"
+  // durante dias conserva su first_healthy y sumaba miles de dolares al contador.
+  const activas = vivas.filter((i) => i.status === "active");
+  const contando = activas
+    .filter((i) => i.desde !== null)
+    .sort((a, b) => Date.parse(a.desde ?? "") - Date.parse(b.desde ?? ""));
+  const principal = contando[0] ?? null;
   return {
     configurado: true,
-    instancias: lista.filter((i) => i.status !== "terminated"),
+    instancias: vivas,
     ssh: sshOk,
     precioHora: cfg.precioHora,
+    activo: activas.length > 0,
+    desde: principal?.desde ?? null,
+    gastado: Math.round(activas.reduce((total, i) => total + i.gastado, 0) * 100) / 100,
+    moneda: "USD",
+    proveedor: "lambda",
   };
 }
