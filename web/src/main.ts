@@ -39,6 +39,7 @@ import {
 import { TimelineView, escapeHtml } from "./timeline.ts";
 import { initChat } from "./chat.ts";
 import { initCosteGpu } from "./gpu-coste.ts";
+import { minutosYsegundos, sinSenales } from "./gpu-texto.ts";
 import { getModel, health, listModels, setModel } from "./llm.ts";
 import type { ChatMessage } from "./llm.ts";
 import { ejecutarAgente } from "./agent/agent.ts";
@@ -143,12 +144,32 @@ let latido: number | null = null;
 let pasoActual = "pensando";
 /** Cuando empezo la herramienta en curso (null = el modelo esta pensando). */
 let pasoDesde: number | null = null;
+/** Ultima senal del turno: evento del agente o resultado de una herramienta. */
+let ultimoEventoMs = Date.now();
+/** Control para cortar el turno desde «Cancelar». */
+let cancelador: AbortController | null = null;
 
 function pararLatido(): void {
   if (latido !== null) {
     clearInterval(latido);
     latido = null;
   }
+}
+
+/**
+ * Lo que se puede decir con fundamento cuando el turno lleva rato callado: si la
+ * GPU esta arrancando no esta colgado, esta esperando; si de verdad no hay
+ * senales, se dice cuanto lleva asi.
+ */
+function avisoDeEspera(): string {
+  const gpu = costeGpu.estado();
+  if (gpu?.fase === "arrancando") {
+    const rato = minutosYsegundos(gpu.arranque);
+    return `GPU arrancando${rato ? ` ${rato}` : ""} · aún no factura`;
+  }
+  if (/@lambda/.test(pasoActual) && gpu?.fase === "activa") return "GPU ejecutando · sin salida todavía";
+  const callado = sinSenales(ultimoEventoMs);
+  return callado > 0 ? `⚠ sin señales hace ${callado} s` : "";
 }
 
 /**
@@ -159,7 +180,8 @@ function arrancarLatido(desde: number): void {
   pararLatido();
   const pintar = (): void => {
     const enPaso = pasoDesde === null ? null : Date.now() - pasoDesde;
-    setStatus(fraseBarra(pasoActual, enPaso, Date.now() - desde));
+    const nota = avisoDeEspera();
+    setStatus(fraseBarra(pasoActual, enPaso, Date.now() - desde) + (nota ? ` · ${nota}` : ""));
   };
   pintar();
   latido = window.setInterval(pintar, 1000);
@@ -172,16 +194,22 @@ async function responderAlUsuario(texto: string): Promise<void> {
   }
   trabajando = true;
   chat.setBusy(true);
+  cancelador = new AbortController();
+  $<HTMLButtonElement>("cancelar").hidden = false;
   await refrescarManifiesto();
   conversacion.push({ role: "user", content: texto });
   const burbuja = chat.add("assistant", "…");
   const t0 = Date.now();
+  ultimoEventoMs = t0;
   pasoActual = `Agente ${getModel()}: pensando`;
   pasoDesde = null;
   arrancarLatido(t0);
   try {
     const resultado = await ejecutarAgente(conversacion, {
+      signal: cancelador.signal,
       alEvento: (evento) => {
+        // Cualquier evento cuenta como señal de vida del turno.
+        ultimoEventoMs = Date.now();
         // La actividad vive en la barra de abajo, no en tarjetas dentro del chat.
         if (evento.tipo === "herramienta") {
           // Empieza una llamada: el reloj del paso arranca aqui.
@@ -208,12 +236,24 @@ async function responderAlUsuario(texto: string): Promise<void> {
     );
   } catch (error) {
     const mensaje = error instanceof Error ? error.message : String(error);
-    chat.update(burbuja, `No he podido completar el turno: ${mensaje}`);
     pararLatido();
-    setStatus(`✗ error: ${mensaje.slice(0, 140)}`);
+    if (cancelador?.signal.aborted) {
+      chat.update(
+        burbuja,
+        "Turno cancelado por ti. Lo que ya estaba escrito en el disco se queda; si hay una GPU arrancada, " +
+          "apágala con el contador de la cabecera (sigue facturando hasta que se apague).",
+      );
+      setStatus("✓ turno cancelado");
+      void costeGpu.refrescar();
+    } else {
+      chat.update(burbuja, `No he podido completar el turno: ${mensaje}`);
+      setStatus(`✗ error: ${mensaje.slice(0, 140)}`);
+    }
   } finally {
     trabajando = false;
     pasoDesde = null;
+    cancelador = null;
+    $<HTMLButtonElement>("cancelar").hidden = true;
     chat.setBusy(false);
   }
   // El historial no puede crecer sin limite: sistema + los ultimos turnos.
@@ -222,6 +262,14 @@ async function responderAlUsuario(texto: string): Promise<void> {
 
 chat.onSend((texto) => {
   void responderAlUsuario(texto);
+});
+
+// Cancelar: corta el modelo y la herramienta en vuelo (una GPU a medias no se
+// apaga sola, pero deja de tener un turno empujándola).
+$("cancelar").addEventListener("click", () => {
+  if (!cancelador) return;
+  cancelador.abort();
+  setStatus("cancelando… (la GPU, si está encendida, se apaga aparte)");
 });
 
 let project: Project | null = null;

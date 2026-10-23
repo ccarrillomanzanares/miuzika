@@ -38,6 +38,10 @@ export interface Instancia {
   tipo: string;
   /** Cuando empezo a facturar (ISO). Base del contador de gasto. */
   desde: string | null;
+  /** Ultimo cambio de estado (ISO): sirve para contar el arranque. */
+  cambio: string | null;
+  /** Tarifa real del tipo de instancia, en dinero/hora. */
+  precioHora: number;
   /** Horas desde que arranco y dinero acumulado a precio de tarifa. */
   horas: number;
   gastado: number;
@@ -101,22 +105,64 @@ async function api(
   return texto === "" ? {} : (JSON.parse(texto) as Record<string, unknown>);
 }
 
+/** Tarifas por tipo de instancia, tal como las publica Lambda (cacheadas 10 min). */
+const preciosTipo = new Map<string, number>();
+let preciosCuando = 0;
+
+async function preciosDeTipos(cfg: ConfigLambda): Promise<Map<string, number>> {
+  if (preciosTipo.size > 0 && Date.now() - preciosCuando < 10 * 60_000) return preciosTipo;
+  try {
+    const datos = (await api(cfg, "instance-types")) as { data?: unknown };
+    preciosTipo.clear();
+    // Lambda devuelve un objeto indexado por nombre (no una lista): cada valor
+    // trae el tipo dentro de `instance_type`. Se aceptan las dos formas.
+    const bruto = datos.data;
+    const lista: Record<string, unknown>[] = Array.isArray(bruto)
+      ? (bruto as Record<string, unknown>[])
+      : Object.values((bruto ?? {}) as Record<string, unknown>).map((valor) => {
+          const dentro = (valor as { instance_type?: unknown }).instance_type;
+          return (dentro ?? valor) as Record<string, unknown>;
+        });
+    for (const tipo of lista) {
+      const nombre = String(tipo.name ?? "");
+      const specs = (tipo.specs ?? {}) as { price_cents_per_hour?: number };
+      const centimos = tipo.price_cents_per_hour ?? specs.price_cents_per_hour;
+      if (nombre !== "" && typeof centimos === "number" && centimos > 0) {
+        preciosTipo.set(nombre, centimos / 100);
+      }
+    }
+    preciosCuando = Date.now();
+  } catch {
+    /* sin tarifas publicadas: se usa el precio del .env como estimacion */
+  }
+  return preciosTipo;
+}
+
 export async function instancias(cfg: ConfigLambda): Promise<Instancia[]> {
-  const datos = (await api(cfg, "instances")) as { data?: Record<string, unknown>[] };
+  const [datos, tarifas] = await Promise.all([
+    api(cfg, "instances") as Promise<{ data?: Record<string, unknown>[] }>,
+    preciosDeTipos(cfg).catch(() => new Map<string, number>()),
+  ]);
   return (datos.data ?? []).map((i) => {
     const tipo = (i.instance_type ?? {}) as { name?: string; price_cents_per_hour?: number };
     // first_healthy es cuando la maquina empezo a estar viva; a partir de ahi se
     // factura. Si aun no arranco, se cuenta desde ahora (0 horas).
     const desde = typeof i.first_healthy === "string" ? i.first_healthy : null;
     const horas = desde ? Math.max(0, (Date.now() - Date.parse(desde)) / 3_600_000) : 0;
-    const precio = (tipo.price_cents_per_hour ?? cfg.precioHora * 100) / 100;
+    // Precio REAL: el que da la API para ese tipo; si no lo trae, la tabla de
+    // tarifas publicadas; y solo si no hay nada, el del .env (estimacion).
+    const nombreTipo = String(tipo.name ?? "");
+    const centimos = typeof tipo.price_cents_per_hour === "number" ? tipo.price_cents_per_hour : null;
+    const precio = centimos !== null ? centimos / 100 : (tarifas.get(nombreTipo) ?? cfg.precioHora);
     return {
       id: String(i.id ?? ""),
       status: String(i.status ?? ""),
       ip: typeof i.ip === "string" ? i.ip : null,
       nombre: String(i.name ?? ""),
-      tipo: String(tipo.name ?? ""),
+      tipo: nombreTipo,
       desde,
+      cambio: typeof i.last_state_change === "string" ? i.last_state_change : null,
+      precioHora: Math.round(precio * 1000) / 1000,
       horas: Math.round(horas * 1000) / 1000,
       gastado: Math.round(horas * precio * 100) / 100,
     };
@@ -434,12 +480,16 @@ export async function ejecutarEnLambda(
 
   await ssh(cfg, arranque.ip, `touch ~/${REMOTO}/.marca`, 30);
   // El cwd remoto es la carpeta del proyecto: lo que vive dentro se pasa relativo
-  // a ella; lo compartido (codigo/, herramientas/) se pasa con ruta absoluta, o se
-  // prefijaria dos veces ("proyectos/<slug>/codigo/...").
+  // a ella; lo compartido (codigo/, herramientas/) se pasa relativo hacia arriba
+  // ("../../codigo/..."), o se prefijaria dos veces ("proyectos/<slug>/codigo/...").
   const prefijo = `proyectos/${p.slug}/`;
+  // Lo compartido se pasa RELATIVO al cwd del proyecto (../.. = ~/miuzika), no
+  // como "$HOME/...": la ruta va entrecomillada, la shell no expande $HOME y
+  // python la resolvia contra el cwd ("proyectos/<slug>/$HOME/miuzika/..."),
+  // que es exactamente el error que dejaba el render sin ejecutar.
   const script = p.scriptRel.startsWith(prefijo)
     ? p.scriptRel.slice(prefijo.length)
-    : `$HOME/${REMOTO}/${p.scriptRel}`;
+    : `../../${p.scriptRel}`;
   const args = p.argumentos.map(comillas).join(" ");
   const comando =
     `cd ~/${REMOTO}/proyectos/${p.slug} && ` +
@@ -473,9 +523,15 @@ export async function estado(cfg: ConfigLambda): Promise<{
   configurado: boolean;
   instancias: Instancia[];
   ssh: { ok: boolean; detalle: string };
+  /** Tarifa que se aplica AHORA: la de la instancia viva o la del tipo configurado. */
   precioHora: number;
+  tipo: string;
+  /** apagada | arrancando | activa | apagandose */
+  fase: "apagada" | "arrancando" | "activa" | "apagandose";
   activo: boolean;
   desde: string | null;
+  /** Inicio del arranque en curso (para el reloj de "arrancando"). */
+  arranque: string | null;
   gastado: number;
   moneda: string;
   proveedor: string;
@@ -488,17 +544,42 @@ export async function estado(cfg: ConfigLambda): Promise<{
   // Solo cuentan las que estan ACTIVAS: una instancia colgada en "terminating"
   // durante dias conserva su first_healthy y sumaba miles de dolares al contador.
   const activas = vivas.filter((i) => i.status === "active");
+  const arrancando = vivas.filter(
+    (i) => i.status === "booting" || i.status === "loading" || i.status === "unhealthy",
+  );
+  const apagandose = vivas.filter(
+    // Sólo cuenta la que se está apagando AHORA: una instancia zombi en
+    // "terminating" desde hace meses (caso abierto con soporte) no puede dejar la
+    // cabecera diciendo "apagándose" para siempre.
+    (i) =>
+      i.status === "terminating" &&
+      (i.desde === null || Date.now() - Date.parse(i.desde) < 30 * 60_000),
+  );
+  const fase = activas.length > 0
+    ? "activa"
+    : arrancando.length > 0
+      ? "arrancando"
+      : apagandose.length > 0
+        ? "apagandose"
+        : "apagada";
   const contando = activas
     .filter((i) => i.desde !== null)
     .sort((a, b) => Date.parse(a.desde ?? "") - Date.parse(b.desde ?? ""));
   const principal = contando[0] ?? null;
+  // La tarifa que se muestra es la de la instancia que hay delante, no la del
+  // .env: un A10 no cuesta lo mismo que un A100 y el .env es solo el respaldo.
+  const tarifas = await preciosDeTipos(cfg).catch(() => new Map<string, number>());
+  const precioHora = (activas[0] ?? arrancando[0])?.precioHora ?? tarifas.get(cfg.tipo) ?? cfg.precioHora;
   return {
     configurado: true,
     instancias: vivas,
     ssh: sshOk,
-    precioHora: cfg.precioHora,
+    precioHora: Math.round(precioHora * 1000) / 1000,
+    tipo: (activas[0] ?? arrancando[0])?.tipo || cfg.tipo,
+    fase,
     activo: activas.length > 0,
     desde: principal?.desde ?? null,
+    arranque: arrancando[0]?.cambio ?? arrancando[0]?.desde ?? null,
     gastado: Math.round(activas.reduce((total, i) => total + i.gastado, 0) * 100) / 100,
     moneda: "USD",
     proveedor: "lambda",

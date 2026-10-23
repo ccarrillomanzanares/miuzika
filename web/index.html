@@ -96,7 +96,10 @@
         </div>
       </dialog>
 
-      <footer class="status" id="status">Doble clic en un clip = piano roll - Ctrl+rueda = zoom</footer>
+      <footer class="status">
+        <span id="status">Doble clic en un clip = piano roll - Ctrl+rueda = zoom</span>
+        <button id="cancelar" class="cancelar" title="Corta el turno del agente (la GPU no se apaga sola)" hidden>Cancelar</button>
+      </footer>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

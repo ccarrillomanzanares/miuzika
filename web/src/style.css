@@ -800,3 +800,32 @@ button.active {
 .proyecto-fila[data-error="1"] strong {
   color: var(--accent);
 }
+
+/* ── Barra de estado: texto + botón de cancelar ────────────────────────────── */
+.status span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status .cancelar {
+  flex-shrink: 0;
+  margin-left: 10px;
+  padding: 2px 9px;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-family: inherit;
+}
+
+.status .cancelar:hover {
+  background: var(--accent-soft);
+}
+
+/* La GPU arrancando o apagándose: cuenta, pero todavía no cobra. */
+.coste.arrancando {
+  color: #e5c07b;
+  border-color: #4a3f22;
+}

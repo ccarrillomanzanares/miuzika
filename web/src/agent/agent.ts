@@ -31,6 +31,8 @@ export interface ResultadoAgente {
 export interface OpcionesAgente {
   maxPasos?: number;
   alEvento?: (evento: EventoAgente) => void;
+  /** Cancelar el turno (botón «Cancelar»): corta el modelo y la herramienta en vuelo. */
+  signal?: AbortSignal;
 }
 
 /** Ejecuta el bucle sobre `mensajes` (se modifican: el historial continua). */
@@ -40,6 +42,7 @@ export async function ejecutarAgente(
 ): Promise<ResultadoAgente> {
   const maxPasos = opciones.maxPasos ?? 12;
   const alEvento = opciones.alEvento;
+  const senal = opciones.signal;
   const t0 = Date.now();
   let pasos = 0;
   let llamadas = 0;
@@ -49,9 +52,21 @@ export async function ejecutarAgente(
   /** Escrituras seguidas sin una ejecucion correcta: corta el bucle de parches. */
   let escriturasSinEjecutar = 0;
 
+  /** Respuesta de cierre cuando el usuario cancela. */
+  const cancelado = (): ResultadoAgente => ({
+    texto:
+      "Turno cancelado por ti. Lo que ya se escribió en disco se queda; si había una GPU arrancada, apágala " +
+      "con el interruptor de la cabecera (sigue facturando hasta que se apague).",
+    pasos,
+    llamadas,
+    ms: Date.now() - t0,
+    herramientas,
+  });
+
   while (pasos < maxPasos) {
+    if (senal?.aborted) return cancelado();
     pasos += 1;
-    const respuesta = await chat(mensajes, { tools: HERRAMIENTAS, temperature: 0.2 });
+    const respuesta = await chat(mensajes, { tools: HERRAMIENTAS, temperature: 0.2, signal: senal });
     texto = respuesta.content.trim();
 
     const pideHerramientas = respuesta.toolCalls.length > 0;
@@ -92,6 +107,7 @@ export async function ejecutarAgente(
     }
 
     for (let i = 0; i < respuesta.toolCalls.length; i += 1) {
+      if (senal?.aborted) return cancelado();
       const llamada = respuesta.toolCalls[i];
       const nombre = llamada.function?.name ?? "";
       const argumentos = llamada.function?.arguments ?? "{}";
@@ -99,7 +115,7 @@ export async function ejecutarAgente(
       alEvento?.({ tipo: "herramienta", texto: resumenLlamada(nombre, argumentos) });
 
       const tHerramienta = Date.now();
-      const resultado = await ejecutarHerramienta(nombre, argumentos);
+      const resultado = await ejecutarHerramienta(nombre, argumentos, senal);
       const msHerramienta = Date.now() - tHerramienta;
       herramientas.push({ nombre, ms: msHerramienta, ok: resultado.ok });
       alEvento?.({

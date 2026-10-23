@@ -237,11 +237,19 @@ el agente reescribía `gpu/motor_gpu.py` en cada turno (no sabía que existía):
 - **Un color por pista**, no por tipo de instrumento. Antes todos los WAV (sampler)
   salían del mismo verde y todos los synth del mismo tono. Reparto por ángulo áureo
   (137,5°) con luminosidad alterna y las pistas de audio algo más apagadas.
-- **Contador de gasto de la GPU** junto al selector CPU/GPU: `1,29 $/h · 00:01:02 ·
-  0,02 $ (sesión 0,01 $)`. Sale de `/api/gpu/estado`, cuya forma es genérica
-  (`precio_hora`, `moneda`, `proveedor`, `activo`, `desde`, `gastado`): otro
-  proveedor sólo tiene que rellenarla. Sólo cuentan las instancias `active` — una
-  colgada en `terminating` durante días metía 7.877 $ en el contador.
+- **Contador de gasto de la GPU** junto al selector CPU/GPU. La regla es: **la
+  tarifa es la real de la instancia que hay delante**, no la del `.env`.
+  - Sale de `/api/gpu/estado`, que ahora devuelve `fase` (`apagada`, `arrancando`,
+    `activa`, `apagandose`), `precio_hora` **por tipo** y el gasto por instancia.
+  - La tabla de precios se pide a Lambda (`/instance-types`, cacheada 10 min) y se
+    usa sólo el `.env` como último respaldo. De ahí que un A10 salga a 1,29 $/h y
+    un A100 SXM4 a 1,99 $/h sin tocar nada.
+  - Textos (`web/src/gpu-texto.ts`, con tests): `A10 · 1,29 $/h · 00:03:12 ·
+    0,04 $ (sesión 0,09 $)` · `A10 arrancando · 2 min 34 s · aún sin facturar` ·
+    `A10 apagándose…` · `GPU apagada · sesión 0,07 $`. **Apagada no enseña
+    tarifa**: eso era lo que confundía (parecía que seguía cobrando).
+  - Sólo cuentan las instancias `active`; una zombi en `terminating` desde mayo
+    (caso de soporte) se ignora para el contador **y** para la fase.
 - **Barra de actividad sin tarjetas**: las burbujas `⚙ herramienta(...)` ya no
   ensucian el historial. La barra de abajo muestra la frase de lo que se está
   haciendo, **lo que lleva la herramienta en curso** y el reloj del turno
@@ -251,6 +259,17 @@ el agente reescribía `gpu/motor_gpu.py` en cada turno (no sabía que existía):
   modelo redacta. Al cerrar el turno resume `✓ listo · N paso(s) · N herramienta(s) ·
   X s · modelo`, y si falla muestra `✗ error: …` en vez de quedarse con los puntos
   suspensivos.
+- **¿Está pensando o colgado?** La barra añade la fase cuando el silencio es
+  legítimo y avisa cuando no lo es:
+  - `GPU arrancando 2 min 34 s · aún no factura` (mientras Lambda enciende),
+  - `GPU ejecutando · sin salida todavía` (llamada `@lambda` en curso),
+  - `⚠ sin señales hace 132 s` (ningún evento del modelo ni de la herramienta).
+  La fuente de verdad es `ultimoEventoMs`, que se toca con cada evento del bucle.
+  La cuenta de "sin señales" es `sinSenales()` en `gpu-texto.ts`, con tests.
+- **Botón «Cancelar»** en la barra de estado mientras hay turno: `AbortController`
+  que corta la llamada al modelo y la herramienta en vuelo (`fetch` con `signal`
+  hasta `/api/run/*` y `/api/verificar`). No apaga la GPU: el botón lo dice y el
+  contador queda a mano.
 - **Una línea de resumen al final del historial** (rol `meta`, gris y
   monoespaciada, sin burbuja) con el desglose por herramienta:
   `✓ 2 paso(s) · 1 herramienta(s) · 6,9 s — verificar_audio 5,2 s · modelo`.
@@ -258,6 +277,17 @@ el agente reescribía `gpu/motor_gpu.py` en cada turno (no sabía que existía):
   a partir de 4 herramientas resume `+N más`, y marca `⚠N fallo(s)` si alguna
   falló. La contabilidad vive en `web/src/agent/actividad.ts` —sin DOM, con
   tests— y el bucle sólo la alimenta midiendo cada llamada.
+
+### Ruta remota en Lambda: `$HOME` no se expande
+
+`ejecutar_python(destino="lambda")` con un script de `codigo/` fallaba con
+`can't open file '/home/ubuntu/miuzika/proyectos/<slug>/$HOME/miuzika/codigo/...'`.
+El comando remoto hacía `cd ~/miuzika/proyectos/<slug> && python3 -u '$HOME/miuzika/codigo/x.py'`:
+la ruta va entrecomillada, la shell no expande `$HOME` y python la resolvía
+**relativa al cwd**. Ahora lo compartido se pasa como `../../codigo/x.py`, que no
+depende de ninguna expansión. El agente llegó a inventarse un lanzador en
+`proyectos/final/$HOME/...` para rodearlo; se borró.
+
 
 ### Cómo retomar en otra sesión
 
@@ -273,12 +303,19 @@ no conecta y `curl localhost:5173` sí. No cambies el binding a `127.0.0.1`: el
 `127.0.0.1` te deja con la app «vacía» (sin proyecto apuntado; el disco sigue ahí,
 y el arranque abre el más reciente, pero el botón `Proyectos` te lo confirma).
 
-Estado al cerrar (2026-10-23, tercera sesión del día): typecheck 0, **55/55 unit +
+Estado al cerrar (2026-10-23, tercera sesión del día): typecheck 0, **67/67 unit +
 OPENDAW OK**. El fichero maestro, la apertura desde disco, la elección
 añadir/nuevo y la retirada de IndexedDB están hechos y probados en el navegador:
 proyecto abierto tras `localStorage.clear()`, WAV traído del disco
 (`/api/picos` 200 y `/api/audio` 200), reproducción con openDAW y autoguardado
 (`✓ guardado proyectos/demo-disco/proyecto.json · 2 pistas`).
+
+Esa misma tarde el agente pidió un proyecto (`final`, 140 compases, 6:13) y se
+quedó 6 minutos reintentando un render que **no podía arrancar** por el `$HOME`
+de la ruta remota (ver arriba). Se terminó la A10 a mano (`0,07 $` facturados) y
+se arregló la ruta. Los `.mid` de `final/salida/` están en disco; el audio de
+`final` **no** se llegó a renderizar. De ahí salen el contador con tarifa real y
+el «sin señales / Cancelar».
 
 Los proyectos de prueba de esta sesión (`demo-disco`, `tono`, `prueba-audio`,
 `prueba-dos`, `migracion-prueba`) se borraron al terminar. **Vitrina** sigue en
@@ -371,6 +408,11 @@ de undo tampoco sobrevive a una recarga: son 8 pasos en memoria.
 - El motor GPU no tiene todavía `midi` propio: los .mid salen del motor numpy.
 - El agente no sabe puntuar con CLAP desde dentro de la app (el piloto vive en
   `tools/piloto-gpu/`).
+- **Progreso en vivo de las herramientas largas**: hoy la barra dice «GPU
+  ejecutando» pero no lo que imprime el script (`marca("charles")`…). El
+  `herramientas.log` ya recibe cada aviso de Lambda; faltaría un `/api/progreso`
+  (o SSE en `/api/run/*`) para enseñar la última línea dentro de la app en vez de
+  en la terminal.
 - Valorar meter `proyecto.json` en git: hoy `workspace/proyectos/` está ignorado
   entero (los WAV pesan demasiado). Si se quiere versionar el estado, hay que
   cambiar el `.gitignore` para ignorar sólo `entrada/`, `salida/` y `__pycache__/`.

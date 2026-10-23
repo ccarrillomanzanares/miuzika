@@ -854,8 +854,10 @@ export default defineConfig(({ mode }) => {
                 proveedor: e.proveedor,
                 activo: e.activo,
                 desde: e.desde,
+                arranque: e.arranque,
+                fase: e.fase,
                 gastado: e.gastado,
-                tipo: cfgLambda.tipo,
+                tipo: e.tipo,
                 region: cfgLambda.region,
                 nombre: cfgLambda.nombre,
               });

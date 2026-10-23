@@ -45,9 +45,13 @@ async function pedirJson(
   ruta: string,
   cuerpo?: unknown,
   limiteMs = 45000,
+  externo?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const control = new AbortController();
   const temporizador = setTimeout(() => control.abort(), limiteMs);
+  // Cancelar el turno tiene que cortar también la petición en vuelo.
+  const alAbortar = (): void => control.abort();
+  externo?.addEventListener("abort", alAbortar, { once: true });
   try {
     const res = await fetch(ruta, {
       method: cuerpo === undefined ? "GET" : "POST",
@@ -63,6 +67,7 @@ async function pedirJson(
     return datos;
   } finally {
     clearTimeout(temporizador);
+    externo?.removeEventListener("abort", alAbortar);
   }
 }
 
@@ -321,6 +326,7 @@ export const HERRAMIENTAS: ToolSpec[] = [
 export async function ejecutarHerramienta(
   nombre: string,
   argumentosJson: string,
+  senal?: AbortSignal,
 ): Promise<ResultadoHerramienta> {
   let args: Record<string, unknown> = {};
   try {
@@ -407,6 +413,7 @@ export async function ejecutarHerramienta(
           "/api/verificar",
           { path: args.path },
           Number(args.timeout_segundos) * 1000 + 45000 || 225000,
+          senal,
         );
         return { ok: datos.ok === true, texto: String(datos.informe ?? "(sin informe)") };
       }
@@ -424,6 +431,7 @@ export async function ejecutarHerramienta(
             timeout_segundos: args.timeout_segundos,
           },
           margen,
+          senal,
         );
         const salida = String(datos.salida ?? "").trim();
         const errores = String(datos.errores ?? "").trim();
