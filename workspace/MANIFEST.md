@@ -1,4 +1,4 @@
-# Motor disponible en workspace/codigo/
+# Motores disponibles: workspace/codigo/ (numpy) y workspace/gpu/ (torch)
 
 Reutiliza estos simbolos; NO los redefinas.
 
@@ -79,3 +79,40 @@ Reutiliza estos simbolos; NO los redefinas.
     - `gen_piano(stem, master)`
     - `gen_fx(stem, master)`
     - `masterizar(master)`
+- **gpu/motor_gpu.py**  (importa de: -)
+    - `t_(x, dispositivo=None)`
+    - `segundos(n)`
+    - `db(x)`
+    - `fir_sinc(corte_hz, taps=127, dispositivo=None, ventana='hann')`  -- FIR paso bajo (sinc con ventana de Hann), corte en Hz.
+    - `filtrar(x, h)`  -- Convolucion 1-D de (..., L) con un FIR, mismo tamano.
+    - `eq_fft(x, forma)`  -- Filtro estatico en el dominio de la frecuencia: exacto y sin diseno de FIR.
+    - `paso_alto(x, corte_hz, orden=4)`
+    - `paso_bajo(x, corte_hz, orden=4)`
+    - `pasa_banda(x, f_lo, f_hi, taps=127)`  -- Paso banda por diferencia de dos pasos bajo (suficiente y barato).
+    - `normalizar_pico(x, objetivo_db=-1.0)`
+    - `osc(f0, n, tipo='sierra', fase_ini=0.0, vibrato=0.0)`  -- Oscilador batcheado: f0 de forma (V,) -> (V, n).
+    - `percusion(f0, n, modos, taus, ruido=0.0, ruido_tau=0.02, ruido_corte=6000.0, ataque=0.001)`  -- Sintesis modal: (V, n) sumando sinusoides con decaimiento + ruido opcional.
+    - `bombo(n=None, vel=1.0)`
+    - `caja(n=None, vel=1.0)`
+    - `charles(n=None, vel=1.0, abierto=False)`
+    - `metal(n=None, vel=1.0, pitch=1.0)`  -- Golpe metalico inarmonico: los 'clangs' del industrial.
+    - `shaker(n=None, vel=1.0)`
+    - `stft(x, n=1024, hop=256)`  -- STFT batcheada: (V, L) -> (V, F, T).
+    - `istft(X, largo, n=1024, hop=256)`
+    - `tv_filter(x, forma, n=2048, hop=256)`  -- Filtro variable en el tiempo, batcheado.
+    - `saturar(x, drive=6.0, veces=4, asimetrico=True)`  -- tanh con drive alto calculada a 'veces' x y filtrada al bajar. Sin aliasing.
+    - `ir_estereo(dur=3.5, decay=0.6, corte_ini=9000.0, corte_fin=1800.0, predelay=0.02, seed=1)`  -- IR por bandas con damping progresivo y decorrelacion estereo.
+    - `convolucion(x, ir)`  -- Convolucion FFT con IR estereo: x (2, L) -> (2, L).
+    - `reverb(x, ir, mix=0.25)`  -- x (2, L); devuelve seco+humedo recortado al largo original.
+    - `shimmer(x, ir, mix=0.18, feedback=0.35, vueltas=3)`  -- +12 semitonos realimentado en la reverb: el 'casi psicodelico'.
+    - `congelar(x, inicio, dur, ventana=0.25)`  -- Congelado espectral: toma un tramo, fija la magnitud y hace derivar la fase.
+    - `granular(x, tam=0.06, densidad=60.0, dur=None, jitter=0.4)`  -- Nube granular batcheada: miles de granos de una vez (index_add).
+    - `compresor(x, umbral_db=-18.0, ratio=2.5, ataque_ms=12.0, salida_ms=90.0)`  -- Compresor con envolvente paralela y suavizado exponencial aproximado.
+    - `compresor_multibanda(x, cortes=(180.0, 1800.0), umbrales=(-20.0, -18.0, -16.0), ratio=2.2)`  -- 3 bandas complementarias por FFT; cada una con su compresor.
+    - `limitador(x, techo_db=-1.0, lookahead_ms=3.0)`  -- Limitador con lookahead: max-pool centrado + suavizado de la ganancia.
+    - `master(x, crest_objetivo=13.0, comprimir=True, tilt_db=0.0, bajo_db=0.0)`  -- Cadena final: HP, tilt, compresion multibanda suave y limitador.
+    - `escribir_wav(ruta, x, pico_db=-1.0, sr=SR)`  -- WAV 24 bits entrelazado. Vectorizado: 208 s de audio se escriben en ~0,2 s
+    - `sumar(bus, senales, inicios)`  -- Deposita (V, L) en un bus 1-D en las posiciones dadas. Una sola operacion.
+    - `panear(mono, p, ganancia=1.0)`  -- (L,) mono -> (2, L) con paneo constante potencia.
+    - `mezclar(pistas, largo)`  -- pistas: lista de (2, L) o (L,). Devuelve (2, largo).
+    - `prueba()`  -- Autotest rapido de cada primitiva (se lanza antes del render).

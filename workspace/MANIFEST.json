@@ -1,5 +1,5 @@
 {
- "generado": "2026-10-23T19:03:54",
+ "generado": "2026-10-23T19:20:32",
  "raiz": "workspace/",
  "regla": "Estos simbolos YA existen. Reutilizalos con 'from <modulo> import <simbolo>'. Escribir un fichero nuevo que los redefina sera rechazado (409).",
  "modulos": {
@@ -398,6 +398,192 @@
      "tipo": "funcion",
      "firma": "(master)",
      "doc": ""
+    }
+   }
+  },
+  "motor_gpu": {
+   "archivo": "gpu/motor_gpu.py",
+   "importa_de": [],
+   "simbolos": {
+    "t_": {
+     "tipo": "funcion",
+     "firma": "(x, dispositivo=None)",
+     "doc": ""
+    },
+    "segundos": {
+     "tipo": "funcion",
+     "firma": "(n)",
+     "doc": ""
+    },
+    "db": {
+     "tipo": "funcion",
+     "firma": "(x)",
+     "doc": ""
+    },
+    "fir_sinc": {
+     "tipo": "funcion",
+     "firma": "(corte_hz, taps=127, dispositivo=None, ventana='hann')",
+     "doc": "FIR paso bajo (sinc con ventana de Hann), corte en Hz."
+    },
+    "filtrar": {
+     "tipo": "funcion",
+     "firma": "(x, h)",
+     "doc": "Convolucion 1-D de (..., L) con un FIR, mismo tamano."
+    },
+    "eq_fft": {
+     "tipo": "funcion",
+     "firma": "(x, forma)",
+     "doc": "Filtro estatico en el dominio de la frecuencia: exacto y sin diseno de FIR."
+    },
+    "paso_alto": {
+     "tipo": "funcion",
+     "firma": "(x, corte_hz, orden=4)",
+     "doc": ""
+    },
+    "paso_bajo": {
+     "tipo": "funcion",
+     "firma": "(x, corte_hz, orden=4)",
+     "doc": ""
+    },
+    "pasa_banda": {
+     "tipo": "funcion",
+     "firma": "(x, f_lo, f_hi, taps=127)",
+     "doc": "Paso banda por diferencia de dos pasos bajo (suficiente y barato)."
+    },
+    "normalizar_pico": {
+     "tipo": "funcion",
+     "firma": "(x, objetivo_db=-1.0)",
+     "doc": ""
+    },
+    "osc": {
+     "tipo": "funcion",
+     "firma": "(f0, n, tipo='sierra', fase_ini=0.0, vibrato=0.0)",
+     "doc": "Oscilador batcheado: f0 de forma (V,) -> (V, n)."
+    },
+    "percusion": {
+     "tipo": "funcion",
+     "firma": "(f0, n, modos, taus, ruido=0.0, ruido_tau=0.02, ruido_corte=6000.0, ataque=0.001)",
+     "doc": "Sintesis modal: (V, n) sumando sinusoides con decaimiento + ruido opcional."
+    },
+    "bombo": {
+     "tipo": "funcion",
+     "firma": "(n=None, vel=1.0)",
+     "doc": ""
+    },
+    "caja": {
+     "tipo": "funcion",
+     "firma": "(n=None, vel=1.0)",
+     "doc": ""
+    },
+    "charles": {
+     "tipo": "funcion",
+     "firma": "(n=None, vel=1.0, abierto=False)",
+     "doc": ""
+    },
+    "metal": {
+     "tipo": "funcion",
+     "firma": "(n=None, vel=1.0, pitch=1.0)",
+     "doc": "Golpe metalico inarmonico: los 'clangs' del industrial."
+    },
+    "shaker": {
+     "tipo": "funcion",
+     "firma": "(n=None, vel=1.0)",
+     "doc": ""
+    },
+    "stft": {
+     "tipo": "funcion",
+     "firma": "(x, n=1024, hop=256)",
+     "doc": "STFT batcheada: (V, L) -> (V, F, T)."
+    },
+    "istft": {
+     "tipo": "funcion",
+     "firma": "(X, largo, n=1024, hop=256)",
+     "doc": ""
+    },
+    "tv_filter": {
+     "tipo": "funcion",
+     "firma": "(x, forma, n=2048, hop=256)",
+     "doc": "Filtro variable en el tiempo, batcheado."
+    },
+    "saturar": {
+     "tipo": "funcion",
+     "firma": "(x, drive=6.0, veces=4, asimetrico=True)",
+     "doc": "tanh con drive alto calculada a 'veces' x y filtrada al bajar. Sin aliasing."
+    },
+    "ir_estereo": {
+     "tipo": "funcion",
+     "firma": "(dur=3.5, decay=0.6, corte_ini=9000.0, corte_fin=1800.0, predelay=0.02, seed=1)",
+     "doc": "IR por bandas con damping progresivo y decorrelacion estereo."
+    },
+    "convolucion": {
+     "tipo": "funcion",
+     "firma": "(x, ir)",
+     "doc": "Convolucion FFT con IR estereo: x (2, L) -> (2, L)."
+    },
+    "reverb": {
+     "tipo": "funcion",
+     "firma": "(x, ir, mix=0.25)",
+     "doc": "x (2, L); devuelve seco+humedo recortado al largo original."
+    },
+    "shimmer": {
+     "tipo": "funcion",
+     "firma": "(x, ir, mix=0.18, feedback=0.35, vueltas=3)",
+     "doc": "+12 semitonos realimentado en la reverb: el 'casi psicodelico'."
+    },
+    "congelar": {
+     "tipo": "funcion",
+     "firma": "(x, inicio, dur, ventana=0.25)",
+     "doc": "Congelado espectral: toma un tramo, fija la magnitud y hace derivar la fase."
+    },
+    "granular": {
+     "tipo": "funcion",
+     "firma": "(x, tam=0.06, densidad=60.0, dur=None, jitter=0.4)",
+     "doc": "Nube granular batcheada: miles de granos de una vez (index_add)."
+    },
+    "compresor": {
+     "tipo": "funcion",
+     "firma": "(x, umbral_db=-18.0, ratio=2.5, ataque_ms=12.0, salida_ms=90.0)",
+     "doc": "Compresor con envolvente paralela y suavizado exponencial aproximado."
+    },
+    "compresor_multibanda": {
+     "tipo": "funcion",
+     "firma": "(x, cortes=(180.0, 1800.0), umbrales=(-20.0, -18.0, -16.0), ratio=2.2)",
+     "doc": "3 bandas complementarias por FFT; cada una con su compresor."
+    },
+    "limitador": {
+     "tipo": "funcion",
+     "firma": "(x, techo_db=-1.0, lookahead_ms=3.0)",
+     "doc": "Limitador con lookahead: max-pool centrado + suavizado de la ganancia."
+    },
+    "master": {
+     "tipo": "funcion",
+     "firma": "(x, crest_objetivo=13.0, comprimir=True, tilt_db=0.0, bajo_db=0.0)",
+     "doc": "Cadena final: HP, tilt, compresion multibanda suave y limitador."
+    },
+    "escribir_wav": {
+     "tipo": "funcion",
+     "firma": "(ruta, x, pico_db=-1.0, sr=SR)",
+     "doc": "WAV 24 bits entrelazado. Vectorizado: 208 s de audio se escriben en ~0,2 s"
+    },
+    "sumar": {
+     "tipo": "funcion",
+     "firma": "(bus, senales, inicios)",
+     "doc": "Deposita (V, L) en un bus 1-D en las posiciones dadas. Una sola operacion."
+    },
+    "panear": {
+     "tipo": "funcion",
+     "firma": "(mono, p, ganancia=1.0)",
+     "doc": "(L,) mono -> (2, L) con paneo constante potencia."
+    },
+    "mezclar": {
+     "tipo": "funcion",
+     "firma": "(pistas, largo)",
+     "doc": "pistas: lista de (2, L) o (L,). Devuelve (2, largo)."
+    },
+    "prueba": {
+     "tipo": "funcion",
+     "firma": "()",
+     "doc": "Autotest rapido de cada primitiva (se lanza antes del render)."
     }
    }
   }

@@ -10,13 +10,16 @@ import json
 import pathlib
 
 RAIZ = pathlib.Path(__file__).resolve().parents[1]
-CODIGO = RAIZ / "codigo"
+# Dos motores: el numpy de referencia y el nativo de GPU. Los dos entran en el
+# manifiesto; si solo entrara codigo/, el agente no sabria que motor_gpu existe y
+# lo reescribiria en cada turno (que es justo lo que este manifiesto evita).
+CAPETAS = [(RAIZ / "codigo", "codigo"), (RAIZ / "gpu", "gpu")]
 JSON_OUT = RAIZ / "MANIFEST.json"
 MD_OUT = RAIZ / "MANIFEST.md"
 
 # Modulos que forman el MOTOR. Los scripts one-off (sample_*.py, pruebas) NO entran:
 # si entraran, la puerta rechazaria cualquier script nuevo que definiera "main".
-NUCLEO = {"dsp", "instruments", "render", "midi", "cancion"}
+NUCLEO = {"dsp", "instruments", "render", "midi", "cancion", "motor_gpu"}
 
 # Nombres de entrada, no API: cualquier script puede definir su propio main().
 IGNORAR = {"main", "run"}
@@ -65,19 +68,22 @@ def main() -> None:
     # 1) quien importa a quien: entra si es nucleo o si otro modulo lo importa
     arboles: dict[str, ast.Module] = {}
     importados: set[str] = set()
-    for p in sorted(CODIGO.glob("*.py")):
-        try:
-            arboles[p.stem] = ast.parse(p.read_text(encoding="utf-8", errors="replace"))
-        except SyntaxError:
-            continue
-        for n in ast.walk(arboles[p.stem]):
-            if isinstance(n, ast.Import):
-                for alias in n.names:
-                    importados.add(alias.name.split(".")[0])
-            elif isinstance(n, ast.ImportFrom) and n.module:
-                importados.add(n.module.split(".")[0])
+    ficheros: list[tuple[pathlib.Path, str]] = []
+    for carpeta, prefijo in CAPETAS:
+        for p in sorted(carpeta.glob("*.py")):
+            ficheros.append((p, prefijo))
+            try:
+                arboles[p.stem] = ast.parse(p.read_text(encoding="utf-8", errors="replace"))
+            except SyntaxError:
+                continue
+            for n in ast.walk(arboles[p.stem]):
+                if isinstance(n, ast.Import):
+                    for alias in n.names:
+                        importados.add(alias.name.split(".")[0])
+                elif isinstance(n, ast.ImportFrom) and n.module:
+                    importados.add(n.module.split(".")[0])
 
-    for p in sorted(CODIGO.glob("*.py")):
+    for p, prefijo in ficheros:
         if p.stem not in NUCLEO and p.stem not in importados:
             continue
         tree = arboles.get(p.stem)
@@ -85,9 +91,9 @@ def main() -> None:
             try:
                 tree = ast.parse(p.read_text(encoding="utf-8", errors="replace"))
             except SyntaxError as exc:
-                manifest["modulos"][p.stem] = {"archivo": f"codigo/{p.name}", "error": str(exc)}
+                manifest["modulos"][p.stem] = {"archivo": f"{prefijo}/{p.name}", "error": str(exc)}
                 continue
-        mod = {"archivo": f"codigo/{p.name}", "importa_de": [], "simbolos": {}}
+        mod = {"archivo": f"{prefijo}/{p.name}", "importa_de": [], "simbolos": {}}
         for n in tree.body:
             if isinstance(n, ast.ImportFrom) and n.module:
                 mod["importa_de"].append(n.module)
@@ -112,7 +118,7 @@ def main() -> None:
 
     JSON_OUT.write_text(json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
 
-    lineas = ["# Motor disponible en workspace/codigo/", ""]
+    lineas = ["# Motores disponibles: workspace/codigo/ (numpy) y workspace/gpu/ (torch)", ""]
     lineas.append("Reutiliza estos simbolos; NO los redefinas.")
     lineas.append("")
     for nombre, mod in manifest["modulos"].items():

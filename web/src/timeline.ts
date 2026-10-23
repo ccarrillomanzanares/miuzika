@@ -21,7 +21,43 @@ const COLORS: Record<string, string> = {
   sampler: "#98c379",
 };
 
-const colorOf = (track: Track): string => COLORS[track.instrument.type] ?? "#8a8f9c";
+/** Color por PISTA (no por tipo): asi dos WAV o dos MIDI no se confunden. */
+const COLORES_PISTA = new Map<string, string>();
+
+/** HSL -> #rrggbb, que es lo que entiende withAlpha(). */
+function hslAHex(h: number, s: number, l: number): string {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [r, g, b] =
+    h < 60 ? [c, x, 0]
+      : h < 120 ? [x, c, 0]
+        : h < 180 ? [0, c, x]
+          : h < 240 ? [0, x, c]
+            : h < 300 ? [x, 0, c]
+              : [c, 0, x];
+  const hex = (v: number): string => Math.round((v + m) * 255).toString(16).padStart(2, "0");
+  return `#${hex(r)}${hex(g)}${hex(b)}`;
+}
+
+/**
+ * Reparte un color por pista con el angulo aureo (137,5 grados): dos pistas
+ * seguidas nunca caen en tonos parecidos, y aun con 20 pistas cada una se
+ * distingue. La luminosidad alterna para separar las que se acercan al dar la
+ * vuelta al circulo, y las pistas de audio van algo mas apagadas que las MIDI.
+ */
+function prepararColores(tracks: Track[]): void {
+  COLORES_PISTA.clear();
+  tracks.forEach((track, indice) => {
+    const tono = (indice * 137.508 + 12) % 360;
+    const luz = indice % 2 === 0 ? 0.64 : 0.52;
+    const saturacion = track.instrument.type === "sampler" ? 0.5 : 0.65;
+    COLORES_PISTA.set(track.id, hslAHex(tono, saturacion, luz));
+  });
+}
+
+const colorOf = (track: Track): string =>
+  COLORES_PISTA.get(track.id) ?? COLORS[track.instrument.type] ?? "#8a8f9c";
 
 /** Un clip que se mueve (o se copia) al soltarlo. */
 export interface MovimientoClip {
@@ -276,6 +312,7 @@ export class TimelineView {
 
   setProject(project: Project): void {
     this.project = project;
+    prepararColores(project.tracks);
     this.beat = 0;
     this.selectedClips.clear();
     this.drag = null;
@@ -309,7 +346,11 @@ export class TimelineView {
   }
 
   refresh(project?: Project): void {
-    if (project) this.project = project;
+    if (project) {
+      this.project = project;
+      // una pista nueva (o borrada) cambia el reparto de colores
+      prepararColores(project.tracks);
+    }
     this.pruneSelection();
     this.renderHeads();
     this.renderStatic();

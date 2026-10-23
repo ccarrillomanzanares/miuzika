@@ -181,7 +181,14 @@ export default defineConfig(({ mode }) => {
   /** Ficheros que forman el motor: reescribirlos exige pasar el smoke test. */
   const MOTOR = new Set(["dsp.py", "instruments.py", "render.py", "midi.py", "cancion.py"]);
 
-  const esDeCodigo = (ruta: string): boolean => ruta.replace(/\\/g, "/").startsWith("codigo/");
+  /** ¿Es codigo del motor? Valen los dos: el numpy de codigo/ y el de GPU en gpu/. */
+  const esDeCodigo = (ruta: string): boolean => {
+    const limpia = ruta.replace(/\\/g, "/");
+    return limpia.startsWith("codigo/") || limpia.startsWith("gpu/");
+  };
+
+  /** ¿Es el motor de GPU? Ese no se puede validar aqui: no hay torch en el portatil. */
+  const esDeGpu = (ruta: string): boolean => ruta.replace(/\\/g, "/").startsWith("gpu/");
 
   /** simbolo -> modulo donde ya existe (del MANIFEST.json). */
   const simbolosDelMotor = (): Map<string, string> => {
@@ -330,6 +337,28 @@ export default defineConfig(({ mode }) => {
                 writeFileSync(destino, datos.contenido, "utf8");
 
                 let nota = "";
+                if (esDeGpu(datos.path)) {
+                  // En gpu/ no hay smoke posible: el portatil no tiene torch. Lo
+                  // minimo es que el fichero parsea; la validacion real se hace en
+                  // la instancia con destino="lambda".
+                  const comprobacion = await correr(
+                    "-c",
+                    [
+                      `import ast,sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())`,
+                      destino,
+                    ],
+                    60,
+                  );
+                  if (comprobacion.codigo !== 0) {
+                    writeFileSync(destino, previo ?? "", "utf8");
+                    if (previo === null && existsSync(destino)) unlinkSync(destino);
+                    responderJson(res, 400, {
+                      error: `El fichero de GPU no parsea; no se ha escrito.\n${(comprobacion.errores || comprobacion.salida).slice(-1200)}`,
+                    });
+                    return;
+                  }
+                  nota = "gpu: sintaxis ok (validar ejecutando con destino=lambda)";
+                }
                 if (esMotor) {
                   const smoke = await smokeOTeReverto(destino, previo);
                   if (!smoke.ok) {
