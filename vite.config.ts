@@ -77,7 +77,7 @@ export default defineConfig(({ mode }) => {
   };
 
   /** Carpetas compartidas por todos los proyectos: motor y utilidades. */
-  const COMPARTIDO = ["codigo/", "herramientas/", "plantillas/", "_archivo/", "proyectos/"];
+  const COMPARTIDO = ["codigo/", "gpu/", "herramientas/", "plantillas/", "_archivo/", "proyectos/"];
 
   /** Slug seguro del proyecto activo ("" -> "sin-proyecto"). */
   const slugProyecto = (valor: unknown): string => {

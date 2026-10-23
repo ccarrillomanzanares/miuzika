@@ -33,11 +33,12 @@ import type { ChatMessage } from "./llm.ts";
 import { ejecutarAgente } from "./agent/agent.ts";
 import {
   cabecerasProyecto,
+  registrarAjustador,
   registrarCreador,
   registrarImportador,
   setProyectoActivo,
 } from "./agent/tools.ts";
-import type { PeticionPistas, PeticionProyecto } from "./agent/tools.ts";
+import type { AjustePista, PeticionPistas, PeticionProyecto } from "./agent/tools.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -1180,8 +1181,79 @@ function crearProyectoDesdeAgente(peticion: PeticionProyecto): { ok: boolean; te
   };
 }
 
+/**
+ * Mueve faders por nombre de pista: es como el agente aplica una mezcla.
+ *
+ * Va por ops (set_track), asi que es un cambio normal del proyecto: entra en el
+ * historial, se deshace con Ctrl+Z y no reinicia el engine (commitLive).
+ */
+function ajustarPistasDesdeAgente(peticion: { pistas: AjustePista[] }): { ok: boolean; texto: string } {
+  if (!project) return { ok: false, texto: "No hay ningun proyecto abierto." };
+  const normal = (texto: string): string =>
+    texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+  const ops: Op[] = [];
+  const hechas: string[] = [];
+  const faltan: string[] = [];
+
+  for (const ajuste of peticion.pistas) {
+    const buscado = normal(ajuste.nombre);
+    if (buscado === "") continue;
+    const pista =
+      project.tracks.find((t) => normal(t.name) === buscado) ??
+      project.tracks.find((t) => normal(t.name).includes(buscado)) ??
+      project.tracks.find((t) => buscado.includes(normal(t.name)));
+    if (!pista) {
+      faltan.push(ajuste.nombre);
+      continue;
+    }
+    const op: Op = { op: "set_track", trackId: pista.id };
+    const cambios: string[] = [];
+    if (typeof ajuste.gainDb === "number" && Number.isFinite(ajuste.gainDb)) {
+      op.gainDb = Math.min(12, Math.max(-60, ajuste.gainDb));
+      cambios.push(`${op.gainDb >= 0 ? "+" : ""}${op.gainDb.toFixed(1)} dB`);
+    }
+    if (typeof ajuste.pan === "number" && Number.isFinite(ajuste.pan)) {
+      op.pan = Math.min(1, Math.max(-1, ajuste.pan));
+      cambios.push(`paneo ${op.pan.toFixed(2)}`);
+    }
+    if (typeof ajuste.muted === "boolean") {
+      op.muted = ajuste.muted;
+      cambios.push(ajuste.muted ? "mute" : "sin mute");
+    }
+    if (typeof ajuste.solo === "boolean") {
+      op.solo = ajuste.solo;
+      cambios.push(ajuste.solo ? "solo" : "sin solo");
+    }
+    if (cambios.length === 0) continue;
+    ops.push(op);
+    hechas.push(`${pista.name}: ${cambios.join(", ")}`);
+  }
+
+  if (ops.length > 0) {
+    try {
+      commitLive(applyOps(project, ops).project);
+    } catch (error) {
+      return {
+        ok: false,
+        texto: `No se pudo ajustar: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  const partes: string[] = [];
+  if (hechas.length > 0) partes.push(`Ajustadas ${hechas.length} pista(s):\n${hechas.join("\n")}`);
+  if (faltan.length > 0) {
+    const nombres = project.tracks.map((t) => t.name).join(", ");
+    partes.push(`No encuentro: ${faltan.join(", ")}. Las pistas son: ${nombres}.`);
+  }
+  if (partes.length === 0) partes.push("No habia nada que cambiar.");
+  return { ok: hechas.length > 0, texto: partes.join("\n\n") };
+}
+
 registrarImportador(importarPistasDesdeAgente);
 registrarCreador(crearProyectoDesdeAgente);
+registrarAjustador(ajustarPistasDesdeAgente);
 
 /** ¿Es un fichero de audio? (por MIME o por extension) */
 function esAudio(file: File): boolean {
@@ -1468,6 +1540,7 @@ if (import.meta.env.DEV) {
     anadirPistas: importarPistasDesdeAgente,
     stems: stemPlayer,
     crearProyecto: crearProyectoDesdeAgente,
+    ajustarPistas: ajustarPistasDesdeAgente,
     nuevoProyecto: (nombre: string, bpm: number, lengthBars: number) =>
       setProject(createProject({ name: nombre, bpm, lengthBars })),
   };

@@ -299,6 +299,7 @@ export async function sincronizar(
 ): Promise<{ codigo: number | null; errores: string; ficheros: number }> {
   const dirs = [
     `${REMOTO}/codigo`,
+    `${REMOTO}/gpu`,
     `${REMOTO}/herramientas`,
     `${REMOTO}/plantillas`,
     `${REMOTO}/proyectos/${slug}/salida`,
@@ -312,6 +313,12 @@ export async function sincronizar(
     const r = await scp(cfg, ip, motor, `${REMOTO}/codigo/`);
     if (r.codigo !== 0) return { codigo: r.codigo, errores: `motor: ${r.errores}`, ficheros: 0 };
     total += motor.length;
+  }
+  const gpu = pyDe(join(carpetaTrabajo, "gpu"));
+  if (gpu.length > 0) {
+    const r = await scp(cfg, ip, gpu, `${REMOTO}/gpu/`);
+    if (r.codigo !== 0) return { codigo: r.codigo, errores: `gpu: ${r.errores}`, ficheros: 0 };
+    total += gpu.length;
   }
   const herramientas = pyDe(join(carpetaTrabajo, "herramientas"));
   if (herramientas.length > 0) {

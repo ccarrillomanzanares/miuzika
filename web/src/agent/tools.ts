@@ -99,6 +99,24 @@ export function registrarImportador(fn: ImportadorLocal | null): void {
   importadorLocal = fn;
 }
 
+/** Ajuste de una pista por su nombre: es como se aplica una mezcla. */
+export interface AjustePista {
+  nombre: string;
+  gainDb?: number;
+  pan?: number;
+  muted?: boolean;
+  solo?: boolean;
+}
+
+type Ajustador = (peticion: { pistas: AjustePista[] }) => { ok: boolean; texto: string };
+
+let ajustador: Ajustador | null = null;
+
+/** main.ts registra aqui como se mueven los faders (necesita el proyecto). */
+export function registrarAjustador(fn: Ajustador | null): void {
+  ajustador = fn;
+}
+
 export const HERRAMIENTAS: ToolSpec[] = [
   {
     type: "function",
@@ -255,6 +273,38 @@ export const HERRAMIENTAS: ToolSpec[] = [
   {
     type: "function",
     function: {
+      name: "ajustar_pistas",
+      description:
+        "Cambia gainDb, paneo, mute o solo de las pistas del proyecto, por su nombre. " +
+        "Es LA forma de aplicar una mezcla elegida sin tocar la sintesis: el cambio es " +
+        "un op, se puede deshacer con Ctrl+Z y el audio se reajusta en el momento. " +
+        "Los nombres son los que se ven en la lista de pistas (Bombo, Bajo, Pad...).",
+      parameters: {
+        type: "object",
+        properties: {
+          pistas: {
+            type: "array",
+            description: "Una entrada por pista a tocar",
+            items: {
+              type: "object",
+              properties: {
+                nombre: { type: "string", description: "Nombre de la pista (tal como se ve)" },
+                gainDb: { type: "number", description: "Ganancia en dB (-60 a +12)" },
+                pan: { type: "number", description: "Paneo -1 (izquierda) a +1 (derecha)" },
+                muted: { type: "boolean" },
+                solo: { type: "boolean" },
+              },
+              required: ["nombre"],
+            },
+          },
+        },
+        required: ["pistas"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "verificar_audio",
       description:
         "Mide un WAV de workspace/ y devuelve formato, duracion, pico, RMS, crest, DC, muestras " +
@@ -336,6 +386,22 @@ export async function ejecutarHerramienta(
             : {}),
         });
       }
+      case "ajustar_pistas": {
+        if (!ajustador) {
+          return { ok: false, texto: "Ahora mismo la app no puede mover faders." };
+        }
+        const lista = Array.isArray(args.pistas) ? (args.pistas as Record<string, unknown>[]) : [];
+        if (lista.length === 0) return { ok: false, texto: "No has dicho ninguna pista." };
+        const pistas: AjustePista[] = lista.map((p) => {
+          const ajuste: AjustePista = { nombre: String(p.nombre ?? "").trim() };
+          if (typeof p.gainDb === "number") ajuste.gainDb = p.gainDb;
+          if (typeof p.pan === "number") ajuste.pan = p.pan;
+          if (typeof p.muted === "boolean") ajuste.muted = p.muted;
+          if (typeof p.solo === "boolean") ajuste.solo = p.solo;
+          return ajuste;
+        });
+        return ajustador({ pistas });
+      }
       case "verificar_audio": {
         const datos = await pedirJson(
           "/api/verificar",
@@ -405,6 +471,10 @@ export function resumenLlamada(nombre: string, argumentosJson: string): string {
     if (nombre === "leer_fichero") return `${nombre}(${String(args.path)})`;
     if (nombre === "editar_fichero") return `${nombre}(${String(args.path)}, ${String(args.busca).length} chars)`;
     if (nombre === "verificar_audio") return `${nombre}(${String(args.path)})`;
+    if (nombre === "ajustar_pistas") {
+      const n = Array.isArray(args.pistas) ? (args.pistas as unknown[]).length : 0;
+      return `${nombre}(${n} pista(s))`;
+    }
     if (nombre === "anadir_pistas") {
       const m = Array.isArray(args.midis) ? (args.midis as unknown[]).length : 0;
       const w = Array.isArray(args.wavs) ? (args.wavs as unknown[]).length : 0;
