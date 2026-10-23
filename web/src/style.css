@@ -374,6 +374,17 @@ main {
   font-size: 11.5px;
 }
 
+/* Resumen del turno al final del historial: informativo, no una burbuja mas. */
+.msg.meta {
+  padding: 0 11px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-family: ui-monospace, monospace;
+  animation: none;
+}
+
 .status {
   display: flex;
   align-items: center;

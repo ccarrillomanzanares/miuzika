@@ -32,6 +32,7 @@ import { initCosteGpu } from "./gpu-coste.ts";
 import { getModel, health, listModels, setModel } from "./llm.ts";
 import type { ChatMessage } from "./llm.ts";
 import { ejecutarAgente } from "./agent/agent.ts";
+import { fraseBarra, lineaResumen, pasoTerminado, segundos } from "./agent/actividad.ts";
 import {
   cabecerasProyecto,
   registrarAjustador,
@@ -130,6 +131,8 @@ let trabajando = false;
 // ── Barra de actividad: frase de lo que hace + reloj, sin llenar el chat.
 let latido: number | null = null;
 let pasoActual = "pensando";
+/** Cuando empezo la herramienta en curso (null = el modelo esta pensando). */
+let pasoDesde: number | null = null;
 
 function pararLatido(): void {
   if (latido !== null) {
@@ -138,13 +141,18 @@ function pararLatido(): void {
   }
 }
 
-/** Repinta la barra cada segundo con lo que esta haciendo y el tiempo del turno. */
+/**
+ * Repinta la barra cada segundo con lo que esta haciendo AHORA: el reloj del
+ * turno y, si hay una herramienta corriendo, lo que lleva esa llamada.
+ */
 function arrancarLatido(desde: number): void {
   pararLatido();
-  latido = window.setInterval(() => {
-    const segundos = Math.round((Date.now() - desde) / 1000);
-    setStatus(`${pasoActual} · ${segundos} s`);
-  }, 1000);
+  const pintar = (): void => {
+    const enPaso = pasoDesde === null ? null : Date.now() - pasoDesde;
+    setStatus(fraseBarra(pasoActual, enPaso, Date.now() - desde));
+  };
+  pintar();
+  latido = window.setInterval(pintar, 1000);
 }
 
 async function responderAlUsuario(texto: string): Promise<void> {
@@ -159,23 +167,34 @@ async function responderAlUsuario(texto: string): Promise<void> {
   const burbuja = chat.add("assistant", "…");
   const t0 = Date.now();
   pasoActual = `Agente ${getModel()}: pensando`;
-  setStatus(pasoActual);
+  pasoDesde = null;
   arrancarLatido(t0);
   try {
     const resultado = await ejecutarAgente(conversacion, {
       alEvento: (evento) => {
-        // La actividad vive en la barra de abajo, no en tarjetas dentro del chat:
-        // cada herramienta actualiza la frase y el reloj sigue corriendo.
-        pasoActual = evento.texto;
-        if (evento.tipo === "herramienta") setStatus(`${pasoActual} · 0 s`);
+        // La actividad vive en la barra de abajo, no en tarjetas dentro del chat.
+        if (evento.tipo === "herramienta") {
+          // Empieza una llamada: el reloj del paso arranca aqui.
+          pasoActual = evento.texto;
+          pasoDesde = Date.now();
+          return;
+        }
+        // Termino: su tiempo se queda a la vista hasta la siguiente herramienta.
+        pasoDesde = null;
+        pasoActual =
+          evento.nombre && typeof evento.ms === "number"
+            ? pasoTerminado(evento.nombre, evento.ms)
+            : evento.texto;
+        setStatus(fraseBarra(pasoActual, null, Date.now() - t0));
       },
     });
     chat.update(burbuja, resultado.texto || "(sin respuesta final)");
     pararLatido();
-    const segundos = (resultado.ms / 1000).toFixed(1);
+    // Una linea discreta al final del historial: en que se fue el tiempo del turno.
+    chat.add("meta", `✓ ${lineaResumen(resultado)} · ${getModel()}`);
     setStatus(
       `✓ listo · ${resultado.pasos} paso(s) · ${resultado.llamadas} herramienta(s) · ` +
-        `${segundos} s · ${getModel()}`,
+        `${segundos(resultado.ms)} · ${getModel()}`,
     );
   } catch (error) {
     const mensaje = error instanceof Error ? error.message : String(error);
@@ -184,6 +203,7 @@ async function responderAlUsuario(texto: string): Promise<void> {
     setStatus(`✗ error: ${mensaje.slice(0, 140)}`);
   } finally {
     trabajando = false;
+    pasoDesde = null;
     chat.setBusy(false);
   }
   // El historial no puede crecer sin limite: sistema + los ultimos turnos.

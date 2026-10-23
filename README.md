@@ -224,9 +224,20 @@ el agente reescribía `gpu/motor_gpu.py` en cada turno (no sabía que existía):
   colgada en `terminating` durante días metía 7.877 $ en el contador.
 - **Barra de actividad sin tarjetas**: las burbujas `⚙ herramienta(...)` ya no
   ensucian el historial. La barra de abajo muestra la frase de lo que se está
-  haciendo y el reloj del turno; al cerrar resume `✓ listo · N paso(s) ·
-  N herramienta(s) · X s · modelo`, y si falla muestra `✗ error: …` en vez de
-  quedarse con los puntos suspensivos.
+  haciendo, **lo que lleva la herramienta en curso** y el reloj del turno
+  (`verificar_audio(…) · 5 s · turno 5 s`). Al terminar cada llamada deja su
+  tiempo con un `✓` delante (`✓ verificar_audio 5,2 s`): ese ✓ es lo único que
+  distingue una herramienta ya hecha de una que sigue corriendo mientras el
+  modelo redacta. Al cerrar el turno resume `✓ listo · N paso(s) · N herramienta(s) ·
+  X s · modelo`, y si falla muestra `✗ error: …` en vez de quedarse con los puntos
+  suspensivos.
+- **Una línea de resumen al final del historial** (rol `meta`, gris y
+  monoespaciada, sin burbuja) con el desglose por herramienta:
+  `✓ 2 paso(s) · 1 herramienta(s) · 6,9 s — verificar_audio 5,2 s · modelo`.
+  Se agrupa por nombre y se ordena por tiempo (primero lo que se comió el turno);
+  a partir de 4 herramientas resume `+N más`, y marca `⚠N fallo(s)` si alguna
+  falló. La contabilidad vive en `web/src/agent/actividad.ts` —sin DOM, con
+  tests— y el bucle sólo la alimenta midiendo cada llamada.
 
 ### Cómo retomar en otra sesión
 
@@ -236,28 +247,31 @@ npm run dev                      # http://localhost:5173
 npm run typecheck && npm run test:unit
 ```
 
-Estado al cerrar (2026-10-23, última sesión): typecheck 0, 34/34 tests, **ninguna
+En este portátil `npm run dev` escucha **sólo en `[::1]`**: `curl 127.0.0.1:5173`
+no conecta y `curl localhost:5173` sí. No cambies el binding a `127.0.0.1`: el
+proyecto y los WAV viven en IndexedDB/localStorage, que están atados al origen,
+y abrir `127.0.0.1` te deja con la app vacía.
+
+Estado al cerrar (2026-10-23, última sesión): typecheck 0, 45/45 tests, **ninguna
 instancia encendida** (sólo queda una A100 vieja en `terminating`, caso de soporte, que
 no factura). El proyecto **Vitrina** está cargado en el navegador del usuario con la
 mezcla elegida en los faders.
 
 Commits de la tanda: `b5463e5` (motor GPU, buscador, faders por chat), `71aec76`
 (motor GPU en manifiesto y puerta 409, colores por pista), `376c42c` (contador de
-gasto y barra de actividad), `8fdd952` (manifiesto regenerado).
+gasto y barra de actividad), `8fdd952` (manifiesto regenerado), `8c73531` (README).
 
-Queda sin commitear `workspace/gpu/prueba_nueva.py`: es el fichero de 2 líneas que se
-usó para comprobar que la puerta 409 deja pasar código nuevo. **No se ha borrado
-porque el usuario no ha dado permiso**; se puede eliminar sin más cuando diga.
+`workspace/gpu/prueba_nueva.py` (el fichero de 2 líneas de la prueba de la puerta
+409) se **borró con permiso del usuario**; era untracked, así que no hizo falta
+commitear nada por él.
 
 ### Pendiente
 
 - **DDSP** (Apache-2.0) entrenado con nuestros propios stems: timbre real de
   instrumento en lugar de síntesis. Es el siguiente salto de calidad de verdad; el
   resto (sobremuestreo, reverb, búsqueda de mezcla) ya está medido y en su sitio.
-- **Probar en real que un script nuevo de GPU reutiliza el motor** en vez de
-  reescribirlo: encender, pedir un sample al agente y mirar el log del turno.
-- Barra de actividad: tiempo **por herramienta** (no sólo del turno) y una línea
-  discreta de resumen al final del historial.
+- **Intentar de verdad que el agente reutilice el motor de GPU** en un script
+  nuevo: encender, pedir un sample al agente y mirar el log del turno.
 - **A/B ciego** GPU 1× vs 4× para confirmar de oído lo que dice el número.
 - Reverb con IR de 5 s sobre el pad, y escuchar si gana densidad.
 - El motor GPU no tiene todavía `midi` propio: los .mid salen del motor numpy.

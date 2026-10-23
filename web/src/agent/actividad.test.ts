@@ -1,0 +1,123 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  agrupar,
+  fraseBarra,
+  lineaResumen,
+  pasoTerminado,
+  segundos,
+  type PasoHerramienta,
+} from "./actividad.ts";
+
+const paso = (nombre: string, ms: number, ok = true): PasoHerramienta => ({ nombre, ms, ok });
+
+test("segundos usa coma decimal y un solo decimal", () => {
+  assert.equal(segundos(0), "0,0 s");
+  assert.equal(segundos(940), "0,9 s");
+  assert.equal(segundos(42_140), "42,1 s");
+  assert.equal(segundos(1_234), "1,2 s");
+});
+
+test("segundos no imprime tiempos negativos", () => {
+  assert.equal(segundos(-5), "0,0 s");
+});
+
+test("agrupar suma por nombre y ordena por tiempo descendente", () => {
+  const grupos = agrupar([
+    paso("leer_fichero", 300),
+    paso("ejecutar_python", 30_000),
+    paso("escribir_fichero", 1_000),
+    paso("ejecutar_python", 8_000),
+  ]);
+  assert.deepEqual(
+    grupos.map((g) => [g.nombre, g.ms, g.veces]),
+    [
+      ["ejecutar_python", 38_000, 2],
+      ["escribir_fichero", 1_000, 1],
+      ["leer_fichero", 300, 1],
+    ],
+  );
+});
+
+test("agrupar cuenta fallos y los empates mantienen el orden de aparicion", () => {
+  const grupos = agrupar([
+    paso("b", 1_000, false),
+    paso("a", 1_000),
+    paso("b", 1_000, false),
+  ]);
+  assert.deepEqual(
+    grupos.map((g) => [g.nombre, g.veces, g.fallos]),
+    [
+      ["b", 2, 2],
+      ["a", 1, 0],
+    ],
+  );
+});
+
+test("agrupar de una lista vacia no inventa grupos", () => {
+  assert.deepEqual(agrupar([]), []);
+});
+
+test("lineaResumen lleva cabecera, desglose y marca de veces", () => {
+  const linea = lineaResumen({
+    pasos: 2,
+    llamadas: 4,
+    ms: 42_140,
+    herramientas: [
+      paso("ejecutar_python", 30_000),
+      paso("ejecutar_python", 8_000),
+      paso("leer_fichero", 300),
+      paso("verificar_audio", 2_000),
+    ],
+  });
+  assert.equal(
+    linea,
+    "2 paso(s) · 4 herramienta(s) · 42,1 s — ejecutar_python 38,0 s ×2 · verificar_audio 2,0 s · leer_fichero 0,3 s",
+  );
+});
+
+test("lineaResumen avisa de los fallos de una herramienta", () => {
+  const linea = lineaResumen({
+    pasos: 1,
+    llamadas: 2,
+    ms: 3_000,
+    herramientas: [paso("ejecutar_python", 1_000, false), paso("ejecutar_python", 1_000)],
+  });
+  assert.match(linea, /ejecutar_python 2,0 s ×2 ⚠1 fallo\(s\)/);
+});
+
+test("lineaResumen sin herramientas no deja raya colgando", () => {
+  const linea = lineaResumen({ pasos: 1, llamadas: 0, ms: 1_500, herramientas: [] });
+  assert.equal(linea, "1 paso(s) · 0 herramienta(s) · 1,5 s");
+});
+
+test("lineaResumen nombra 4 y resume el resto con +N mas", () => {
+  const linea = lineaResumen({
+    pasos: 6,
+    llamadas: 6,
+    ms: 6_000,
+    herramientas: [
+      paso("a", 1_000),
+      paso("b", 2_000),
+      paso("c", 3_000),
+      paso("d", 4_000),
+      paso("e", 5_000),
+      paso("f", 6_000),
+    ],
+  });
+  assert.match(linea, /— f 6,0 s · e 5,0 s · d 4,0 s · c 3,0 s · \+2 más$/);
+});
+
+test("fraseBarra muestra el paso en curso y el reloj del turno", () => {
+  assert.equal(fraseBarra("Agente: pensando", null, 12_400), "Agente: pensando · turno 12 s");
+  assert.equal(
+    fraseBarra("ejecutar_python(a.py)", 8_600, 41_000),
+    "ejecutar_python(a.py) · 9 s · turno 41 s",
+  );
+});
+
+test("pasoTerminado marca el visto bueno para no confundirlo con uno en curso", () => {
+  assert.equal(pasoTerminado("leer_fichero", 40), "✓ leer_fichero 0,0 s");
+  assert.equal(pasoTerminado("ejecutar_python", 38_500), "✓ ejecutar_python 38,5 s");
+});

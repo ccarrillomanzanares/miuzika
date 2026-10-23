@@ -8,10 +8,15 @@
 import { chat } from "../llm.ts";
 import type { ChatMessage } from "../llm.ts";
 import { HERRAMIENTAS, ejecutarHerramienta, resumenLlamada } from "./tools.ts";
+import type { PasoHerramienta } from "./actividad.ts";
 
 export interface EventoAgente {
   tipo: "herramienta" | "aviso";
   texto: string;
+  /** Solo en "aviso": la herramienta que acaba de terminar y lo que tardo. */
+  nombre?: string;
+  ms?: number;
+  ok?: boolean;
 }
 
 export interface ResultadoAgente {
@@ -19,6 +24,8 @@ export interface ResultadoAgente {
   pasos: number;
   llamadas: number;
   ms: number;
+  /** Una entrada por llamada, en orden: es lo que desglosa la barra de actividad. */
+  herramientas: PasoHerramienta[];
 }
 
 export interface OpcionesAgente {
@@ -37,6 +44,8 @@ export async function ejecutarAgente(
   let pasos = 0;
   let llamadas = 0;
   let texto = "";
+  /** Tiempo medido de cada llamada: se devuelve para la barra de actividad. */
+  const herramientas: PasoHerramienta[] = [];
   /** Escrituras seguidas sin una ejecucion correcta: corta el bucle de parches. */
   let escriturasSinEjecutar = 0;
 
@@ -76,6 +85,7 @@ export async function ejecutarAgente(
           pasos,
           llamadas,
           ms: Date.now() - t0,
+          herramientas,
         };
       }
       break;
@@ -88,8 +98,17 @@ export async function ejecutarAgente(
       llamadas += 1;
       alEvento?.({ tipo: "herramienta", texto: resumenLlamada(nombre, argumentos) });
 
+      const tHerramienta = Date.now();
       const resultado = await ejecutarHerramienta(nombre, argumentos);
-      alEvento?.({ tipo: "aviso", texto: resultado.texto.split("\n")[0].slice(0, 160) });
+      const msHerramienta = Date.now() - tHerramienta;
+      herramientas.push({ nombre, ms: msHerramienta, ok: resultado.ok });
+      alEvento?.({
+        tipo: "aviso",
+        texto: resultado.texto.split("\n")[0].slice(0, 160),
+        nombre,
+        ms: msHerramienta,
+        ok: resultado.ok,
+      });
 
       mensajes.push({
         role: "tool",
@@ -122,6 +141,7 @@ export async function ejecutarAgente(
           pasos,
           llamadas,
           ms: Date.now() - t0,
+          herramientas,
         };
       }
     }
@@ -131,5 +151,5 @@ export async function ejecutarAgente(
     alEvento?.({ tipo: "aviso", texto: `Corte de seguridad: ${maxPasos} pasos sin respuesta final.` });
   }
 
-  return { texto, pasos, llamadas, ms: Date.now() - t0 };
+  return { texto, pasos, llamadas, ms: Date.now() - t0, herramientas };
 }

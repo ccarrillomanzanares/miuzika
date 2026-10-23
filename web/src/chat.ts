@@ -9,7 +9,7 @@
 import { escapeHtml } from "./timeline.ts";
 import { setDestino, type Destino } from "./agent/tools.ts";
 
-export type ChatRole = "user" | "assistant" | "system";
+export type ChatRole = "user" | "assistant" | "system" | "meta";
 
 export interface ChatApi {
   /** Añade un mensaje al historial y devuelve su burbuja (para poder reescribirla). */
@@ -200,7 +200,9 @@ export function initChat(): ChatApi {
       for (const fila of leido.slice(-MAX_ENTRADAS)) {
         if (typeof fila.text !== "string") continue;
         const role: ChatRole =
-          fila.role === "user" || fila.role === "assistant" ? fila.role : "system";
+          fila.role === "user" || fila.role === "assistant" || fila.role === "meta"
+            ? fila.role
+            : "system";
         const entrada: Entrada = { role, text: fila.text };
         historial.push(entrada);
         pintar(entrada);
