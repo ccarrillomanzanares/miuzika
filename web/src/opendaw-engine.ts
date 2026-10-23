@@ -291,6 +291,9 @@ export async function playWithOpenDaw(
   const worklet = project.startAudioWorklet();
   await worklet.isReady();
   await context.resume();
+  // Sin esto, un mute/solo/volumen puesto en parado se pierde: syncMix solo
+  // corria cuando se cambiaba algo con el transporte ya sonando.
+  syncMix(source);
 
   const subscription = project.engine.position.catchupAndSubscribe((owner) => {
     onTick(owner.getValue() / 960);

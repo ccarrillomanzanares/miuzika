@@ -199,6 +199,7 @@ function sincronizarStems(): void {
     return;
   }
   stemPlayer.setBpm(vista.bpm);
+  const haySolo = vista.tracks.some((track) => track.solo);
   const defs: {
     clave: string;
     url: string;
@@ -208,6 +209,8 @@ function sincronizarStems(): void {
     gainDb: number;
   }[] = [];
   for (const track of vista.tracks) {
+    // Solo suena lo que suena: mute lo calla y, si hay algún solo, manda ese.
+    if (track.muted || (haySolo && !track.solo)) continue;
     for (const clip of track.clips) {
       if (!clip.audio) continue;
       const asset = audioAssets.get(clip.audio.assetId);
@@ -610,6 +613,7 @@ function commitLive(next: Project): void {
   project = next;
   persist();
   timeline.refresh(view);
+  sincronizarStems();
   openDawHandle?.syncMix(view);
   updateActions();
   updateHistoryButtons();
@@ -1019,15 +1023,19 @@ async function importarPistasDesdeAgente(
           { op: "add_track", id, name: nombre, kind: "midi", instrument: { type: tipo, program: prog } },
         ]).project;
         for (let i = 0; i < pista.notes.length; i += MAX_NOTAS) {
-          current = applyOps(current, [
-            {
-              op: "add_notes",
-              trackId: id,
-              startBar: inicio,
-              name: nombre,
-              notes: pista.notes.slice(i, i + MAX_NOTAS),
-            },
-          ]).project;
+          const trozo = pista.notes.slice(i, i + MAX_NOTAS);
+          if (i === 0) {
+            current = applyOps(current, [
+              { op: "add_notes", trackId: id, startBar: inicio, name: nombre, notes: trozo },
+            ]).project;
+          } else {
+            // Los trozos siguen en el MISMO clip: si no, cada trozo crea un clip
+            // nuevo desde el compas inicial y se solapan (Bateria: 2376 notas).
+            const clipId = current.tracks.find((t) => t.id === id)?.clips.at(-1)?.id;
+            current = applyOps(current, [
+              { op: "add_notes", trackId: id, clipId, notes: trozo },
+            ]).project;
+          }
         }
         hechas.push(`${nombre} (MIDI, ${pista.notes.length} notas)`);
       }
