@@ -233,6 +233,22 @@ export class TimelineView {
       this.draw(this.beat);
     });
 
+    // La columna de nombres no esta dentro del scroller: hay que arrastrarla a mano,
+    // o al bajar se queda fija y cada nombre acaba en la fila equivocada.
+    this.wrap.addEventListener("scroll", () => this.aplicarScrollCabeceras(), { passive: true });
+
+    // Y al reves: la rueda sobre los nombres desplaza la lista.
+    this.heads.addEventListener(
+      "wheel",
+      (event) => {
+        if (event.deltaY !== 0) {
+          this.wrap.scrollTop += event.deltaY;
+          event.preventDefault();
+        }
+      },
+      { passive: false },
+    );
+
     this.wrap.addEventListener(
       "wheel",
       (event) => {
@@ -385,6 +401,13 @@ export class TimelineView {
     this.draw(this.beat);
   }
 
+  /** Mueve la columna de nombres lo mismo que el lienzo (scroll vertical). */
+  private aplicarScrollCabeceras(): void {
+    const interior = this.heads.firstElementChild as HTMLElement | null;
+    if (!interior) return;
+    interior.style.transform = `translateY(${-this.wrap.scrollTop}px)`;
+  }
+
   private emitClipSelection(): void {
     this.onClipSelectionChange([...this.selectedClips]);
   }
@@ -479,7 +502,10 @@ export class TimelineView {
         </div>`;
       })
       .join("");
-    this.heads.innerHTML = `<div class="ruler-spacer"></div>${rows}`;
+    // Las filas van en un contenedor propio para poder desplazarlas con transform:
+    // asi no depende de la altura de la barra de scroll horizontal del lienzo.
+    this.heads.innerHTML = `<div class="heads-inner"><div class="ruler-spacer"></div>${rows}</div>`;
+    this.aplicarScrollCabeceras();
   }
 
   private renderStatic(): void {

@@ -224,6 +224,10 @@ main {
   background: #0f1117;
 }
 
+.heads-inner {
+  will-change: transform;
+}
+
 .ruler-spacer {
   height: 26px;
   border-bottom: 1px solid var(--line);
