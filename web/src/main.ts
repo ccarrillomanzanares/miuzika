@@ -11,12 +11,16 @@ import { createProject, projectStats } from "../../src/core/project.ts";
 import { applyOps } from "../../src/core/ops.ts";
 import type { Op } from "../../src/core/ops.ts";
 import {
+  assetsStreamingGuardados,
   audioAssets,
   computePeaks,
+  guardarAssetsStreaming,
   hydrateProjectAudio,
   loadAudioFile,
   persistAudioAsset,
+  registrarAssetStreaming,
 } from "./audio-store.ts";
+import { StemPlayer } from "./stem-player.ts";
 import { openPianoRoll } from "./editor.ts";
 import { openCodeLab } from "./code-lab.ts";
 import type { CodeAudioRequest } from "./code-lab.ts";
@@ -163,6 +167,64 @@ let persistenceWarned = false;
 let openDawHandle: OpenDawPlaybackHandle | null = null;
 let openDawGeneration = 0;
 
+const stemPlayer = new StemPlayer();
+/** Por encima de estos segundos el WAV no se decodifica: se reproduce por streaming. */
+const SEGUNDOS_STREAMING = 30;
+
+/** Ruta completa (con la carpeta del proyecto) para <audio src>, que no manda cabeceras. */
+function rutaCompleta(src: string): string {
+  const compartido = /^(codigo|herramientas|plantillas|proyectos|_archivo)\//.test(src);
+  if (compartido || !project) return src;
+  return `proyectos/${slugDeProyecto(project)}/${src}`;
+}
+
+/** Duracion y picos de un WAV sin decodificarlo en el navegador. */
+async function metadatosWav(ruta: string): Promise<{
+  picos: number[];
+  duracionSeg: number;
+}> {
+  const res = await fetch(`/api/picos?path=${encodeURIComponent(ruta)}&cubos=1024`, {
+    headers: cabecerasProyecto(),
+  });
+  if (!res.ok) throw new Error(`no se pudo leer ${ruta}`);
+  const datos = (await res.json()) as { picos?: number[]; duracionSeg?: number };
+  return { picos: datos.picos ?? [], duracionSeg: Number(datos.duracionSeg ?? 0) };
+}
+
+/** Prepara los stems de streaming del proyecto abierto (los que no van por openDAW). */
+function sincronizarStems(): void {
+  const vista = project;
+  if (!vista) {
+    stemPlayer.definir([]);
+    return;
+  }
+  stemPlayer.setBpm(vista.bpm);
+  const defs: {
+    clave: string;
+    url: string;
+    startBeat: number;
+    lengthBeat: number;
+    offsetBeat: number;
+    gainDb: number;
+  }[] = [];
+  for (const track of vista.tracks) {
+    for (const clip of track.clips) {
+      if (!clip.audio) continue;
+      const asset = audioAssets.get(clip.audio.assetId);
+      if (!asset?.streaming || !asset.src) continue;
+      defs.push({
+        clave: `${clip.audio.assetId}:${clip.id}`,
+        url: `/api/audio?path=${encodeURIComponent(rutaCompleta(asset.src))}`,
+        startBeat: clip.start,
+        lengthBeat: clip.length,
+        offsetBeat: clip.audio.offset,
+        gainDb: clip.audio.gainDb + track.gainDb,
+      });
+    }
+  }
+  stemPlayer.definir(defs);
+}
+
 const HISTORY_KEY = "miuzika.history";
 const HISTORY_LIMIT = 8;
 let history: Project[] = loadHistory();
@@ -280,6 +342,7 @@ function setPlaying(value: boolean): void {
 }
 
 function stopOpenDaw(): void {
+  stemPlayer.detener();
   openDawGeneration++;
   const handle = openDawHandle;
   openDawHandle = null;
@@ -302,13 +365,19 @@ async function startOpenDawPlayback(view: Project): Promise<void> {
     warnMissingAudio(missing);
     const { playWithOpenDaw } = await import("./opendaw-engine.ts");
     const endBeat = view.lengthBars * beatsPerBar(view);
+    // openDAW solo recibe lo que esta decodificado; los stems largos van aparte.
+    const paraEngine = new Map<string, { name: string; buffer: AudioBuffer }>();
+    for (const [id, asset] of audioAssets) {
+      if (asset.buffer) paraEngine.set(id, { name: asset.name, buffer: asset.buffer });
+    }
     const handle = await playWithOpenDaw(
       view,
       (beat) => {
         timeline.draw(beat);
+        stemPlayer.sincronizar(beat);
         if (openDawHandle && beat >= endBeat - 0.05) stopOpenDaw();
       },
-      audioAssets,
+      paraEngine,
     );
     if (generation !== openDawGeneration) {
       handle.stop();
@@ -316,7 +385,14 @@ async function startOpenDawPlayback(view: Project): Promise<void> {
     }
     openDawHandle = handle;
     setPlaying(true);
-    addMessage("assistant", "Reproduciendo con el engine de openDAW.");
+    await stemPlayer.reproducir(handle.beat);
+    const cuantos = stemPlayer.vocesActivas;
+    addMessage(
+      "assistant",
+      cuantos > 0
+        ? `Reproduciendo con openDAW (MIDI) y ${cuantos} stem(s) por streaming.`
+        : "Reproduciendo con el engine de openDAW.",
+    );
   } catch (error) {
     if (generation !== openDawGeneration) return;
     setPlaying(false);
@@ -586,6 +662,7 @@ function applyProject(next: Project | null): void {
   // setProject cambia los datos y los cabezales, pero no repinta el lienzo:
   // sin esto, un proyecto aplicado por el agente deja la timeline vacia.
   timeline.relayout();
+  sincronizarStems();
   const stats = projectStats(view);
   const minutes = Math.floor(stats.seconds / 60);
   const seconds = String(Math.round(stats.seconds % 60)).padStart(2, "0");
@@ -970,18 +1047,51 @@ async function importarPistasDesdeAgente(
 
   for (const ruta of peticion.wavs) {
     try {
+      const fichero = ruta.split("/").pop() ?? "audio.wav";
+      const sinExt = fichero.replace(/\.[^.]+$/, "");
+      const recortado = prefijo && sinExt.startsWith(prefijo) ? sinExt.slice(prefijo.length) : sinExt;
+      const nombre = (recortado || sinExt || "Audio").slice(0, 60);
+
+      // Los stems largos NO se decodifican: streaming con <audio> y picos del
+      // servidor. Asi caben muchos a la vez (la RAM no crece con la duracion).
+      const meta = await metadatosWav(ruta);
+      if (meta.duracionSeg >= SEGUNDOS_STREAMING) {
+        const durationBeats = (meta.duracionSeg * current.bpm) / 60;
+        const assetId = `aud_st_${Date.now().toString(36)}_${contador++}`;
+        registrarAssetStreaming({
+          id: assetId,
+          name: nombre,
+          durationBeats,
+          src: ruta,
+          peaks: Float32Array.from(meta.picos),
+        });
+        guardarAssetsStreaming();
+        current = applyOps(current, [
+          { op: "register_audio_asset", assetId, name: nombre, durationBeats },
+          {
+            op: "add_audio_clip",
+            assetId,
+            startBar: inicio,
+            lengthBeats: durationBeats,
+            gainDb: 0,
+            name: nombre,
+            track: { name: nombre },
+          },
+        ]).project;
+        hechas.push(
+          `${nombre} (audio streaming, ${durationBeats.toFixed(1)} beats, sin decodificar)`,
+        );
+        continue;
+      }
+
       const res = await fetch(`/api/audio?path=${encodeURIComponent(ruta)}`, {
         headers: cabecerasProyecto(),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
-      const fichero = ruta.split("/").pop() ?? "audio.wav";
       const file = new File([blob], fichero, { type: "audio/wav" });
       const asset = await loadAudioFile(file, current.bpm);
       const guardado = await persistAudioAsset(asset.id, asset.name, asset.durationBeats, file);
-      const recortado =
-        prefijo && asset.name.startsWith(prefijo) ? asset.name.slice(prefijo.length) : asset.name;
-      const nombre = recortado.slice(0, 60) || asset.name.slice(0, 60);
       current = applyOps(current, [
         {
           op: "register_audio_asset",
@@ -1050,6 +1160,7 @@ function esAudio(file: File): boolean {
 function ramAudioBytes(): number {
   let total = 0;
   for (const asset of audioAssets.values()) {
+    if (!asset.buffer) continue; // los de streaming no ocupan RAM
     total += asset.buffer.length * asset.buffer.numberOfChannels * 4;
   }
   return total;
@@ -1227,6 +1338,10 @@ window.addEventListener("keydown", (event) => {
 // --- Arranque --------------------------------------------------------------
 
 async function boot(): Promise<void> {
+  // Los assets de streaming no estan en IndexedDB: viven en el servidor.
+  for (const guardado of assetsStreamingGuardados()) {
+    if (!audioAssets.has(guardado.id)) registrarAssetStreaming(guardado);
+  }
   let restoredFromDb = false;
   let recoveredAssets = 0;
 
@@ -1319,6 +1434,7 @@ if (import.meta.env.DEV) {
       return future;
     },
     anadirPistas: importarPistasDesdeAgente,
+    stems: stemPlayer,
     crearProyecto: crearProyectoDesdeAgente,
     nuevoProyecto: (nombre: string, bpm: number, lengthBars: number) =>
       setProject(createProject({ name: nombre, bpm, lengthBars })),

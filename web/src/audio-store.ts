@@ -6,9 +6,13 @@ import { getAudioAsset, putAudioAsset } from "./audio-db.ts";
 interface LoadedAsset {
   id: string;
   name: string;
-  buffer: AudioBuffer;
+  /** null cuando el asset va por streaming (no se decodifica en el navegador). */
+  buffer: AudioBuffer | null;
   durationBeats: number;
   peaks: Float32Array;
+  /** Ruta en el servidor para los assets de streaming (/api/audio?path=...). */
+  src?: string;
+  streaming?: boolean;
 }
 
 export const audioAssets = new Map<string, LoadedAsset>();
@@ -24,6 +28,76 @@ function slug(value: string): string {
       .replace(/^_+|_+$/g, "")
       .slice(0, 40) || "audio"
   );
+}
+
+/**
+ * Registra un asset que NO se decodifica: se reproduce por streaming con <audio>
+ * y la onda viene calculada del servidor. Pensado para stems largos.
+ */
+export function registrarAssetStreaming(datos: {
+  id: string;
+  name: string;
+  durationBeats: number;
+  src: string;
+  peaks: Float32Array;
+}): void {
+  audioAssets.set(datos.id, {
+    id: datos.id,
+    name: datos.name,
+    buffer: null,
+    durationBeats: datos.durationBeats,
+    peaks: datos.peaks,
+    src: datos.src,
+    streaming: true,
+  });
+}
+
+const CLAVE_STREAM = "miuzika.assets.stream";
+
+/** Guarda en localStorage los assets de streaming para recuperarlos al recargar. */
+export function guardarAssetsStreaming(): void {
+  try {
+    const datos: Record<string, { name: string; durationBeats: number; src: string; peaks: number[] }> = {};
+    for (const asset of audioAssets.values()) {
+      if (!asset.streaming || !asset.src) continue;
+      datos[asset.id] = {
+        name: asset.name,
+        durationBeats: asset.durationBeats,
+        src: asset.src,
+        peaks: Array.from(asset.peaks),
+      };
+    }
+    localStorage.setItem(CLAVE_STREAM, JSON.stringify(datos));
+  } catch {
+    /* sin espacio o sin localStorage: se pierde el dibujo, no el audio */
+  }
+}
+
+/** Devuelve los assets de streaming guardados (main.ts los vuelve a registrar). */
+export function assetsStreamingGuardados(): {
+  id: string;
+  name: string;
+  durationBeats: number;
+  src: string;
+  peaks: Float32Array;
+}[] {
+  try {
+    const crudo = localStorage.getItem(CLAVE_STREAM);
+    if (!crudo) return [];
+    const datos = JSON.parse(crudo) as Record<
+      string,
+      { name: string; durationBeats: number; src: string; peaks: number[] }
+    >;
+    return Object.entries(datos).map(([id, valor]) => ({
+      id,
+      name: valor.name,
+      durationBeats: valor.durationBeats,
+      src: valor.src,
+      peaks: Float32Array.from(valor.peaks ?? []),
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function decodeAudioBlob(blob: Blob): Promise<AudioBuffer> {

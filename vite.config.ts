@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { basename, dirname, relative, resolve, sep } from "node:path";
+import { createReadStream } from "node:fs";
 import { defineConfig, loadEnv } from "vite";
 
 const isolationHeaders = {
@@ -466,20 +467,65 @@ export default defineConfig(({ mode }) => {
             });
           });
 
-          // Sirve un WAV de workspace/ para que el navegador lo importe al proyecto.
+          // Sirve un WAV de workspace/ con soporte de Range: el cliente puede pedir
+          // trozos y decodificarlos de uno en uno (streaming) en vez del fichero entero.
           server.middlewares.use("/api/audio", (req, res) => {
             const url = new URL(req.url ?? "/", "http://localhost");
             const rel = url.searchParams.get("path") ?? "";
-            const destino = rel ? resolverEnTrabajo(rel, slugProyecto(req.headers["x-miuzika-proyecto"])) : null;
+            const destino = rel
+              ? resolverEnTrabajo(rel, slugProyecto(req.headers["x-miuzika-proyecto"]))
+              : null;
             if (!destino || !existsSync(destino)) {
               responderJson(res, 404, { error: "no existe" });
               return;
             }
-            const datos = readFileSync(destino);
-            res.statusCode = 200;
+            const totalBytes = statSync(destino).size;
+            const rango = String(req.headers.range ?? "");
+            const coincidencia = /^bytes=(\d*)-(\d*)$/.exec(rango.trim());
+            res.setHeader("Accept-Ranges", "bytes");
             res.setHeader("Content-Type", "audio/wav");
-            res.setHeader("Content-Length", String(datos.length));
-            res.end(datos);
+
+            if (coincidencia && (coincidencia[1] !== "" || coincidencia[2] !== "")) {
+              let desde = coincidencia[1] === "" ? totalBytes - Number(coincidencia[2]) : Number(coincidencia[1]);
+              let hasta = coincidencia[1] === "" || coincidencia[2] === "" ? totalBytes - 1 : Number(coincidencia[2]);
+              desde = Math.max(0, Math.min(desde, totalBytes - 1));
+              hasta = Math.max(desde, Math.min(hasta, totalBytes - 1));
+              const largo = hasta - desde + 1;
+              res.statusCode = 206;
+              res.setHeader("Content-Range", `bytes ${desde}-${hasta}/${totalBytes}`);
+              res.setHeader("Content-Length", String(largo));
+              createReadStream(destino, { start: desde, end: hasta }).pipe(res);
+              return;
+            }
+
+            res.statusCode = 200;
+            res.setHeader("Content-Length", String(totalBytes));
+            createReadStream(destino).pipe(res);
+          });
+
+          // Picos de un WAV calculados en el servidor: la onda se dibuja sin decodificar.
+          server.middlewares.use("/api/picos", async (req, res) => {
+            const url = new URL(req.url ?? "/", "http://localhost");
+            const rel = url.searchParams.get("path") ?? "";
+            const cubos = url.searchParams.get("cubos") ?? "1024";
+            const destino = rel
+              ? resolverEnTrabajo(rel, slugProyecto(req.headers["x-miuzika-proyecto"]))
+              : null;
+            if (!destino || !existsSync(destino)) {
+              responderJson(res, 404, { error: "no existe" });
+              return;
+            }
+            const r = await correr("herramientas/picos.py", [destino, cubos], 120);
+            if (r.codigo !== 0) {
+              responderJson(res, 400, { error: (r.errores || r.salida).slice(-800) });
+              return;
+            }
+            try {
+              const datos = JSON.parse(r.salida) as Record<string, unknown>;
+              responderJson(res, 200, { ok: true, ...datos });
+            } catch (error) {
+              responderJson(res, 500, { error: "salida no es JSON: " + String(error) });
+            }
           });
 
           // Devuelve las notas de un .mid ya normalizadas a beats (op add_notes).
