@@ -1043,7 +1043,9 @@ async function importarPistasDesdeAgente(
   }
 
   // prefijo comun de los WAV, para que las pistas no se llamen "tema_bateria"
-  let prefijo = "";
+  // Prefijo a quitar de los nombres: el del fichero comun y, si no hay varios,
+  // el del propio proyecto ("sacramento_bajo.wav" -> "bajo").
+  let prefijo = project ? `${slugDeProyecto(project)}_` : "";
   if (peticion.wavs.length > 1) {
     const bases = peticion.wavs.map((r) => (r.split("/").pop() ?? r).replace(/\.[^.]+$/, ""));
     let comun = bases[0] ?? "";
@@ -1074,17 +1076,39 @@ async function importarPistasDesdeAgente(
           peaks: Float32Array.from(meta.picos),
         });
         guardarAssetsStreaming();
+        const existente = current.tracks.find((t) => t.kind === "audio" && t.name === nombre);
         current = applyOps(current, [
           { op: "register_audio_asset", assetId, name: nombre, durationBeats },
-          {
-            op: "add_audio_clip",
-            assetId,
-            startBar: inicio,
-            lengthBeats: durationBeats,
-            gainDb: 0,
-            name: nombre,
-            track: { name: nombre },
-          },
+          ...(existente
+            ? [
+                // Reimportar REEMPLAZA los clips de esa pista: asi se corrige una
+                // tanda mal recortada sin acabar con dos pistas iguales.
+                ...existente.clips.map((clip) => ({
+                  op: "remove_clip" as const,
+                  trackId: existente.id,
+                  clipId: clip.id,
+                })),
+                {
+                  op: "add_audio_clip" as const,
+                  assetId,
+                  startBar: inicio,
+                  lengthBeats: durationBeats,
+                  gainDb: 0,
+                  name: nombre,
+                  trackId: existente.id,
+                },
+              ]
+            : [
+                {
+                  op: "add_audio_clip" as const,
+                  assetId,
+                  startBar: inicio,
+                  lengthBeats: durationBeats,
+                  gainDb: 0,
+                  name: nombre,
+                  track: { name: nombre },
+                },
+              ]),
         ]).project;
         hechas.push(
           `${nombre} (audio streaming, ${durationBeats.toFixed(1)} beats, sin decodificar)`,

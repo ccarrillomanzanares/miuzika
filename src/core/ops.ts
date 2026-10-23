@@ -463,7 +463,10 @@ function applyOne(project: Project, op: ParsedOp): string {
       const start = op.startBar * barBeats;
       const offset = op.offsetBeats ?? 0;
       const available = Math.max(0.25, asset.durationBeats - offset);
-      const length = Math.min(op.lengthBeats ?? available, 64 * barBeats);
+      // Sin tope artificial: un stem de 6 minutos son 560 beats y antes se
+      // recortaba a 64 compases (256 beats), asi que el audio acababa en el
+      // compas 65 mientras el MIDI seguia hasta el 116.
+      const length = Math.min(op.lengthBeats ?? available, available);
       track.clips.push({
         id: nextClipId(project),
         name: op.name ?? asset.name,

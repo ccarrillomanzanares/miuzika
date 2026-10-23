@@ -183,6 +183,15 @@ test("duplicate_clip coloca la copia justo después y no comparte notas", () => 
   assert.equal(clips[0]!.notes[0]!.pitch, 60);
 });
 
+test("add_audio_clip no recorta un stem largo a 64 compases", () => {
+  const { project } = applyOps(baseProject(), [
+    { op: "register_audio_asset", assetId: "aud_largo", name: "stem", durationBeats: 560 },
+    { op: "add_audio_clip", assetId: "aud_largo", startBar: 0, track: { name: "Stem" } },
+  ]);
+  const clip = project.tracks[0]!.clips[0]!;
+  assert.equal(clip.length, 560, "debe conservar los 140 compases del stem");
+});
+
 test("duplicate_clip puede copiar a otra pista y a un inicio concreto", () => {
   const inicio = applyOps(baseProject(), [
     { op: "add_track", id: "trk_a", name: "A" },
