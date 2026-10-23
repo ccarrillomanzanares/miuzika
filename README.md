@@ -252,21 +252,78 @@ no conecta y `curl localhost:5173` sí. No cambies el binding a `127.0.0.1`: el
 proyecto y los WAV viven en IndexedDB/localStorage, que están atados al origen,
 y abrir `127.0.0.1` te deja con la app vacía.
 
-Estado al cerrar (2026-10-23, última sesión): typecheck 0, 45/45 tests, **ninguna
-instancia encendida** (sólo queda una A100 vieja en `terminating`, caso de soporte, que
-no factura). El proyecto **Vitrina** está cargado en el navegador del usuario con la
-mezcla elegida en los faders.
+Estado al cerrar (2026-10-23, segunda sesión del día): typecheck 0, **45/45 unit +
+OPENDAW OK**, ninguna instancia encendida (sólo queda una A100 vieja en
+`terminating`, caso de soporte, que no factura). Último commit `bae9cb6` (tiempo por
+herramienta en la barra). El proyecto **Vitrina** está cargado en el navegador del
+usuario con la mezcla elegida en los faders.
 
-Commits de la tanda: `b5463e5` (motor GPU, buscador, faders por chat), `71aec76`
+Commits de la jornada: `b5463e5` (motor GPU, buscador, faders por chat), `71aec76`
 (motor GPU en manifiesto y puerta 409, colores por pista), `376c42c` (contador de
-gasto y barra de actividad), `8fdd952` (manifiesto regenerado), `8c73531` (README).
+gasto y barra de actividad), `8fdd952` (manifiesto regenerado), `8c73531` (README),
+`bae9cb6` (tiempo por herramienta y línea de resumen del turno).
 
 `workspace/gpu/prueba_nueva.py` (el fichero de 2 líneas de la prueba de la puerta
 409) se **borró con permiso del usuario**; era untracked, así que no hizo falta
 commitear nada por él.
 
+**Aviso que cuesta un susto**: si el servidor de Vite se cae con la app abierta en el
+navegador, todo parece funcionar hasta que le das a **play**: arrancar el engine hace
+un `import()` dinámico de `web/src/opendaw-engine.ts` y el navegador responde
+`Failed to fetch dynamically imported module: http://localhost:5173/src/opendaw-engine.ts`.
+No es openDAW ni el WASM: es que no hay servidor. Se arregla levantando `npm run dev`
+y recargando la página. Y un servidor de dev lanzado **desde un turno del agente muere
+si ese turno se interrumpe**, así que conviene levantar el servidor en una terminal
+propia (o con `persist_on_release`) antes de ponerse a escuchar.
+
+### Fichero maestro por proyecto — lo siguiente (petición del usuario)
+
+Lo que pasó, con el código delante:
+
+- **«Abrir» con WAV sueltos no abre un proyecto**: `importarAudio()` mete una pista
+  por fichero en el proyecto que ya está abierto, en el compás actual
+  (`web/src/main.ts`). Por eso el título (`#song-info`, que pinta `project.name`) siguió
+  mostrando el proyecto anterior y los clips viejos seguían ahí, para borrarlos a mano.
+  Funciona como está escrito, pero no es lo que uno espera al elegir la carpeta
+  `salida/` de un proyecto.
+- **El estado del proyecto vive sólo en el navegador** (localStorage + IndexedDB) y no
+  hay exportación. En disco, `workspace/proyectos/<slug>/` sólo tiene los `.py` y
+  `salida/` con los WAV: **no hay ningún fichero de estado** (los únicos `.json` bajo
+  `workspace/` son `MANIFEST.json` y `proyectos/vitrina/salida/vitrina_busqueda.json`,
+  que es la salida del buscador de mezclas, no un proyecto).
+
+Petición del usuario, en sus palabras ordenadas:
+
+1. **Un fichero maestro en cada carpeta de proyecto** (`workspace/proyectos/<slug>/`)
+   con el último estado: pistas, clips, faders, mute/solo, BPM y tonalidad, más las
+   referencias a sus WAV y MIDI. Al abrir el proyecto se carga ese estado, y los WAV
+   se traen **del disco** (`/api/audio`), no sólo de IndexedDB.
+2. Poder **añadir WAV o MIDI a un proyecto ya abierto** sin perder lo que hay. El audio
+   ya se puede (botones «Audio» y «Abrir»); por el selector de ficheros no se puede
+   meter un `.mid` (el `accept` no lo incluye), aunque el agente sí sabe crear pistas
+   MIDI desde `workspace/` con `anadir_pistas(midis=[...])`.
+
+Decisiones que hay que cerrar antes de escribir código:
+
+- **¿Referencia o incrusta el audio?** Referenciar por ruta relativa (`salida/x.wav`) es
+  lo sensato: los stems son de 95 MB cada uno. Incrustar en base64 un máster de 6 stems
+  son ~760 MB de JSON.
+- **¿Autoguardado o botón?** Autoguardado con retardo (1-2 s tras el último cambio) es
+  cómodo, pero escribe con `/api/fs/write` en cada arrastre de fader; un «Guardar»
+  explícito no pierde nada porque localStorage/IndexedDB siguen ahí.
+- **¿Nombre y forma?** `proyectos/<slug>/proyecto.json` (y la app pide la lista de
+  proyectos a `/api/fs/list`) parece lo más simple; el `.miuzika.zip` que ya sabe
+  importar `project-bundle.ts` es la alternativa autocontenida.
+- **¿Y al elegir WAV con un proyecto abierto?** Hoy añade y lo dice en el chat; lo que
+  pide el usuario es que se pueda **elegir**: «añadir al proyecto abierto» o «empezar uno
+  nuevo con el nombre de la carpeta».
+
+Nada de esto está implementado todavía.
+
 ### Pendiente
 
+- **Fichero maestro por proyecto y abrir proyecto desde disco** (sección de arriba):
+  es la tarea con la que empieza la próxima sesión.
 - **DDSP** (Apache-2.0) entrenado con nuestros propios stems: timbre real de
   instrumento en lugar de síntesis. Es el siguiente salto de calidad de verdad; el
   resto (sobremuestreo, reverb, búsqueda de mezcla) ya está medido y en su sitio.
