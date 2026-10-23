@@ -829,3 +829,19 @@ button.active {
   color: #e5c07b;
   border-color: #4a3f22;
 }
+
+/* Aviso de bundle viejo: botón que aparece solo cuando el servidor cambió. */
+.recargar {
+  border-color: #e5c07b;
+  color: #e5c07b;
+}
+
+.recargar.activo {
+  background: #2a2418;
+  animation: latido-recargar 1.6s ease-in-out infinite;
+}
+
+@keyframes latido-recargar {
+  0%, 100% { border-color: #e5c07b; }
+  50% { border-color: #6a5a30; }
+}

@@ -40,6 +40,7 @@ import { TimelineView, escapeHtml } from "./timeline.ts";
 import { initChat } from "./chat.ts";
 import { initCosteGpu } from "./gpu-coste.ts";
 import { minutosYsegundos, sinSenales } from "./gpu-texto.ts";
+import { vigilarVersion } from "./build.ts";
 import { getModel, health, listModels, setModel } from "./llm.ts";
 import type { ChatMessage } from "./llm.ts";
 import { ejecutarAgente } from "./agent/agent.ts";
@@ -271,6 +272,21 @@ $("cancelar").addEventListener("click", () => {
   cancelador.abort();
   setStatus("cancelando… (la GPU, si está encendida, se apaga aparte)");
 });
+
+// El servidor publica un id de su código: si cambia, esta pestaña está vieja.
+vigilarVersion(() => {
+  const boton = $<HTMLButtonElement>("recargar");
+  boton.hidden = false;
+  boton.classList.add("activo");
+  addMessage(
+    "system",
+    "El servidor tiene código más nuevo que esta pestaña. Pulsa «↻ versión nueva» para cargarlo: " +
+      "hasta entonces la app va con el bundle viejo y el agente puede encontrarse funciones que ya no existen " +
+      "(pasó con crear_proyecto).",
+  );
+});
+
+$("recargar").addEventListener("click", () => location.reload());
 
 let project: Project | null = null;
 let busy = false;

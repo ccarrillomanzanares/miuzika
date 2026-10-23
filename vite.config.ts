@@ -107,6 +107,30 @@ export default defineConfig(({ mode }) => {
   /** Carpetas compartidas por todos los proyectos: motor y utilidades. */
   const COMPARTIDO = ["codigo/", "gpu/", "herramientas/", "plantillas/", "_archivo/", "proyectos/"];
 
+  /**
+   * Identificador del código servido: la marca de tiempo más nueva de web/ y de
+   * esta config. Si cambia, la pestaña abierta está corriendo un bundle viejo
+   * (el HMR se desconecta cuando el servidor se reinicia) y hay que recargar.
+   */
+  const idDeBuild = (): string => {
+    let max = 0;
+    const recorrer = (dir: string): void => {
+      if (!existsSync(dir)) return;
+      for (const entrada of readdirSync(dir, { withFileTypes: true })) {
+        const completo = resolve(dir, entrada.name);
+        if (entrada.isDirectory()) recorrer(completo);
+        else if (/\.(ts|css|html)$/.test(entrada.name)) {
+          max = Math.max(max, statSync(completo).mtimeMs);
+        }
+      }
+    };
+    recorrer(resolve(process.cwd(), "web/src"));
+    const config = resolve(process.cwd(), "vite.config.ts");
+    if (existsSync(config)) max = Math.max(max, statSync(config).mtimeMs);
+    return String(Math.round(max));
+  };
+  const arranqueServidor = new Date().toISOString();
+
   /** Slug seguro del proyecto activo ("" -> "sin-proyecto"). */
   const slugProyecto = (valor: unknown): string => {
     const limpio = String(valor ?? "")
@@ -497,6 +521,12 @@ export default defineConfig(({ mode }) => {
                 });
               }
             });
+          });
+
+          // Identificador del código servido: la pestaña lo compara cada 20 s y
+          // avisa si está corriendo un bundle viejo (HMR desconectado).
+          server.middlewares.use("/api/build", (_req, res) => {
+            responderJson(res, 200, { ok: true, id: idDeBuild(), arrancado: arranqueServidor });
           });
 
           server.middlewares.use("/api/fs/list", (req, res) => {
