@@ -126,3 +126,75 @@ test("add_notes usa tiempos relativos al clip", () => {  const { project } = app
   assert.equal(clip.notes.length, 2);
   assert.equal(project.lengthBars >= 3, true);
 });
+
+test("move_clip cambia el inicio en beats", () => {
+  const inicio = applyOps(baseProject(), [
+    { op: "add_track", id: "trk_a", name: "A" },
+    { op: "add_notes", trackId: "trk_a", startBar: 0, notes: [{ pitch: 60, start: 0, duration: 1, velocity: 100 }] },
+  ]).project;
+  const clipId = inicio.tracks[0]!.clips[0]!.id;
+  const { project } = applyOps(inicio, [{ op: "move_clip", trackId: "trk_a", clipId, startBeat: 6 }]);
+  assert.equal(project.tracks[0]!.clips[0]!.start, 6);
+  assert.equal(project.tracks[0]!.clips[0]!.id, clipId, "el clip conserva su id");
+});
+
+test("move_clip puede cambiar de pista y rechaza mezclar midi con audio", () => {
+  const inicio = applyOps(baseProject(), [
+    { op: "add_track", id: "trk_a", name: "A" },
+    { op: "add_track", id: "trk_b", name: "B" },
+    { op: "add_track", id: "trk_w", name: "Wav", kind: "audio" },
+    { op: "add_notes", trackId: "trk_a", startBar: 0, notes: [{ pitch: 60, start: 0, duration: 1, velocity: 100 }] },
+  ]).project;
+  const clipId = inicio.tracks[0]!.clips[0]!.id;
+
+  const movido = applyOps(inicio, [
+    { op: "move_clip", trackId: "trk_a", clipId, startBeat: 4, trackDestinoId: "trk_b" },
+  ]).project;
+  assert.equal(movido.tracks[0]!.clips.length, 0, "sale de la pista original");
+  assert.equal(movido.tracks[1]!.clips.length, 1, "entra en la destino");
+  assert.equal(movido.tracks[1]!.clips[0]!.start, 4);
+
+  assert.throws(
+    () =>
+      applyOps(inicio, [
+        { op: "move_clip", trackId: "trk_a", clipId, startBeat: 0, trackDestinoId: "trk_w" },
+      ]),
+    /pista de audio/,
+  );
+});
+
+test("duplicate_clip coloca la copia justo después y no comparte notas", () => {
+  const inicio = applyOps(baseProject(), [
+    { op: "add_track", id: "trk_a", name: "A" },
+    { op: "add_notes", trackId: "trk_a", startBar: 0, notes: [{ pitch: 60, start: 0, duration: 2, velocity: 100 }] },
+  ]).project;
+  const original = inicio.tracks[0]!.clips[0]!;
+
+  const { project } = applyOps(inicio, [
+    { op: "duplicate_clip", trackId: "trk_a", clipId: original.id },
+  ]);
+  const clips = project.tracks[0]!.clips;
+  assert.equal(clips.length, 2);
+  assert.equal(clips[1]!.start, original.start + original.length, "pegado al final del original");
+  assert.notEqual(clips[1]!.id, original.id, "id nuevo");
+
+  // mutar la copia no toca al original
+  clips[1]!.notes[0]!.pitch = 72;
+  assert.equal(clips[0]!.notes[0]!.pitch, 60);
+});
+
+test("duplicate_clip puede copiar a otra pista y a un inicio concreto", () => {
+  const inicio = applyOps(baseProject(), [
+    { op: "add_track", id: "trk_a", name: "A" },
+    { op: "add_track", id: "trk_b", name: "B" },
+    { op: "add_notes", trackId: "trk_a", startBar: 0, notes: [{ pitch: 64, start: 0, duration: 1, velocity: 90 }] },
+  ]).project;
+  const original = inicio.tracks[0]!.clips[0]!;
+  const { project } = applyOps(inicio, [
+    { op: "duplicate_clip", trackId: "trk_a", clipId: original.id, startBeat: 16, trackDestinoId: "trk_b" },
+  ]);
+  assert.equal(project.tracks[0]!.clips.length, 1);
+  assert.equal(project.tracks[1]!.clips.length, 1);
+  assert.equal(project.tracks[1]!.clips[0]!.start, 16);
+  assert.equal(project.tracks[1]!.clips[0]!.notes[0]!.pitch, 64);
+});

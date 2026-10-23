@@ -4,7 +4,8 @@
  */
 
 import { z } from "zod";
-import type { Device, DeviceType, Note, Project, Track } from "./types.ts";import {
+import type { Clip, Device, DeviceType, Note, Project, Track } from "./types.ts";
+import {
   DEVICE_DEFAULTS,
   DEVICE_PARAMS,
   DEVICE_TYPES,
@@ -153,6 +154,28 @@ const SetAudioClipOp = z.object({
   gainDb: GainSchema.optional(),
 });
 
+const MoveClipOp = z.object({
+  op: z.literal("move_clip"),
+  trackId: IdSchema.describe("Pista donde esta el clip"),
+  clipId: IdSchema.describe("Id o nombre del clip"),
+  startBeat: z.number().min(0).max(16384).describe("Nuevo inicio en beats desde el compas 1"),
+  trackDestinoId: IdSchema.optional().describe("Pista destino si se arrastra en vertical"),
+});
+
+const DuplicateClipOp = z.object({
+  op: z.literal("duplicate_clip"),
+  trackId: IdSchema.describe("Pista donde esta el clip original"),
+  clipId: IdSchema.describe("Id o nombre del clip original"),
+  startBeat: z
+    .number()
+    .min(0)
+    .max(16384)
+    .optional()
+    .describe("Inicio de la copia; por defecto, justo despues del original"),
+  trackDestinoId: IdSchema.optional().describe("Pista destino de la copia"),
+  name: z.string().max(60).optional(),
+});
+
 const SetMasterOp = z.object({
   op: z.literal("set_master"),
   gainDb: GainSchema,
@@ -172,6 +195,8 @@ const OpSchema = z.discriminatedUnion("op", [
   RegisterAudioAssetOp,
   AddAudioClipOp,
   SetAudioClipOp,
+  MoveClipOp,
+  DuplicateClipOp,
   SetMasterOp,
 ]);
 
@@ -467,6 +492,56 @@ function applyOne(project: Project, op: ParsedOp): string {
         );
       }
       return `Clip de audio actualizado: ${clip.id}`;
+    }
+
+    case "move_clip": {
+      const origen = resolveTrack(project, op.trackId);
+      const clip = resolveClip(origen, op.clipId);
+      const barBeats = beatsPerBar(project);
+      let destino = origen;
+      if (op.trackDestinoId && op.trackDestinoId !== origen.id) {
+        destino = resolveTrack(project, op.trackDestinoId);
+        if (destino.kind !== origen.kind) {
+          throw new OpError(
+            `No se puede mover un clip de ${origen.kind} a una pista de ${destino.kind} ("${destino.name}")`,
+          );
+        }
+        origen.clips = origen.clips.filter((existing) => existing !== clip);
+        destino.clips.push(clip);
+      }
+      clip.start = Math.max(0, op.startBeat);
+      project.lengthBars = Math.max(
+        project.lengthBars,
+        Math.ceil((clip.start + clip.length) / barBeats),
+      );
+      return `Clip movido: ${clip.id} a ${clip.start.toFixed(2)} beats en ${destino.name}`;
+    }
+
+    case "duplicate_clip": {
+      const origen = resolveTrack(project, op.trackId);
+      const clip = resolveClip(origen, op.clipId);
+      const destino = op.trackDestinoId ? resolveTrack(project, op.trackDestinoId) : origen;
+      if (destino.kind !== origen.kind) {
+        throw new OpError(
+          `No se puede duplicar un clip de ${origen.kind} en una pista de ${destino.kind} ("${destino.name}")`,
+        );
+      }
+      const barBeats = beatsPerBar(project);
+      const copia: Clip = {
+        id: nextClipId(project),
+        name: op.name ?? clip.name,
+        start: Math.max(0, op.startBeat ?? clip.start + clip.length),
+        length: clip.length,
+        notes: clip.notes.map((nota) => ({ ...nota })),
+      };
+      if (clip.audio) copia.audio = { ...clip.audio };
+      if (clip.origin) copia.origin = { ...clip.origin };
+      destino.clips.push(copia);
+      project.lengthBars = Math.max(
+        project.lengthBars,
+        Math.ceil((copia.start + copia.length) / barBeats),
+      );
+      return `Clip duplicado: ${copia.id} en ${destino.name} (${copia.start.toFixed(2)} beats)`;
     }
 
     case "add_device": {

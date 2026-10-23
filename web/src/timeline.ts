@@ -1,6 +1,6 @@
 /** Timeline + piano roll en canvas con cabeceras fijas. */
 
-import type { Project, Track } from "../../src/core/types.ts";
+import type { Clip, Project, Track } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
 import { audioAssets } from "./audio-store.ts";
 
@@ -23,6 +23,19 @@ const COLORS: Record<string, string> = {
 
 const colorOf = (track: Track): string => COLORS[track.instrument.type] ?? "#8a8f9c";
 
+/** Un clip que se mueve (o se copia) al soltarlo. */
+export interface MovimientoClip {
+  trackId: string;
+  clipId: string;
+  startBeat: number;
+  trackDestinoId?: string;
+}
+
+/** Paso del imán: semicorchea. */
+const PASO_IMAN = 0.25;
+/** Cuántos píxeles hay que moverse para que cuente como arrastre y no como clic. */
+const UMBRAL_ARRASTRE = 3;
+
 export class TimelineView {
   private readonly canvas: HTMLCanvasElement;
   private readonly wrap: HTMLElement;
@@ -39,6 +52,16 @@ export class TimelineView {
   private lastPlayheadX: number | null = null;
   private selected = new Set<string>();
   private anchor: string | null = null;
+  private selectedClips = new Set<string>();
+  private drag: {
+    trackIndex: number;
+    clipStart: number;
+    x0: number;
+    y0: number;
+    deltaBeats: number;
+    deltaTracks: number;
+    movido: boolean;
+  } | null = null;
 
   get currentBeat(): number {
     return this.beat;
@@ -49,6 +72,8 @@ export class TimelineView {
   onToggleSolo: (trackId: string) => void = () => {};
   onSelectionChange: (trackIds: string[]) => void = () => {};
   onEditClip: (trackId: string, clipId: string) => void = () => {};
+  onClipSelectionChange: (clipIds: string[]) => void = () => {};
+  onClipsDrop: (movimientos: MovimientoClip[], copiar: boolean) => void = () => {};
 
   constructor(canvas: HTMLCanvasElement, wrap: HTMLElement, heads: HTMLElement) {
     this.canvas = canvas;
@@ -58,11 +83,99 @@ export class TimelineView {
     this.staticCanvas = document.createElement("canvas");
     this.staticCtx = this.staticCanvas.getContext("2d")!;
 
-    this.canvas.addEventListener("click", (event) => {
+    // Arrastre de clips + seleccion. El seek se hace al pinchar en el vacio o en la regla.
+    this.canvas.addEventListener("pointerdown", (event) => {
+      if (!this.project) return;
       const rect = this.canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
-      this.onSeek(Math.max(0, x / this.pxPerBeat));
+      const y = event.clientY - rect.top;
+      const golpe = this.clipAt(x, y);
+      if (!golpe) {
+        this.clearClipSelection();
+        this.onSeek(Math.max(0, x / this.pxPerBeat));
+        return;
+      }
+      // Shift anade a la seleccion; Ctrl tambien (para no romper costumbres).
+      if (event.shiftKey || event.ctrlKey || event.metaKey) {
+        if (this.selectedClips.has(golpe.clip.id)) this.selectedClips.delete(golpe.clip.id);
+        else this.selectedClips.add(golpe.clip.id);
+      } else if (!this.selectedClips.has(golpe.clip.id)) {
+        this.selectedClips = new Set([golpe.clip.id]);
+      }
+      this.emitClipSelection();
+      try {
+        this.canvas.setPointerCapture(event.pointerId);
+      } catch {
+        /* puntero sintetico o ya liberado: el arrastre funciona igual */
+      }
+      this.drag = {
+        trackIndex: golpe.trackIndex,
+        clipStart: golpe.clip.start,
+        x0: x,
+        y0: y,
+        deltaBeats: 0,
+        deltaTracks: 0,
+        movido: false,
+      };
+      this.renderStatic();
+      this.draw(this.beat);
     });
+
+    this.canvas.addEventListener("pointermove", (event) => {
+      if (!this.drag || !this.project) return;
+      const rect = this.canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const dx = x - this.drag.x0;
+      const dy = y - this.drag.y0;
+      if (Math.abs(dx) >= UMBRAL_ARRASTRE || Math.abs(dy) >= UMBRAL_ARRASTRE) this.drag.movido = true;
+      const bruto = dx / this.pxPerBeat;
+      this.drag.deltaBeats = Math.round(bruto / PASO_IMAN) * PASO_IMAN;
+      // Solo se cambia de pista arrastrando un unico clip (con varios no hay destino claro).
+      this.drag.deltaTracks =
+        this.selectedClips.size === 1 ? Math.round(dy / ROW) : 0;
+      this.renderStatic();
+      this.draw(this.beat);
+    });
+
+    const soltar = (event: PointerEvent): void => {
+      if (!this.drag || !this.project) return;
+      const arrastre = this.drag;
+      this.drag = null;
+      try {
+        this.canvas.releasePointerCapture(event.pointerId);
+      } catch {
+        /* el puntero ya no estaba capturado */
+      }
+      if (!arrastre.movido) {
+        this.renderStatic();
+        this.draw(this.beat);
+        return;
+      }
+      const total = this.project.tracks.length;
+      const movimientos: MovimientoClip[] = [];
+      for (const track of this.project.tracks) {
+        for (const clip of track.clips) {
+          if (!this.selectedClips.has(clip.id)) continue;
+          const indiceDestino = Math.max(
+            0,
+            Math.min(total - 1, this.indiceDePista(track.id) + arrastre.deltaTracks),
+          );
+          const destino = this.project.tracks[indiceDestino]!;
+          movimientos.push({
+            trackId: track.id,
+            clipId: clip.id,
+            startBeat: Math.max(0, clip.start + arrastre.deltaBeats),
+            ...(destino.id !== track.id ? { trackDestinoId: destino.id } : {}),
+          });
+        }
+      }
+      this.renderStatic();
+      this.draw(this.beat);
+      if (movimientos.length > 0) this.onClipsDrop(movimientos, event.altKey);
+    };
+    this.canvas.addEventListener("pointerup", soltar);
+    this.canvas.addEventListener("pointercancel", soltar);
 
     this.canvas.addEventListener("dblclick", (event) => {
       if (!this.project) return;
@@ -148,6 +261,9 @@ export class TimelineView {
   setProject(project: Project): void {
     this.project = project;
     this.beat = 0;
+    this.selectedClips.clear();
+    this.drag = null;
+    this.emitClipSelection();
     this.pruneSelection();
     this.fitToProject();
     this.renderHeads();
@@ -220,10 +336,57 @@ export class TimelineView {
       if (!ids.has(id)) this.selected.delete(id);
     }
     if (this.anchor && !ids.has(this.anchor)) this.anchor = null;
+
+    const clipIds = new Set(this.project.tracks.flatMap((track) => track.clips.map((clip) => clip.id)));
+    for (const id of [...this.selectedClips]) {
+      if (!clipIds.has(id)) this.selectedClips.delete(id);
+    }
   }
 
   private emitSelection(): void {
     this.onSelectionChange([...this.selected]);
+  }
+
+  /** Clip que hay bajo un punto del lienzo (null si es vacio o la regla). */
+  private clipAt(x: number, y: number): { trackIndex: number; clip: Clip; track: Track } | null {
+    if (!this.project || y < RULER) return null;
+    const index = Math.floor((y - RULER) / ROW);
+    const track = this.project.tracks[index];
+    if (!track) return null;
+    const beat = x / this.pxPerBeat;
+    for (const clip of track.clips) {
+      if (beat >= clip.start && beat < clip.start + clip.length) {
+        return { trackIndex: index, clip, track };
+      }
+    }
+    return null;
+  }
+
+  private indiceDePista(trackId: string): number {
+    return this.project ? this.project.tracks.findIndex((track) => track.id === trackId) : -1;
+  }
+
+  getSelectedClips(): string[] {
+    return [...this.selectedClips];
+  }
+
+  selectClips(ids: string[]): void {
+    this.selectedClips = new Set(ids);
+    this.emitClipSelection();
+    this.renderStatic();
+    this.draw(this.beat);
+  }
+
+  clearClipSelection(): void {
+    if (this.selectedClips.size === 0) return;
+    this.selectedClips.clear();
+    this.emitClipSelection();
+    this.renderStatic();
+    this.draw(this.beat);
+  }
+
+  private emitClipSelection(): void {
+    this.onClipSelectionChange([...this.selectedClips]);
   }
 
   draw(beat: number): void {
@@ -380,9 +543,10 @@ export class TimelineView {
       for (const clip of track.clips) {
         const x = clip.start * this.pxPerBeat;
         const width = Math.max(2, clip.length * this.pxPerBeat);
-        ctx.fillStyle = withAlpha(color, track.muted ? 0.06 : 0.16);
-        ctx.strokeStyle = withAlpha(color, track.muted ? 0.2 : 0.55);
-        ctx.lineWidth = 1;
+        const elegido = this.selectedClips.has(clip.id);
+        ctx.fillStyle = withAlpha(color, track.muted ? 0.06 : elegido ? 0.3 : 0.16);
+        ctx.strokeStyle = withAlpha(color, track.muted ? 0.2 : elegido ? 1 : 0.55);
+        ctx.lineWidth = elegido ? 2 : 1;
         ctx.beginPath();
         ctx.roundRect(x + 0.5, top + 4.5, width - 1, ROW - 9, 4);
         ctx.fill();
@@ -445,6 +609,34 @@ export class TimelineView {
         ctx.restore();
       }
     });
+
+    // Fantasma de lo que se esta arrastrando (destino real, con iman aplicado).
+    if (this.drag && this.drag.movido) {
+      const arrastre = this.drag;
+      project.tracks.forEach((track, index) => {
+        const indiceDestino = Math.max(
+          0,
+          Math.min(project.tracks.length - 1, index + arrastre.deltaTracks),
+        );
+        const destino = project.tracks[indiceDestino]!;
+        for (const clip of track.clips) {
+          if (!this.selectedClips.has(clip.id)) continue;
+          const x = Math.max(0, clip.start + arrastre.deltaBeats) * this.pxPerBeat;
+          const ancho = Math.max(2, clip.length * this.pxPerBeat);
+          const top = RULER + indiceDestino * ROW;
+          ctx.save();
+          ctx.setLineDash([5, 3]);
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = withAlpha(colorOf(destino), 0.95);
+          ctx.fillStyle = withAlpha(colorOf(destino), 0.12);
+          ctx.beginPath();
+          ctx.roundRect(x + 1, top + 5, ancho - 2, ROW - 11, 4);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+      });
+    }
   }
 }
 

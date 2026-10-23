@@ -141,6 +141,9 @@ let busy = false;
 let ready = false;
 let restoring = false;
 let selectedTrackIds: string[] = [];
+let selectedClipIds: string[] = [];
+/** Referencias copiadas con Ctrl+C (se pegan duplicando el original). */
+let portapapeles: { trackId: string; clipId: string; start: number }[] = [];
 let persistenceWarned = false;
 let openDawHandle: OpenDawPlaybackHandle | null = null;
 let openDawGeneration = 0;
@@ -166,6 +169,21 @@ timeline.onToggleSolo = (trackId) => toggleTracksFlag([trackId], "solo");
 timeline.onSelectionChange = (ids) => {
   selectedTrackIds = ids;
   updateSelectionBar();
+};
+timeline.onClipSelectionChange = (ids) => {
+  selectedClipIds = ids;
+  updateSelectionBar();
+};
+timeline.onClipsDrop = (movimientos, copiar) => {
+  if (!project || movimientos.length === 0) return;
+  const ops: Op[] = movimientos.map((mov) => ({
+    op: (copiar ? "duplicate_clip" : "move_clip") as "duplicate_clip" | "move_clip",
+    trackId: mov.trackId,
+    clipId: mov.clipId,
+    startBeat: mov.startBeat,
+    ...(mov.trackDestinoId ? { trackDestinoId: mov.trackDestinoId } : {}),
+  }));
+  aplicarOpsClips(ops, `${copiar ? "Copiado" : "Movido"}(s) ${ops.length} clip(s).`, copiar);
 };
 
 timeline.onEditClip = (trackId, clipId) => {
@@ -536,15 +554,100 @@ function applyProject(next: Project | null): void {
 
 function updateSelectionBar(): void {
   const selected = project?.tracks.filter((track) => selectedTrackIds.includes(track.id)) ?? [];
+  const clips = selectedClipIds.length;
   const bar = $<HTMLElement>("selection-bar");
-  bar.hidden = selected.length === 0;
-  $("selection-count").textContent = selected.length === 1 ? "1 pista" : `${selected.length} pistas`;
+  bar.hidden = selected.length === 0 && clips === 0;
+  const partes: string[] = [];
+  if (selected.length > 0) partes.push(selected.length === 1 ? "1 pista" : `${selected.length} pistas`);
+  if (clips > 0) partes.push(clips === 1 ? "1 clip" : `${clips} clips`);
+  $("selection-count").textContent = partes.join(" · ") || "0";
   const enabled = ready && !busy;
   $<HTMLButtonElement>("sel-mute").disabled = !enabled || selected.length === 0;
   $<HTMLButtonElement>("sel-solo").disabled = !enabled || selected.length === 0;
   $<HTMLButtonElement>("sel-delete").disabled = !enabled || selected.length === 0;
   $<HTMLButtonElement>("sel-all").disabled = !enabled || !project || project.tracks.length === 0;
-  $<HTMLButtonElement>("sel-clear").disabled = selected.length === 0;
+  $<HTMLButtonElement>("sel-clear").disabled = selected.length === 0 && clips === 0;
+  $<HTMLButtonElement>("clip-copy").disabled = !enabled || clips === 0;
+  $<HTMLButtonElement>("clip-paste").disabled = !enabled || portapapeles.length === 0;
+  $<HTMLButtonElement>("clip-dup").disabled = !enabled || clips === 0;
+}
+
+/** Devuelve el par (pista, clip) de cada id seleccionado. */
+function clipsSeleccionados(): { trackId: string; clipId: string; start: number; length: number }[] {
+  if (!project) return [];
+  const salida: { trackId: string; clipId: string; start: number; length: number }[] = [];
+  for (const track of project.tracks) {
+    for (const clip of track.clips) {
+      if (selectedClipIds.includes(clip.id)) {
+        salida.push({ trackId: track.id, clipId: clip.id, start: clip.start, length: clip.length });
+      }
+    }
+  }
+  return salida;
+}
+
+/** Aplica ops de clips y deja seleccionado lo que ha quedado (las copias, si las hay). */
+function aplicarOpsClips(ops: Op[], mensaje: string, seleccionarNuevas: boolean): void {
+  if (!project || ops.length === 0) return;
+  try {
+    const antes = new Set(project.tracks.flatMap((track) => track.clips.map((clip) => clip.id)));
+    const siguiente = applyOps(project, ops).project;
+    commitLive(siguiente);
+    if (seleccionarNuevas) {
+      const nuevas = siguiente.tracks
+        .flatMap((track) => track.clips.map((clip) => clip.id))
+        .filter((id) => !antes.has(id));
+      if (nuevas.length > 0) timeline.selectClips(nuevas);
+    }
+    addMessage("system", mensaje);
+  } catch (error) {
+    addMessage("system", `No se pudo: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function copiarClips(): void {
+  const clips = clipsSeleccionados();
+  if (clips.length === 0) return;
+  portapapeles = clips.map(({ trackId, clipId, start }) => ({ trackId, clipId, start }));
+  addMessage("system", `Copiado(s) ${clips.length} clip(s). Ctrl+V para pegar en el cursor.`);
+  updateSelectionBar();
+}
+
+function pegarClips(): void {
+  if (!project || portapapeles.length === 0) return;
+  const base = Math.min(...portapapeles.map((item) => item.start));
+  // iman a semicorchea, igual que el arrastre
+  const destino = Math.round(currentBeat() / 0.25) * 0.25;
+  const ops: Op[] = portapapeles.map((item) => ({
+    op: "duplicate_clip" as const,
+    trackId: item.trackId,
+    clipId: item.clipId,
+    startBeat: Math.max(0, destino + (item.start - base)),
+  }));
+  aplicarOpsClips(ops, `Pegado(s) ${ops.length} clip(s) en el compás ${Math.floor(destino / 4) + 1}.`, true);
+}
+
+function duplicarClips(): void {
+  const clips = clipsSeleccionados();
+  if (clips.length === 0) return;
+  const ops: Op[] = clips.map((item) => ({
+    op: "duplicate_clip" as const,
+    trackId: item.trackId,
+    clipId: item.clipId,
+    startBeat: item.start + item.length,
+  }));
+  aplicarOpsClips(ops, `Duplicado(s) ${ops.length} clip(s) a continuación.`, true);
+}
+
+function borrarClips(): void {
+  const clips = clipsSeleccionados();
+  if (clips.length === 0) return;
+  const ops: Op[] = clips.map((item) => ({
+    op: "remove_clip" as const,
+    trackId: item.trackId,
+    clipId: item.clipId,
+  }));
+  aplicarOpsClips(ops, `Borrado(s) ${ops.length} clip(s).`, false);
 }
 
 function deleteSelectedTracks(): void {
@@ -676,6 +779,9 @@ $("new-song").addEventListener("click", () => {
 
 $("code-lab").addEventListener("click", () => openCodeEditor());
 
+$("clip-copy").addEventListener("click", copiarClips);
+$("clip-paste").addEventListener("click", pegarClips);
+$("clip-dup").addEventListener("click", duplicarClips);
 $("sel-mute").addEventListener("click", () => toggleTracksFlag(selectedTrackIds, "muted"));
 $("sel-solo").addEventListener("click", () => toggleTracksFlag(selectedTrackIds, "solo"));
 $("sel-delete").addEventListener("click", deleteSelectedTracks);
@@ -985,6 +1091,11 @@ window.addEventListener("keydown", (event) => {
   }
   if (!modifier) {
     if (event.key === "Delete" || event.key === "Backspace") {
+      if (selectedClipIds.length > 0) {
+        event.preventDefault();
+        borrarClips();
+        return;
+      }
       if (selectedTrackIds.length === 0) return;
       event.preventDefault();
       deleteSelectedTracks();
@@ -995,6 +1106,15 @@ window.addEventListener("keydown", (event) => {
   if (key === "a") {
     event.preventDefault();
     timeline.selectAll();
+  } else if (key === "c") {
+    event.preventDefault();
+    copiarClips();
+  } else if (key === "v") {
+    event.preventDefault();
+    pegarClips();
+  } else if (key === "d") {
+    event.preventDefault();
+    duplicarClips();
   } else if (key === "z") {
     event.preventDefault();
     if (event.shiftKey) void redo();
