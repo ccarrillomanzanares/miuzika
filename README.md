@@ -57,7 +57,8 @@ stack(
 ```
 
 - 1 ciclo = 1 compás.
-- Límite actual: 64 compases.
+- El render de Strudel va por compases (sin tope de clips: los WAV largos ya no se
+  recortan).
 - Carga sample packs y soundfonts de Strudel; la primera renderización puede tardar.
 - El resultado es audio, no MIDI.
 
@@ -96,14 +97,17 @@ web/
     audio-db.ts          IndexedDB de WAVs
   public/drums/          kit WAV para Playfield
   public/opendaw-wasm/   engine.wasm y plugins
-docs/                   arquitectura, openDAW y plan de pruebas
+docs/                   arquitectura, openDAW, plan de pruebas y notas legales
+  LEGAL.md              qué es y qué no es obra; licencias de datos y modelos
 ```
 
 ## Limitaciones
 
 - Strudel → WAV: máximo 64 compases por render.
 - Strudel depende de sample maps remotos y de sus licencias.
-- openDAW puede consumir CPU/memoria con muchos WAV largos.
+- Los WAV de más de 30 s se reproducen por streaming (`<audio>`), no decodificados:
+  10 stems de 6 minutos ocupan ~20 MB en lugar de ~1,3 GB.
+- openDAW sigue decodificando los WAV cortos y los samples de batería.
 - El motor de patrones clásico asume 4/4.
 
 ## Licencia
