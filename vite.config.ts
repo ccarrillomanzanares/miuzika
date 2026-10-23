@@ -1012,6 +1012,33 @@ export default defineConfig(({ mode }) => {
                 responderJson(res, 404, { error: `no existe ${datos.path}` });
                 return;
               }
+
+              // En Lambda se paga GPU por hora: un script del motor numpy (dsp,
+              // instruments, render) allí es CPU a precio de GPU. Se corta antes
+              // de arrancar la máquina, que es lo caro.
+              const fuente = readFileSync(script, "utf8");
+              const usaGpu = /\b(?:from|import)\s+motor_gpu\b/.test(fuente) || /\btorch\b/.test(fuente);
+              const usaNumpy = /\b(?:from|import)\s+(?:dsp|instruments|render|cancion)\b/.test(fuente);
+              if (usaNumpy && !usaGpu) {
+                anotar(
+                  ficheroHerramientas,
+                  JSON.stringify({
+                    t: new Date().toISOString(),
+                    tool: "ejecutar_python_lambda",
+                    path: datos.path,
+                    rechazado: "script de CPU en Lambda",
+                  }),
+                );
+                responderJson(res, 409, {
+                  error:
+                    "Ese script usa el motor numpy (dsp/instruments/render) y NO importa motor_gpu: en " +
+                    "Lambda pagarías GPU para renderizar en CPU. Dos salidas: (1) reescríbelo con motor_gpu " +
+                    "(torch: osc, saturar(veces=4), ir_estereo, reverb, shimmer, congelar, granular, " +
+                    "compresor_multibanda, limitador) y repite con destino='lambda'; (2) si quieres CPU, " +
+                    "usa destino='cpu': es gratis y corre en el portátil. No hay una tercera.",
+                });
+                return;
+              }
               const segundos = Math.min(Math.max(datos.timeout_segundos ?? 900, 1), 1800);
               const argumentos = Array.isArray(datos.argumentos)
                 ? datos.argumentos.map((a) => String(a))
@@ -1020,6 +1047,9 @@ export default defineConfig(({ mode }) => {
               const relativo = relative(carpetaTrabajo, script).split(sep).join("/");
 
               const avisos: string[] = [];
+              if (!usaGpu) {
+                avisos.push("El script no importa motor_gpu: la GPU está encendida pero no se usa.");
+              }
               ejecutarEnLambda(cfgLambda, {
                 scriptRel: relativo,
                 argumentos,
