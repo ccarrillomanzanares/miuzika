@@ -17,3 +17,4 @@ workspace/catalogo/**/*.flac
 workspace/catalogo/_descargas/
 workspace/tmp/
 workspace/catalogo/VCSL-1.2.2-RC/
+workspace/catalogo/**/*.sf2
