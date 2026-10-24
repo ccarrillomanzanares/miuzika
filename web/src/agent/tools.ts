@@ -112,6 +112,7 @@ interface RegistroGlobal {
   creador?: CreadorProyecto | null;
   importador?: ImportadorLocal | null;
   ajustador?: Ajustador | null;
+  igualador?: Igualador | null;
 }
 
 const registro: RegistroGlobal =
@@ -148,11 +149,30 @@ export function registrarAjustador(fn: Ajustador | null): void {
   registro.ajustador = fn;
 }
 
+/** Igualar la duracion de los clips (en compases) sin tocar el resto del proyecto. */
+export interface PeticionIgualar {
+  /** Compases que deben durar los clips. Si falta, se toma el clip mas largo. */
+  compases?: number;
+  /** Solo estas pistas (por nombre). Vacio = todas. */
+  pistas?: string[];
+}
+
+type Igualador = (peticion: PeticionIgualar) => { ok: boolean; texto: string };
+
+let igualador: Igualador | null = null;
+
+/** main.ts registra aqui como se igualan los clips (necesita el proyecto). */
+export function registrarIgualador(fn: Igualador | null): void {
+  igualador = fn;
+  registro.igualador = fn;
+}
+
 /** Lo registrado, mirando primero lo local y después el registro compartido. */
 const herramientaLocal = {
   creador: (): CreadorProyecto | null => creadorProyecto ?? registro.creador ?? null,
   importador: (): ImportadorLocal | null => importadorLocal ?? registro.importador ?? null,
   ajustador: (): Ajustador | null => ajustador ?? registro.ajustador ?? null,
+  igualador: (): Igualador | null => igualador ?? registro.igualador ?? null,
 };
 
 /** Mensaje único para el caso «la app no tiene este registro»: dice qué hacer. */
@@ -276,6 +296,30 @@ export const HERRAMIENTAS: ToolSpec[] = [
           compases: { type: "integer", description: "Duracion en compases (por defecto 32)" },
         },
         required: ["nombre"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "igualar_clips",
+      description:
+        "Iguala la duracion de TODOS los clips del proyecto (MIDI y audio) al mismo numero de compases. " +
+        "Usalo cuando el usuario diga que los clips no acaban igual o cuando el MIDI y el WAV de un mismo " +
+        "instrumento terminen en compases distintos. No toca ni notas, ni niveles, ni el tempo.",
+      parameters: {
+        type: "object",
+        properties: {
+          compases: {
+            type: "integer",
+            description: "Compases que deben durar todos los clips. Si no lo dices, se usa el clip mas largo.",
+          },
+          pistas: {
+            type: "array",
+            items: { type: "string" },
+            description: "Solo estas pistas (por nombre). Vacio = todo el proyecto.",
+          },
+        },
       },
     },
   },
@@ -423,6 +467,16 @@ async function ejecutarCrudo(
           nombre: String(args.nombre ?? "").trim(),
           bpm: Number(args.bpm ?? 120) || 120,
           compases: Number(args.compases ?? 32) || 32,
+        });
+      }
+      case "igualar_clips": {
+        const igualar = herramientaLocal.igualador();
+        if (!igualar) {
+          return { ok: false, texto: SIN_REGISTRO };
+        }
+        return igualar({
+          ...(Number(args.compases) > 0 ? { compases: Math.trunc(Number(args.compases)) } : {}),
+          ...(Array.isArray(args.pistas) ? { pistas: (args.pistas as unknown[]).map(String) } : {}),
         });
       }
       case "anadir_pistas": {

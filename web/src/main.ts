@@ -57,10 +57,16 @@ import {
   cabecerasProyecto,
   registrarAjustador,
   registrarCreador,
+  registrarIgualador,
   registrarImportador,
   setProyectoActivo,
 } from "./agent/tools.ts";
-import type { AjustePista, PeticionPistas, PeticionProyecto } from "./agent/tools.ts";
+import type {
+  AjustePista,
+  PeticionIgualar,
+  PeticionPistas,
+  PeticionProyecto,
+} from "./agent/tools.ts";
 import { ejecutarHerramienta } from "./agent/tools.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 
@@ -1424,6 +1430,70 @@ async function importarPistasDesdeAgente(
   return { ok: hechas.length > 0, texto };
 }
 
+/**
+ * Iguala la duracion de los clips: todos al mismo numero de compases.
+ *
+ * Los clips se miden en compases, asi que el MIDI de un instrumento y el WAV del
+ * mismo material tienen que acabar en el mismo compas. Va por ops (se deshace con
+ * Ctrl+Z) y no toca notas, niveles ni tempo.
+ */
+function igualarClipsDesdeAgente(peticion: PeticionIgualar): { ok: boolean; texto: string } {
+  if (!project) return { ok: false, texto: "No hay ningun proyecto abierto." };
+  const bar = beatsPerBar(project);
+  const normal = (texto: string): string =>
+    texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+  const pedidas = (peticion.pistas ?? []).filter((n) => n.trim() !== "");
+  const pistas =
+    pedidas.length === 0
+      ? project.tracks
+      : project.tracks.filter((t) => pedidas.some((n) => normal(t.name).includes(normal(n))));
+  if (pistas.length === 0) {
+    return { ok: false, texto: `No encuentro ninguna pista que se llame asi: ${pedidas.join(", ")}` };
+  }
+
+  const masLargo = Math.max(0, ...pistas.flatMap((t) => t.clips.map((c) => c.length)));
+  const objetivo =
+    peticion.compases && peticion.compases > 0
+      ? Math.trunc(peticion.compases) * bar
+      : compasesDeAudio(masLargo, bar);
+  if (!(objetivo > 0)) return { ok: false, texto: "No hay clips que igualar." };
+
+  const ops: Op[] = [];
+  let mudos = 0;
+  for (const pista of pistas) {
+    for (const clip of pista.clips) {
+      if (Math.abs(clip.length - objetivo) > 1e-6) {
+        ops.push({ op: "set_clip_length", trackId: pista.id, clipId: clip.id, lengthBeats: objetivo });
+      }
+    }
+  }
+  if (ops.length === 0) {
+    return {
+      ok: true,
+      texto: `Nada que igualar: los ${pistas.length} clips ya duran ${(objetivo / bar).toFixed(2)} compases.`,
+    };
+  }
+  for (const pista of pistas) {
+    if (pista.kind === "audio") mudos += 1;
+  }
+  const siguiente = applyOps(project, [
+    ...ops,
+    {
+      op: "set_song",
+      bpm: project.bpm,
+      lengthBars: Math.max(project.lengthBars, Math.ceil(objetivo / bar - 1e-6)),
+    },
+  ]).project;
+  commitLive(siguiente);
+  return {
+    ok: true,
+    texto:
+      `Igualados ${ops.length} clips a ${(objetivo / bar).toFixed(2)} compases (${objetivo} beats) ` +
+      `en ${pistas.length} pistas. El proyecto queda en ${siguiente.lengthBars} compases.`,
+  };
+}
+
 /** Crea un proyecto vacio con el nombre pedido (lo llama el agente tras preguntar). */
 function crearProyectoDesdeAgente(peticion: PeticionProyecto): { ok: boolean; texto: string } {
   const nombre = peticion.nombre.trim();
@@ -1516,6 +1586,7 @@ function ajustarPistasDesdeAgente(peticion: { pistas: AjustePista[] }): { ok: bo
 registrarImportador(importarPistasDesdeAgente);
 registrarCreador(crearProyectoDesdeAgente);
 registrarAjustador(ajustarPistasDesdeAgente);
+registrarIgualador(igualarClipsDesdeAgente);
 
 /** ¿Es un fichero de audio? (por MIME o por extension) */
 function esAudio(file: File): boolean {
