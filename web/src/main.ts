@@ -1,6 +1,7 @@
 import type { CodeSource, InstrumentType, Project } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
 import { createProject, projectStats } from "../../src/core/project.ts";
+import { compasesDeAudio } from "../../src/core/tiempo.ts";
 import { applyOps } from "../../src/core/ops.ts";
 import type { Op } from "../../src/core/ops.ts";
 import {
@@ -112,6 +113,11 @@ const AGENTE_SISTEMA = [
   "Para corregir una linea usa editar_fichero(path, busca, reemplaza). Para medir un WAV usa",
   "verificar_audio(path). Para un sample rapido copia plantillas/one_shot.py y cambia PARAMS.",
   "Si de verdad hace falta algo nuevo, crealo en codigo/experimental/ con nombres nuevos.",
+  "ANTES DE ENTREGAR, PREGUNTA (no lo decidas tu): (a) ¿pistas MIDI, WAV o las dos? Si son las dos, el",
+  "material se duplica y suena doble: o dejas las MIDI silenciadas, o no las anades. (b) Si algun stem queda",
+  "mas de 12 dB por debajo de la mediana (pico), dilo y PREGUNTA si corregirlo antes de tocar el script.",
+  "Los clips de audio duran lo que el fichero redondeado a compas; los MIDI acaban donde acaban sus notas.",
+  "No estires unos para igualar los otros: si el usuario los quiere iguales, pregunta antes.",
   "REGLA DEL DINERO: en Lambda se paga la GPU por hora, asi que alli SOLO se ejecuta motor_gpu (torch).",
   "Un script que importe dsp/instruments/render/cancion es del motor numpy: eso va con destino='cpu',",
   "que es gratis. El servidor RECHAZA (409) un script de numpy en Lambda; no lo reintentes igual.",
@@ -1272,7 +1278,7 @@ async function importarPistasDesdeAgente(
                   op: "add_audio_clip" as const,
                   assetId,
                   startBar: inicio,
-                  lengthBeats: durationBeats,
+                  lengthBeats: compasesDeAudio(durationBeats, beatsPerBar(current)),
                   gainDb: 0,
                   name: nombre,
                   trackId: existente.id,
@@ -1314,7 +1320,7 @@ async function importarPistasDesdeAgente(
           op: "add_audio_clip",
           assetId: asset.id,
           startBar: inicio,
-          lengthBeats: asset.durationBeats,
+          lengthBeats: compasesDeAudio(asset.durationBeats, beatsPerBar(current)),
           gainDb: 0,
           name: nombre,
           track: { name: nombre },
@@ -1334,6 +1340,13 @@ async function importarPistasDesdeAgente(
     hechas.length > 0 ? `Anadidas ${hechas.length} pistas:` : "No se anadio ninguna pista.",
     ...hechas.map((linea) => `- ${linea}`),
     ...(fallos.length > 0 ? ["Fallos:", ...fallos.map((linea) => `- ${linea}`)] : []),
+    // El mismo material dos veces suena doble: se avisa en el acto, no después.
+    ...(peticion.midis.length > 0 && peticion.wavs.length > 0
+      ? [
+          "AVISO: has anadido MIDI y WAV del mismo tema. Suenan los dos a la vez (doble nivel y fase). " +
+            "Pregunta al usuario cual dejar y silencia el otro juego con ajustar_pistas.",
+        ]
+      : []),
   ].join("\n");
   return { ok: hechas.length > 0, texto };
 }
@@ -1525,7 +1538,7 @@ async function importarAudio(files: File[], destino: "anadir" | "nuevo" = "anadi
           op: "add_audio_clip",
           assetId,
           startBar: bar,
-          lengthBeats: durationBeats,
+          lengthBeats: compasesDeAudio(durationBeats, beatsPerBar(current)),
           gainDb: 0,
           name: nombre,
           track: { name: nombre },
