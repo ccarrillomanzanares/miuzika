@@ -6,6 +6,11 @@ from dsp import (SR, note_hz, white, fade, biquad, filt, lp, hp, bp, tv_filter,
 
 # ================================================================ BATERIA
 def kick(vel=1.0, seed=0):
+    """Bombo sintético: seno con caída de tono rápida y golpe de aire.
+    familia: percusión
+    vel: 0.05..1 Intensidad
+    seed: 0..9999 Semilla
+    """
     n = int(0.60 * SR)
     t = np.arange(n) / SR
     f = 44.0 + 118.0 * np.exp(-t / 0.026) + 26.0 * np.exp(-t / 0.13)
@@ -24,6 +29,11 @@ def kick(vel=1.0, seed=0):
 
 
 def snare(vel=1.0, seed=0):
+    """Caja: cuerpo tonal corto y ruido filtrado con cola.
+    familia: percusión
+    vel: 0.05..1 Intensidad
+    seed: 0..9999 Semilla
+    """
     n = int(0.42 * SR)
     t = np.arange(n) / SR
     rng = np.random.default_rng(seed)
@@ -46,6 +56,12 @@ def snare(vel=1.0, seed=0):
 
 
 def hat(vel=1.0, seed=0, open_=False):
+    """Charles de ruido metálico filtrado, cerrado o abierto.
+    familia: percusión
+    vel: 0.05..1 Intensidad
+    open_: bool Abierto
+    seed: 0..9999 Semilla
+    """
     dur = 0.30 if open_ else 0.075
     n = int(dur * SR)
     t = np.arange(n) / SR
@@ -66,6 +82,13 @@ def hat(vel=1.0, seed=0, open_=False):
 
 
 def metal_hit(vel=1.0, seed=0, pitch=1.0, dur=0.9):
+    """Chapa metálica con parciales inarmónicos: el golpe industrial.
+    familia: percusión
+    vel: 0.05..1 Intensidad
+    pitch: 0.4..2.5 Tono (x)
+    dur: 0.05..4 Duración (s)
+    seed: 0..9999 Semilla
+    """
     n = int(dur * SR)
     t = np.arange(n) / SR
     rng = np.random.default_rng(seed)
@@ -84,6 +107,11 @@ def metal_hit(vel=1.0, seed=0, pitch=1.0, dur=0.9):
 
 
 def shaker(vel=1.0, seed=0):
+    """Cascabel: ruido corto con envolvente suave.
+    familia: ruido
+    vel: 0.05..1 Intensidad
+    seed: 0..9999 Semilla
+    """
     n = int(0.16 * SR)
     t = np.arange(n) / SR
     rng = np.random.default_rng(seed)
@@ -127,7 +155,16 @@ def _osc(freq, n, table=_SAW, phase0=0.0):
     return table[i0] * (1 - fr) + table[i1] * fr
 
 
-def bass_note(midi, dur, vel=1.0, seed=0, squelch=0.0, bright=1.0):
+def bass_note(midi=40, dur=0.5, vel=1.0, seed=0, squelch=0.0, bright=1.0):
+    """Bajo sintético con filtro: del seno limpio al squelch ácido.
+    familia: tonal
+    midi: 21..108 Nota (midi)
+    dur: 0.05..8 Duración (s)
+    vel: 0.05..1 Intensidad
+    squelch: 0..1 Squelch
+    bright: 0.2..3 Brillo (x)
+    seed: 0..9999 Semilla
+    """
     n = int((dur + 0.25) * SR)
     t = np.arange(n) / SR
     f0 = float(note_hz(midi))
@@ -158,7 +195,15 @@ def bass_note(midi, dur, vel=1.0, seed=0, squelch=0.0, bright=1.0):
     return fade(y * vel, 1.0, 15.0)
 
 
-def drone_note(midi, dur, vel=1.0, seed=0, cutoff=320.0):
+def drone_note(midi=40, dur=4.0, vel=1.0, seed=0, cutoff=320.0):
+    """Zumbido sostenido de dientes de sierra filtrados.
+    familia: textura
+    midi: 21..108 Nota (midi)
+    dur: 0.1..16 Duración (s)
+    vel: 0.05..1 Intensidad
+    cutoff: 40..8000 Corte (Hz)
+    seed: 0..9999 Semilla
+    """
     n = int(dur * SR)
     t = np.arange(n) / SR
     f0 = float(note_hz(midi))
@@ -179,7 +224,14 @@ def drone_note(midi, dur, vel=1.0, seed=0, cutoff=320.0):
     return y * vel
 
 
-def organ_chord(midis, dur, vel=1.0, seed=0):
+def organ_chord(midis=(40, 47, 52), dur=2.0, vel=1.0, seed=0):
+    """Acorde de órgano con registro de dientes y vibrato.
+    familia: tonal
+    midis: 21..108[8] Notas (midi)
+    dur: 0.1..16 Duración (s)
+    vel: 0.05..1 Intensidad
+    seed: 0..9999 Semilla
+    """
     n = int(dur * SR)
     t = np.arange(n) / SR
     rng = np.random.default_rng(seed)
@@ -204,7 +256,9 @@ def organ_chord(midis, dur, vel=1.0, seed=0):
 
 
 def guitar_loop(beats, bpm, pattern, vel=1.0, seed=0, drive=7.0):
-    """pattern: [(beat, dur_beats, midi, vel, mute)] -> buffer de 'beats' pulsos."""
+    """Riff de guitarra completo: no es un one-shot, pide patrón y tempo.
+    familia: tonal
+    """
     spb = 60.0 / bpm
     n = int(beats * spb * SR)
     out = np.zeros(n + SR)
@@ -236,7 +290,15 @@ def guitar_loop(beats, bpm, pattern, vel=1.0, seed=0, drive=7.0):
     return out * vel
 
 
-def piano_note(midi, dur, vel=1.0, seed=0, detune=0.0):
+def piano_note(midi=60, dur=1.0, vel=1.0, seed=0, detune=0.0):
+    """Piano sintético con parciales y desafinado ajustable.
+    familia: tonal
+    midi: 21..108 Nota (midi)
+    dur: 0.05..12 Duración (s)
+    vel: 0.05..1 Intensidad
+    detune: -0.05..0.05 Desafinado
+    seed: 0..9999 Semilla
+    """
     n = int((dur + 0.6) * SR)
     t = np.arange(n) / SR
     f0 = float(note_hz(midi)) * (1.0 + detune)
@@ -261,6 +323,9 @@ def piano_note(midi, dur, vel=1.0, seed=0, detune=0.0):
 
 
 def reverse_swell(src, dur=None):
+    """Inversión de un sonido dado: pide material de origen.
+    familia: textura
+    """
     x = np.asarray(src, float)
     if dur is not None:
         n = int(dur * SR)
@@ -271,6 +336,14 @@ def reverse_swell(src, dur=None):
 
 
 def squelch(vel=1.0, seed=0, dur=0.35, f_lo=180.0, f_hi=1800.0):
+    """Barrido de resonancia con subida de tono: el blip del techno.
+    familia: ruido
+    vel: 0.05..1 Intensidad
+    dur: 0.05..2 Duración (s)
+    f_lo: 40..2000 Frecuencia baja (Hz)
+    f_hi: 200..12000 Frecuencia alta (Hz)
+    seed: 0..9999 Semilla
+    """
     n = int(dur * SR)
     t = np.arange(n) / SR
     f0 = 55.0
@@ -285,6 +358,13 @@ def squelch(vel=1.0, seed=0, dur=0.35, f_lo=180.0, f_hi=1800.0):
 
 
 def feedback_growl(vel=1.0, seed=0, dur=1.6, f0=196.0):
+    """Rugido de realimentación con formantes: cola industrial.
+    familia: textura
+    vel: 0.05..1 Intensidad
+    dur: 0.1..8 Duración (s)
+    f0: 30..2000 Fundamental (Hz)
+    seed: 0..9999 Semilla
+    """
     n = int(dur * SR)
     t = np.arange(n) / SR
     rng = np.random.default_rng(seed)
@@ -349,7 +429,9 @@ def _formant_env(times, freqs, track):
 
 def voice(syllables, seed=0, f0_base=98.0, breath=0.10, drive=1.0,
           whisper=False, jitter=0.35, tail=0.35, tilt=1.0):
-    """syllables: [(t0, dur, midi, vowel, cons, vel)] -> mono float array."""
+    """Voz sintética por sílabas: pide una lista de sílabas.
+    familia: textura
+    """
     if not syllables:
         return np.zeros(1)
     total = max(s[0] + s[1] for s in syllables) + tail
@@ -448,3 +530,32 @@ def voice(syllables, seed=0, f0_base=98.0, breath=0.10, drive=1.0,
         y = soft_clip(y * drive, 1.6)
     y *= np.interp(np.arange(n) / SR, np.arange(ctrl) / 200.0, amp)
     return fade(y, 3.0, 25.0)
+
+
+# ── VOCES CREADAS POR EL AGENTE ──────────────────────────────────────────────
+# Añadidas desde la app. Docstring obligatorio: ver codigo/voces.py.
+
+import numpy as np
+
+from instruments import _PULSE, _osc, SR
+from dsp import bp
+
+
+def cowbell(vel=1.0, pitch=1.0, dur=0.45, seed=0):
+    """Cencerro metálico de dos tonos, tipo industrial.
+    familia: percusión
+    vel: 0.05..1 Intensidad
+    pitch: 0.6..1.8 Tono (x)
+    dur: 0.08..2 Duración (s)
+    seed: 0..9999 Semilla
+    """
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    # Dos pulsos cuadrados desafinados entre sí: el batido es lo que suena a cencerro.
+    a = _osc(540.0 * pitch, n, _PULSE, 0.0)
+    b = _osc(800.0 * pitch, n, _PULSE, 0.35)
+    x = 0.6 * a + 0.4 * b
+    # Los dos formantes del cencerro (2,6 y 3,9 kHz) y una cola corta.
+    x = bp(x, 2600.0 * pitch, 1.2) + 0.4 * bp(x, 3900.0 * pitch, 1.6)
+    x *= np.exp(-t / (0.10 * max(dur, 0.08)))
+    return x * float(vel)
