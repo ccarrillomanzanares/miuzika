@@ -15,24 +15,31 @@ agente pregunta antes de entregar (MIDI vs WAV, stems 12 dB abajo).
 
 ---
 
-## Fase 3 — Creación de sonidos · EN CURSO
+## Fase 3 — Creación de sonidos · CASI
 
 **Idea**: un sonido es **receta JSON + WAV**, no un sintetizador nuevo. El motor
-Python ya tiene los timbres; openDAW ya tiene sampler.
+Python ya tiene los timbres; openDAW ya tiene sampler. Y no hay panel de perillas:
+se pide con palabras y con el ▶.
 
-| paso | entregable | dónde |
-|---|---|---|
-| 3.1 | catálogo de voces con parámetros reales y rangos, receta y generación del script de render | `src/core/sonidos.ts` + tests |
-| 3.2 | panel «Sonidos»: catálogo, sliders, ▶ escuchar, «Guardar en el proyecto» | `web/index.html`, `web/src/main.ts`, `style.css` |
-| 3.3 | herramienta `crear_sonido` para el agente (receta → script → `/api/run/python` → medir → guardar) | `web/src/agent/tools.ts` |
-| 3.4 | colocar el sonido: clip de audio o carga en el sampler para tocarlo por MIDI | `main.ts` |
+| paso | estado |
+|---|---|
+| 3.1 catálogo **leído del motor** (`codigo/voces.py` + `/api/voces`), con familia, rango, unidad y perfil medido | HECHO |
+| 3.2 se descarta el panel de parámetros: el idioma es el chat + palabras | DECIDIDO |
+| 3.3 puerta para voces nuevas (`codigo/gate_voz.py` + `/api/voces/nueva`): se cuecen en `instruments.py` | HECHO |
+| 3.4 vocabulario de 16 palabras con ejes y post-proceso universal (`src/core/palabras.ts`) | HECHO |
+| 3.5 herramientas del agente: `listar_voces`, `crear_sonido`, `crear_voz` | HECHO |
+| 3.6 escuchar en contexto: que el agente coloque el sonido en la pista y se oiga dentro del tema | PENDIENTE |
+| 3.7 lista de sonidos del proyecto con ▶ (lo mínimo de interfaz) | PENDIENTE |
 
-**Criterios de aceptación**
-- Misma receta y misma semilla dan el mismo WAV (mismo hash).
-- El preview suena en menos de 2 s (render CPU, one-shot).
-- El fichero queda en `proyectos/<slug>/sonidos/<nombre>.wav` + `<nombre>.json`, y
-  aparece en la timeline.
-- `tsc` 0, `test:unit` verde, `build:web` OK, prueba en navegador.
+**Criterios de aceptación (cumplidos salvo 3.6-3.7)**
+- Misma receta y misma semilla dan el mismo WAV (mismo hash). ✔
+- La puerta rechaza lo que no es un sonido y dice por qué. ✔ (onda cuadrada:
+  «crest 0.0 dB fuera de 2.0-30.0»; duplicada: 409; sin semilla: «no es
+  reproducible»).
+- El fichero queda en `proyectos/<slug>/sonidos/<nombre>.wav` + `.json`. ✔
+- Las palabras cambian el sonido de forma medible (cola −30 dB, centroide
+  +1.393 Hz, crest de 11,1 a 18,1). ✔
+- `tsc` 0, `test:unit` 103/103, `npm test` con OPENDAW OK, prueba en navegador. ✔
 
 **No entra**: sintetizador propio, edición gráfica de onda, DDSP.
 
