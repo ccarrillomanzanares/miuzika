@@ -30,7 +30,7 @@ const MAX_CAMPO = 700;
 const MAX_RESUMEN = 1800;
 
 /** Por encima de esto una salida de herramienta se recorta antes de ir al modelo. */
-export const UMBRAL_SALIDA = 1200;
+export const UMBRAL_SALIDA = 4000;
 
 export interface AgenteEnDisco {
   formato: "miuzika-agente";

@@ -54,7 +54,7 @@ export function idDeAsset(nombre: string): string {
 
 /** Ruta que entiende el servidor: lo compartido tal cual y el resto en el proyecto. */
 export function rutaEnProyecto(ruta: string, slugProyecto: string): string {
-  if (/^(codigo|herramientas|plantillas|proyectos|_archivo)\//.test(ruta)) return ruta;
+  if (/^(codigo|gpu|herramientas|plantillas|proyectos|_archivo|_salidas)\//.test(ruta)) return ruta;
   return `proyectos/${slugProyecto}/${ruta}`;
 }
 

@@ -146,7 +146,7 @@ export default defineConfig(({ mode }) => {
   };
 
   /** Carpetas compartidas por todos los proyectos: motor y utilidades. */
-  const COMPARTIDO = ["codigo/", "gpu/", "herramientas/", "plantillas/", "_archivo/", "proyectos/"];
+  const COMPARTIDO = ["codigo/", "gpu/", "herramientas/", "plantillas/", "_archivo/", "_salidas/", "proyectos/"];
 
   /**
    * Identificador del código servido: la marca de tiempo más nueva de web/ y de

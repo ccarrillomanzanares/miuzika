@@ -976,7 +976,10 @@ export function resumenLlamada(nombre: string, argumentosJson: string): string {
 }
 
 /**
- * Salida completa de una herramienta -> `_salidas/` del proyecto. Se le pasa al
+ * Salida completa de una herramienta -> `_salidas/` en la raíz del espacio de
+ * trabajo, NO dentro del proyecto: si el agente crea un proyecto nuevo a mitad de
+ * turno, los ficheros de antes tienen que seguir encontrándose (pasó: 4 lecturas
+ * «no existe» porque se habían escrito en el proyecto anterior). Se le pasa al
  * modelo sólo la cabeza y la cola: un render imprime cientos de líneas y
  * arrastrarlas en el contexto encarece cada turno y lo distrae.
  */
