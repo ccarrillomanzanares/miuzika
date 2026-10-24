@@ -30,6 +30,8 @@ interface InstrumentSpec {
   preset?: string;
   /** Programa GM para el export MIDI. */
   program?: number;
+  /** Fichero del instrumento, relativo al proyecto (un .sf2 para `soundfont`). */
+  archivo?: string;
 }
 
 export const DEVICE_TYPES = [

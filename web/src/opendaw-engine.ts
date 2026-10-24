@@ -39,7 +39,7 @@ async function bootEngine(): Promise<EngineBoot> {
   if (bootStore.__miuzikaOpenDawBoot) return bootStore.__miuzikaOpenDawBoot;
   const boot = (async (): Promise<EngineBoot> => {
     const [
-      { Project, AudioWorklets, Workers },
+      { Project, AudioWorklets, Workers, GlobalSoundfontLoaderManager },
       { WasmEngine },
       { AnimationFrame },
       { UUID, Option },
@@ -71,7 +71,7 @@ async function bootEngine(): Promise<EngineBoot> {
     }
     return {
       context,
-      core: { Project, AudioWorklets, Workers } as typeof import("@opendaw/studio-core"),
+      core: { Project, AudioWorklets, Workers, GlobalSoundfontLoaderManager } as typeof import("@opendaw/studio-core"),
       UUID,
       Option,
       AudioData,
@@ -245,6 +245,7 @@ export async function playWithOpenDaw(
   source: MiuzikaProject,
   onTick: (beat: number) => void,
   audioAssets: ReadonlyMap<string, OpenDawAudioInput> = new Map(),
+  soundfonts: ReadonlyMap<string, { uuid: Uint8Array; name: string; bytes: ArrayBuffer }> = new Map(),
 ): Promise<OpenDawPlaybackHandle> {
   const { context, core, UUID, Option, AudioData } = await bootEngine();
   const hasDrums = source.tracks.some((track) => track.instrument.type === "drumkit");
@@ -260,19 +261,56 @@ export async function playWithOpenDaw(
   const exported = await projectToOpenDaw(source, {
     drumSamples: prepared.attachments,
     audioAssets: prepared.audioFiles,
+    soundfonts,
   });
   const { Project } = core;
+
+  // Se parsean antes de montar el proyecto: `getOrCreate` es síncrono y el motor
+  // lo llama en cuanto ve un dispositivo Soundfont.
+  const parseados = new Map<string, unknown>();
+  if (soundfonts.size > 0) {
+    const { SoundFont2 } = (await import("soundfont2")) as unknown as {
+      SoundFont2: new (bytes: Uint8Array) => unknown;
+    };
+    for (const sf of soundfonts.values()) {
+      parseados.set(claveDeUuid(sf.uuid), new SoundFont2(new Uint8Array(sf.bytes)));
+    }
+  }
 
   const env = {
     audioContext: context,
     audioWorklets: core.AudioWorklets.get(context),
     sampleManager: prepared.sampleManager,
-    soundfontManager: {},
+    // El motor no recibe los bytes: recibe un gestor al que le pide el SoundFont
+    // por uuid (`getOrCreate`). Es la única puerta que expone openDAW.
+    soundfontManager: nuevoGestorDeSoundfonts(Option, parseados),
     sampleService: {},
     soundfontService: {},
   };
 
   const project = Project.load(env as never, exported.bytes);
+  if (import.meta.env.DEV && soundfonts.size > 0) {
+    // Sonda de desarrollo: qué ha entendido openDAW de cada SoundFont. Si `estado`
+    // no es "loaded", el motor no ha podido parsear el fichero.
+    const gestor = env.soundfontManager as {
+      getOrCreate: (uuid: Uint8Array) => { state: { type: string }; soundfont: { isEmpty: () => boolean; unwrapOrUndefined?: () => { presets?: { length: number } } } };
+    };
+    (globalThis as unknown as { __miuzikaSoundfonts: unknown }).__miuzikaSoundfonts = Array.from(
+      soundfonts,
+      ([ruta, sf]) => {
+        const cargador = gestor.getOrCreate(sf.uuid);
+        let presets = 0;
+        try {
+          if (!cargador.soundfont.isEmpty()) {
+            presets = cargador.soundfont.unwrapOrUndefined?.()?.presets?.length ?? 0;
+          }
+        } catch {
+          presets = -1;
+        }
+        return { ruta, estado: cargador.state.type, presets };
+      },
+    );
+  }
   const units = new Map(
     project.rootBoxAdapter.audioUnits.adapters().map((unit) => [unit.label, unit] as const),
   );
@@ -322,4 +360,52 @@ export async function playWithOpenDaw(
       project.terminate();
     },
   };
+}
+
+
+/**
+ * Gestor de SoundFonts propio, sin pasar por el almacén de openDAW.
+ *
+ * El gestor de la librería intenta primero leer el .sf2 de su OPFS (IndexedDB
+ * disfrazado); si ese almacén no está instalado, la promesa no se resuelve nunca y
+ * el instrumento se queda en "progress" para siempre (medido). Aquí el fichero ya
+ * está en memoria, así que se entrega ya parseado y el estado nace en "loaded".
+ */
+function nuevoGestorDeSoundfonts(
+  Option: { wrap: (valor: unknown) => unknown; None: unknown },
+  parseados: ReadonlyMap<string, unknown>,
+): unknown {
+  const cache = new Map<string, unknown>();
+  return {
+    getOrCreate: (uuid: Uint8Array) => {
+      const clave = claveDeUuid(uuid);
+      const existente = cache.get(clave);
+      if (existente) return existente;
+      const soundfont = parseados.get(clave);
+      const cargador = {
+        uuid,
+        state: soundfont ? { type: "loaded" } : { type: "error", reason: "soundfont desconocido" },
+        soundfont: soundfont ? Option.wrap(soundfont) : Option.None,
+        meta: Option.None,
+        subscribe: (observador: (estado: unknown) => void) => {
+          observador(cargador.state);
+          return { terminate: () => {} };
+        },
+        invalidate: () => {},
+      };
+      cache.set(clave, cargador);
+      return cargador;
+    },
+    fetch: async () => {
+      throw new Error("los SoundFonts se cargan del proyecto, no de la red");
+    },
+    remove: (uuid: Uint8Array) => {
+      cache.delete(claveDeUuid(uuid));
+    },
+    invalidate: () => cache.clear(),
+  };
+}
+
+function claveDeUuid(uuid: Uint8Array): string {
+  return Array.from(uuid, (b) => b.toString(16).padStart(2, "0")).join("");
 }

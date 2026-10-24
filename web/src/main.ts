@@ -600,6 +600,7 @@ async function startOpenDawPlayback(view: Project): Promise<void> {
     for (const [id, asset] of audioAssets) {
       if (asset.buffer) paraEngine.set(id, { name: asset.name, buffer: asset.buffer });
     }
+    const soundfonts = await cargarSoundfontsDelProyecto(view);
     const handle = await playWithOpenDaw(
       view,
       (beat) => {
@@ -608,6 +609,7 @@ async function startOpenDawPlayback(view: Project): Promise<void> {
         if (openDawHandle && beat >= endBeat - 0.05) stopOpenDaw();
       },
       paraEngine,
+      soundfonts,
     );
     if (generation !== openDawGeneration) {
       handle.stop();
@@ -2507,4 +2509,45 @@ if (import.meta.env.DEV) {
     nuevoProyecto: (nombre: string, bpm: number, lengthBars: number) =>
       setProject(createProject({ name: nombre, bpm, lengthBars })),
   };
+}
+
+/**
+ * Los .sf2 del proyecto, para dárselos al motor. Se piden al servidor porque el
+ * fichero vive en `proyectos/<slug>/` y no en memoria: así el proyecto sigue
+ * siendo portable y suena igual en otra máquina.
+ */
+async function cargarSoundfontsDelProyecto(
+  view: Project,
+): Promise<Map<string, { uuid: Uint8Array; name: string; bytes: ArrayBuffer }>> {
+  const mapa = new Map<string, { uuid: Uint8Array; name: string; bytes: ArrayBuffer }>();
+  for (const track of view.tracks) {
+    const archivo = track.instrument.type === "soundfont" ? track.instrument.archivo : undefined;
+    if (!archivo || mapa.has(archivo)) continue;
+    const respuesta = await fetch(`/api/audio?path=${encodeURIComponent(archivo)}`, {
+      headers: { "x-miuzika-proyecto": slugDeProyecto(view) },
+    }).catch(() => null);
+    if (!respuesta || !respuesta.ok) continue;
+    mapa.set(archivo, {
+      uuid: uuidDeSoundfont(archivo),
+      name: archivo.split("/").pop() ?? "instrumento.sf2",
+      bytes: await respuesta.arrayBuffer(),
+    });
+  }
+  return mapa;
+}
+
+/** 16 bytes estables a partir de la ruta: el adaptador y el motor deben coincidir. */
+function uuidDeSoundfont(texto: string): Uint8Array {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < texto.length; i++) {
+    h1 = Math.imul(h1 ^ texto.charCodeAt(i), 16777619) >>> 0;
+    h2 = (h2 + Math.imul(texto.charCodeAt(i) + i, 2654435761)) >>> 0;
+  }
+  const bytes = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) {
+    const fuente = i < 8 ? h1 : h2;
+    bytes[i] = (fuente >>> ((i % 4) * 8)) & 0xff;
+  }
+  return bytes;
 }

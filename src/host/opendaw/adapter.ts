@@ -24,6 +24,7 @@ import {
   velocityToUnit,
 } from "./mapping.ts";
 import { installNodeShims } from "./shims.ts";
+import { Option } from "@opendaw/lib-std";
 
 interface OpenDawExport {
   bytes: ArrayBuffer;
@@ -60,6 +61,13 @@ interface OpenDawAudioChunk {
   startInSeconds: number;
 }
 
+export interface OpenDawSoundfont {
+  /** uuid del SoundfontFileBox y clave con la que el motor pide los bytes. */
+  uuid: Uint8Array;
+  name: string;
+  bytes: ArrayBuffer;
+}
+
 export interface OpenDawAudioAsset {
   chunks: ReadonlyArray<OpenDawAudioChunk>;
   durationInSeconds: number;
@@ -70,6 +78,8 @@ interface OpenDawBuildOptions {
   drumSamples?: OpenDawDrumSample[];
   /** WAV de las pistas de audio, por id de asset del IR. */
   audioAssets?: ReadonlyMap<string, OpenDawAudioAsset>;
+  /** SoundFonts por ruta de fichero (`instrumento.archivo`). */
+  soundfonts?: ReadonlyMap<string, OpenDawSoundfont>;
 }
 
 interface HostEnv {
@@ -120,7 +130,26 @@ function createHeadlessEnv(): HostEnv {
       register: () => noopTerminable,
       getOrCreate: () => emptyLoader,
     },
-    soundfontManager: {},
+    // Un SoundfontDeviceBox pide su cargador al serializar; aquí sólo hace falta
+    // que exista y diga que no está cargado (el sonido no se toca en Node).
+    soundfontManager: {
+      getOrCreate: () => ({
+        uuid: new Uint8Array(16),
+        state: { type: "error", reason: "headless" },
+        // Tiene que ser un Option de verdad: openDAW llama a `.match` sobre él.
+        soundfont: Option.None,
+        subscribe: (observer: (state: unknown) => void) => {
+          observer({ type: "error", reason: "headless" });
+          return noopTerminable;
+        },
+        invalidate: () => {},
+      }),
+      fetch: async () => {
+        throw new Error("headless");
+      },
+      remove: () => {},
+      invalidate: () => {},
+    },
     sampleService: {},
     soundfontService: {},
   };
@@ -254,6 +283,35 @@ export async function projectToOpenDaw(
         }
 
         const instrument = mapInstrument(track.instrument.type);
+        const soundfont =
+          track.instrument.type === "soundfont" && track.instrument.archivo
+            ? options.soundfonts?.get(track.instrument.archivo)
+            : undefined;
+        if (soundfont) {
+          // El dispositivo Soundfont no lleva los bytes: lleva un puntero a un
+          // SoundfontFileBox, y el motor pide el contenido por su uuid.
+          const fichero = boxes.SoundfontFileBox.create(
+            project.boxGraph,
+            soundfont.uuid as never,
+            (box: { fileName: { setValue: (v: string) => void } }) =>
+              box.fileName.setValue(soundfont.name),
+          );
+          const producto = project.api.createInstrument(adapters.InstrumentFactories.Soundfont as never, {
+            name: track.name,
+            attachment: fichero,
+          } as never);
+          const unidad = project.boxAdapters.adapterFor(
+            producto.audioUnitBox,
+            adapters.AudioUnitBoxAdapter,
+          );
+          unidad.namedParameter.volume.setValue(track.gainDb);
+          unidad.namedParameter.panning.setValue(track.pan);
+          unidad.namedParameter.mute.setValue(track.muted);
+          unidad.namedParameter.solo.setValue(track.solo);
+          stats.tracks++;
+          warnings.push(`"${track.name}": arranca con el SoundFont ${soundfont.name} (preset 0)`);
+          continue;
+        }
         if (instrument.warning) warnings.push(`"${track.name}": ${instrument.warning}`);
 
         const factory =
