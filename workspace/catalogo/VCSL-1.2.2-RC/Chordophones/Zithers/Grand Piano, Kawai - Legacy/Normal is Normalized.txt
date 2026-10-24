@@ -1,3 +1,0 @@
-'Normal' has been normalized. Use a velocity response curve rather than volume levels to create dynamics. Should be very smooth as a result!
-
-P.S. Apologies for funky tuning. :(

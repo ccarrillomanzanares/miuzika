@@ -1,1 +1,0 @@
-Set these samples to trigger on the release. Add a 100ms attack, or otherwise some attack amount which is roughly equal to the release value you have for your normal samples.
