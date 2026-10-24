@@ -12,3 +12,7 @@ workspace/salida/*.wav
 workspace/proyectos/
 tools/piloto-gpu/audio/
 cache-commit.txt
+workspace/catalogo/**/*.wav
+workspace/catalogo/**/*.flac
+workspace/catalogo/_descargas/
+workspace/tmp/

@@ -98,29 +98,39 @@ export const ETIQUETAS: Etiqueta[] = [
   { id: "congas", es: "Congas", en: "Congas", gm: 63, bst: "is-p", familia: "percusión",
     alias: ["conga", "tumbadora"] },
   { id: "timbales", es: "Timbales", en: "Timbales", gm: 65, bst: "is-p", familia: "percusión",
-    alias: ["timbal", "timbale"] },
+    alias: ["timbal", "timbale", "timpani", "tímpano", "tímpanos"] },
   { id: "agogo", es: "Agogó", en: "Agogo", gm: 67, bst: "is-p", familia: "percusión",
     alias: ["agogo bells", "campanas brasileñas"] },
+  { id: "cajon", es: "Cajón", en: "Cajon", bst: "is-p", familia: "percusión",
+    alias: ["cajón flamenco", "cajon flamenco"] },
+  { id: "darbuka", es: "Darbuka", en: "Darbuka", bst: "is-p", familia: "percusión",
+    alias: ["doumbek", "derbake", "tabla árabe"] },
+  { id: "pandero", es: "Pandero", en: "Frame drum", bst: "is-p", familia: "percusión",
+    alias: ["frame drum", "pandereta redonda", "bodhran", "tambor de marco"] },
   { id: "vibraslap", es: "Vibraslap", en: "Vibraslap", gm: 58, bst: "is-p", familia: "percusión",
     alias: ["vibra slap", "quijada"] },
 
   // ── Tonales ───────────────────────────────────────────────────────────────
-  { id: "bajo", es: "Bajo", en: "Bass", bst: "is-e", familia: "tonal",
-    alias: ["bass", "bajo eléctrico", "bajo sintético", "sub"] },
+  { id: "bajo", es: "Bajo", en: "Bass guitar", bst: "is-e", familia: "tonal",
+    alias: ["bass guitar", "bajo eléctrico", "bajo sintético", "sub"] },
   { id: "piano", es: "Piano", en: "Piano", bst: "is-k", familia: "tonal",
-    alias: ["piano acústico", "teclado", "piano eléctrico"] },
+    alias: ["piano acústico", "teclado", "piano eléctrico", "grand piano", "upright piano", "steinway", "kawai", "yamaha"] },
   { id: "organo", es: "Órgano", en: "Organ", bst: "is-k", familia: "tonal",
     alias: ["organ", "órgano Hammond", "acorde de órgano"] },
   { id: "campana", es: "Campana", en: "Bell", bst: "is-p", familia: "tonal",
-    alias: ["bell", "campana tubular", "campanas", "carillón"] },
+    alias: ["bell", "campana tubular", "campanas", "carillón", "balafon", "balafón", "glockenspiel", "xilófono", "xylophone", "vibraphone"] },
   { id: "pad", es: "Pad", en: "Pad", bst: "is-e", familia: "tonal",
     alias: ["colchón", "ambiente tonal", "pad de sintetizador"] },
   { id: "cuerdas", es: "Cuerdas", en: "Strings", bst: "is-s", familia: "tonal",
-    alias: ["strings", "violines", "orquesta de cuerda"] },
+    alias: ["strings", "violines", "orquesta de cuerda", "harp", "arpa", "cello", "viola", "violin", "contrabajo", "double bass", "dan tranh", "zither", "cítara", "strumstick"] },
   { id: "guitarra", es: "Guitarra", en: "Guitar", bst: "is-s", familia: "tonal",
     alias: ["guitar", "guitarra eléctrica", "riff de guitarra"] },
+  { id: "vientos", es: "Vientos", en: "Winds", bst: "is-w", familia: "tonal",
+    alias: ["saxo", "saxofón", "saxophone", "saxello", "tenor saxophone", "flauta", "flute",
+            "clarinete", "clarinet", "trompeta", "trumpet", "trombón", "trombone", "recorder",
+            "didgeridoo", "cuerno", "horn", "oboе"] },
   { id: "sintetizador", es: "Sintetizador", en: "Synth", bst: "is-e", familia: "tonal",
-    alias: ["synth", "sintetizador analógico", "saw", "diente de sierra"] },
+    alias: ["synth", "sintetizador analógico", "saw", "diente de sierra", "tx81z", "fm piano", "fm"] },
 
   // ── Texturas y efectos ────────────────────────────────────────────────────
   { id: "drone", es: "Drone", en: "Drone", bst: "is-e", familia: "textura",
@@ -130,7 +140,7 @@ export const ETIQUETAS: Etiqueta[] = [
   { id: "rugido", es: "Rugido", en: "Growl", bst: "fx-ex", familia: "textura",
     alias: ["growl", "rugido metálico", "gruñido", "feedback"] },
   { id: "golpe-metalico", es: "Golpe metálico", en: "Metal hit", bst: "is-p", familia: "percusión",
-    alias: ["metal", "clang", "chapa", "clangor", "golpe de metal"] },
+    alias: ["metal", "clang", "chapa", "clangor", "golpe de metal", "anvil", "yunque", "brake drum", "bell tree"] },
   { id: "ruido", es: "Ruido", en: "Noise", bst: "fx-ex", familia: "ruido",
     alias: ["noise", "ruido blanco", "siseo", "hiss"] },
   { id: "vinilo", es: "Vinilo", en: "Vinyl noise", bst: "fx-ex", familia: "ruido",
@@ -157,6 +167,7 @@ export const BST: Record<string, string> = {
   "is-e": "Instrument samples · Sintetizadores / Electrónico",
   "is-s": "Instrument samples · Cuerda",
   "is-k": "Instrument samples · Piano / Teclado",
+  "is-w": "Instrument samples · Viento",
   "fx-h": "Sound effects · Sonidos y acciones humanas",
   "fx-el": "Sound effects · Electrónico / Diseño",
   "fx-ex": "Sound effects · Experimental",
@@ -177,13 +188,26 @@ export function etiquetaPorId(id: string): Etiqueta | undefined {
   return ETIQUETAS.find((e) => e.id === id);
 }
 
-/** Etiquetas que coinciden con un texto: id, nombre es/en o cualquier alias. */
+/** ¿Aparece `aguja` en `pajar` como palabra completa (o como frase completa)? */
+function contienePalabra(pajar: string, aguja: string): boolean {
+  if (aguja.length < 4) return pajar === aguja;
+  const esc = aguja.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+  return new RegExp(`(^|\\s)${esc}($|\\s)`).test(pajar);
+}
+
+/**
+ * Etiquetas que coinciden con un texto: id, nombre es/en o cualquier alias.
+ *
+ * Se compara por palabra completa: con `includes` a secas, «Baroque Alto
+ * Recorder» daba «rimshot» porque contiene «aro», y «Bell Tree» salía como
+ * «campana de ride». Las palabras de menos de 4 letras sólo valen exactas.
+ */
 export function etiquetasDeTexto(texto: string): Etiqueta[] {
   const buscado = normalizar(texto);
   if (buscado === "") return [];
   return ETIQUETAS.filter((etiqueta) => {
     const candidatos = [etiqueta.id, etiqueta.es, etiqueta.en, ...etiqueta.alias].map(normalizar);
-    return candidatos.some((c) => c === buscado || c.includes(buscado) || buscado.includes(c));
+    return candidatos.some((c) => c === buscado || contienePalabra(buscado, c) || contienePalabra(c, buscado));
   });
 }
 
