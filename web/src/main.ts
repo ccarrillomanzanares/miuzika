@@ -1973,6 +1973,90 @@ function fechaCorta(iso: string): string {
   return fecha.toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * Diálogo «Sonidos»: busca en la biblioteca CC0 (índice del servidor) y trae lo que
+ * elijas al proyecto. Sin copiar a mano: el sample entra convertido y normalizado.
+ */
+let sonidosTimer: number | null = null;
+let sonidosReproduciendo: HTMLAudioElement | null = null;
+
+async function pintarSonidos(consulta: string): Promise<void> {
+  const lista = $("lista-sonidos");
+  const texto = consulta.trim();
+  if (texto === "") {
+    lista.innerHTML = `<p class="vacio">4.231 samples CC0 (VCSL). Escribe lo que buscas.</p>`;
+    return;
+  }
+  lista.innerHTML = `<p class="vacio">Buscando «${escapeHtml(texto)}»…</p>`;
+  try {
+    const res = await fetch("/api/catalogo/buscar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consulta: texto, limite: 30 }),
+    });
+    const datos = (await res.json()) as {
+      total?: number;
+      resultados?: {
+        archivo: string;
+        rutaAudio: string;
+        instrumento: string;
+        familia: string;
+        strudel: string | null;
+        perfil?: Record<string, number>;
+      }[];
+    };
+    const todos = datos.resultados ?? [];
+    // La biblioteca trae la misma toma en 6-12 capas y repeticiones: se agrupa por
+    // instrumento y se queda el primero (el que mejor puntuó), diciendo cuántos hay.
+    const porInstrumento = new Map<string, { fila: (typeof todos)[number]; cuantos: number }>();
+    for (const fila of todos) {
+      const previo = porInstrumento.get(fila.instrumento);
+      if (previo) previo.cuantos += 1;
+      else porInstrumento.set(fila.instrumento, { fila, cuantos: 1 });
+    }
+    const filas = [...porInstrumento.values()].map((x) => ({ ...x.fila, cuantos: x.cuantos }));
+    if (filas.length === 0) {
+      lista.innerHTML = `<p class="vacio">Nada parecido a «${escapeHtml(texto)}» en los ${datos.total ?? 0} samples.</p>`;
+      return;
+    }
+    lista.innerHTML = filas
+      .map((r) => {
+        const p = r.perfil ?? {};
+        const medidas = [
+          p.duracion_s !== undefined ? `${p.duracion_s} s` : "",
+          p.centroide_hz !== undefined ? `${Math.round(p.centroide_hz)} Hz` : "",
+        ]
+          .filter((x) => x !== "")
+          .join(" · ");
+        return (
+          `<div class="sonido-fila">` +
+          `<button class="icon" data-oir="${escapeHtml(r.rutaAudio)}" title="Escuchar">▶</button>` +
+          `<span class="sonido-nombre"><strong>${escapeHtml(r.instrumento)}</strong>` +
+          `<em>${escapeHtml(r.familia)}${medidas ? " · " + escapeHtml(medidas) : ""}` +
+          `${(r as { cuantos?: number }).cuantos && (r as { cuantos?: number }).cuantos! > 1 ? ` · ${(r as { cuantos?: number }).cuantos} variantes` : ""}` +
+          `${r.strudel ? ` · Strudel: s("${escapeHtml(r.strudel)}")` : ""}</em></span>` +
+          `<button data-traer="${escapeHtml(r.archivo)}" data-nombre="${escapeHtml(
+            r.instrumento.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+          )}">Añadir</button>` +
+          `</div>`
+        );
+      })
+      .join("");
+  } catch (error) {
+    lista.innerHTML = `<p class="vacio">No pude buscar: ${escapeHtml(
+      error instanceof Error ? error.message : String(error),
+    )}</p>`;
+  }
+}
+
+function abrirSonidos(): void {
+  const dialogo = $<HTMLDialogElement>("dialogo-sonidos");
+  if (!dialogo.open) dialogo.showModal();
+  const campo = $<HTMLInputElement>("sonidos-buscar");
+  campo.focus();
+  void pintarSonidos(campo.value);
+}
+
 /** Abre el diálogo con los proyectos que tienen proyecto.json en el disco. */
 async function abrirListaDeProyectos(): Promise<void> {
   const dialogo = $<HTMLDialogElement>("dialogo-proyectos");
@@ -2043,6 +2127,39 @@ async function abrirProyectoDeDisco(ruta: string): Promise<void> {
     setBusy(false);
   }
 }
+
+$("sonidos").addEventListener("click", () => abrirSonidos());
+$("sonidos-cerrar").addEventListener("click", () => $<HTMLDialogElement>("dialogo-sonidos").close());
+$<HTMLInputElement>("sonidos-buscar").addEventListener("input", (event) => {
+  const valor = (event.target as HTMLInputElement).value;
+  if (sonidosTimer !== null) window.clearTimeout(sonidosTimer);
+  sonidosTimer = window.setTimeout(() => void pintarSonidos(valor), 280);
+});
+
+$("lista-sonidos").addEventListener("click", (event) => {
+  const objetivo = (event.target as HTMLElement).closest("button");
+  if (!objetivo) return;
+  const oir = objetivo.dataset.oir;
+  if (oir) {
+    // Escuchar sin traerlo: el <audio> lee el WAV del catálogo tal cual.
+    sonidosReproduciendo?.pause();
+    sonidosReproduciendo = new Audio(`/api/catalogo/audio?path=${encodeURIComponent(oir)}`);
+    void sonidosReproduciendo.play();
+    return;
+  }
+  const traer = objetivo.dataset.traer;
+  if (traer) {
+    objetivo.disabled = true;
+    objetivo.textContent = "…";
+    void usarSampleDesdeAgente({ archivo: traer, nombre: objetivo.dataset.nombre ?? "sample" }).then(
+      (r) => {
+        objetivo.disabled = false;
+        objetivo.textContent = r.ok ? "✓" : "error";
+        addMessage("system", r.ok ? `Sample añadido al proyecto desde la biblioteca.` : r.texto);
+      },
+    );
+  }
+});
 
 $("lista-proyectos").addEventListener("click", (event) => {
   const boton = (event.target as HTMLElement).closest<HTMLElement>("[data-ruta]");

@@ -909,10 +909,10 @@ export default defineConfig(({ mode }) => {
             entradas: null as null | EntradaCatalogo[],
             mtime: 0,
           };
-          const leerCatalogo = (): { entradas: EntradaCatalogo[]; total: number } => {
+          const leerCatalogo = (): { entradas: EntradaCatalogo[]; total: number; raiz: string } => {
             const ruta = resolve(carpetaTrabajo, "catalogo", "catalogo-vcsl.json");
             const rutaStrudel = resolve(carpetaTrabajo, "catalogo", "strudel-vcsl.json");
-            if (!existsSync(ruta)) return { entradas: [], total: 0 };
+            if (!existsSync(ruta)) return { entradas: [], total: 0, raiz: "" };
             const mtime = statSync(ruta).mtimeMs;
             if (cacheCatalogo.json === null || mtime !== cacheCatalogo.mtime) {
               cacheCatalogo.json = JSON.parse(readFileSync(ruta, "utf8")) as Record<string, unknown>;
@@ -920,7 +920,11 @@ export default defineConfig(({ mode }) => {
               cacheCatalogo.mtime = mtime;
             }
             if (cacheCatalogo.entradas !== null) {
-              return { entradas: cacheCatalogo.entradas, total: cacheCatalogo.entradas.length };
+              return {
+                entradas: cacheCatalogo.entradas,
+                total: cacheCatalogo.entradas.length,
+                raiz: String((cacheCatalogo.json as { raiz?: string }).raiz ?? ""),
+              };
             }
             const datos = cacheCatalogo.json as { entradas?: Record<string, unknown>[] };
             // Nombres de Strudel: su mapa apunta a los mismos ficheros de VCSL, así que
@@ -942,6 +946,7 @@ export default defineConfig(({ mode }) => {
                 }
               }
             }
+            const raiz = String((datos as { raiz?: string }).raiz ?? "");
             const entradas = (datos.entradas ?? [])
               .filter((x) => typeof x.archivo === "string" && (x.medido as Record<string, unknown> | null))
               .map((x) => {
@@ -978,8 +983,30 @@ export default defineConfig(({ mode }) => {
                 } as EntradaCatalogo & { strudel: string | null };
               });
             cacheCatalogo.entradas = entradas;
-            return { entradas, total: entradas.length };
+            return { entradas, total: entradas.length, raiz };
           };
+
+          // Escuchar un sample de la biblioteca sin traerlo al proyecto.
+          server.middlewares.use("/api/catalogo/audio", (req, res) => {
+            const url = new URL(req.url ?? "/", "http://localhost");
+            const rel = url.searchParams.get("path") ?? "";
+            const raiz = resolve(carpetaTrabajo, "catalogo");
+            const destino = resolve(carpetaTrabajo, rel);
+            if (rel === "" || !destino.startsWith(raiz + sep) || !existsSync(destino)) {
+              responderJson(res, 404, { error: "no existe" });
+              return;
+            }
+            const total = statSync(destino).size;
+            res.writeHead(200, {
+              "Content-Type": "audio/wav",
+              "Content-Length": String(total),
+              "Accept-Ranges": "none",
+              "Cache-Control": "max-age=3600",
+            });
+            const flujo = createReadStream(destino);
+            flujo.on("error", () => res.end());
+            flujo.pipe(res);
+          });
 
           server.middlewares.use("/api/catalogo/buscar", (req, res) => {
             if (req.method !== "POST") {
@@ -989,7 +1016,7 @@ export default defineConfig(({ mode }) => {
             leerCuerpo(req, (cuerpo) => {
               try {
                 const datos = JSON.parse(cuerpo) as { consulta?: string; limite?: number; familia?: string };
-                const { entradas, total } = leerCatalogo();
+                const { entradas, total, raiz } = leerCatalogo();
                 const encontrados = buscarEnCatalogo(entradas, String(datos.consulta ?? ""), {
                   limite: Math.min(Math.max(Number(datos.limite ?? 8), 1), 50),
                   ...(datos.familia ? { familia: datos.familia } : {}),
@@ -999,6 +1026,8 @@ export default defineConfig(({ mode }) => {
                   total,
                   resultados: encontrados.map((r) => ({
                     archivo: r.entrada.ruta,
+                    // Para el <audio>: ruta relativa a workspace/.
+                    rutaAudio: `catalogo/${raiz}/${String(r.entrada.ruta ?? "")}`,
                     instrumento: r.entrada.etiqueta,
                     familia: r.entrada.familia,
                     perfil: r.entrada.perfil,

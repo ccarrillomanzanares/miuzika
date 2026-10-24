@@ -28,6 +28,7 @@
           <label class="file">Audio<input id="audio-file" type="file" accept="audio/*" multiple /></label>
           <button id="guardar" title="Escribir el fichero maestro en workspace/proyectos/&lt;slug&gt;/proyecto.json (Ctrl+S)">Guardar</button>
           <button id="proyectos" title="Abrir un proyecto guardado en workspace/proyectos/">Proyectos</button>
+          <button id="sonidos" title="Buscar en la biblioteca de samples (CC0) y traerlos al proyecto">Sonidos</button>
           <button id="code-lab" title="Escribir un patrón Strudel y renderizarlo a WAV">Strudel</button>
           <button id="chat-toggle" class="active" title="Mostrar u ocultar el chat del agente">Chat</button>
           <button id="recargar" class="recargar" title="El servidor tiene código más nuevo que esta pestaña; cárgalo (se pierde el turno en curso)" hidden>↻ versión nueva</button>
@@ -85,6 +86,16 @@
           <button id="proyectos-cerrar" class="icon" title="Cerrar">✕</button>
         </div>
         <div id="lista-proyectos" class="lista-proyectos"></div>
+      </dialog>
+
+      <dialog id="dialogo-sonidos" class="dialogo dialogo-ancho">
+        <div class="dialogo-cabeza">
+          <strong>Sonidos</strong>
+          <button id="sonidos-cerrar" class="icon" title="Cerrar">✕</button>
+        </div>
+        <input id="sonidos-buscar" type="search" placeholder="bombo corto, tarola, china sucio…" autocomplete="off">
+        <p class="sonidos-ayuda">Escribe cómo lo pedirías: entiende «tarola», «hi-hat», «platillo crash» y el carácter (corto, seco, brillante).</p>
+        <div id="lista-sonidos" class="lista-sonidos"></div>
       </dialog>
 
       <dialog id="dialogo-audio" class="dialogo">
