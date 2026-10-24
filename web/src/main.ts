@@ -2,6 +2,15 @@ import type { CodeSource, InstrumentType, Project } from "../../src/core/types.t
 import { beatsPerBar } from "../../src/core/types.ts";
 import { createProject, projectStats } from "../../src/core/project.ts";
 import { compasesDeAudio } from "../../src/core/tiempo.ts";
+import {
+  normalizarReceta,
+  rutaScriptDeSonido,
+  rutaWavDeSonido,
+  scriptDeSonido,
+  vozPorClave,
+} from "../../src/core/sonidos.ts";
+import type { RecetaSonido, VozSonido } from "../../src/core/sonidos.ts";
+import { aplicarPalabras, vocabularioParaPrompt } from "../../src/core/palabras.ts";
 import { applyOps } from "../../src/core/ops.ts";
 import type { Op } from "../../src/core/ops.ts";
 import {
@@ -57,6 +66,7 @@ import {
   cabecerasProyecto,
   registrarAjustador,
   registrarCreador,
+  registrarCreadorSonido,
   registrarIgualador,
   registrarImportador,
   setProyectoActivo,
@@ -66,6 +76,7 @@ import type {
   PeticionIgualar,
   PeticionPistas,
   PeticionProyecto,
+  PeticionSonido,
 } from "./agent/tools.ts";
 import { ejecutarHerramienta } from "./agent/tools.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
@@ -92,6 +103,9 @@ const timeline = new TimelineView(canvas, wrap, heads);
 chat.onLayout(() => timeline.relayout());
 
 // ── Agente: piensa y actúa (la clave la pone el servidor; las manos, el workspace)
+/** Las palabras del vocabulario, tal cual, para que el agente no las reescriba. */
+const VOCABULARIO_PROMPT = vocabularioParaPrompt();
+
 const AGENTE_SISTEMA = [
   "Eres el agente musical de miuzika, un DAW que corre en el navegador.",
   "Trabajas en espanol: breve al hablar, pero con datos reales al informar.",
@@ -122,6 +136,11 @@ const AGENTE_SISTEMA = [
   "Para corregir una linea usa editar_fichero(path, busca, reemplaza). Para medir un WAV usa",
   "verificar_audio(path). Para un sample rapido copia plantillas/one_shot.py y cambia PARAMS.",
   "Si de verdad hace falta algo nuevo, crealo en codigo/experimental/ con nombres nuevos.",
+  "SONIDOS: para hacer un timbre usa crear_sonido(nombre, voz, palabras=[...]). Las voces son las del",
+  "motor y se consultan con listar_voces (si no aparece, no existe: entonces crear_voz). Las palabras que",
+  "entiende el sistema son: " + VOCABULARIO_PROMPT + ". Se pueden combinar ('corto y gordo'); si dos se",
+  "contradicen (corto/largo), gana la ultima y se avisa. No traduzcas tu las palabras a numeros: pasalas",
+  "tal cual y el sistema las convierte. Un sonido queda en proyectos/<slug>/sonidos/ con su ficha JSON.",
   "ANTES DE ENTREGAR, PREGUNTA (no lo decidas tu): (a) ¿pistas MIDI, WAV o las dos? Si son las dos, el",
   "material se duplica y suena doble: o dejas las MIDI silenciadas, o no las anades. (b) Si algun stem queda",
   "mas de 12 dB por debajo de la mediana (pico), dilo y PREGUNTA si corregirlo antes de tocar el script.",
@@ -1431,6 +1450,112 @@ async function importarPistasDesdeAgente(
 }
 
 /**
+ * Crea un sonido desde el chat: receta -> script -> render -> medida -> disco.
+ *
+ * La voz y sus parametros salen del catalogo del motor (/api/voces), las palabras
+ * del vocabulario humano, y el resultado se guarda con su ficha en
+ * proyectos/<slug>/sonidos/, asi que se puede repetir y volver a escuchar.
+ */
+async function crearSonidoDesdeAgente(
+  peticion: PeticionSonido,
+): Promise<{ ok: boolean; texto: string }> {
+  if (!project) {
+    return { ok: false, texto: "No hay proyecto abierto: crea uno primero (su carpeta es donde vive el sonido)." };
+  }
+  const slug = slugDeProyecto(project);
+  const avisos: string[] = [];
+
+  let catalogo: VozSonido[] = [];
+  try {
+    const res = await fetch("/api/voces");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    catalogo = ((await res.json()) as { voces?: VozSonido[] }).voces ?? [];
+  } catch (error) {
+    return {
+      ok: false,
+      texto: `No pude leer el catalogo del motor: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
+  let receta: RecetaSonido;
+  try {
+    const normalizada = normalizarReceta(
+      { nombre: peticion.nombre || peticion.voz, voz: peticion.voz, args: peticion.args },
+      catalogo,
+    );
+    receta = normalizada.receta;
+    avisos.push(...normalizada.avisos);
+  } catch (error) {
+    return { ok: false, texto: error instanceof Error ? error.message : String(error) };
+  }
+
+  if (peticion.palabras && peticion.palabras.length > 0) {
+    const conPalabras = aplicarPalabras(receta, peticion.palabras, vozPorClave(catalogo, receta.voz));
+    receta = conPalabras.receta;
+    avisos.push(...conPalabras.avisos, ...conPalabras.descartadas.map((d) => d.motivo));
+  }
+
+  const rutaScript = rutaScriptDeSonido(receta);
+  const escribir = (ruta: string, contenido: string): Promise<Response> =>
+    fetch("/api/fs/write", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: ruta, contenido }),
+    });
+
+  try {
+    const w = await escribir(rutaScript, scriptDeSonido(receta, { slug }));
+    if (!w.ok) throw new Error(`no pude escribir el script (${w.status})`);
+    const r = await fetch("/api/run/python", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: rutaScript, timeout_segundos: 180 }),
+    });
+    const corrida = (await r.json()) as { codigo?: number; salida?: string; errores?: string };
+    if (!r.ok || (corrida.codigo ?? 1) !== 0) {
+      throw new Error(
+        `el render fallo: ${(corrida.errores || corrida.salida || `HTTP ${r.status}`).slice(-600)}`,
+      );
+    }
+
+    // Ficha junto al WAV: es lo que permite repetirlo con otras palabras.
+    const rutaFicha = `proyectos/${slug}/${rutaWavDeSonido(receta).replace(/\.wav$/, ".json")}`;
+    await escribir(rutaFicha, JSON.stringify(receta, null, 2));
+
+    // Medida objetiva: no se entrega un sonido sin saber como esta.
+    const rutaWav = `proyectos/${slug}/${rutaWavDeSonido(receta)}`;
+    let informe = "";
+    try {
+      const v = await fetch("/api/verificar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: rutaWav }),
+      });
+      if (v.ok) informe = String(((await v.json()) as { informe?: string }).informe ?? "");
+    } catch {
+      /* medir es opcional: el sonido ya esta hecho */
+    }
+    const medidas = informe
+      .split("\n")
+      .filter((l) => /pico|clipeadas/.test(l))
+      .join(" ");
+
+    const texto = [
+      `Sonido "${receta.nombre}" creado (voz ${receta.voz}${receta.palabras?.length ? ` · ${receta.palabras.join(", ")}` : ""}).`,
+      `WAV: ${rutaWav}`,
+      medidas ? `Medidas: ${medidas}` : "",
+      ...avisos.map((a) => `- ${a}`),
+      `Para oirlo en la cancion: anadir_pistas(wavs=["${rutaWav}"], compases=<los del tema>).`,
+    ]
+      .filter((l) => l !== "")
+      .join("\n");
+    return { ok: true, texto };
+  } catch (error) {
+    return { ok: false, texto: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
  * Iguala la duracion de los clips: todos al mismo numero de compases.
  *
  * Los clips se miden en compases, asi que el MIDI de un instrumento y el WAV del
@@ -1587,6 +1712,7 @@ registrarImportador(importarPistasDesdeAgente);
 registrarCreador(crearProyectoDesdeAgente);
 registrarAjustador(ajustarPistasDesdeAgente);
 registrarIgualador(igualarClipsDesdeAgente);
+registrarCreadorSonido(crearSonidoDesdeAgente);
 
 /** ¿Es un fichero de audio? (por MIME o por extension) */
 function esAudio(file: File): boolean {

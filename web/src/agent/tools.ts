@@ -113,6 +113,7 @@ interface RegistroGlobal {
   importador?: ImportadorLocal | null;
   ajustador?: Ajustador | null;
   igualador?: Igualador | null;
+  sonidos?: CreadorSonido | null;
 }
 
 const registro: RegistroGlobal =
@@ -167,12 +168,37 @@ export function registrarIgualador(fn: Igualador | null): void {
   registro.igualador = fn;
 }
 
+/**
+ * Crear un sonido: la voz sale del catálogo del motor y las palabras son el
+ * vocabulario humano («corto», «gordo», «sucio») traducido a parámetros.
+ */
+export interface PeticionSonido {
+  nombre: string;
+  /** Clave de la voz en el catálogo (kick, metal_hit, cowbell…). */
+  voz: string;
+  /** Palabras del vocabulario, en el orden en que se dicen. */
+  palabras?: string[];
+  /** Valores concretos de parámetros de la voz (opcional). */
+  args?: Record<string, number | boolean | number[]>;
+}
+
+type CreadorSonido = (peticion: PeticionSonido) => Promise<{ ok: boolean; texto: string }>;
+
+let creadorSonido: CreadorSonido | null = null;
+
+/** main.ts registra aqui como se renderiza y guarda un sonido (necesita el proyecto). */
+export function registrarCreadorSonido(fn: CreadorSonido | null): void {
+  creadorSonido = fn;
+  registro.sonidos = fn;
+}
+
 /** Lo registrado, mirando primero lo local y después el registro compartido. */
 const herramientaLocal = {
   creador: (): CreadorProyecto | null => creadorProyecto ?? registro.creador ?? null,
   importador: (): ImportadorLocal | null => importadorLocal ?? registro.importador ?? null,
   ajustador: (): Ajustador | null => ajustador ?? registro.ajustador ?? null,
   igualador: (): Igualador | null => igualador ?? registro.igualador ?? null,
+  sonidos: (): CreadorSonido | null => creadorSonido ?? registro.sonidos ?? null,
 };
 
 /** Mensaje único para el caso «la app no tiene este registro»: dice qué hacer. */
@@ -296,6 +322,71 @@ export const HERRAMIENTAS: ToolSpec[] = [
           compases: { type: "integer", description: "Duracion en compases (por defecto 32)" },
         },
         required: ["nombre"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "listar_voces",
+      description:
+        "Lista los timbres que sabe sintetizar el motor, con su familia y sus parametros (rango y " +
+        "unidad). Es el catalogo real, leido del codigo: si una voz no sale aqui, no existe.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "crear_sonido",
+      description:
+        "Crea un sonido de verdad y lo guarda en el proyecto: elige una voz del catalogo, aplica las " +
+        "palabras del usuario (corto, gordo, sucio...) y renderiza el WAV. Si el usuario pide un sonido " +
+        "que no existe como voz, usa crear_voz.",
+      parameters: {
+        type: "object",
+        properties: {
+          nombre: { type: "string", description: "Nombre del sonido; tambien el del fichero" },
+          voz: { type: "string", description: "Clave de la voz del catalogo (kick, snare, metal_hit...)" },
+          palabras: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "corto, largo, seco, gordo, hueco, grave, agudo, brillante, oscuro, sucio, limpio, " +
+              "metalico, agresivo, redondo, chillon, apagado",
+          },
+          args: {
+            type: "object",
+            description: "Parametros de la voz, solo si hace falta precision (dur, pitch, midi...)",
+          },
+        },
+        required: ["nombre", "voz"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "crear_voz",
+      description:
+        "Anade un timbre NUEVO al motor: escribes la funcion de Python, se renderiza, se mide y, si " +
+        "pasa la puerta (duracion 0,05-16 s, RMS > -60 dBFS, crest 2-30 dB, DC < 0,01, reproducible, " +
+        "< 3 s), queda en instruments.py para siempre y aparece en el catalogo. Si no pasa, te devuelve " +
+        "las medidas para que la corrijas. Usala solo cuando listar_voces no tenga lo que piden.",
+      parameters: {
+        type: "object",
+        properties: {
+          nombre: { type: "string", description: "Nombre de la funcion: minusculas, letras/numeros/_, 3-31" },
+          fuente: {
+            type: "string",
+            description:
+              "Codigo Python COMPLETO de la funcion, con imports (numpy, dsp, instruments) y docstring " +
+              "obligatorio: primera linea = descripcion, luego 'familia: percusion|tonal|ruido|textura' y " +
+              "una linea por parametro 'nombre: min..max Etiqueta (unidad)' o 'nombre: bool Etiqueta'. " +
+              "Todos los parametros con valor por defecto y deterministas por 'seed'.",
+          },
+        },
+        required: ["nombre", "fuente"],
       },
     },
   },
@@ -468,6 +559,94 @@ async function ejecutarCrudo(
           bpm: Number(args.bpm ?? 120) || 120,
           compases: Number(args.compases ?? 32) || 32,
         });
+      }
+      case "listar_voces": {
+        try {
+          const res = await fetch("/api/voces");
+          const datos = (await res.json()) as {
+            voces?: {
+              clave: string;
+              familia: string;
+              descripcion: string;
+              excluida?: string | null;
+              params: { clave: string; min?: number; max?: number; unidad?: string }[];
+            }[];
+          };
+          const lineas = (datos.voces ?? []).map((voz) => {
+            if (voz.excluida) return `- ${voz.clave}: NO USABLE (${voz.excluida})`;
+            const params = voz.params
+              .map((p) =>
+                p.min === undefined ? p.clave : `${p.clave} ${p.min}..${p.max}${p.unidad ? " " + p.unidad : ""}`,
+              )
+              .join(", ");
+            return `- ${voz.clave} [${voz.familia}] ${voz.descripcion} (${params})`;
+          });
+          return { ok: true, texto: `Voces del motor (${lineas.length}):\n${lineas.join("\n")}` };
+        } catch (error) {
+          return {
+            ok: false,
+            texto: "No pude leer el catalogo: " + (error instanceof Error ? error.message : String(error)),
+          };
+        }
+      }
+      case "crear_sonido": {
+        const crear = herramientaLocal.sonidos();
+        if (!crear) {
+          return { ok: false, texto: SIN_REGISTRO };
+        }
+        const argsSonido =
+          typeof args.args === "object" && args.args !== null
+            ? (args.args as Record<string, number | boolean | number[]>)
+            : undefined;
+        return crear({
+          nombre: String(args.nombre ?? "").trim(),
+          voz: String(args.voz ?? "").trim(),
+          ...(Array.isArray(args.palabras) ? { palabras: (args.palabras as unknown[]).map(String) } : {}),
+          ...(argsSonido ? { args: argsSonido } : {}),
+        });
+      }
+      case "crear_voz": {
+        const nombre = String(args.nombre ?? "").trim().toLowerCase();
+        const fuente = String(args.fuente ?? "");
+        if (nombre === "" || fuente.trim() === "") {
+          return { ok: false, texto: "faltan nombre o fuente" };
+        }
+        try {
+          const res = await fetch("/api/voces/nueva", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nombre, fuente }),
+          });
+          const datos = (await res.json()) as {
+            ok?: boolean;
+            motivos?: string[];
+            voz?: { clave?: string; familia?: string; params?: { clave: string }[] };
+            perfil?: Record<string, number>;
+            total?: number;
+            traza?: string | null;
+          };
+          if (!res.ok || !datos.ok) {
+            const perfil =
+              datos.perfil && Object.keys(datos.perfil).length > 0
+                ? ` Medidas: ${Object.entries(datos.perfil)
+                    .map(([k, v]) => `${k}=${v}`)
+                    .join(" ")}`
+                : "";
+            return {
+              ok: false,
+              texto: `La puerta la rechaza: ${(datos.motivos ?? [`HTTP ${res.status}`]).join("; ")}.${perfil}`,
+            };
+          }
+          return {
+            ok: true,
+            texto:
+              `Voz "${datos.voz?.clave ?? nombre}" anadida al motor (familia ${datos.voz?.familia ?? "?"}, ` +
+              `parametros: ${(datos.voz?.params ?? []).map((p) => p.clave).join(", ")}). Catalogo: ${datos.total ?? "?"} voces. ` +
+              `Ya se puede usar con crear_sonido.`,
+          };
+        } catch (error) {
+          return { ok: false, texto: "No pude llamar a la puerta: " + (error instanceof Error ? error.message : String(error)) };
+        }
       }
       case "igualar_clips": {
         const igualar = herramientaLocal.igualador();

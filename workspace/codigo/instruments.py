@@ -559,3 +559,31 @@ def cowbell(vel=1.0, pitch=1.0, dur=0.45, seed=0):
     x = bp(x, 2600.0 * pitch, 1.2) + 0.4 * bp(x, 3900.0 * pitch, 1.6)
     x *= np.exp(-t / (0.10 * max(dur, 0.08)))
     return x * float(vel)
+
+import numpy as np
+
+from dsp import SR, bp, white
+
+def palmada(vel=1.0, pitch=1.0, dur=0.30, seed=0):
+    """Palmada de manos: tres golpes de ruido muy juntos y cola corta.
+    familia: percusión
+    vel: 0.05..1 Intensidad
+    pitch: 0.6..1.6 Tono (x)
+    dur: 0.1..1 Duración (s)
+    seed: 0..9999 Semilla
+    """
+    n = int(dur * SR)
+    x = np.zeros(n)
+    # Tres "manos" separadas 6 ms: eso es lo que suena a palmada y no a ruido.
+    for i, desplazamiento in enumerate((0.0, 0.006, 0.013)):
+        inicio = int((desplazamiento / 0.006) * 0.0 + desplazamiento * SR)
+        resto = n - inicio
+        if resto <= 0:
+            continue
+        t = np.arange(resto) / SR
+        golpe = bp(white(resto, seed + i), 1200.0 * pitch, 0.9) * np.exp(-t / 0.012)
+        golpe += bp(white(resto, seed + i + 7), 3200.0 * pitch, 1.2) * np.exp(-t / 0.006) * 0.5
+        x[inicio:] += golpe * (1.0 - 0.25 * i)
+    t = np.arange(n) / SR
+    x += bp(white(n, seed + 21), 900.0 * pitch, 0.7) * np.exp(-t / 0.09) * 0.35
+    return x * float(vel)

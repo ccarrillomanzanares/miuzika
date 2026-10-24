@@ -41,21 +41,23 @@ Reutiliza estos simbolos; NO los redefinas.
     - `rms_db(x)`
     - `crest_db(x)`
     - `normalize_peak(x, target_db=-1.0)`
-- **codigo/instruments.py**  (importa de: dsp)
-    - `kick(vel=1.0, seed=0)`
-    - `snare(vel=1.0, seed=0)`
-    - `hat(vel=1.0, seed=0, open_=False)`
-    - `metal_hit(vel=1.0, seed=0, pitch=1.0, dur=0.9)`
-    - `shaker(vel=1.0, seed=0)`
-    - `bass_note(midi, dur, vel=1.0, seed=0, squelch=0.0, bright=1.0)`
-    - `drone_note(midi, dur, vel=1.0, seed=0, cutoff=320.0)`
-    - `organ_chord(midis, dur, vel=1.0, seed=0)`
-    - `guitar_loop(beats, bpm, pattern, vel=1.0, seed=0, drive=7.0)`  -- pattern: [(beat, dur_beats, midi, vel, mute)] -> buffer de 'beats' pulsos.
-    - `piano_note(midi, dur, vel=1.0, seed=0, detune=0.0)`
-    - `reverse_swell(src, dur=None)`
-    - `squelch(vel=1.0, seed=0, dur=0.35, f_lo=180.0, f_hi=1800.0)`
-    - `feedback_growl(vel=1.0, seed=0, dur=1.6, f0=196.0)`
-    - `voice(syllables, seed=0, f0_base=98.0, breath=0.1, drive=1.0, whisper=False, jitter=0.35, tail=0.35, tilt=1.0)`  -- syllables: [(t0, dur, midi, vowel, cons, vel)] -> mono float array.
+- **codigo/instruments.py**  (importa de: dsp, instruments)
+    - `kick(vel=1.0, seed=0)`  -- Bombo sintético: seno con caída de tono rápida y golpe de aire.
+    - `snare(vel=1.0, seed=0)`  -- Caja: cuerpo tonal corto y ruido filtrado con cola.
+    - `hat(vel=1.0, seed=0, open_=False)`  -- Charles de ruido metálico filtrado, cerrado o abierto.
+    - `metal_hit(vel=1.0, seed=0, pitch=1.0, dur=0.9)`  -- Chapa metálica con parciales inarmónicos: el golpe industrial.
+    - `shaker(vel=1.0, seed=0)`  -- Cascabel: ruido corto con envolvente suave.
+    - `bass_note(midi=40, dur=0.5, vel=1.0, seed=0, squelch=0.0, bright=1.0)`  -- Bajo sintético con filtro: del seno limpio al squelch ácido.
+    - `drone_note(midi=40, dur=4.0, vel=1.0, seed=0, cutoff=320.0)`  -- Zumbido sostenido de dientes de sierra filtrados.
+    - `organ_chord(midis=(40, 47, 52), dur=2.0, vel=1.0, seed=0)`  -- Acorde de órgano con registro de dientes y vibrato.
+    - `guitar_loop(beats, bpm, pattern, vel=1.0, seed=0, drive=7.0)`  -- Riff de guitarra completo: no es un one-shot, pide patrón y tempo.
+    - `piano_note(midi=60, dur=1.0, vel=1.0, seed=0, detune=0.0)`  -- Piano sintético con parciales y desafinado ajustable.
+    - `reverse_swell(src, dur=None)`  -- Inversión de un sonido dado: pide material de origen.
+    - `squelch(vel=1.0, seed=0, dur=0.35, f_lo=180.0, f_hi=1800.0)`  -- Barrido de resonancia con subida de tono: el blip del techno.
+    - `feedback_growl(vel=1.0, seed=0, dur=1.6, f0=196.0)`  -- Rugido de realimentación con formantes: cola industrial.
+    - `voice(syllables, seed=0, f0_base=98.0, breath=0.1, drive=1.0, whisper=False, jitter=0.35, tail=0.35, tilt=1.0)`  -- Voz sintética por sílabas: pide una lista de sílabas.
+    - `cowbell(vel=1.0, pitch=1.0, dur=0.45, seed=0)`  -- Cencerro metálico de dos tonos, tipo industrial.
+    - `palmada(vel=1.0, pitch=1.0, dur=0.3, seed=0)`  -- Palmada de manos: tres golpes de ruido muy juntos y cola corta.
 - **codigo/midi.py**  (importa de: -)
     - `write_midi(path, tracks, bpm=90.0, ppq=480, name='miuzika')`  -- tracks: lista de dicts {name, channel, program, notes=[(start_beats, dur_beats, pitch, vel)]}
 - **codigo/render.py**  (importa de: dsp, midi)
@@ -79,6 +81,11 @@ Reutiliza estos simbolos; NO los redefinas.
     - `gen_piano(stem, master)`
     - `gen_fx(stem, master)`
     - `masterizar(master)`
+- **codigo/voces.py**  (importa de: -)
+    - `voces(excluidas=None)`  -- Lista de voces del motor, con sus parámetros tal como están en el código.
+    - `perfil(x)`  -- Perfil acústico medible de un render: lo que no admite opinión.
+    - `medir_voz(nombre, args=None, timeout_s=10.0)`  -- Renderiza una voz con sus valores por defecto y devuelve su perfil.
+    - `catalogo(con_perfil=False)`  -- Catálogo completo: voces (las excluidas, marcadas) y su perfil si se pide.
 - **gpu/motor_gpu.py**  (importa de: -)
     - `t_(x, dispositivo=None)`
     - `segundos(n)`
