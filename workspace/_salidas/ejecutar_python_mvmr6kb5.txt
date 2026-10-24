@@ -1,0 +1,127 @@
+CPU: exit=0 en 532 ms
+salida:
+def voice(syllables, seed=0, f0_base=98.0, breath=0.10, drive=1.0,
+          whisper=False, jitter=0.35, tail=0.35, tilt=1.0):
+    """Voz sintética por sílabas: pide una lista de sílabas.
+    familia: textura
+    """
+    if not syllables:
+        return np.zeros(1)
+    total = max(s[0] + s[1] for s in syllables) + tail
+    n = int(total * SR)
+    rng = np.random.default_rng(seed)
+
+    # --- control de f0 y amplitud a 200 Hz
+    ctrl = int(total * 200.0) + 2
+    f0 = np.full(ctrl, float(note_hz(syllables[0][2])))
+    amp = np.zeros(ctrl)
+    F = np.zeros((ctrl, 3))
+    G = np.zeros((ctrl, 3))
+    BW = np.full((ctrl, 3), 0.12)
+    cur = np.array(VOWELS['a'], float)
+    F[:] = cur[:, 0]
+    G[:] = cur[:, 1]
+    BW[:] = cur[:, 2] / 1200.0
+    prev_m = float(syllables[0][2])
+    noise_amp = np.zeros(ctrl)
+
+    for (t0, dur, m, vow, cons, vel) in syllables:
+        i0 = int(t0 * 200.0)
+        i1 = min(ctrl, int((t0 + dur) * 200.0))
+        if i1 <= i0:
+            continue
+        tgt = float(note_hz(m))
+        prev = float(note_hz(prev_m))
+        seg = np.arange(i0, i1)
+        rel = (seg - i0) / max(1, (i1 - i0))
+        # portamento corto y plano despues: casi hablado
+        gl = np.clip(rel / 0.22, 0, 1)
+        f = prev * (tgt / prev) ** gl
+        f *= 1.0 + 0.004 * np.sin(2 * np.pi * 4.7 * seg / 200.0 + rng.uniform(0, 6))
+        f *= 1.0 + rng.normal(0, 0.0015 * jitter, len(seg))
+        # caida al final de la silaba
+        f *= 1.0 - 0.02 * np.clip((rel - 0.75) / 0.25, 0, 1)
+        f0[i0:i1] = f
+        # envolvente
+        a = np.clip(rel / 0.10, 0, 1)
+        r = np.clip((1 - rel) / 0.18, 0, 1)
+        amp[i0:i1] = np.maximum(amp[i0:i1], a * r * vel)
+        # formantes
+        v = np.array(VOWELS.get(vow, VOWELS['a']), float)
+        if cons and cons in VOWELS:
+            c = np.array(VOWELS[cons], float)
+            ncons = min(len(seg), int(0.055 * 200))
+            for k in range(3):
+                F[i0:i0 + ncons, k] = c[k, 0]
+                G[i0:i0 + ncons, k] = c[k, 1] * 0.9
+                BW[i0:i0 + ncons, k] = c[k, 2] / 1200.0
+            noise_amp[i0:i0 + ncons] = 0.55 * vel
+            st = i0 + ncons
+            mv = min(len(seg) - ncons, int(0.05 * 200))
+            for k in range(3):
+                if mv > 0:
+                    F[st:st + mv, k] = np.linspace(c[k, 0], v[k, 0], mv)
+                    G[st:st + mv, k] = np.linspace(c[k, 1] * 0.9, v[k, 1], mv)
+                    BW[st:st + mv, k] = np.linspace(c[k, 2] / 1200.0, v[k, 2] / 1200.0, mv)
+                F[st + mv:i1, k] = v[k, 0]
+                G[st + mv:i1, k] = v[k, 1]
+                BW[st + mv:i1, k] = v[k, 2] / 1200.0
+        else:
+            for k in range(3):
+                F[i0:i1, k] = v[k, 0]
+                G[i0:i1, k] = v[k, 1]
+                BW[i0:i1, k] = v[k, 2] / 1200.0
+        prev_m = m
+
+    # suavizado de los tracks de formantes
+    k = np.ones(9) / 9.0
+    for arr in (F, G, BW):
+        for c in range(3):
+            arr[:, c] = np.convolve(arr[:, c], k, mode='same')
+
+    # --- fuente
+    f0s = np.interp(np.arange(n) / SR, np.arange(ctrl) / 200.0, f0)
+    if whisper:
+        src = rng.standard_normal(n) * 0.5
+    else:
+        src = _osc(f0s, n, _SAW)
+        src = src * 0.8 + _osc(f0s * 1.0, n, _PULSE, 0.25) * 0.35
+        # aspereza de garganta
+        src = soft_clip(src * (1.0 + 0.6 * tilt), 1.4)
+    nz = rng.standard_normal(n)
+    nzamp = np.interp(np.arange(n) / SR, np.arange(ctrl) / 200.0, noise_amp + breath * amp)
+    src = src + nz * nzamp * 0.5
+
+    track = (F, G, BW)
+    y = tv_filter(src, lambda tt, ff: _formant_env(tt, ff, track), n=1024, hop=256)[:n]
+    # aire: ruido filtrado por los mismos formantes
+    air = tv_filter(nz, lambda tt, ff: _formant_env(tt, ff, track) * 0.35, n=1024, hop=256)[:n]
+    y = y + air * (0.35 + breath)
+    y = hp(y, 70.0, 0.7)
+    y = lp(y, 7500.0, 0.7)
+    if drive != 1.0:
+        y = soft_clip(y * drive, 1.6)
+    y *= np.interp(np.arange(n) / SR, np.arange(ctrl) / 200.0, amp)
+    return fade(y, 3.0, 25.0)
+
+======================================================================
+def cadena_voz(x, drive=1.0, rev_mix=0.16, dly_mix=0.20, sil=None, bright=1.0):
+    y = hp(x, 95.0, 0.7)
+    y = filt(y, *biquad('peak', 2600.0, 1.0, 3.5))
+    y = filt(y, *biquad('peak', 6200.0, 2.2, -4.5))
+    y = filt(y, *biquad('hshelf', 7500.0, 0.7, -2.0))
+    y = filt(y, *biquad('peak', 220.0, 1.2, 1.5))
+    y = compress(y, -24.0, 2.6, 30.0, 4.0)
+    if drive != 1.0:
+        y = soft_clip(y * drive, 1.5)
+    y = y / (np.max(np.abs(y)) + 1e-9) * 0.9
+    ir_l = reverb_ir(2.2, 0.42, seed=21, lp_hz=5200.0)
+    ir_r = reverb_ir(2.2, 0.42, seed=22, lp_hz=5200.0)
+    out = reverb_st(y, ir_l, ir_r, mix=rev_mix)
+    if sil is not None and dly_mix > 0:
+        d = delay(y, 0.5, fb=0.42, mix=0.5, taps=6, lp_hz=3200.0)
+        a = actividad(sil, len(y))
+        gap = 1.0 - np.clip(moving_avg(a, 140.0), 0.0, 1.0)
+        d = d * gap
+        out = out + np.stack([d, np.roll(d, int(0.011 * SR))], axis=1) * dly_mix
+    return out

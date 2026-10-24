@@ -39,6 +39,8 @@ const InstrumentSchema = z.object({
   type: z.enum(INSTRUMENT_TYPES),
   preset: z.string().max(64).optional(),
   program: z.number().int().min(0).max(127).optional(),
+  /** .sf2 del instrumento, relativo al proyecto (sólo para `soundfont`). */
+  archivo: z.string().max(200).optional(),
 });
 
 const KeySchema = z.object({

@@ -67,9 +67,10 @@ import {
   registrarAjustador,
   registrarCreador,
   registrarCreadorSonido,
-  registrarImportadorSample,
-  registrarIgualador,
   registrarImportador,
+  registrarImportadorSample,
+  registrarInstrumentador,
+  registrarIgualador,
   setProyectoActivo,
 } from "./agent/tools.ts";
 import type {
@@ -146,6 +147,14 @@ const AGENTE_SISTEMA = [
   "entiende el sistema son: " + VOCABULARIO_PROMPT + ". Se pueden combinar ('corto y gordo'); si dos se",
   "contradicen (corto/largo), gana la ultima y se avisa. No traduzcas tu las palabras a numeros: pasalas",
   "tal cual y el sistema las convierte. Un sonido queda en proyectos/<slug>/sonidos/ con su ficha JSON.",
+  "INSTRUMENTOS: si hay que TOCAR notas con un instrumento de la biblioteca (saxo, arpa, piano...), usa",
+  "usar_instrumento(sfz, nombre): convierte el .sfz en un SoundFont con sus regiones y crea la pista. No",
+  "cojas un sample y lo estires para tocar varias notas: medido, un saxo estirado 3,5x suena a armonica y",
+  "queda +1054 cents fuera de tono. Si el instrumento no esta en VCSL (cuerdas frotadas: no hay violines),",
+  "dilo en vez de sustituirlo por otra cosa.",
+  "FINALES: un stem renderizado debe caber en el proyecto CON su cola: deja 2 s despues del ultimo golpe y",
+  "un fundido corto. Si el fichero dura exactamente lo que el proyecto y aun suena en la ultima muestra, el",
+  "final se oye cortado (medido: arpa a -20 dB en el ultimo milisegundo).",
   "ANTES DE ENTREGAR, PREGUNTA (no lo decidas tu): (a) ¿pistas MIDI, WAV o las dos? Si son las dos, el",
   "material se duplica y suena doble: o dejas las MIDI silenciadas, o no las anades. (b) Si algun stem queda",
   "mas de 12 dB por debajo de la mediana (pico), dilo y PREGUNTA si corregirlo antes de tocar el script.",
@@ -1790,6 +1799,59 @@ registrarAjustador(ajustarPistasDesdeAgente);
 registrarIgualador(igualarClipsDesdeAgente);
 registrarCreadorSonido(crearSonidoDesdeAgente);
 registrarImportadorSample(usarSampleDesdeAgente);
+registrarInstrumentador(instrumentarDesdeAgente);
+
+/**
+ * Un instrumento de la biblioteca, convertido a SoundFont y puesto como pista.
+ * El .sf2 trae sus 46 regiones con la nota raíz que declara el SFZ, que es lo que
+ * evita el «suena a armónica» de estirar un único sample.
+ */
+async function instrumentarDesdeAgente(peticion: {
+  sfz: string;
+  nombre: string;
+}): Promise<{ ok: boolean; texto: string }> {
+  try {
+    const res = await fetch("/api/instrumentos/crear", {
+      method: "POST",
+      headers: cabecerasProyecto({ "Content-Type": "application/json" }),
+      body: JSON.stringify(peticion),
+    });
+    const datos = (await res.json()) as {
+      ok?: boolean;
+      archivo?: string;
+      zonas?: number;
+      notas?: number[];
+      error?: string;
+    };
+    if (!datos.ok || !datos.archivo) {
+      return { ok: false, texto: `No se pudo convertir: ${datos.error ?? res.status}` };
+    }
+    if (!project) {
+      return { ok: false, texto: "Abre o crea un proyecto antes de añadir un instrumento." };
+    }
+    const despues = applyOps(project, [
+      {
+        op: "add_track",
+        name: peticion.nombre.slice(0, 60),
+        kind: "midi",
+        instrument: { type: "soundfont", preset: peticion.nombre.slice(0, 64), archivo: datos.archivo },
+      },
+    ]).project;
+    setProject(despues);
+    const pista = despues.tracks.at(-1);
+    const notas = datos.notas ?? [];
+    return {
+      ok: true,
+      texto:
+        `Instrumento «${peticion.nombre}» listo: ${datos.zonas ?? 0} zonas` +
+        (notas.length === 2 ? ` (notas ${notas[0]}-${notas[1]})` : "") +
+        ` en ${datos.archivo}. Pista ${pista ? `«${pista.name}»` : ""} creada: añade notas con ` +
+        `anadir_notas o usa el piano roll.`,
+    };
+  } catch (error) {
+    return { ok: false, texto: `No se pudo convertir: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
 
 /** ¿Es un fichero de audio? (por MIME o por extension) */
 function esAudio(file: File): boolean {

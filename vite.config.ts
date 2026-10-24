@@ -146,7 +146,7 @@ export default defineConfig(({ mode }) => {
   };
 
   /** Carpetas compartidas por todos los proyectos: motor y utilidades. */
-  const COMPARTIDO = ["codigo/", "gpu/", "herramientas/", "plantillas/", "_archivo/", "_salidas/", "proyectos/"];
+  const COMPARTIDO = ["codigo/", "gpu/", "herramientas/", "plantillas/", "_archivo/", "_salidas/", "catalogo/", "proyectos/"];
 
   /**
    * Identificador del código servido: la marca de tiempo más nueva de web/ y de
@@ -842,6 +842,42 @@ export default defineConfig(({ mode }) => {
             } catch (error) {
               responderJson(res, 500, { error: "salida no es JSON: " + String(error) });
             }
+          });
+
+          // Un instrumento de la biblioteca, convertido a .sf2 dentro del proyecto.
+          // Es la forma de tocar 46 regiones en vez de estirar un sample (que suena
+          // a armónica y desafina: medido, +1054 cents en el saxo).
+          server.middlewares.use("/api/instrumentos/crear", (req, res) => {
+            if (req.method !== "POST") {
+              responderJson(res, 405, { error: "usa POST" });
+              return;
+            }
+            leerCuerpo(req, async (cuerpo) => {
+              try {
+                const datos = JSON.parse(cuerpo) as { sfz?: string; nombre?: string };
+                const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
+                const sfzRel = String(datos.sfz ?? "");
+                const sfz = sfzRel ? resolverEnTrabajo(sfzRel, slug) : null;
+                if (!sfz || !existsSync(sfz)) {
+                  responderJson(res, 404, { error: `no existe el SFZ: ${sfzRel}` });
+                  return;
+                }
+                const carpeta = resolve(carpetaTrabajo, "proyectos", slug);
+                const nombre = String(datos.nombre ?? basename(sfz, ".sfz"));
+                const r = await correr(
+                  "codigo/sfz_a_proyecto.py",
+                  [sfz, carpeta, nombre],
+                  600,
+                );
+                if (r.codigo !== 0) {
+                  responderJson(res, 400, { error: (r.errores || r.salida).slice(-800) });
+                  return;
+                }
+                responderJson(res, 200, JSON.parse(r.salida));
+              } catch (error) {
+                responderJson(res, 500, { error: String(error) });
+              }
+            });
           });
 
           // Devuelve las notas de un .mid ya normalizadas a beats (op add_notes).

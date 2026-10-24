@@ -102,6 +102,21 @@ export interface PeticionProyecto {
 
 type CreadorProyecto = (peticion: PeticionProyecto) => { ok: boolean; texto: string };
 
+/** Convierte un instrumento de la biblioteca a .sf2 y lo pone como pista. */
+export interface PeticionInstrumento {
+  sfz: string;
+  nombre: string;
+}
+
+type Instrumentador = (peticion: PeticionInstrumento) => Promise<{ ok: boolean; texto: string }>;
+
+let instrumentadorLocal: Instrumentador | null = null;
+
+export function registrarInstrumentador(fn: Instrumentador | null): void {
+  instrumentadorLocal = fn;
+  registro.instrumentador = fn;
+}
+
 let creadorProyecto: CreadorProyecto | null = null;
 
 /**
@@ -118,6 +133,7 @@ interface RegistroGlobal {
   igualador?: Igualador | null;
   sonidos?: CreadorSonido | null;
   samples?: ImportadorSample | null;
+  instrumentador?: Instrumentador | null;
 }
 
 const registro: RegistroGlobal =
@@ -224,6 +240,7 @@ const herramientaLocal = {
   igualador: (): Igualador | null => igualador ?? registro.igualador ?? null,
   sonidos: (): CreadorSonido | null => creadorSonido ?? registro.sonidos ?? null,
   samples: (): ImportadorSample | null => importadorSample ?? registro.samples ?? null,
+  instrumentador: (): Instrumentador | null => instrumentadorLocal ?? registro.instrumentador ?? null,
 };
 
 /** Mensaje único para el caso «la app no tiene este registro»: dice qué hacer. */
@@ -405,6 +422,28 @@ export const HERRAMIENTAS: ToolSpec[] = [
           compases: { type: "integer", description: "Duracion del clip en compases (opcional)" },
         },
         required: ["archivo"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "usar_instrumento",
+      description:
+        "Convierte un instrumento de la biblioteca (.sfz de VCSL) en un SoundFont dentro del proyecto y " +
+        "crea su pista MIDI. ESTA es la forma de tener un instrumento afinado: usa sus 46 regiones y la " +
+        "raíz que declara el SFZ. NO cojas un solo sample y lo estires para tocar varias notas: suena a " +
+        "armonica y desafina (medido: +1054 cents).",
+      parameters: {
+        type: "object",
+        properties: {
+          sfz: {
+            type: "string",
+            description: "Ruta del .sfz dentro de workspace/catalogo/ (p. ej. catalogo/VCSL-1.2.2-RC/Aerophones/Reed Aerophones/Tenor Saxophone - Non-Vibrato.sfz)",
+          },
+          nombre: { type: "string", description: "Nombre del instrumento y de la pista" },
+        },
+        required: ["sfz", "nombre"],
       },
     },
   },
@@ -773,6 +812,16 @@ async function ejecutarCrudo(
         } catch (error) {
           return { ok: false, texto: "No pude buscar: " + (error instanceof Error ? error.message : String(error)) };
         }
+      }
+      case "usar_instrumento": {
+        const instrumentar = herramientaLocal.instrumentador();
+        if (!instrumentar) {
+          return { ok: false, texto: SIN_REGISTRO };
+        }
+        return instrumentar({
+          sfz: String(args.sfz ?? "").trim(),
+          nombre: String(args.nombre ?? "").trim() || "instrumento",
+        });
       }
       case "usar_sample": {
         const usar = herramientaLocal.samples();
