@@ -937,7 +937,12 @@ export default defineConfig(({ mode }) => {
             leerCuerpo(req, async (cuerpo) => {
               const rutaInstruments = resolve(carpetaTrabajo, "codigo", "instruments.py");
               try {
-                const datos = JSON.parse(cuerpo) as { nombre?: string; fuente?: string };
+                const datos = JSON.parse(cuerpo) as {
+                  nombre?: string;
+                  fuente?: string;
+                  destino?: string;
+                };
+                const destino = datos.destino === "gpu" ? "gpu" : "cpu";
                 const nombre = String(datos.nombre ?? "").trim().toLowerCase();
                 const fuente = String(datos.fuente ?? "");
                 if (!/^[a-z][a-z0-9_]{2,30}$/.test(nombre)) {
@@ -951,16 +956,41 @@ export default defineConfig(({ mode }) => {
                   responderJson(res, 400, { ok: false, motivos: ["la fuente está vacía o es enorme"] });
                   return;
                 }
-                const original = readFileSync(rutaInstruments, "utf8");
-                if (new RegExp(`^def ${nombre}\\(`, "m").test(original)) {
+                const rutaGpu = resolve(carpetaTrabajo, "gpu", "voces_gpu.py");
+                const textoCpu = readFileSync(rutaInstruments, "utf8");
+                const textoGpu = existsSync(rutaGpu) ? readFileSync(rutaGpu, "utf8") : "";
+                const existe = new RegExp(`^def ${nombre}\\(`, "m");
+                if (existe.test(textoCpu) || existe.test(textoGpu)) {
                   responderJson(res, 409, { ok: false, motivos: [`ya existe la voz "${nombre}"`] });
                   return;
                 }
 
-                // 1) la candidata va a tmp/ y ahí se renderiza (subproceso con límite).
-                const candidata = `tmp/_candidata_${nombre}.py`;
+                // 1) la candidata se renderiza donde toca. En GPU va a gpu/ (Lambda
+                //    sube esa carpeta) y la mide gpu/gate_voz_gpu.py allí mismo.
+                const candidata =
+                  destino === "gpu" ? `gpu/_candidata_${nombre}.py` : `tmp/_candidata_${nombre}.py`;
                 writeFileSync(resolve(carpetaTrabajo, candidata), fuente, "utf8");
-                const prueba = await correr("codigo/gate_voz.py", [candidata], 90);
+                let prueba: { codigo: number | null; salida: string; errores: string };
+                if (destino === "gpu") {
+                  const host = req.headers.host ?? "localhost:5173";
+                  const respuesta = await fetch(`http://${host}/api/run/lambda`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "x-miuzika-proyecto": slugProyecto(req.headers["x-miuzika-proyecto"]) },
+                    body: JSON.stringify({
+                      path: "gpu/gate_voz_gpu.py",
+                      argumentos: [`_candidata_${nombre}.py`],
+                      timeout_segundos: 900,
+                    }),
+                  });
+                  const leido = (await respuesta.json()) as { codigo?: number; salida?: string; errores?: string };
+                  prueba = {
+                    codigo: leido.codigo ?? (respuesta.ok ? 0 : 1),
+                    salida: leido.salida ?? "",
+                    errores: leido.errores ?? "",
+                  };
+                } else {
+                  prueba = await correr("codigo/gate_voz.py", [candidata], 90);
+                }
                 const ultima = prueba.salida.trim().split("\n").filter((l) => l.startsWith("{")).pop();
                 if (!ultima) {
                   responderJson(res, 500, {
@@ -995,13 +1025,15 @@ export default defineConfig(({ mode }) => {
                   .join("\n")
                   .replace(/\n{3,}/g, "\n\n")
                   .trim();
+                const rutaDestino = destino === "gpu" ? rutaGpu : rutaInstruments;
+                const original = readFileSync(rutaDestino, "utf8");
                 const marca = "VOCES CREADAS POR EL AGENTE";
                 const cabecera = original.includes(marca)
                   ? ""
                   : "\n\n# ── VOCES CREADAS POR EL AGENTE ──────────────────────────────────────────────\n" +
                     "# Añadidas desde la app. Docstring obligatorio: ver codigo/voces.py.\n";
                 writeFileSync(
-                  rutaInstruments,
+                  rutaDestino,
                   original.replace(/\s*$/, "\n") + cabecera + "\n" + limpia + "\n",
                   "utf8",
                 );
@@ -1009,7 +1041,7 @@ export default defineConfig(({ mode }) => {
                 // 3) el módulo tiene que seguir importando y la voz aparecer en el catálogo.
                 const revisar = await correr("codigo/voces.py", ["--medir"], 240);
                 if (revisar.codigo !== 0) {
-                  writeFileSync(rutaInstruments, original, "utf8");
+                  writeFileSync(rutaDestino, original, "utf8");
                   responderJson(res, 500, {
                     ok: false,
                     motivos: ["la voz rompe instruments.py; se ha deshecho el cambio"],

@@ -67,6 +67,8 @@ export interface RecetaSonido {
   post: PostSonido;
   /** Palabras con las que se pidió, para poder repetirlo en lenguaje humano. */
   palabras?: string[];
+  /** Dónde se renderiza: en el portátil (cpu) o en Lambda (gpu). */
+  destino?: "cpu" | "gpu";
 }
 
 export const POST_POR_DEFECTO: PostSonido = {
@@ -240,7 +242,7 @@ export function scriptDeSonido(receta: RecetaSonido, opciones: { slug: string })
   return `"""Sonido «${receta.nombre}» — generado por miuzika desde una receta.
 
 No editar a mano: se regenera desde proyectos/${opciones.slug}/sonidos/${receta.nombre}.json
-Voz: ${receta.voz}${receta.palabras?.length ? ` · palabras: ${receta.palabras.join(", ")}` : ""}
+Voz: ${receta.voz} (${receta.destino ?? "cpu"})${receta.palabras?.length ? ` · palabras: ${receta.palabras.join(", ")}` : ""}
 """
 import os
 import sys
@@ -251,10 +253,11 @@ import numpy as np
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.abspath(os.path.join(AQUI, "..", ".."))
 sys.path.insert(0, os.path.join(RAIZ, "codigo"))
+sys.path.insert(0, os.path.join(RAIZ, "gpu"))
 
-import dsp          # noqa: E402
-import instruments  # noqa: E402
+import dsp  # noqa: E402
 
+DESTINO = ${literalPython(receta.destino ?? "cpu")}
 VOZ = ${literalPython(receta.voz)}
 ARGS = {
 ${args}
@@ -310,9 +313,11 @@ def postproceso(x):
 
 
 def main():
-    fn = getattr(instruments, VOZ, None)
+    # Las voces de GPU viven en gpu/voces_gpu.py y solo corren alli (torch).
+    modulo = __import__("voces_gpu" if DESTINO == "gpu" else "instruments")
+    fn = getattr(modulo, VOZ, None)
     if fn is None:
-        raise SystemExit(f"VOZ desconocida: {VOZ}")
+        raise SystemExit(f"VOZ desconocida: {VOZ} ({DESTINO})")
     x = postproceso(fn(**ARGS))
     est = np.stack([x, x], axis=1)
     pcm = np.clip(est * 32767.0, -32768, 32767).astype("<i2")

@@ -23,6 +23,7 @@ Uso:
     python codigo/voces.py --json ruta.json # escribe el catálogo en un fichero
 """
 
+import ast
 import importlib
 import inspect
 import json
@@ -143,9 +144,90 @@ def voces(excluidas=None):
             "descripcion": doc["descripcion"],
             "documentada": bool(doc["descripcion"]) and "familia" in inspect.getdoc(fn or "").lower(),
             "params": params,
+            "destino": "cpu",
             "excluida": excluidas.get(nombre),
         }
         salida.append(voz)
+    return salida
+
+
+# ── Voces de GPU: se leen sin importarlas (aquí no hay torch) ────────────────
+
+RUTA_GPU = os.path.abspath(os.path.join(AQUI, "..", "gpu", "voces_gpu.py"))
+
+
+def _docstring_de(nodo):
+    """Igual que _leer_docstring pero desde el AST, sin importar el módulo."""
+    doc = ast.get_docstring(nodo) or ""
+    lineas = [l.strip() for l in doc.splitlines() if l.strip()]
+    datos = {"descripcion": lineas[0] if lineas else "", "familia": "sin clasificar", "params": {}}
+    for linea in lineas[1:]:
+        if linea.lower().startswith("familia:"):
+            familia = linea.split(":", 1)[1].strip().lower()
+            datos["familia"] = familia if familia in FAMILIAS else "sin clasificar"
+            continue
+        m = LINEA_PARAM.match(linea)
+        if m:
+            datos["params"][m["clave"]] = {
+                "tipo": "enteros" if m["maximo"] else "num",
+                "min": float(m["min"]),
+                "max": float(m["max"]),
+                "etiqueta": m["etiqueta"].strip(),
+                "unidad": (m["unidad"] or "").strip(),
+                **({"maximo_elementos": int(m["maximo"])} if m["maximo"] else {}),
+            }
+            continue
+        m = LINEA_BOOL.match(linea)
+        if m:
+            datos["params"][m["clave"]] = {"tipo": "bool", "etiqueta": m["etiqueta"].strip()}
+    return datos
+
+
+def voces_gpu(ruta=None):
+    """Voces del motor de GPU, leídas del código con `ast` (sin torch)."""
+    ruta = ruta or RUTA_GPU
+    if not os.path.exists(ruta):
+        return []
+    arbol = ast.parse(open(ruta, encoding="utf-8").read())
+    salida = []
+    for nodo in arbol.body:
+        if not isinstance(nodo, ast.FunctionDef) or nodo.name.startswith("_"):
+            continue
+        doc = _docstring_de(nodo)
+        params = []
+        argumentos = nodo.args.args
+        por_defecto = [None] * (len(argumentos) - len(nodo.args.defaults)) + list(nodo.args.defaults)
+        for arg, defecto in zip(argumentos, por_defecto):
+            if arg.arg in ("self", "cls"):
+                continue
+            valor = None
+            if isinstance(defecto, ast.Constant):
+                valor = defecto.value
+            elif isinstance(defecto, (ast.List, ast.Tuple)):
+                valor = [el.value for el in defecto.elts if isinstance(el, ast.Constant)]
+            meta = doc["params"].get(arg.arg, {})
+            params.append(
+                {
+                    "clave": arg.arg,
+                    "etiqueta": meta.get("etiqueta") or arg.arg.capitalize(),
+                    "tipo": meta.get("tipo") or ("enteros" if isinstance(valor, list) else "num"),
+                    "defecto": valor,
+                    "obligatorio": defecto is None,
+                    **({k: meta[k] for k in ("min", "max", "unidad", "maximo_elementos") if k in meta}),
+                }
+            )
+        salida.append(
+            {
+                "clave": nodo.name,
+                "etiqueta": doc["descripcion"].split(".")[0][:60] or nodo.name.capitalize(),
+                "familia": doc["familia"],
+                "descripcion": doc["descripcion"],
+                "documentada": bool(doc["descripcion"]) and "familia" in (ast.get_docstring(nodo) or "").lower(),
+                "params": params,
+                "destino": "gpu",
+                "excluida": None,
+            }
+        )
     return salida
 
 
@@ -222,8 +304,11 @@ def medir_voz(nombre, args=None, timeout_s=10.0):
 
 def catalogo(con_perfil=False):
     """Catálogo completo: voces (las excluidas, marcadas) y su perfil si se pide."""
-    lista = voces()
+    lista = voces() + voces_gpu()
     for voz in lista:
+        if voz.get("destino") == "gpu":
+            # El perfil de una voz GPU se mide en Lambda, no aqui (no hay torch).
+            continue
         if voz["excluida"]:
             continue
         if any(p["obligatorio"] for p in voz["params"]):

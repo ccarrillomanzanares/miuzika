@@ -377,10 +377,17 @@ export const HERRAMIENTAS: ToolSpec[] = [
         type: "object",
         properties: {
           nombre: { type: "string", description: "Nombre de la funcion: minusculas, letras/numeros/_, 3-31" },
+          destino: {
+            type: "string",
+            enum: ["cpu", "gpu"],
+            description:
+              "cpu: numpy local, gratis e instantaneo. gpu: torch en Lambda (1,29 $/h, ~3 min de " +
+              "arranque); usalo solo si la voz necesita torch o un render pesado. Pregunta antes.",
+          },
           fuente: {
             type: "string",
             description:
-              "Codigo Python COMPLETO de la funcion, con imports (numpy, dsp, instruments) y docstring " +
+              "Codigo Python COMPLETO de la funcion, con imports (numpy, dsp, instruments o torch) y docstring " +
               "obligatorio: primera linea = descripcion, luego 'familia: percusion|tonal|ruido|textura' y " +
               "una linea por parametro 'nombre: min..max Etiqueta (unidad)' o 'nombre: bool Etiqueta'. " +
               "Todos los parametros con valor por defecto y deterministas por 'seed'.",
@@ -579,7 +586,7 @@ async function ejecutarCrudo(
                 p.min === undefined ? p.clave : `${p.clave} ${p.min}..${p.max}${p.unidad ? " " + p.unidad : ""}`,
               )
               .join(", ");
-            return `- ${voz.clave} [${voz.familia}] ${voz.descripcion} (${params})`;
+            return `- ${voz.clave} [${voz.familia}${(voz as { destino?: string }).destino === "gpu" ? ", GPU" : ""}] ${voz.descripcion} (${params})`;
           });
           return { ok: true, texto: `Voces del motor (${lineas.length}):\n${lineas.join("\n")}` };
         } catch (error) {
@@ -612,10 +619,11 @@ async function ejecutarCrudo(
           return { ok: false, texto: "faltan nombre o fuente" };
         }
         try {
+          const destino = args.destino === "gpu" ? "gpu" : "cpu";
           const res = await fetch("/api/voces/nueva", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ nombre, fuente }),
+            body: JSON.stringify({ nombre, fuente, destino }),
           });
           const datos = (await res.json()) as {
             ok?: boolean;
@@ -640,7 +648,7 @@ async function ejecutarCrudo(
           return {
             ok: true,
             texto:
-              `Voz "${datos.voz?.clave ?? nombre}" anadida al motor (familia ${datos.voz?.familia ?? "?"}, ` +
+              `Voz "${datos.voz?.clave ?? nombre}" anadida al motor de ${destino.toUpperCase()} (familia ${datos.voz?.familia ?? "?"}, ` +
               `parametros: ${(datos.voz?.params ?? []).map((p) => p.clave).join(", ")}). Catalogo: ${datos.total ?? "?"} voces. ` +
               `Ya se puede usar con crear_sonido.`,
           };

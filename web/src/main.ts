@@ -1489,6 +1489,13 @@ async function crearSonidoDesdeAgente(
     return { ok: false, texto: error instanceof Error ? error.message : String(error) };
   }
 
+  const voz = vozPorClave(catalogo, receta.voz);
+  const destino: "cpu" | "gpu" = (voz as { destino?: string } | undefined)?.destino === "gpu" ? "gpu" : "cpu";
+  receta = { ...receta, destino };
+  if (destino === "gpu") {
+    avisos.push("Esta voz renderiza en la GPU: usa Lambda (1,29 $/h si esta apagada, ~3 min de arranque).");
+  }
+
   if (peticion.palabras && peticion.palabras.length > 0) {
     const conPalabras = aplicarPalabras(receta, peticion.palabras, vozPorClave(catalogo, receta.voz));
     receta = conPalabras.receta;
@@ -1506,10 +1513,13 @@ async function crearSonidoDesdeAgente(
   try {
     const w = await escribir(rutaScript, scriptDeSonido(receta, { slug }));
     if (!w.ok) throw new Error(`no pude escribir el script (${w.status})`);
-    const r = await fetch("/api/run/python", {
+    const r = await fetch(destino === "gpu" ? "/api/run/lambda" : "/api/run/python", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: rutaScript, timeout_segundos: 180 }),
+      body: JSON.stringify({
+        path: rutaScript,
+        timeout_segundos: destino === "gpu" ? 600 : 180,
+      }),
     });
     const corrida = (await r.json()) as { codigo?: number; salida?: string; errores?: string };
     if (!r.ok || (corrida.codigo ?? 1) !== 0) {
@@ -1541,7 +1551,7 @@ async function crearSonidoDesdeAgente(
       .join(" ");
 
     const texto = [
-      `Sonido "${receta.nombre}" creado (voz ${receta.voz}${receta.palabras?.length ? ` · ${receta.palabras.join(", ")}` : ""}).`,
+      `Sonido "${receta.nombre}" creado (voz ${receta.voz} en ${destino.toUpperCase()}${receta.palabras?.length ? ` · ${receta.palabras.join(", ")}` : ""}).`,
       `WAV: ${rutaWav}`,
       medidas ? `Medidas: ${medidas}` : "",
       ...avisos.map((a) => `- ${a}`),
