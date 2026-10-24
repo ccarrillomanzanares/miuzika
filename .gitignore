@@ -11,3 +11,4 @@ workspace/_archivo/
 workspace/salida/*.wav
 workspace/proyectos/
 tools/piloto-gpu/audio/
+cache-commit.txt

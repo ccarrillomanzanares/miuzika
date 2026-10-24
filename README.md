@@ -411,6 +411,12 @@ en el mismo sitio, sin importar que el `.mid` termine en su última nota o que e
   (es lo que usa el importador); `src/core/tiempo.ts` decide las longitudes y
   tiene 5 tests.
 
+### Plan
+
+Las fases de lo que falta (creación de sonidos, mezcla con lo que ya trae openDAW,
+análisis y unificación de trabajos de motor) están en [PLAN.md](PLAN.md), con sus
+criterios de aceptación.
+
 ### Contexto y retención del agente
 
 Tres cosas distintas, cada una en su sitio:
