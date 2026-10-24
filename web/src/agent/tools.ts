@@ -77,6 +77,12 @@ export interface PeticionPistas {
   midis: string[];
   wavs: string[];
   inicioCompas: number;
+  /**
+   * Cuantos compases dura la toma. Todos los clips de la llamada (MIDI y WAV)
+   * duran exactamente eso: la duracion se cuenta en compases, no en segundos de
+   * fichero, asi que el MIDI y el WAV del mismo instrumento acaban igual.
+   */
+  compases?: number;
   /** Nombre del proyecto si hay que crearlo (lo pregunta el agente al usuario). */
   nombreProyecto?: string;
 }
@@ -298,6 +304,12 @@ export const HERRAMIENTAS: ToolSpec[] = [
             type: "integer",
             description: "Compas donde empiezan las pistas (0 = principio)",
           },
+          compases: {
+            type: "integer",
+            description:
+              "Duracion de la toma en COMPASES (p.ej. 80). Todos los clips que anadas duran eso, " +
+              "tanto los MIDI como los WAV: asi acaban en el mismo compas. Ponlo siempre que lo sepas.",
+          },
           nombre_proyecto: {
             type: "string",
             description:
@@ -422,6 +434,7 @@ async function ejecutarCrudo(
           midis: Array.isArray(args.midis) ? (args.midis as unknown[]).map(String) : [],
           wavs: Array.isArray(args.wavs) ? (args.wavs as unknown[]).map(String) : [],
           inicioCompas: Number(args.inicio_compas ?? 0) || 0,
+          ...(Number(args.compases) > 0 ? { compases: Math.trunc(Number(args.compases)) } : {}),
           ...(typeof args.nombre_proyecto === "string" && args.nombre_proyecto.trim() !== ""
             ? { nombreProyecto: args.nombre_proyecto.trim() }
             : {}),

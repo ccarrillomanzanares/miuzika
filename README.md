@@ -394,6 +394,23 @@ Un WAV de más de 512 MB o en un formato que `herramientas/picos.py` no sepa lee
 no entra, y el proyecto no lo referenciará (se avisa en el chat). El historial
 de undo tampoco sobrevive a una recarga: son 8 pasos en memoria.
 
+### Duración de los clips: en compases
+
+Un clip dura un número de compases, y **ese número es el mismo para el MIDI y para
+el WAV del mismo material**. Por eso `anadir_pistas` acepta `compases=N` (la
+duración de la toma): todos los clips de esa llamada miden `N` compases y acaban
+en el mismo sitio, sin importar que el `.mid` termine en su última nota o que el
+`.wav` lleve cola de reverb.
+
+- Sin `compases`: el audio se redondea al compás (`336,667 → 340`) y los MIDI se
+  estiran hasta esa misma longitud. Un one-shot de menos de dos compases conserva
+  su duración exacta.
+- Si `compases` pide más de lo que dura el fichero, el clip se queda en lo que hay
+  y el resultado lo dice: «pediste 90 compases pero el WAV dura 84,17».
+- Op nueva `set_clip_length` en `src/core/ops.ts` para igualar un clip existente
+  (es lo que usa el importador); `src/core/tiempo.ts` decide las longitudes y
+  tiene 5 tests.
+
 ### Contexto y retención del agente
 
 Tres cosas distintas, cada una en su sitio:

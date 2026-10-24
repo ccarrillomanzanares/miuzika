@@ -207,3 +207,22 @@ test("duplicate_clip puede copiar a otra pista y a un inicio concreto", () => {
   assert.equal(project.tracks[1]!.clips[0]!.start, 16);
   assert.equal(project.tracks[1]!.clips[0]!.notes[0]!.pitch, 64);
 });
+
+test("set_clip_length iguala un clip MIDI con el de audio de la misma toma", () => {
+  // Un bombo MIDI que acaba en el compas 76 y su WAV de 85 compases: los dos
+  // clips tienen que medir lo mismo, porque la duracion se cuenta en compases.
+  const inicio = applyOps(baseProject(), [
+    { op: "add_track", id: "trk_bat", name: "Bombo", instrument: { type: "drumkit" } },
+    { op: "add_notes", trackId: "trk_bat", startBar: 0, notes: [{ pitch: 36, start: 300, duration: 1, velocity: 100 }] },
+    { op: "register_audio_asset", assetId: "aud1", name: "bombo", durationBeats: 336.6666666666667 },
+    { op: "add_audio_clip", assetId: "aud1", startBar: 0, track: { name: "bombo" } },
+  ]).project;
+  const midi = inicio.tracks[0]!.clips[0]!;
+  assert.equal(midi.length, 304); // acaba donde acaba su nota (compas 76)
+  const { project } = applyOps(inicio, [
+    { op: "set_clip_length", trackId: "trk_bat", clipId: midi.id, lengthBeats: 340 },
+  ]);
+  assert.equal(project.tracks[0]!.clips[0]!.length, 340);
+  assert.equal(project.lengthBars, 85);
+});
+

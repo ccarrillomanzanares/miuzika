@@ -107,16 +107,19 @@ const AGENTE_SISTEMA = [
   "Si NO hay proyecto abierto, PREGUNTA al usuario como llamarlo (no lo inventes) y llama a",
   "crear_proyecto(nombre) ANTES de escribir nada: su nombre es su carpeta (proyectos/<nombre>/) y",
   "todo lo que escribas en 'salida/...' caera ahi.",
-  "Para ENTREGAR una cancion llama a anadir_pistas(midis=[...], wavs=[...]): crea pistas reales en el",
-  "DAW. Deja los .mid y los .wav (stems, no master) en salida/. NO masterices ni limitadores el stereo",
-  "final: el master se decide en el DAW con los faders; entrega pistas separadas.",
+  "Para ENTREGAR una cancion llama a anadir_pistas(midis=[...], wavs=[...], compases=N): crea pistas",
+  "reales en el DAW. Pasa SIEMPRE compases=N (la duracion de la toma, p.ej. 80): todos los clips que",
+  "anadas duran esos compases, tanto los MIDI como los WAV, asi que acaban en el mismo compas. La",
+  "duracion de un clip se cuenta en compases, no en segundos de fichero. Deja los .mid y los .wav",
+  "(stems, no master) en salida/. NO masterices ni limitadores el stereo final: el master se decide en",
+  "el DAW con los faders; entrega pistas separadas.",
   "Para corregir una linea usa editar_fichero(path, busca, reemplaza). Para medir un WAV usa",
   "verificar_audio(path). Para un sample rapido copia plantillas/one_shot.py y cambia PARAMS.",
   "Si de verdad hace falta algo nuevo, crealo en codigo/experimental/ con nombres nuevos.",
   "ANTES DE ENTREGAR, PREGUNTA (no lo decidas tu): (a) ¿pistas MIDI, WAV o las dos? Si son las dos, el",
   "material se duplica y suena doble: o dejas las MIDI silenciadas, o no las anades. (b) Si algun stem queda",
   "mas de 12 dB por debajo de la mediana (pico), dilo y PREGUNTA si corregirlo antes de tocar el script.",
-  "Los clips de audio duran lo que el fichero redondeado a compas; los MIDI acaban donde acaban sus notas.",
+  "Sin compases, el audio dura lo que el fichero redondeado a compas y el MIDI acaba en su ultima nota:",
   "No estires unos para igualar los otros: si el usuario los quiere iguales, pregunta antes.",
   "REGLA DEL DINERO: en Lambda se paga la GPU por hora, asi que alli SOLO se ejecuta motor_gpu (torch).",
   "Un script que importe dsp/instruments/render/cancion es del motor numpy: eso va con destino='cpu',",
@@ -1112,6 +1115,16 @@ async function importarPistasDesdeAgente(
   const MAX_NOTAS = 2000; // tope de la op add_notes
   const hechas: string[] = [];
   const fallos: string[] = [];
+  /**
+   * La duracion de una toma se cuenta en COMPASES, no en segundos de fichero: asi
+   * el MIDI (que acaba en su ultima nota) y el WAV (que lleva cola) del mismo
+   * instrumento acaban en el mismo compas. Si el agente no la dice, se toma la del
+   * audio, que es lo que dura el material.
+   */
+  const compasesToma = peticion.compases && peticion.compases > 0 ? Math.trunc(peticion.compases) : 0;
+  const clipsMidi: { trackId: string; clipId: string }[] = [];
+  let largoAudio = 0;
+  const avisos: string[] = [];
 
   // 1) sin proyecto hace falta el nombre ANTES de leer nada: la carpeta del
   //    proyecto es lo que permite resolver 'salida/...'. Se crea provisional y
@@ -1215,6 +1228,8 @@ async function importarPistasDesdeAgente(
             current = applyOps(current, [
               { op: "add_notes", trackId: id, startBar: inicio, name: nombre, notes: trozo },
             ]).project;
+            const clipId = current.tracks.find((t) => t.id === id)?.clips.at(-1)?.id;
+            if (clipId) clipsMidi.push({ trackId: id, clipId });
           } else {
             // Los trozos siguen en el MISMO clip: si no, cada trozo crea un clip
             // nuevo desde el compas inicial y se solapan (Bateria: 2376 notas).
@@ -1278,7 +1293,10 @@ async function importarPistasDesdeAgente(
                   op: "add_audio_clip" as const,
                   assetId,
                   startBar: inicio,
-                  lengthBeats: compasesDeAudio(durationBeats, beatsPerBar(current)),
+                  lengthBeats:
+                    compasesToma > 0
+                      ? compasesToma * beatsPerBar(current)
+                      : compasesDeAudio(durationBeats, beatsPerBar(current)),
                   gainDb: 0,
                   name: nombre,
                   trackId: existente.id,
@@ -1289,13 +1307,26 @@ async function importarPistasDesdeAgente(
                   op: "add_audio_clip" as const,
                   assetId,
                   startBar: inicio,
-                  lengthBeats: durationBeats,
+                  lengthBeats:
+                    compasesToma > 0
+                      ? compasesToma * beatsPerBar(current)
+                      : compasesDeAudio(durationBeats, beatsPerBar(current)),
                   gainDb: 0,
                   name: nombre,
                   track: { name: nombre },
                 },
               ]),
         ]).project;
+        if (compasesToma > 0 && compasesToma * beatsPerBar(current) > durationBeats + 1e-6) {
+          avisos.push(
+            `${nombre}: pediste ${compasesToma} compases pero el WAV dura ${durationBeats.toFixed(1)} beats ` +
+              `(${(durationBeats / beatsPerBar(current)).toFixed(2)} compases). El clip se queda en lo que hay.`,
+          );
+        }
+        largoAudio = Math.max(
+          largoAudio,
+          compasesToma > 0 ? compasesToma * beatsPerBar(current) : compasesDeAudio(durationBeats, beatsPerBar(current)),
+        );
         hechas.push(
           `${nombre} (audio streaming, ${durationBeats.toFixed(1)} beats, sin decodificar)`,
         );
@@ -1320,16 +1351,57 @@ async function importarPistasDesdeAgente(
           op: "add_audio_clip",
           assetId: asset.id,
           startBar: inicio,
-          lengthBeats: compasesDeAudio(asset.durationBeats, beatsPerBar(current)),
+          lengthBeats:
+            compasesToma > 0
+              ? compasesToma * beatsPerBar(current)
+              : compasesDeAudio(asset.durationBeats, beatsPerBar(current)),
           gainDb: 0,
           name: nombre,
           track: { name: nombre },
         },
       ]).project;
+      if (compasesToma > 0 && compasesToma * beatsPerBar(current) > asset.durationBeats + 1e-6) {
+        avisos.push(
+          `${nombre}: pediste ${compasesToma} compases pero el WAV dura ${asset.durationBeats.toFixed(1)} beats. ` +
+            "El clip se queda en lo que hay.",
+        );
+      }
+      largoAudio = Math.max(
+        largoAudio,
+        compasesToma > 0 ? compasesToma * beatsPerBar(current) : compasesDeAudio(asset.durationBeats, beatsPerBar(current)),
+      );
       hechas.push(`${nombre} (audio, ${asset.durationBeats.toFixed(1)} beats)`);
     } catch (error) {
       fallos.push(`${ruta}: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  // La toma entera mide lo mismo: compases dichos por el agente o, si no, lo que
+  // dura el audio. Los clips MIDI se estiran hasta ahi (nunca se recortan: sus
+  // notas ya caben dentro).
+  const barBeatsToma = beatsPerBar(current);
+  const largoToma =
+    compasesToma > 0 ? compasesToma * barBeatsToma : largoAudio;
+  if (largoToma > 0) {
+    const opsFinales: Op[] = [];
+    for (const { trackId, clipId } of clipsMidi) {
+      const pista = current.tracks.find((t) => t.id === trackId);
+      const clip = pista?.clips.find((c) => c.id === clipId);
+      if (clip && clip.length < largoToma - 1e-6) {
+        opsFinales.push({ op: "set_clip_length", trackId, clipId, lengthBeats: largoToma });
+      }
+    }
+    if (opsFinales.length > 0) current = applyOps(current, opsFinales).project;
+    current = applyOps(current, [
+      {
+        op: "set_song",
+        bpm: current.bpm,
+        lengthBars: Math.max(
+          current.lengthBars,
+          inicio + Math.ceil(largoToma / barBeatsToma - 1e-6),
+        ),
+      },
+    ]).project;
   }
 
   if (hechas.length > 0) {
@@ -1340,6 +1412,7 @@ async function importarPistasDesdeAgente(
     hechas.length > 0 ? `Anadidas ${hechas.length} pistas:` : "No se anadio ninguna pista.",
     ...hechas.map((linea) => `- ${linea}`),
     ...(fallos.length > 0 ? ["Fallos:", ...fallos.map((linea) => `- ${linea}`)] : []),
+    ...avisos,
     // El mismo material dos veces suena doble: se avisa en el acto, no después.
     ...(peticion.midis.length > 0 && peticion.wavs.length > 0
       ? [

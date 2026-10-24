@@ -156,6 +156,18 @@ const SetAudioClipOp = z.object({
   gainDb: GainSchema.optional(),
 });
 
+/**
+ * Cambia la duracion de un clip, MIDI o de audio. Los clips se miden en compases:
+ * el MIDI de un instrumento y el WAV del mismo material tienen que acabar en el
+ * mismo compas, aunque el fichero MIDI acabe en su ultima nota y el WAV lleve cola.
+ */
+const SetClipLengthOp = z.object({
+  op: z.literal("set_clip_length"),
+  trackId: IdSchema,
+  clipId: IdSchema,
+  lengthBeats: z.number().positive().max(4096),
+});
+
 const MoveClipOp = z.object({
   op: z.literal("move_clip"),
   trackId: IdSchema.describe("Pista donde esta el clip"),
@@ -197,6 +209,7 @@ const OpSchema = z.discriminatedUnion("op", [
   RegisterAudioAssetOp,
   AddAudioClipOp,
   SetAudioClipOp,
+  SetClipLengthOp,
   MoveClipOp,
   DuplicateClipOp,
   SetMasterOp,
@@ -503,6 +516,18 @@ function applyOne(project: Project, op: ParsedOp): string {
         );
       }
       return `Clip de audio actualizado: ${clip.id}`;
+    }
+
+    case "set_clip_length": {
+      const track = resolveTrack(project, op.trackId);
+      const clip = resolveClip(track, op.clipId);
+      const barBeats = beatsPerBar(project);
+      clip.length = Math.max(0.25, op.lengthBeats);
+      project.lengthBars = Math.max(
+        project.lengthBars,
+        Math.ceil((clip.start + clip.length) / barBeats - 1e-6),
+      );
+      return `Clip ${clip.id} dura ${clip.length.toFixed(2)} beats`;
     }
 
     case "move_clip": {
