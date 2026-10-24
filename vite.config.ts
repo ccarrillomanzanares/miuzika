@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -44,17 +45,55 @@ export default defineConfig(({ mode }) => {
   const carpetaTmp = resolve(process.cwd(), "tmp");
   const ficheroLog = resolve(carpetaTmp, "llm.log");
 
-  /** Anade una linea a un log (nunca debe romper la app). */
-  const anotar = (fichero: string, linea: string): void => {
+  /** Tope de cada log: al pasarse se guarda una copia .1 y se empieza otro. */
+  const TOPE_LOG = 5 * 1024 * 1024;
+  const TOPE_LOG_HERRAMIENTAS = 2 * 1024 * 1024;
+
+  /** Anade una linea a un log, rotando por tamano (nunca debe romper la app). */
+  const anotar = (fichero: string, linea: string, tope?: number): void => {
     try {
       mkdirSync(carpetaTmp, { recursive: true });
+      const limite = tope ?? (fichero === ficheroHerramientas ? TOPE_LOG_HERRAMIENTAS : TOPE_LOG);
+      if (existsSync(fichero) && statSync(fichero).size > limite) {
+        renameSync(fichero, `${fichero}.1`);
+      }
       appendFileSync(fichero, linea + "\n", "utf8");
     } catch {
       /* sin log */
     }
   };
 
-  const registrarTurno = (linea: string): void => anotar(ficheroLog, linea);
+  /**
+   * Sin MIUZIKA_LOG_COMPLETO=1 el log guarda el turno sin los mensajes enteros:
+   * con el manifiesto dentro eran ~40 KB por vuelta y acababa conteniendo todo el
+   * codigo del proyecto. Se guarda la forma (rol, tamano, primeras 200 letras) y,
+   * aparte, la peticion y la respuesta. Con el flag, entero (para depurar).
+   */
+  const compactarTurno = (linea: string): string => {
+    if (process.env.MIUZIKA_LOG_COMPLETO === "1") return linea;
+    try {
+      const datos = JSON.parse(linea) as Record<string, unknown>;
+      const mensajes = Array.isArray(datos.mensajes)
+        ? (datos.mensajes as { role?: string; content?: string; tool_calls?: unknown[] }[])
+        : [];
+      const sistema = mensajes.find((m) => m.role === "system")?.content ?? "";
+      const resumen = {
+        ...datos,
+        mensajes: mensajes.map((m) => ({
+          role: m.role ?? "?",
+          caracteres: (m.content ?? "").length,
+          inicio: (m.content ?? "").slice(0, 200),
+          herramientas: Array.isArray(m.tool_calls) ? m.tool_calls.length : 0,
+        })),
+        sistema: { caracteres: sistema.length, inicio: sistema.slice(0, 400) },
+      };
+      return JSON.stringify(resumen);
+    } catch {
+      return linea.slice(0, 2000);
+    }
+  };
+
+  const registrarTurno = (linea: string): void => anotar(ficheroLog, compactarTurno(linea));
 
   const ficheroHerramientas = resolve(carpetaTmp, "herramientas.log");
   /** Todo lo que escribe o ejecuta el agente vive aqui, y no puede salir de aqui. */

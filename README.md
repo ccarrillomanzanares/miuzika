@@ -394,6 +394,36 @@ Un WAV de más de 512 MB o en un formato que `herramientas/picos.py` no sepa lee
 no entra, y el proyecto no lo referenciará (se avisa en el chat). El historial
 de undo tampoco sobrevive a una recarga: son 8 pasos en memoria.
 
+### Contexto y retención del agente
+
+Tres cosas distintas, cada una en su sitio:
+
+| | Dónde | Cuánto |
+|---|---|---|
+| **Contexto del modelo** | RAM: prompt de sistema + últimos 25 mensajes | se pierde al recargar, y por eso… |
+| **Historial del proyecto** | `proyectos/<slug>/agente.json`: últimos 8 turnos + resumen rodante de los anteriores | se rehidrata en el prompt al abrir el proyecto |
+| **Transcripción visible** | `localStorage miuzika.chat.log` | últimos 300 mensajes |
+| **Depuración** | `tmp/llm.log`, `tmp/herramientas.log` | 5 y 2 MB con una copia `.1` (`renameSync`) |
+
+- **`agente.json`** guarda turnos *conversacionales* (petición + respuesta final),
+  sin el fontanería de `tool_calls`: así se puede volver a meter en el prompt sin
+  ids huérfanos. Al pasar de 8 turnos, los viejos se funden en una línea cada uno
+  (`agregarTurno` en `web/src/agent/contexto.ts`, con tests). Al abrir otro
+  proyecto se cambia de conversación; la visible no se borra.
+- **Las salidas largas no viajan.** Si una herramienta devuelve más de 1200
+  caracteres, al modelo le llega la cabeza + la cola y el texto completo se
+  guarda en `proyectos/<slug>/_salidas/<herramienta>_<id>.txt`, que puede releer
+  con `leer_fichero`. Medido: `leer_fichero('codigo/dsp.py')` pasa de 10.133 a
+  1.352 caracteres de contexto.
+- **El log de turnos va compactado** salvo `MIUZIKA_LOG_COMPLETO=1`: de cada
+  mensaje guarda rol, tamaño y primeras 200 letras (y 400 del prompt de sistema),
+  más la petición y la respuesta. Antes eran ~40 KB por turno con el manifiesto
+  dentro; ahora ~1,3 KB, y rota al pasar de 5 MB.
+- Lo que **no** hay: memoria semántica ni RAG. La memoria durable es el propio
+  `proyecto.json` (estado medible) y, si se quiere prosa, un `NOTAS.md` por
+  proyecto. Para 3-5 proyectos, un RAG sería opaco y podría inyectar recuerdos
+  falsos.
+
 ### Pendiente
 
 - **Importar `.mid` por el selector de ficheros** (el `accept` no lo incluye).

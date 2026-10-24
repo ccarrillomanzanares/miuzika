@@ -44,6 +44,13 @@ import { vigilarVersion } from "./build.ts";
 import { getModel, health, listModels, setModel } from "./llm.ts";
 import type { ChatMessage } from "./llm.ts";
 import { ejecutarAgente } from "./agent/agent.ts";
+import {
+  agregarTurno,
+  bloqueContexto,
+  interpretarAgente,
+  serializarAgente,
+} from "./agent/contexto.ts";
+import type { TurnoAgente } from "./agent/contexto.ts";
 import { fraseBarra, lineaResumen, pasoTerminado, segundos } from "./agent/actividad.ts";
 import {
   cabecerasProyecto,
@@ -53,6 +60,7 @@ import {
   setProyectoActivo,
 } from "./agent/tools.ts";
 import type { AjustePista, PeticionPistas, PeticionProyecto } from "./agent/tools.ts";
+import { ejecutarHerramienta } from "./agent/tools.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -134,7 +142,8 @@ async function refrescarManifiesto(): Promise<void> {
       sistema.content =
         AGENTE_SISTEMA +
         carpeta +
-        (manifiestoMotor ? `\n\n=== MOTOR DISPONIBLE ===\n${manifiestoMotor}` : "");
+        (manifiestoMotor ? `\n\n=== MOTOR DISPONIBLE ===\n${manifiestoMotor}` : "") +
+        bloqueContexto(resumenAgente, turnosAgente);
     }
   } catch {
     /* sin manifiesto: se trabaja con el prompt basico */
@@ -236,6 +245,16 @@ async function responderAlUsuario(texto: string): Promise<void> {
     pararLatido();
     // Una linea discreta al final del historial: en que se fue el tiempo del turno.
     chat.add("meta", `✓ ${lineaResumen(resultado)} · ${getModel()}`);
+    // El turno va al historial del proyecto: sobrevive a recargas y reinicios.
+    if ((resultado.texto ?? "").trim() !== "") {
+      const estado = agregarTurno(resumenAgente, turnosAgente, {
+        usuario: texto,
+        asistente: resultado.texto,
+      });
+      resumenAgente = estado.resumen;
+      turnosAgente = estado.turnos;
+      void guardarAgente();
+    }
     setStatus(
       `✓ listo · ${resultado.pasos} paso(s) · ${resultado.llamadas} herramienta(s) · ` +
         `${segundos(resultado.ms)} · ${getModel()}`,
@@ -292,6 +311,60 @@ vigilarVersion(() => {
 });
 
 $("recargar").addEventListener("click", () => location.reload());
+
+/**
+ * Conversación del agente POR PROYECTO, en `proyectos/<slug>/agente.json`.
+ * Al recargar se rehidrata en el prompt de sistema, así que el agente sabe qué
+ * se hizo antes en este proyecto (antes se perdía todo con un F5).
+ */
+let resumenAgente = "";
+let turnosAgente: TurnoAgente[] = [];
+/** Slug cuya conversación está cargada en memoria (para no recargarla sin motivo). */
+let slugAgente = "";
+
+async function cargarAgenteDelProyecto(vista: Project | null): Promise<void> {
+  const slug = vista ? slugDeProyecto(vista) : "";
+  if (slug === slugAgente) return;
+  slugAgente = slug;
+  resumenAgente = "";
+  turnosAgente = [];
+  if (slug !== "") {
+    try {
+      const res = await fetch(`/api/fs/read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: `proyectos/${slug}/agente.json` }),
+      });
+      if (res.ok) {
+        const datos = (await res.json()) as { contenido?: string };
+        const leido = interpretarAgente(String(datos.contenido ?? ""));
+        resumenAgente = leido.resumen;
+        turnosAgente = leido.turnos;
+      }
+    } catch {
+      /* sin historial: se empieza limpio */
+    }
+  }
+  // La conversación en curso pertenece al proyecto anterior: se tira.
+  conversacion.length = 1;
+  await refrescarManifiesto();
+}
+
+async function guardarAgente(): Promise<void> {
+  if (slugAgente === "") return;
+  try {
+    await fetch(`/api/fs/write`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: `proyectos/${slugAgente}/agente.json`,
+        contenido: JSON.stringify(serializarAgente(resumenAgente, turnosAgente, getModel()), null, 2),
+      }),
+    });
+  } catch {
+    /* el historial no puede romper un turno */
+  }
+}
 
 let project: Project | null = null;
 let busy = false;
@@ -730,6 +803,8 @@ function applyProject(next: Project | null): void {
   project = next;
   // Cambiar de proyecto no debe dejar los WAV del anterior ocupando RAM.
   liberarAssetsNoUsados(next);
+  // Y el agente cambia de conversación: cada proyecto tiene la suya en disco.
+  void cargarAgenteDelProyecto(next);
   persist();
   updateActions();
   const view = activeProject(next);
@@ -1941,6 +2016,11 @@ if (import.meta.env.DEV) {
     get history() {
       return history;
     },
+    /** Para depurar: el contexto que ve el modelo y el ejecutor de herramientas. */
+    get conversacion() {
+      return conversacion;
+    },
+    herramienta: ejecutarHerramienta,
     get future() {
       return future;
     },

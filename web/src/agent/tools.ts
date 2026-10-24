@@ -7,6 +7,7 @@
  */
 
 import type { ToolSpec } from "../llm.ts";
+import { UMBRAL_SALIDA, recortarSalida } from "./contexto.ts";
 
 export interface ResultadoHerramienta {
   ok: boolean;
@@ -355,7 +356,7 @@ export const HERRAMIENTAS: ToolSpec[] = [
   },
 ];
 
-export async function ejecutarHerramienta(
+async function ejecutarCrudo(
   nombre: string,
   argumentosJson: string,
   senal?: AbortSignal,
@@ -527,4 +528,43 @@ export function resumenLlamada(nombre: string, argumentosJson: string): string {
   } catch {
     return nombre;
   }
+}
+
+/**
+ * Salida completa de una herramienta -> `_salidas/` del proyecto. Se le pasa al
+ * modelo sólo la cabeza y la cola: un render imprime cientos de líneas y
+ * arrastrarlas en el contexto encarece cada turno y lo distrae.
+ */
+async function guardarSalidaLarga(nombre: string, texto: string): Promise<string> {
+  const fichero = `_salidas/${nombre}_${Date.now().toString(36)}.txt`;
+  const res = await fetch("/api/fs/write", {
+    method: "POST",
+    headers: cabecerasProyecto({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ path: fichero, contenido: texto }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return fichero;
+}
+
+/**
+ * Ejecuta una herramienta y deja el resultado listo para el modelo: si la salida
+ * es larga se recorta y el texto entero se guarda en el proyecto para poder
+ * releerlo con `leer_fichero`.
+ */
+export async function ejecutarHerramienta(
+  nombre: string,
+  argumentosJson: string,
+  senal?: AbortSignal,
+): Promise<ResultadoHerramienta> {
+  const resultado = await ejecutarCrudo(nombre, argumentosJson, senal);
+  if (resultado.texto.length <= UMBRAL_SALIDA) return resultado;
+
+  let aviso: string;
+  try {
+    const fichero = await guardarSalidaLarga(nombre, resultado.texto);
+    aviso = `\n[Salida completa (${resultado.texto.length} caracteres) en ${fichero}: léela con leer_fichero si la necesitas]`;
+  } catch {
+    aviso = `\n[Salida recortada de ${resultado.texto.length} caracteres: no se pudo guardar entera]`;
+  }
+  return { ...resultado, texto: recortarSalida(resultado.texto) + aviso };
 }
