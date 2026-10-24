@@ -1,5 +1,5 @@
 {
- "generado": "2026-10-24T10:38:05",
+ "generado": "2026-10-24T18:24:33",
  "raiz": "workspace/",
  "regla": "Estos simbolos YA existen. Reutilizalos con 'from <modulo> import <simbolo>'. Escribir un fichero nuevo que los redefina sera rechazado (409).",
  "modulos": {
@@ -423,6 +423,11 @@
      "firma": "(excluidas=None)",
      "doc": "Lista de voces del motor, con sus parámetros tal como están en el código."
     },
+    "voces_gpu": {
+     "tipo": "funcion",
+     "firma": "(ruta=None)",
+     "doc": "Voces del motor de GPU, leídas del código con `ast` (sin torch)."
+    },
     "perfil": {
      "tipo": "funcion",
      "firma": "(x)",
@@ -623,6 +628,52 @@
      "tipo": "funcion",
      "firma": "()",
      "doc": "Autotest rapido de cada primitiva (se lanza antes del render)."
+    }
+   }
+  },
+  "voces_gpu": {
+   "archivo": "gpu/voces_gpu.py",
+   "importa_de": [],
+   "simbolos": {
+    "kit_bombo": {
+     "tipo": "funcion",
+     "firma": "(vel=1.0, pitch=1.0, dur=0.9, seed=0)",
+     "doc": "Bombo de batería: cuerpo con caída de tono, click y saturación."
+    },
+    "kit_caja": {
+     "tipo": "funcion",
+     "firma": "(vel=1.0, pitch=1.0, dur=0.55, seed=0)",
+     "doc": "Caja de batería: dos cuerpos tonales, bordona y cola corta."
+    },
+    "kit_tom": {
+     "tipo": "funcion",
+     "firma": "(vel=1.0, pitch=1.0, dur=1.3, seed=0)",
+     "doc": "Tom de batería: parche grande con caída de tono lenta y algo de aire."
+    },
+    "kit_charles": {
+     "tipo": "funcion",
+     "firma": "(vel=1.0, pitch=1.0, dur=0.35, seed=0)",
+     "doc": "Charles cerrado: ruido muy agudo y corto con un toque metálico."
+    },
+    "kit_crash": {
+     "tipo": "funcion",
+     "firma": "(vel=1.0, pitch=1.0, dur=2.5, seed=0)",
+     "doc": "Plato crash: parciales inarmónicos y cola larga con aire."
+    },
+    "kit_china": {
+     "tipo": "funcion",
+     "firma": "(vel=1.0, pitch=1.0, dur=2.0, seed=0)",
+     "doc": "Plato china: más sucio y agresivo que el crash, con cola gated."
+    },
+    "kit_ride": {
+     "tipo": "funcion",
+     "firma": "(vel=1.0, pitch=1.0, dur=2.0, seed=0)",
+     "doc": "Plato ride: campana definida (ping) y cola metálica limpia."
+    },
+    "campana_fm": {
+     "tipo": "funcion",
+     "firma": "(note=69, dur=4.0, ratio=3.5, index=2.0, seed=0)",
+     "doc": "Campana FM grande con cola larga y parciales inarmónicos."
     }
    }
   }

@@ -8,6 +8,9 @@
 
 import type { ToolSpec } from "../llm.ts";
 import { UMBRAL_SALIDA, recortarSalida } from "./contexto.ts";
+import { buscarEnCatalogo } from "../../../src/core/buscar.ts";
+import type { EntradaCatalogo } from "../../../src/core/buscar.ts";
+import { etiquetasEnFrase } from "../../../src/core/taxonomia.ts";
 
 export interface ResultadoHerramienta {
   ok: boolean;
@@ -338,6 +341,32 @@ export const HERRAMIENTAS: ToolSpec[] = [
   {
     type: "function",
     function: {
+      name: "buscar_sonido",
+      description:
+        "Busca en el catalogo del motor lo que pide el usuario en lenguaje natural (y en su idioma). " +
+        "Entiende los nombres habituales y los regionalismos (tarola = caja, hi-hat = charles, platillo " +
+        "crash = crash) y el caracter medido (corto, largo, seco, brillante, oscuro, grave, agudo, sucio, " +
+        "limpio). Usala ANTES de crear nada: si ya existe algo que encaja, dilo y usalo.",
+      parameters: {
+        type: "object",
+        properties: {
+          consulta: {
+            type: "string",
+            description: "La peticion tal cual la dice el usuario, p.ej. 'un china sucio y corto'",
+          },
+          familia: {
+            type: "string",
+            enum: ["percusión", "tonal", "textura", "ruido", "efecto"],
+            description: "Opcional: acota a una familia",
+          },
+        },
+        required: ["consulta"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "crear_sonido",
       description:
         "Crea un sonido de verdad y lo guarda en el proyecto: elige una voz del catalogo, aplica las " +
@@ -594,6 +623,65 @@ async function ejecutarCrudo(
             ok: false,
             texto: "No pude leer el catalogo: " + (error instanceof Error ? error.message : String(error)),
           };
+        }
+      }
+      case "buscar_sonido": {
+        const consulta = String(args.consulta ?? "").trim();
+        if (consulta === "") return { ok: false, texto: "falta la consulta" };
+        try {
+          const res = await fetch("/api/voces?medir=1");
+          const datos = (await res.json()) as {
+            voces?: {
+              clave: string;
+              etiqueta: string;
+              familia: string;
+              descripcion: string;
+              destino?: string;
+              excluida?: string | null;
+              perfil?: Record<string, number>;
+            }[];
+          };
+          const catalogo: EntradaCatalogo[] = (datos.voces ?? [])
+            .filter((voz) => !voz.excluida)
+            .map((voz) => ({
+              clave: voz.clave,
+              etiqueta: voz.etiqueta,
+              familia: voz.familia,
+              descripcion: voz.descripcion,
+              destino: voz.destino === "gpu" ? "gpu" : "cpu",
+              perfil: voz.perfil,
+            }));
+          const encontrados = buscarEnCatalogo(catalogo, consulta, {
+            ...(typeof args.familia === "string" ? { familia: args.familia } : {}),
+            limite: 6,
+          });
+          const etiquetas = etiquetasEnFrase(consulta).map((e) => e.id);
+          if (encontrados.length === 0) {
+            return {
+              ok: true,
+              texto:
+                `No hay nada parecido a "${consulta}" en el catalogo` +
+                (etiquetas.length > 0 ? ` (lo mas cercano por etiqueta: ${etiquetas.join(", ")})` : "") +
+                ". Puedes crearlo con crear_sonido si existe una voz que sirva, o con crear_voz si no.",
+            };
+          }
+          const lineas = encontrados.map((r) => {
+            const p = r.entrada.perfil ?? {};
+            const medidas = [
+              p.duracion_s !== undefined ? `${p.duracion_s} s` : "",
+              p.centroide_hz !== undefined ? `${Math.round(p.centroide_hz)} Hz` : "",
+              p.crest_db !== undefined ? `crest ${p.crest_db} dB` : "",
+            ]
+              .filter((x) => x !== "")
+              .join(", ");
+            return `- ${r.entrada.clave} (${r.entrada.familia}, ${r.entrada.destino}): ${r.entrada.descripcion} [${medidas}] (${r.motivos.join("; ")})`;
+          });
+          return {
+            ok: true,
+            texto: `Candidatos para "${consulta}":\n${lineas.join("\n")}\nUsa crear_sonido con la voz que elijas.`,
+          };
+        } catch (error) {
+          return { ok: false, texto: "No pude buscar: " + (error instanceof Error ? error.message : String(error)) };
         }
       }
       case "crear_sonido": {

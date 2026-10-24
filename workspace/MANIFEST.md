@@ -83,6 +83,7 @@ Reutiliza estos simbolos; NO los redefinas.
     - `masterizar(master)`
 - **codigo/voces.py**  (importa de: -)
     - `voces(excluidas=None)`  -- Lista de voces del motor, con sus parámetros tal como están en el código.
+    - `voces_gpu(ruta=None)`  -- Voces del motor de GPU, leídas del código con `ast` (sin torch).
     - `perfil(x)`  -- Perfil acústico medible de un render: lo que no admite opinión.
     - `medir_voz(nombre, args=None, timeout_s=10.0)`  -- Renderiza una voz con sus valores por defecto y devuelve su perfil.
     - `catalogo(con_perfil=False)`  -- Catálogo completo: voces (las excluidas, marcadas) y su perfil si se pide.
@@ -123,3 +124,12 @@ Reutiliza estos simbolos; NO los redefinas.
     - `panear(mono, p, ganancia=1.0)`  -- (L,) mono -> (2, L) con paneo constante potencia.
     - `mezclar(pistas, largo)`  -- pistas: lista de (2, L) o (L,). Devuelve (2, largo).
     - `prueba()`  -- Autotest rapido de cada primitiva (se lanza antes del render).
+- **gpu/voces_gpu.py**  (importa de: -)
+    - `kit_bombo(vel=1.0, pitch=1.0, dur=0.9, seed=0)`  -- Bombo de batería: cuerpo con caída de tono, click y saturación.
+    - `kit_caja(vel=1.0, pitch=1.0, dur=0.55, seed=0)`  -- Caja de batería: dos cuerpos tonales, bordona y cola corta.
+    - `kit_tom(vel=1.0, pitch=1.0, dur=1.3, seed=0)`  -- Tom de batería: parche grande con caída de tono lenta y algo de aire.
+    - `kit_charles(vel=1.0, pitch=1.0, dur=0.35, seed=0)`  -- Charles cerrado: ruido muy agudo y corto con un toque metálico.
+    - `kit_crash(vel=1.0, pitch=1.0, dur=2.5, seed=0)`  -- Plato crash: parciales inarmónicos y cola larga con aire.
+    - `kit_china(vel=1.0, pitch=1.0, dur=2.0, seed=0)`  -- Plato china: más sucio y agresivo que el crash, con cola gated.
+    - `kit_ride(vel=1.0, pitch=1.0, dur=2.0, seed=0)`  -- Plato ride: campana definida (ping) y cola metálica limpia.
+    - `campana_fm(note=69, dur=4.0, ratio=3.5, index=2.0, seed=0)`  -- Campana FM grande con cola larga y parciales inarmónicos.
