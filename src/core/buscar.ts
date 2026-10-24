@@ -29,6 +29,10 @@ export interface EntradaCatalogo {
   perfil?: Perfil;
   /** Ruta del WAV si es un sample ya renderizado. */
   ruta?: string;
+  /** Texto ya normalizado (lo rellena quien indexa: 4.231 entradas × N consultas
+   *  es demasiado trabajo para normalizar en cada búsqueda). */
+  normTexto?: string;
+  normClave?: string;
 }
 
 export interface OpcionesBusqueda {
@@ -77,31 +81,52 @@ export function buscarEnCatalogo(
   const caracteres = Object.keys(CARACTER).filter((c) => texto.includes(c));
   const resultados: Resultado[] = [];
 
+  // El catálogo grande (4.231 entradas) se consulta con `includes` sobre un texto ya
+  // normalizado con espacios en los bordes: comparar por palabra sin construir una
+  // expresión regular por alias y por entrada (eso tardaba segundos).
+  const espacios = (texto: string): string => ` ${normalizar(texto)} `;
+  // Lo que no cambia por entrada se calcula una vez, no 4.231 veces.
+  const objetivos = etiquetas.map((etiqueta) => ({
+    etiqueta,
+    nombres: [etiqueta.es, etiqueta.en, ...etiqueta.alias].map(espacios),
+    idNormalizado: normalizar(etiqueta.id),
+  }));
+  const familiaBuscada = new Map(objetivos.map((o) => [o.etiqueta.id, normalizar(o.etiqueta.familia)]));
+  const palabrasConEspacio = palabras.map((p) => ` ${p}`);
+
   for (const entrada of catalogo) {
     if (opciones.familia && entrada.familia !== opciones.familia) continue;
     let puntuacion = 0;
     let coincideEtiqueta = false;
     const motivos: string[] = [];
-    const nombre = normalizar(`${entrada.clave} ${entrada.etiqueta} ${entrada.descripcion}`);
+    const nombre =
+      entrada.normTexto !== undefined
+        ? ` ${entrada.normTexto} `
+        : espacios(`${entrada.clave} ${entrada.etiqueta} ${entrada.descripcion}`);
+    const claveNormalizada = entrada.normClave ?? normalizar(entrada.clave);
 
-    for (const etiqueta of etiquetas) {
+    const familiaEntrada = normalizar(entrada.familia);
+    const etiquetaNormalizada = espacios(entrada.etiqueta);
+    for (const objetivo of objetivos) {
+      const { etiqueta } = objetivo;
       const coincideId =
         entrada.taxonomia === etiqueta.id ||
-        normalizar(entrada.clave) === normalizar(etiqueta.id) ||
-        normalizar(entrada.etiqueta).includes(normalizar(etiqueta.es)) ||
-        [etiqueta.es, etiqueta.en, ...etiqueta.alias].map(normalizar).some((n) => nombre.includes(n));
+        normalizar(entrada.clave) === objetivo.idNormalizado ||
+        etiquetaNormalizada.includes(espacios(etiqueta.es)) ||
+        objetivo.nombres.some((n) => nombre.includes(n));
       if (coincideId) {
         puntuacion += 10;
         coincideEtiqueta = true;
         motivos.push(`es «${etiqueta.es}»`);
-      } else if (normalizar(entrada.familia) === normalizar(etiqueta.familia)) {
+      } else if (familiaEntrada === familiaBuscada.get(etiqueta.id)) {
         puntuacion += 2;
         motivos.push(`misma familia (${etiqueta.familia})`);
       }
     }
 
-    for (const palabra of palabras) {
-      if (normalizar(entrada.clave).includes(palabra) || nombre.includes(palabra)) {
+    for (let i = 0; i < palabras.length; i += 1) {
+      const palabra = palabras[i] as string;
+      if (claveNormalizada.includes(palabra) || nombre.includes(palabrasConEspacio[i] as string)) {
         puntuacion += 4;
         if (!motivos.includes(`dice «${palabra}»`)) motivos.push(`dice «${palabra}»`);
       }

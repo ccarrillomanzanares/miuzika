@@ -67,6 +67,7 @@ import {
   registrarAjustador,
   registrarCreador,
   registrarCreadorSonido,
+  registrarImportadorSample,
   registrarIgualador,
   registrarImportador,
   setProyectoActivo,
@@ -76,6 +77,7 @@ import type {
   PeticionIgualar,
   PeticionPistas,
   PeticionProyecto,
+  PeticionSample,
   PeticionSonido,
 } from "./agent/tools.ts";
 import { ejecutarHerramienta } from "./agent/tools.ts";
@@ -1569,6 +1571,65 @@ async function crearSonidoDesdeAgente(
 }
 
 /**
+ * Mete un sample de la biblioteca en el proyecto: lo convierte y normaliza en el
+ * servidor (`codigo/importar_sample.py`) y lo deja como clip de audio.
+ *
+ * El sample queda copiado dentro del proyecto: el proyecto sigue siendo portable y
+ * no depende de que la biblioteca siga en su sitio.
+ */
+async function usarSampleDesdeAgente(
+  peticion: PeticionSample,
+): Promise<{ ok: boolean; texto: string }> {
+  if (!project) return { ok: false, texto: "No hay proyecto abierto: el sample tiene que entrar en alguno." };
+  const archivo = peticion.archivo.trim();
+  if (archivo === "") return { ok: false, texto: "Falta la ruta del sample." };
+  const nombre =
+    (peticion.nombre ?? archivo.split("/").pop() ?? "sample")
+      .replace(/\.[^.]+$/, "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "sample";
+
+  try {
+    const res = await fetch("/api/catalogo/importar", {
+      method: "POST",
+      // El slug va explícito: `cabecerasProyecto()` depende de que el agente haya
+      // pasado por `setProyectoActivo`, y si no, el sample acaba en "sin-proyecto".
+      headers: { "Content-Type": "application/json", "x-miuzika-proyecto": slugDeProyecto(project) },
+      body: JSON.stringify({ archivo, nombre }),
+    });
+    const datos = (await res.json()) as {
+      ok?: boolean;
+      ruta?: string;
+      duracion_s?: number;
+      pico_original_dbfs?: number;
+      error?: string;
+    };
+    if (!res.ok || !datos.ok || !datos.ruta) {
+      return { ok: false, texto: `No pude importar el sample: ${datos.error ?? `HTTP ${res.status}`}` };
+    }
+    const puesto = await importarPistasDesdeAgente({
+      midis: [],
+      wavs: [datos.ruta],
+      inicioCompas: 0,
+      ...(peticion.compases && peticion.compases > 0 ? { compases: peticion.compases } : {}),
+    });
+    return {
+      ok: puesto.ok,
+      texto:
+        `Sample "${nombre}" en el proyecto (${datos.duracion_s} s, pico ${datos.pico_original_dbfs} -> -1 dBFS).\n` +
+        `Fichero: proyectos/${slugDeProyecto(project)}/${datos.ruta}\n` +
+        puesto.texto,
+    };
+  } catch (error) {
+    return { ok: false, texto: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
  * Iguala la duracion de los clips: todos al mismo numero de compases.
  *
  * Los clips se miden en compases, asi que el MIDI de un instrumento y el WAV del
@@ -1726,6 +1787,7 @@ registrarCreador(crearProyectoDesdeAgente);
 registrarAjustador(ajustarPistasDesdeAgente);
 registrarIgualador(igualarClipsDesdeAgente);
 registrarCreadorSonido(crearSonidoDesdeAgente);
+registrarImportadorSample(usarSampleDesdeAgente);
 
 /** ¿Es un fichero de audio? (por MIME o por extension) */
 function esAudio(file: File): boolean {

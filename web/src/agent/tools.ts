@@ -117,6 +117,7 @@ interface RegistroGlobal {
   ajustador?: Ajustador | null;
   igualador?: Igualador | null;
   sonidos?: CreadorSonido | null;
+  samples?: ImportadorSample | null;
 }
 
 const registro: RegistroGlobal =
@@ -195,6 +196,26 @@ export function registrarCreadorSonido(fn: CreadorSonido | null): void {
   registro.sonidos = fn;
 }
 
+/** Meter un sample de la biblioteca en el proyecto (clip + asset, normalizado). */
+export interface PeticionSample {
+  /** Ruta dentro de workspace/catalogo/ (la que devuelve buscar_sonido). */
+  archivo: string;
+  /** Nombre para el fichero y la pista; si falta, se saca del archivo. */
+  nombre?: string;
+  /** Duración del clip en compases (opcional: por defecto, lo que dure el audio). */
+  compases?: number;
+}
+
+type ImportadorSample = (peticion: PeticionSample) => Promise<{ ok: boolean; texto: string }>;
+
+let importadorSample: ImportadorSample | null = null;
+
+/** main.ts registra aqui como se importa un sample (necesita el proyecto abierto). */
+export function registrarImportadorSample(fn: ImportadorSample | null): void {
+  importadorSample = fn;
+  registro.samples = fn;
+}
+
 /** Lo registrado, mirando primero lo local y después el registro compartido. */
 const herramientaLocal = {
   creador: (): CreadorProyecto | null => creadorProyecto ?? registro.creador ?? null,
@@ -202,6 +223,7 @@ const herramientaLocal = {
   ajustador: (): Ajustador | null => ajustador ?? registro.ajustador ?? null,
   igualador: (): Igualador | null => igualador ?? registro.igualador ?? null,
   sonidos: (): CreadorSonido | null => creadorSonido ?? registro.sonidos ?? null,
+  samples: (): ImportadorSample | null => importadorSample ?? registro.samples ?? null,
 };
 
 /** Mensaje único para el caso «la app no tiene este registro»: dice qué hacer. */
@@ -361,6 +383,28 @@ export const HERRAMIENTAS: ToolSpec[] = [
           },
         },
         required: ["consulta"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "usar_sample",
+      description:
+        "Mete en el proyecto un sample de la biblioteca CC0 (los 4.231 ficheros de VCSL) como pista de " +
+        "audio: lo convierte a 44,1k/16b, lo normaliza a -1 dBFS y lo deja en proyectos/<slug>/samples/. " +
+        "Usalo despues de buscar_sonido, con la ruta que devuelve.",
+      parameters: {
+        type: "object",
+        properties: {
+          archivo: {
+            type: "string",
+            description: "Ruta del sample dentro de workspace/catalogo/ (la que da buscar_sonido)",
+          },
+          nombre: { type: "string", description: "Nombre del fichero y de la pista" },
+          compases: { type: "integer", description: "Duracion del clip en compases (opcional)" },
+        },
+        required: ["archivo"],
       },
     },
   },
@@ -629,7 +673,12 @@ async function ejecutarCrudo(
         const consulta = String(args.consulta ?? "").trim();
         if (consulta === "") return { ok: false, texto: "falta la consulta" };
         try {
-          const res = await fetch("/api/voces?medir=1");
+          // Medir las 16 voces cuesta ~2 s: sólo se pide si la consulta lleva una
+          // palabra de carácter (corto, brillante…), que es cuando hace falta.
+          const pideCaracter = /\b(corto|largo|seco|brillante|oscuro|grave|agudo|sucio|limpio|redondo|apagado|chillon|metalico)\b/i.test(
+            consulta,
+          );
+          const res = await fetch(pideCaracter ? "/api/voces?medir=1" : "/api/voces");
           const datos = (await res.json()) as {
             voces?: {
               clave: string;
@@ -651,6 +700,42 @@ async function ejecutarCrudo(
               destino: voz.destino === "gpu" ? "gpu" : "cpu",
               perfil: voz.perfil,
             }));
+          // La biblioteca CC0 (4.231 samples), buscada en el servidor.
+          let biblioteca: string[] = [];
+          try {
+            const rc = await fetch("/api/catalogo/buscar", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ consulta, limite: 6 }),
+            });
+            if (rc.ok) {
+              const dc = (await rc.json()) as {
+                resultados?: {
+                  archivo: string;
+                  instrumento: string;
+                  familia: string;
+                  strudel: string | null;
+                  perfil?: Record<string, number>;
+                }[];
+              };
+              biblioteca = (dc.resultados ?? []).map((r) => {
+                const p = r.perfil ?? {};
+                const medidas = [
+                  p.duracion_s !== undefined ? `${p.duracion_s} s` : "",
+                  p.centroide_hz !== undefined ? `${Math.round(p.centroide_hz)} Hz` : "",
+                ]
+                  .filter((x) => x !== "")
+                  .join(", ");
+                return (
+                  `- ${r.archivo} (${r.instrumento}, ${r.familia}) [${medidas}]` +
+                  (r.strudel ? ` · en Strudel: s("${r.strudel}")` : "")
+                );
+              });
+            }
+          } catch {
+            /* sin biblioteca: se sigue con las voces del motor */
+          }
+
           const encontrados = buscarEnCatalogo(catalogo, consulta, {
             ...(typeof args.familia === "string" ? { familia: args.familia } : {}),
             limite: 6,
@@ -676,13 +761,31 @@ async function ejecutarCrudo(
               .join(", ");
             return `- ${r.entrada.clave} (${r.entrada.familia}, ${r.entrada.destino}): ${r.entrada.descripcion} [${medidas}] (${r.motivos.join("; ")})`;
           });
-          return {
-            ok: true,
-            texto: `Candidatos para "${consulta}":\n${lineas.join("\n")}\nUsa crear_sonido con la voz que elijas.`,
-          };
+          const partes = [
+            `Candidatos para "${consulta}":`,
+            lineas.join("\n"),
+            biblioteca.length > 0
+              ? `\nEn la biblioteca CC0 (${biblioteca.length}):\n${biblioteca.join("\n")}\nPara meterlo: usar_sample(archivo="...").`
+              : "",
+            "Para sintetizar uno nuevo: crear_sonido con la voz que elijas.",
+          ].filter((x) => x !== "");
+          return { ok: true, texto: partes.join("\n") };
         } catch (error) {
           return { ok: false, texto: "No pude buscar: " + (error instanceof Error ? error.message : String(error)) };
         }
+      }
+      case "usar_sample": {
+        const usar = herramientaLocal.samples();
+        if (!usar) {
+          return { ok: false, texto: SIN_REGISTRO };
+        }
+        return usar({
+          archivo: String(args.archivo ?? "").trim(),
+          ...(typeof args.nombre === "string" && args.nombre.trim() !== ""
+            ? { nombre: args.nombre.trim() }
+            : {}),
+          ...(Number(args.compases) > 0 ? { compases: Math.trunc(Number(args.compases)) } : {}),
+        });
       }
       case "crear_sonido": {
         const crear = herramientaLocal.sonidos();
