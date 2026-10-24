@@ -2328,6 +2328,13 @@ $<HTMLInputElement>("open").addEventListener("change", async (event) => {
 window.addEventListener("keydown", (event) => {
   const target = event.target as HTMLElement | null;
   if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+  if (target?.isContentEditable) return;
+  // Con texto seleccionado en la página, Ctrl+C/X son del navegador: si no, al
+  // copiar un trozo de la respuesta del agente el atajo se lo comía el portapapeles
+  // de clips y no copiaba nada.
+  const seleccion = window.getSelection();
+  const hayTexto = Boolean(seleccion && !seleccion.isCollapsed && seleccion.toString().trim().length > 0);
+  if (hayTexto && ["c", "x"].includes(event.key.toLowerCase())) return;
   if (event.key === "Escape") {
     timeline.clearSelection();
     return;
