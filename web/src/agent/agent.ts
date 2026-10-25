@@ -52,10 +52,14 @@ export async function ejecutarAgente(
   /** Escrituras seguidas sin una ejecucion correcta: corta el bucle de parches. */
   let escriturasSinEjecutar = 0;
   /** Fallos idénticos seguidos por herramienta: corta los reintentos ciegos. */
-  const fallosIguales = new Map<string, number>();
+  /** Tope de salida por turno: 4.096 tokens (≈1.200 líneas de código). */
+const MAX_TOKENS_SALIDA = 4096;
+
+const fallosIguales = new Map<string, number>();
   // Un vacío aislado es un fallo del proveedor, no del modelo: se reintenta una vez
   // en silencio. Si se repite, se para y se avisa (para no entrar en bucle).
   let vaciosSeguidos = 0;
+  let reanudaciones = 0;
 
   /** Respuesta de cierre cuando el usuario cancela. */
   const cancelado = (): ResultadoAgente => ({
@@ -71,7 +75,12 @@ export async function ejecutarAgente(
   while (pasos < maxPasos) {
     if (senal?.aborted) return cancelado();
     pasos += 1;
-    const respuesta = await chat(mensajes, { tools: HERRAMIENTAS, temperature: 0.2, signal: senal });
+    const respuesta = await chat(mensajes, {
+      tools: HERRAMIENTAS,
+      temperature: 0.2,
+      signal: senal,
+      maxTokens: MAX_TOKENS_SALIDA,
+    });
     texto = respuesta.content.trim();
 
     const pideHerramientas = respuesta.toolCalls.length > 0;
@@ -100,9 +109,18 @@ export async function ejecutarAgente(
         // 'load' es lo que devuelve el proveedor cuando está saturado: cero tokens y
         // 250 ms (medido dos veces seguidas el 25-oct). Reintentar al instante no sirve;
         // se espera y se prueba hasta tres veces.
-        if (!cortada && vaciosSeguidos < 3) {
+        if (!cortada && vaciosSeguidos < 5) {
           vaciosSeguidos += 1;
-          await new Promise((listo) => setTimeout(listo, 1000 * vaciosSeguidos * vaciosSeguidos));
+          // 'load' en Ollama es el modelo cargándose: hace falta esperar de verdad.
+          await new Promise((listo) => setTimeout(listo, 1000 * 2 ** (vaciosSeguidos - 1)));
+          continue;
+        }
+        // Si el proveedor sigue sin contestar, se retoma el turno solo una vez: lo que
+        // el usuario haría escribiendo «continúa». Si tampoco, se para y se avisa.
+        if (!cortada && reanudaciones < 1) {
+          reanudaciones += 1;
+          vaciosSeguidos = 0;
+          mensajes.push({ role: "user", content: "Continúa desde donde lo dejaste." });
           continue;
         }
         return {

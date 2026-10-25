@@ -2504,22 +2504,13 @@ async function boot(): Promise<void> {
     }
   };
 
-  let slug = slugGuardado;
-  if (slug) project = await abrir(slug);
-  if (!project) {
-    // Sin apunte (o el fichero ya no está): el proyecto más reciente del disco.
-    try {
-      const lista = await listarProyectos();
-      const primero = lista.find((candidato) => !candidato.error);
-      if (primero) {
-        slug = primero.slug;
-        project = await abrir(slug);
-        if (project) aviso = `Abierto el proyecto más reciente del disco (${primero.ruta}).`;
-      }
-    } catch {
-      /* sin servidor no hay disco: se arranca vacío */
-    }
-  }
+  // Arranque limpio: NO se abre ningún proyecto solo. El usuario decide con «Proyectos»
+  // (o pidiendo una pieza nueva). Abrir el último sin querer hizo que «proyecto cargado»
+  // sustituyera al que se estaba mirando, y encima en proyectos vacíos parecía un fallo.
+  let slug = "";
+  void abrir;
+  void slugGuardado;
+  void listarProyectos;
 
   if (project) {
     setBusy(true, "Cargando los WAV del proyecto…");
@@ -2534,13 +2525,28 @@ async function boot(): Promise<void> {
 
   if (project) {
     setProject(project, false);
-    addMessage("assistant", `Proyecto cargado del disco: "${project.name}". Pulsa play para escuchar.`);
+    // Si viene vacío se dice: «pulsa play» sobre un proyecto sin pistas parece que la
+    // app no ha cargado nada (pasó tres veces seguidas el 25-oct).
+    addMessage(
+      "assistant",
+      project.tracks.length === 0
+        ? `Proyecto cargado del disco: "${project.name}". Está **vacío**: 0 pistas, ` +
+            `${project.lengthBars} compases a ${project.bpm} BPM. La última petición no llegó ` +
+            `a entregar pistas.`
+        : `Proyecto cargado del disco: "${project.name}". ${project.tracks.length} pista(s). ` +
+            `Pulsa play para escuchar.`,
+    );
     if (migracion) addMessage("system", migracion);
     if (aviso) addMessage("system", aviso);
     if (cargados > 0) addMessage("system", `WAV cargados de proyectos/${slug}/: ${cargados}.`);
     if (faltan.length > 0) warnMissingAudio(faltan);
   } else {
     setProject(null, false);
+    addMessage(
+      "system",
+      "Arranque limpio: no he abierto ningún proyecto. Usa «Proyectos» para abrir uno o " +
+        "pídele una pieza nueva al agente.",
+    );
     if (migracion) addMessage("system", migracion);
   }
 

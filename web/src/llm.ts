@@ -48,6 +48,9 @@ export interface ChatOptions {
   temperature?: number;
   jsonMode?: boolean;
   signal?: AbortSignal;
+  /** Tope de tokens de salida. Sin él, un turno llegó a pedir 9.692 y el proveedor
+   *  contestó 'load' (saturado) en el turno siguiente, tres veces seguidas. */
+  maxTokens?: number;
 }
 
 /** Prefijo del proxy: el servidor de Vite pone la clave. */
@@ -121,6 +124,7 @@ export async function chat(
   if (options.tools && options.tools.length > 0) body.tools = options.tools;
   if (typeof options.temperature === "number") body.temperature = options.temperature;
   if (options.jsonMode) body.response_format = { type: "json_object" };
+  if (typeof options.maxTokens === "number") body.max_tokens = options.maxTokens;
 
   const t0 = Date.now();
   const res = await fetch(`${LLM_BASE}/v1/chat/completions`, {
