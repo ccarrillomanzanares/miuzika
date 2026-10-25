@@ -351,6 +351,11 @@ async function cargarAgenteDelProyecto(vista: Project | null): Promise<void> {
   // Y la vista se sincroniza con lo que el modelo recuerda: se pinta la conversación
   // guardada de ESTE proyecto. Antes la memoria estaba en disco y el panel salía vacío,
   // así que el agente «recordaba» cosas que el usuario no veía.
+  // OJO: si el agente crea o cambia de proyecto A MITAD de turno (crear_proyecto), esto
+  // también se ejecuta. Vaciar el chat entonces borraba la petición del usuario y la
+  // burbuja de progreso: la app parecía muerta con el turno corriendo. Sólo se repinta
+  // si no hay turno en marcha.
+  if (trabajando) return;
   chat.clear();
   if (turnosAgente.length > 0) {
     chat.add(
