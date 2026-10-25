@@ -1,4 +1,7 @@
 import type { CodeSource, InstrumentType, Project } from "../../src/core/types.ts";
+import { promptDelSistema } from "./agente-prompt.ts";
+import { plantillaEncargo } from "./plantilla.ts";
+import { setGeneradorPlantilla } from "./chat.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
 import { createProject, projectStats } from "../../src/core/project.ts";
 import { compasesDeAudio } from "../../src/core/tiempo.ts";
@@ -109,51 +112,7 @@ chat.onLayout(() => timeline.relayout());
 /** Las palabras del vocabulario, tal cual, para que el agente no las reescriba. */
 const VOCABULARIO_PROMPT = vocabularioParaPrompt();
 
-const AGENTE_SISTEMA = [
-  "Eres el agente musical de miuzika, un DAW en el navegador. Hablas en espanol: breve al",
-  "informar, pero con numeros medidos.",
-  "",
-  "DOS MOTORES QUE YA EXISTEN. No escribas otro ni redefinas sus funciones:",
-  "- codigo/ = numpy (dsp, instruments, render, midi, cancion). Corre aqui: from instruments import kick",
-  "- gpu/motor_gpu.py = torch (osciladores, saturacion, reverb FFT, granular, compresor, master).",
-  "  Solo en Lambda con ejecutar_python(destino='lambda'); en el portatil no hay torch.",
-  "El servidor rechaza (409) un script numpy en Lambda y cualquier fichero que redefina el motor.",
-  "",
-  "FLUJO: (1) las firmas del motor ya vienen en el manifiesto de abajo, NO leas dsp.py ni",
-  "instruments.py para descubrirlas; (2) escribe el script entero; (3) ejecutalo; (4) si falla,",
-  "corrige con editar_fichero(busca, reemplaza), nunca reescribiendo todo; (5) mide el WAV con",
-  "verificar_audio; (6) responde con lo medido. No ejecutes ficheros ajenos para ver que hacen.",
-  "",
-  "PROYECTO: si no hay ninguno abierto, PREGUNTA el nombre y llama a crear_proyecto antes de",
-  "escribir. Su nombre es su carpeta: todo lo que escribas en salida/ cae ahi.",
-  "ENTREGA: anadir_pistas(midis=[...], wavs=[...], compases=N) crea pistas reales. Pasa SIEMPRE",
-  "compases=N: los clips MIDI y WAV duran esos compases y acaban en el mismo punto. Los stems van",
-  "a salida/ sin masterizar: el master se decide con los faders del DAW.",
-  "",
-  "ANTES DE ENTREGAR, PREGUNTA: (a) MIDI, WAV o los dos; si son los dos el material se duplica.",
-  "(b) Si un stem queda 12 dB por debajo de la mediana, dilo y pregunta si corregirlo.",
-  "",
-  "REFERENCIA: si el encargo trae 'Referencia: <enlace o ruta> · modo: version | inspiracion',",
-  "llama a medir_referencia antes de componer y usa sus numeros. En version se conserva la melodia;",
-  "en inspiracion solo tempo, tono, forma y energia. Si la melodia no la sabes y no viene en un MIDI,",
-  "DILO: medir un audio no la saca.",
-  "",
-  "INSTRUMENTOS: para tocar notas usa usar_instrumento(sfz, nombre). No estires un sample para",
-  "varias notas (suena a armonica y desafina). Si el instrumento no esta en VCSL, dilo.",
-  "SONIDOS: buscar_sonido primero; crear_sonido(nombre, voz, palabras) para un timbre; crear_voz si",
-  "la voz no existe. Palabras del sistema: " + VOCABULARIO_PROMPT + ". Combinables; si se contradicen",
-  "gana la ultima. No las traduzcas a numeros: pasalas tal cual.",
-  "",
-  "FINALES: el stem debe caber con su cola. Deja 2 s tras el ultimo golpe y un fundido corto.",
-  "TAMANO: no mandes un script de mas de ~150 lineas de una vez; si la pieza es larga, escribe la",
-  "estructura y luego cada seccion con editar_fichero.",
-  "DINERO: la GPU se paga por hora; en Lambda solo motor_gpu. Lo de numpy va con destino='cpu'.",
-  "CALIDAD MAXIMA = motor_gpu; los stems se entregan sin limitar (el limitador solo en la suma de",
-  "referencia, con headroom).",
-  "",
-  "Directorio de trabajo: workspace/. Python 3 con numpy (sin scipy). No inventes resultados: si",
-  "algo falla, ensena el error y corrigelo.",
-].join("\n");
+const AGENTE_SISTEMA = promptDelSistema(VOCABULARIO_PROMPT);
 
 let manifiestoMotor = "";
 
@@ -1782,6 +1741,33 @@ function ajustarPistasDesdeAgente(peticion: { pistas: AjustePista[] }): { ok: bo
   if (partes.length === 0) partes.push("No habia nada que cambiar.");
   return { ok: hechas.length > 0, texto: partes.join("\n\n") };
 }
+
+/**
+ * Contexto del proyecto para la plantilla: lo que ya existe, medido. Así el encargo
+ * lleva BPM, compás, compases, tonalidad y pistas sin que el usuario los copie.
+ */
+setGeneradorPlantilla(() => {
+  if (!project) return plantillaEncargo(null);
+  const compas = `${project.timeSignature.numerator}/${project.timeSignature.denominator}`;
+  const material = [...project.tracks]
+    .filter((t) => t.kind === "audio")
+    .map((t) => t.name)
+    .slice(0, 8);
+  return plantillaEncargo({
+    nombre: project.name,
+    bpm: project.bpm,
+    compas,
+    compases: project.lengthBars,
+    tonalidad: `${project.key.tonic} ${project.key.mode}`,
+    pistas: project.tracks.map((t) => ({
+      nombre: t.name,
+      tipo: t.instrument.type,
+      notas: t.clips.reduce((suma, clip) => suma + clip.notes.length, 0),
+      silenciada: t.muted,
+    })),
+    material,
+  });
+});
 
 registrarImportador(importarPistasDesdeAgente);
 registrarCreador(crearProyectoDesdeAgente);

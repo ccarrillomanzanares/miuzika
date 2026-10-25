@@ -6,6 +6,7 @@
  * un reinicio del servidor) ya no borra nada. `onSend` es el enganche del agente.
  */
 
+import { CURSOR_PLANTILLA } from "./plantilla.ts";
 import { escapeHtml } from "./timeline.ts";
 import { setDestino, type Destino } from "./agent/tools.ts";
 
@@ -46,6 +47,16 @@ const DESTINO_KEY = "miuzika.destino";
 const MAX_ENTRADAS = 300;
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
+
+/**
+ * Quién sabe generar la plantilla (main.ts, que conoce el proyecto abierto). Se
+ * registra al arrancar; sin registro, el botón no hace nada en vez de mentir.
+ */
+let generadorPlantilla: (() => string) | null = null;
+
+export function setGeneradorPlantilla(fn: (() => string) | null): void {
+  generadorPlantilla = fn;
+}
 
 export function initChat(): ChatApi {
   const app = $("app");
@@ -142,29 +153,16 @@ export function initChat(): ChatApi {
     }
   });
 
-  // Plantilla de encargo: rellena el compositor con el esqueleto. Es más rápido
-  // corregir nueve líneas que recordarlas, y así el agente recibe siempre lo mismo
-  // (tempo, compases, instrumentos, estructura, final) en vez de un párrafo suelto.
-  const PLANTILLA = [
-    "Proyecto: ",
-    "Entrega: MIDI",
-    "Referencia: (enlace de YouTube o ruta de un audio) · modo: versión | inspiración",
-    "Tempo: BPM en 4/4 · N compases · tonalidad",
-    "Instrumentos: ",
-    "Estructura: compases 1-8 … · 9-16 … · 17-24 …",
-    "Carácter: ",
-    "Qué NO quiero: ",
-    "Final: cómo acaba y cuánta cola",
-    "Comprobación: al terminar, dime BPM, compases y duración real del render",
-  ].join("\n");
-
+  // Plantilla de encargo: el esqueleto + el contexto medido del proyecto abierto.
+  // El texto lo genera main.ts, que es quien conoce el proyecto.
   const botonPlantilla = document.getElementById("chat-plantilla");
   botonPlantilla?.addEventListener("click", () => {
+    const plantilla = generadorPlantilla ? generadorPlantilla() : "";
+    if (!plantilla) return;
     const vacio = input.value.trim() === "";
-    input.value = vacio ? PLANTILLA : `${input.value.replace(/\s+$/, "")}\n${PLANTILLA}`;
+    input.value = vacio ? plantilla : `${input.value.replace(/\s+$/, "")}\n${plantilla}`;
     input.focus();
-    // El cursor, al final de la primera línea (donde se escribe el nombre).
-    if (vacio) input.setSelectionRange("Proyecto: ".length, "Proyecto: ".length);
+    if (vacio) input.setSelectionRange(CURSOR_PLANTILLA, CURSOR_PLANTILLA);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 

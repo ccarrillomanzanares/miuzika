@@ -19,3 +19,4 @@ workspace/tmp/
 workspace/catalogo/VCSL-1.2.2-RC/
 workspace/catalogo/**/*.sf2
 workspace/_salidas/
+workspace/prompt.html
