@@ -184,7 +184,11 @@ function arrancarLatido(desde: number): void {
   const pintar = (): void => {
     const enPaso = pasoDesde === null ? null : Date.now() - pasoDesde;
     const nota = avisoDeEspera();
-    setStatus(fraseBarra(pasoActual, enPaso, Date.now() - desde) + (nota ? ` · ${nota}` : ""));
+    const marco = fraseBarra(pasoActual, enPaso, Date.now() - desde) + (nota ? ` · ${nota}` : "");
+    setStatus(marco);
+    // La misma frase, en el chat: la barra de abajo es pequeña y con el chat abierto
+    // no se mira. Un turno largo sin esto parece que no hace nada.
+    chat.mostrarProgreso(marco);
   };
   pintar();
   latido = window.setInterval(pintar, 1000);
@@ -218,12 +222,14 @@ async function responderAlUsuario(texto: string): Promise<void> {
           pasoActual = evento.texto;
           pasoDesde = null;
           setStatus(evento.texto);
+          chat.mostrarProgreso(evento.texto);
           return;
         }
         if (evento.tipo === "herramienta") {
           // Empieza una llamada: el reloj del paso arranca aqui.
           pasoActual = evento.texto;
           pasoDesde = Date.now();
+          chat.mostrarProgreso(evento.texto);
           return;
         }
         // Termino: su tiempo se queda a la vista hasta la siguiente herramienta.
@@ -235,6 +241,7 @@ async function responderAlUsuario(texto: string): Promise<void> {
         setStatus(fraseBarra(pasoActual, null, Date.now() - t0));
       },
     });
+    chat.ocultarProgreso();
     chat.update(burbuja, resultado.texto || "(sin respuesta final)");
     pararLatido();
     // Una linea discreta al final del historial: en que se fue el tiempo del turno.

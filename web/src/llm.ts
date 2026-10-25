@@ -209,6 +209,7 @@ export async function chat(
     : reloj.signal;
 
   let texto = "";
+  let razonamiento = "";
   let razon = "";
   let uso: ChatResult["usage"];
   let modeloDevuelto = modelo;
@@ -246,6 +247,7 @@ export async function chat(
           choices?: {
             delta?: {
               content?: string;
+              reasoning?: string;
               tool_calls?: {
                 index?: number;
                 id?: string;
@@ -266,6 +268,15 @@ export async function chat(
         const eleccion = trozo.choices?.[0];
         if (!eleccion) continue;
         const delta = eleccion.delta ?? {};
+        // El modelo razona antes de contestar y ese texto llega en `delta.reasoning`.
+        // Se cuenta como progreso (es lo que está haciendo) y se mide, porque si el
+        // razonamiento se come el presupuesto la respuesta sale vacía.
+        const trozoRazon = (delta as { reasoning?: string }).reasoning;
+        if (typeof trozoRazon === "string" && trozoRazon.length > 0) {
+          razonamiento += trozoRazon;
+          tokens += 1;
+          options.onProgreso?.({ tokens, ms: Date.now() - t0, texto });
+        }
         if (typeof delta.content === "string" && delta.content.length > 0) {
           texto += delta.content;
           tokens += 1;
@@ -319,6 +330,11 @@ export async function chat(
 
   const ms = Date.now() - t0;
 
+  // Sin texto pero con razonamiento y cortado por longitud: se pasó el turno pensando.
+  if (texto.trim() === "" && razonamiento.length > 0 && razon === "length") {
+    razon = "sin_salida";
+  }
+
   // 'load' no es una respuesta: es el modelo cargándose. Se calienta y se repite.
   if (razon === "load" && (options.reintentosPorCarga ?? 0) < 4) {
     await esperarModeloCargado(modelo);
@@ -336,6 +352,7 @@ export async function chat(
     ms,
     mensajes: messages,
     respuesta: texto,
+    razonamiento: razonamiento.length,
     tool_calls: toolCalls,
     finish_reason: razon,
     usage: uso ?? null,

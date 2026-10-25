@@ -17,6 +17,10 @@ export interface ChatApi {
   add(role: ChatRole, text: string): HTMLDivElement;
   /** Reemplaza el contenido de una burbuja creada con add(). */
   update(element: HTMLDivElement, text: string): void;
+  /** Burbuja viva de «está trabajando»: se llama muchas veces y se reutiliza. */
+  mostrarProgreso(texto: string): void;
+  /** La quita (al terminar, al cancelar o al abrir otro proyecto). */
+  ocultarProgreso(): void;
   /** Bloquea el envio mientras el agente esta trabajando. */
   setBusy(busy: boolean): void;
   /** Vacía el historial (canción nueva). */
@@ -90,7 +94,32 @@ export function initChat(): ChatApi {
     return div;
   };
 
+  /**
+   * Burbuja de «está trabajando» al final del chat. Se actualiza mientras el turno
+   * corre y desaparece al terminar: así se ve que hay algo en marcha sin tener que
+   * mirar la barra de estado, que es pequeña y está abajo.
+   */
+  let burbujaProgreso: HTMLDivElement | null = null;
+
+  const mostrarProgreso = (texto: string): void => {
+    if (!burbujaProgreso) {
+      burbujaProgreso = document.createElement("div");
+      burbujaProgreso.className = "msg progreso";
+      burbujaProgreso.innerHTML = '<span class="punto"></span><span class="texto"></span>';
+      log.appendChild(burbujaProgreso);
+    }
+    const hueco = burbujaProgreso.querySelector(".texto");
+    if (hueco) hueco.textContent = texto;
+    log.scrollTop = log.scrollHeight;
+  };
+
+  const ocultarProgreso = (): void => {
+    burbujaProgreso?.remove();
+    burbujaProgreso = null;
+  };
+
   const add = (role: ChatRole, text: string): HTMLDivElement => {
+    ocultarProgreso();
     const entrada: Entrada = { role, text };
     historial.push(entrada);
     const div = pintar(entrada);
@@ -228,6 +257,8 @@ export function initChat(): ChatApi {
 
   return {
     add,
+    mostrarProgreso,
+    ocultarProgreso,
     update,
     setBusy,
     clear: () => {

@@ -909,3 +909,26 @@ button.active {
 .sonido-nombre { display: flex; flex-direction: column; min-width: 0; }
 .sonido-nombre strong { font-weight: 600; font-size: 0.86rem; }
 .sonido-nombre em { font-style: normal; font-size: 0.74rem; opacity: 0.6; }
+
+/* Burbuja de «está trabajando»: se ve en el chat, no sólo en la barra de abajo. */
+.msg.progreso {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim, #9aa3b7);
+  font-style: italic;
+}
+
+.msg.progreso .punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--blue, #4c8dff);
+  animation: latir 1s ease-in-out infinite;
+  flex: 0 0 auto;
+}
+
+@keyframes latir {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}

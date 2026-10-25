@@ -53,8 +53,9 @@ export async function ejecutarAgente(
   /** Escrituras seguidas sin una ejecucion correcta: corta el bucle de parches. */
   let escriturasSinEjecutar = 0;
   /** Fallos idénticos seguidos por herramienta: corta los reintentos ciegos. */
-  /** Tope de salida por turno: 4.096 tokens (≈1.200 líneas de código). */
-const MAX_TOKENS_SALIDA = 4096;
+  /** Tope de salida por turno. El modelo razona antes de contestar y ese razonamiento
+ *  gasta del mismo presupuesto: con 4.096 se quedaba sin escribir la respuesta. */
+const MAX_TOKENS_SALIDA = 8192;
 
 const fallosIguales = new Map<string, number>();
   // Un vacío aislado es un fallo del proveedor, no del modelo: se reintenta una vez
@@ -89,7 +90,7 @@ const fallosIguales = new Map<string, number>();
         ultimoAviso = ms;
         alEvento?.({
           tipo: "progreso",
-          texto: `pensando · ${(ms / 1000).toFixed(1)} s · ${tokens} trozos`,
+          texto: `pensando · ${(ms / 1000).toFixed(1)} s · ${tokens} tokens`,
         });
       },
     });
@@ -116,7 +117,7 @@ const fallosIguales = new Map<string, number>();
       if (vacia) {
         const tokens = respuesta.usage?.completion_tokens ?? 0;
         const segundos = Math.round((Date.now() - t0) / 1000);
-        const cortada = respuesta.finishReason === "length";
+        const cortada = respuesta.finishReason === "length" || respuesta.finishReason === "sin_salida";
         const agotada = tokens >= 32768;
         // 'load' es lo que devuelve el proveedor cuando está saturado: cero tokens y
         // 250 ms (medido dos veces seguidas el 25-oct). Reintentar al instante no sirve;
@@ -137,9 +138,13 @@ const fallosIguales = new Map<string, number>();
         }
         return {
           texto: cortada
-            ? "El modelo se ha cortado a mitad de la respuesta (tope de salida) y no ha llegado a " +
-              "terminar. Lo escrito en disco se queda. Dime «continúa» y sigo desde ahí, o pídeme " +
-              "que lo haga en trozos más pequeños."
+            ? respuesta.finishReason === "sin_salida"
+              ? "El modelo se ha pasado el turno razonando y no llegó a escribir la respuesta. " +
+                "No es un fallo de la app: se le dio más presupuesto y se reintenta solo. Si vuelve " +
+                "a pasar, pídelo en trozos más pequeños."
+              : "El modelo se ha cortado a mitad de la respuesta (tope de salida) y no ha llegado a " +
+                "terminar. Lo escrito en disco se queda. Dime «continúa» y sigo desde ahí, o pídeme " +
+                "que lo haga en trozos más pequeños."
             : agotada
             ? "El modelo ha agotado su salida generando en bucle (" +
               `${tokens.toLocaleString("es-ES")} tokens en ${segundos} s) y no ha devuelto ` +
