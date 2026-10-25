@@ -48,6 +48,10 @@ export interface ChatOptions {
   temperature?: number;
   jsonMode?: boolean;
   signal?: AbortSignal;
+  /** Se llama con cada trozo que llega: sirve para enseñar que está trabajando. */
+  onProgreso?: (progreso: { tokens: number; ms: number; texto: string }) => void;
+  /** Corta la petición si no contesta en este tiempo (por defecto 180 s). */
+  timeoutMs?: number;
   /** Tope de tokens de salida. Sin él, un turno llegó a pedir 9.692 y el proveedor
    *  contestó 'load' (saturado) en el turno siguiente, tres veces seguidas. */
   maxTokens?: number;
@@ -115,51 +119,155 @@ export async function health(signal?: AbortSignal): Promise<Health> {
 }
 
 /** Una vuelta de conversación (sin streaming), compatible con tool calling. */
+/**
+ * Una llamada al modelo, EN STREAMING.
+ *
+ * Por qué streaming y no una espera a ciegas: con `stream: false` el proveedor tiene
+ * que generar todo antes de contestar; un turno largo con 10.000 tokens de entrada
+ * acaba en `finish_reason: "load"` (cero palabras en 0,25 s) o en una petición
+ * colgada. Con streaming llega el primer token enseguida, la conexión no se queda
+ * muda y se puede enseñar el progreso: tokens y segundos en vivo.
+ *
+ * `timeoutMs` corta una petición que no responde (antes podía quedarse colgada para
+ * siempre: eso era el «sin respuesta final»).
+ */
 export async function chat(
   messages: ChatMessage[],
   options: ChatOptions = {},
 ): Promise<ChatResult> {
   const modelo = options.model ?? getModel();
-  const body: Record<string, unknown> = { model: modelo, messages, stream: false };
+  const body: Record<string, unknown> = {
+    model: modelo,
+    messages,
+    stream: true,
+    stream_options: { include_usage: true },
+  };
   if (options.tools && options.tools.length > 0) body.tools = options.tools;
   if (typeof options.temperature === "number") body.temperature = options.temperature;
   if (options.jsonMode) body.response_format = { type: "json_object" };
   if (typeof options.maxTokens === "number") body.max_tokens = options.maxTokens;
 
   const t0 = Date.now();
-  const res = await fetch(`${LLM_BASE}/v1/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal: options.signal,
-  });
-  const texto = await res.text();
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${texto.slice(0, 300)}`);
+  const reloj = new AbortController();
+  const temporizador = window.setTimeout(
+    () => reloj.abort(new Error("tiempo agotado")),
+    options.timeoutMs ?? 180_000,
+  );
+  const cualquier = (AbortSignal as unknown as { any?: (s: AbortSignal[]) => AbortSignal }).any;
+  const senal = options.signal
+    ? cualquier
+      ? cualquier([options.signal, reloj.signal])
+      : reloj.signal
+    : reloj.signal;
 
-  const data = JSON.parse(texto) as {
-    model?: string;
-    choices?: {
-      message?: { content?: string; tool_calls?: ToolCall[] };
-      finish_reason?: string;
-    }[];
-    usage?: ChatResult["usage"];
-  };
-  const eleccion = data.choices?.[0];
+  let texto = "";
+  let razon = "";
+  let uso: ChatResult["usage"];
+  let modeloDevuelto = modelo;
+  let tokens = 0;
+  const parciales = new Map<number, { id: string; name: string; arguments: string }>();
+
+  try {
+    const res = await fetch(`${LLM_BASE}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify(body),
+      signal: senal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+
+    const lector = res.body?.getReader();
+    if (!lector) throw new Error("la respuesta no trae cuerpo");
+    const decodificador = new TextDecoder();
+    let buzon = "";
+
+    for (;;) {
+      const { done, value } = await lector.read();
+      if (done) break;
+      buzon += decodificador.decode(value, { stream: true });
+      let corte = buzon.indexOf("\n");
+      while (corte >= 0) {
+        const linea = buzon.slice(0, corte).trim();
+        buzon = buzon.slice(corte + 1);
+        corte = buzon.indexOf("\n");
+        if (!linea.startsWith("data:")) continue;
+        const carga = linea.slice(5).trim();
+        if (carga === "[DONE]") continue;
+        let trozo: {
+          model?: string;
+          choices?: {
+            delta?: {
+              content?: string;
+              tool_calls?: {
+                index?: number;
+                id?: string;
+                function?: { name?: string; arguments?: string };
+              }[];
+            };
+            finish_reason?: string;
+          }[];
+          usage?: ChatResult["usage"];
+        };
+        try {
+          trozo = JSON.parse(carga);
+        } catch {
+          continue;
+        }
+        if (trozo.model) modeloDevuelto = trozo.model;
+        if (trozo.usage) uso = trozo.usage;
+        const eleccion = trozo.choices?.[0];
+        if (!eleccion) continue;
+        const delta = eleccion.delta ?? {};
+        if (typeof delta.content === "string" && delta.content.length > 0) {
+          texto += delta.content;
+          tokens += 1;
+          options.onProgreso?.({ tokens, ms: Date.now() - t0, texto });
+        }
+        for (const llamada of delta.tool_calls ?? []) {
+          // Los trozos de argumentos también son progreso: cuando el modelo escribe un
+          // guion no manda texto, y sin esto la barra se quedaba muda mientras trabajaba.
+          tokens += 1;
+          options.onProgreso?.({ tokens, ms: Date.now() - t0, texto });
+          const indice = llamada.index ?? 0;
+          const previo = parciales.get(indice) ?? { id: "", name: "", arguments: "" };
+          parciales.set(indice, {
+            id: llamada.id || previo.id,
+            name: llamada.function?.name || previo.name,
+            arguments: previo.arguments + (llamada.function?.arguments ?? ""),
+          });
+        }
+        if (eleccion.finish_reason) razon = eleccion.finish_reason;
+      }
+    }
+  } finally {
+    window.clearTimeout(temporizador);
+  }
+
+  const toolCalls: ToolCall[] = [...parciales.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .filter(([, valor]) => valor.name !== "")
+    .map(([indice, valor]) => ({
+      id: valor.id || `call_${indice}_${Math.round(t0)}`,
+      type: "function",
+      function: { name: valor.name, arguments: valor.arguments || "{}" },
+    }));
+
+  const ms = Date.now() - t0;
   registrarTurno({
-    modelo,
-    ms: Date.now() - t0,
+    modelo: modeloDevuelto,
+    ms,
     mensajes: messages,
-    respuesta: eleccion?.message?.content ?? "",
-    tool_calls: eleccion?.message?.tool_calls ?? [],
-    finish_reason: eleccion?.finish_reason ?? "",
-    usage: data.usage ?? null,
+    respuesta: texto,
+    tool_calls: toolCalls,
+    finish_reason: razon,
+    usage: uso ?? null,
   });
   return {
-    content: eleccion?.message?.content ?? "",
-    ms: Date.now() - t0,
-    toolCalls: eleccion?.message?.tool_calls ?? [],
-    finishReason: eleccion?.finish_reason ?? "",
-    model: data.model ?? modelo,
-    usage: data.usage,
+    content: texto,
+    ms,
+    toolCalls,
+    finishReason: razon,
+    model: modeloDevuelto,
+    usage: uso,
   };
 }

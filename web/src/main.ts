@@ -282,6 +282,12 @@ async function responderAlUsuario(texto: string): Promise<void> {
         // Cualquier evento cuenta como señal de vida del turno.
         ultimoEventoMs = Date.now();
         // La actividad vive en la barra de abajo, no en tarjetas dentro del chat.
+        if (evento.tipo === "progreso") {
+          pasoActual = evento.texto;
+          pasoDesde = null;
+          setStatus(evento.texto);
+          return;
+        }
         if (evento.tipo === "herramienta") {
           // Empieza una llamada: el reloj del paso arranca aqui.
           pasoActual = evento.texto;

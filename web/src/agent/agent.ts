@@ -11,7 +11,8 @@ import { HERRAMIENTAS, ejecutarHerramienta, resumenLlamada } from "./tools.ts";
 import type { PasoHerramienta } from "./actividad.ts";
 
 export interface EventoAgente {
-  tipo: "herramienta" | "aviso";
+  /** "progreso": el modelo está escribiendo; se emite como mucho cada 700 ms. */
+  tipo: "herramienta" | "aviso" | "progreso";
   texto: string;
   /** Solo en "aviso": la herramienta que acaba de terminar y lo que tardo. */
   nombre?: string;
@@ -75,11 +76,22 @@ const fallosIguales = new Map<string, number>();
   while (pasos < maxPasos) {
     if (senal?.aborted) return cancelado();
     pasos += 1;
+    let ultimoAviso = 0;
     const respuesta = await chat(mensajes, {
       tools: HERRAMIENTAS,
       temperature: 0.2,
       signal: senal,
       maxTokens: MAX_TOKENS_SALIDA,
+      // Con streaming se puede decir que está trabajando de verdad: cuántos trozos
+      // lleva y cuánto tiempo. Se emite cada 700 ms para no saturar la barra.
+      onProgreso: ({ tokens, ms }) => {
+        if (ms - ultimoAviso < 700) return;
+        ultimoAviso = ms;
+        alEvento?.({
+          tipo: "progreso",
+          texto: `pensando · ${(ms / 1000).toFixed(1)} s · ${tokens} trozos`,
+        });
+      },
     });
     texto = respuesta.content.trim();
 
