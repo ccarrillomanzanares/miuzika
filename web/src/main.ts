@@ -341,6 +341,20 @@ async function cargarAgenteDelProyecto(vista: Project | null): Promise<void> {
   }
   // La conversación en curso pertenece al proyecto anterior: se tira.
   conversacion.length = 1;
+  // Y la vista se sincroniza con lo que el modelo recuerda: se pinta la conversación
+  // guardada de ESTE proyecto. Antes la memoria estaba en disco y el panel salía vacío,
+  // así que el agente «recordaba» cosas que el usuario no veía.
+  chat.clear();
+  if (turnosAgente.length > 0) {
+    chat.add(
+      "meta",
+      `Conversación guardada de este proyecto: ${turnosAgente.length} turno(s). Es lo que recuerdo al empezar.`,
+    );
+    for (const turno of turnosAgente.slice(-4)) {
+      if (turno.usuario) chat.add("user", turno.usuario);
+      if (turno.asistente) chat.add("assistant", turno.asistente);
+    }
+  }
   await refrescarManifiesto();
 }
 

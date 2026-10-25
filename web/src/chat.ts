@@ -43,9 +43,6 @@ const LOG_KEY = "miuzika.chat.log";
 const DRAFT_KEY = "miuzika.chat.borrador";
 /** Donde ejecuta Python el agente: "cpu" (este portatil) o "lambda" (GPU). */
 const DESTINO_KEY = "miuzika.destino";
-/** Tope de mensajes guardados (no crece sin fin). */
-const MAX_ENTRADAS = 300;
-
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 /**
@@ -78,7 +75,7 @@ export function initChat(): ChatApi {
 
   const guardar = (): void => {
     try {
-      localStorage.setItem(LOG_KEY, JSON.stringify(historial.slice(-MAX_ENTRADAS)));
+      // Ya no se guarda: el chat arranca vacío y la memoria del proyecto está en disco.
     } catch {
       /* sin persistencia */
     }
@@ -214,26 +211,14 @@ export function initChat(): ChatApi {
     });
   }
 
-  // Estado guardado: plegado, historial y borrador.
+  // Estado guardado: sólo si el chat está plegado. El historial y el borrador NO se
+  // restauran: al abrir la aplicación no debe haber nada de la sesión anterior. La
+  // conversación de cada proyecto vive en su agente.json y se carga al abrirlo.
   let startOpen = true;
   try {
     startOpen = localStorage.getItem(COLLAPSE_KEY) !== "1";
-    const crudo = localStorage.getItem(LOG_KEY);
-    if (crudo) {
-      const leido = JSON.parse(crudo) as { role?: string; text?: string }[];
-      for (const fila of leido.slice(-MAX_ENTRADAS)) {
-        if (typeof fila.text !== "string") continue;
-        const role: ChatRole =
-          fila.role === "user" || fila.role === "assistant" || fila.role === "meta"
-            ? fila.role
-            : "system";
-        const entrada: Entrada = { role, text: fila.text };
-        historial.push(entrada);
-        pintar(entrada);
-      }
-    }
-    const borrador = localStorage.getItem(DRAFT_KEY);
-    if (borrador) input.value = borrador;
+    localStorage.removeItem(LOG_KEY);
+    localStorage.removeItem(DRAFT_KEY);
   } catch {
     /* sin persistencia */
   }
