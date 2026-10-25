@@ -2521,11 +2521,7 @@ async function boot(): Promise<void> {
     if (faltan.length > 0) warnMissingAudio(faltan);
   } else {
     setProject(null, false);
-    addMessage(
-      "system",
-      "Arranque limpio: no he abierto ningún proyecto. Usa «Proyectos» para abrir uno o " +
-        "pídele una pieza nueva al agente.",
-    );
+    // Sin mensaje de arranque: que la línea de tiempo esté vacía ya lo dice.
     if (migracion) addMessage("system", migracion);
   }
 
