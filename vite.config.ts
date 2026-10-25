@@ -844,6 +844,32 @@ export default defineConfig(({ mode }) => {
             }
           });
 
+          // Mide una canción de referencia (enlace o fichero): tempo, tono, forma.
+          server.middlewares.use("/api/referencia/medir", (req, res) => {
+            if (req.method !== "POST") {
+              responderJson(res, 405, { error: "usa POST" });
+              return;
+            }
+            leerCuerpo(req, async (cuerpo) => {
+              try {
+                const datos = JSON.parse(cuerpo) as { origen?: string };
+                const origen = String(datos.origen ?? "").trim();
+                if (!origen) {
+                  responderJson(res, 400, { error: "falta el origen (enlace o ruta)" });
+                  return;
+                }
+                const r = await correr("codigo/analizar_referencia.py", [origen], 900);
+                if (r.codigo !== 0) {
+                  responderJson(res, 400, { error: (r.errores || r.salida).slice(-800) });
+                  return;
+                }
+                responderJson(res, 200, JSON.parse(r.salida));
+              } catch (error) {
+                responderJson(res, 500, { error: String(error) });
+              }
+            });
+          });
+
           // Un instrumento de la biblioteca, convertido a .sf2 dentro del proyecto.
           // Es la forma de tocar 46 regiones en vez de estirar un sample (que suena
           // a armónica y desafina: medido, +1054 cents en el saxo).

@@ -142,6 +142,32 @@ export function initChat(): ChatApi {
     }
   });
 
+  // Plantilla de encargo: rellena el compositor con el esqueleto. Es más rápido
+  // corregir nueve líneas que recordarlas, y así el agente recibe siempre lo mismo
+  // (tempo, compases, instrumentos, estructura, final) en vez de un párrafo suelto.
+  const PLANTILLA = [
+    "Proyecto: ",
+    "Entrega: MIDI",
+    "Referencia: (enlace de YouTube o ruta de un audio) · modo: versión | inspiración",
+    "Tempo: BPM en 4/4 · N compases · tonalidad",
+    "Instrumentos: ",
+    "Estructura: compases 1-8 … · 9-16 … · 17-24 …",
+    "Carácter: ",
+    "Qué NO quiero: ",
+    "Final: cómo acaba y cuánta cola",
+    "Comprobación: al terminar, dime BPM, compases y duración real del render",
+  ].join("\n");
+
+  const botonPlantilla = document.getElementById("chat-plantilla");
+  botonPlantilla?.addEventListener("click", () => {
+    const vacio = input.value.trim() === "";
+    input.value = vacio ? PLANTILLA : `${input.value.replace(/\s+$/, "")}\n${PLANTILLA}`;
+    input.focus();
+    // El cursor, al final de la primera línea (donde se escribe el nombre).
+    if (vacio) input.setSelectionRange("Proyecto: ".length, "Proyecto: ".length);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const text = input.value.trim();

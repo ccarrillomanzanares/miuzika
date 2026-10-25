@@ -543,6 +543,19 @@ export class TimelineView {
         </div>`;
       })
       .join("");
+    if (this.project.tracks.length === 0) {
+      // Un proyecto sin pistas se veía igual que una app rota: la línea de compases y
+      // nada más. Aquí se dice qué pasa y qué hacer.
+      this.heads.innerHTML = `<div class="heads-inner">
+        <div class="ruler-spacer"></div>
+        <div class="pista-vacia">
+          <strong>${escapeHtml(this.project.name)}</strong> no tiene pistas todavía.
+          <small>Pídele una pieza al agente en el chat, o arrastra un WAV aquí.</small>
+        </div>
+      </div>`;
+      this.aplicarScrollCabeceras();
+      return;
+    }
     // Las filas van en un contenedor propio para poder desplazarlas con transform:
     // asi no depende de la altura de la barra de scroll horizontal del lienzo.
     this.heads.innerHTML = `<div class="heads-inner"><div class="ruler-spacer"></div>${rows}</div>`;

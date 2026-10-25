@@ -428,6 +428,27 @@ export const HERRAMIENTAS: ToolSpec[] = [
   {
     type: "function",
     function: {
+      name: "medir_referencia",
+      description:
+        "Mide una canción de referencia y devuelve tempo, tonalidad, duración, compases y la " +
+        "curva de energía por bloques de 4 compases, más el carácter en palabras. Acepta un " +
+        "enlace de YouTube o la ruta de un audio. NO saca la melodía ni los acordes: si hay que " +
+        "tocar el tema, la melodía tiene que venir de otro sitio.",
+      parameters: {
+        type: "object",
+        properties: {
+          origen: {
+            type: "string",
+            description: "Enlace de YouTube o ruta de un audio dentro de workspace/",
+          },
+        },
+        required: ["origen"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "usar_instrumento",
       description:
         "Convierte un instrumento de la biblioteca (.sfz de VCSL) en un SoundFont dentro del proyecto y " +
@@ -812,6 +833,26 @@ async function ejecutarCrudo(
         } catch (error) {
           return { ok: false, texto: "No pude buscar: " + (error instanceof Error ? error.message : String(error)) };
         }
+      }
+      case "medir_referencia": {
+        const origen = String(args.origen ?? "").trim();
+        if (!origen) return { ok: false, texto: "Falta el enlace o la ruta de la referencia." };
+        const res = await fetch("/api/referencia/medir", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ origen }),
+        });
+        const datos = (await res.json()) as Record<string, unknown> & { ok?: boolean; error?: string };
+        if (!datos.ok) return { ok: false, texto: `No se pudo medir: ${datos.error ?? res.status}` };
+        const linea =
+          `${datos.duracion_s} s · ${datos.tempo_bpm} BPM · ` +
+          (datos.tonalidad && (datos.tonalidad as { tonica?: string }).tonica
+            ? `${(datos.tonalidad as { tonica: string }).tonica} ${(datos.tonalidad as { modo: string }).modo}`
+            : "sin tonalidad clara") +
+          ` · ${datos.compases} compases\n` +
+          `carácter: ${(datos.palabras as string[])?.join(", ") ?? ""}\n` +
+          `forma (energía por 4 compases): ${JSON.stringify(datos.forma)}`;
+        return { ok: true, texto: linea };
       }
       case "usar_instrumento": {
         const instrumentar = herramientaLocal.instrumentador();

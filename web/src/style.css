@@ -234,6 +234,27 @@ main {
   background: #1a1d26;
 }
 
+.pista-vacia {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text-dim, #8b93a7);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pista-vacia strong {
+  color: var(--text, #d7dce8);
+  font-size: 13px;
+}
+
+.pista-vacia small {
+  color: var(--text-faint, #6b7385);
+  font-size: 11px;
+}
+
 .track-head {
   height: 56px;
   display: flex;
@@ -670,6 +691,23 @@ button.active {
 .chat-composer textarea:focus {
   outline: none;
   border-color: #3d4657;
+}
+
+#chat-plantilla {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #1a1f2b;
+  color: var(--text-dim, #9aa3b7);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#chat-plantilla:hover {
+  background: #232a39;
+  color: var(--text, #d7dce8);
 }
 
 #chat-send {
