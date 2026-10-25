@@ -53,6 +53,9 @@ export async function ejecutarAgente(
   let escriturasSinEjecutar = 0;
   /** Fallos idénticos seguidos por herramienta: corta los reintentos ciegos. */
   const fallosIguales = new Map<string, number>();
+  // Un vacío aislado es un fallo del proveedor, no del modelo: se reintenta una vez
+  // en silencio. Si se repite, se para y se avisa (para no entrar en bucle).
+  let vaciosSeguidos = 0;
 
   /** Respuesta de cierre cuando el usuario cancela. */
   const cancelado = (): ResultadoAgente => ({
@@ -73,6 +76,7 @@ export async function ejecutarAgente(
 
     const pideHerramientas = respuesta.toolCalls.length > 0;
     const vacia = !pideHerramientas && texto === "";
+    if (!vacia) vaciosSeguidos = 0;
 
     // Una respuesta vacia y sin herramientas no se guarda: solo ensuciaria el historial.
     if (!vacia) {
@@ -91,9 +95,18 @@ export async function ejecutarAgente(
       if (vacia) {
         const tokens = respuesta.usage?.completion_tokens ?? 0;
         const segundos = Math.round((Date.now() - t0) / 1000);
+        const cortada = respuesta.finishReason === "length";
         const agotada = tokens >= 32768;
+        if (!cortada && vaciosSeguidos === 0) {
+          vaciosSeguidos += 1;
+          continue;
+        }
         return {
-          texto: agotada
+          texto: cortada
+            ? "El modelo se ha cortado a mitad de la respuesta (tope de salida) y no ha llegado a " +
+              "terminar. Lo escrito en disco se queda. Dime «continúa» y sigo desde ahí, o pídeme " +
+              "que lo haga en trozos más pequeños."
+            : agotada
             ? "El modelo ha agotado su salida generando en bucle (" +
               `${tokens.toLocaleString("es-ES")} tokens en ${segundos} s) y no ha devuelto ` +
               "texto ni herramienta alguna. No se ha tocado nada: dime «continúa» para reintentarlo."

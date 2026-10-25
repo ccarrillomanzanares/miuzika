@@ -147,6 +147,7 @@ export async function chat(
     mensajes: messages,
     respuesta: eleccion?.message?.content ?? "",
     tool_calls: eleccion?.message?.tool_calls ?? [],
+    finish_reason: eleccion?.finish_reason ?? "",
     usage: data.usage ?? null,
   });
   return {
