@@ -13,7 +13,7 @@ import {
   vozPorClave,
 } from "../../src/core/sonidos.ts";
 import type { RecetaSonido, VozSonido } from "../../src/core/sonidos.ts";
-import { aplicarPalabras, vocabularioParaPrompt } from "../../src/core/palabras.ts";
+import { aplicarPalabras } from "../../src/core/palabras.ts";
 import { applyOps } from "../../src/core/ops.ts";
 import type { Op } from "../../src/core/ops.ts";
 import {
@@ -109,10 +109,7 @@ const timeline = new TimelineView(canvas, wrap, heads);
 chat.onLayout(() => timeline.relayout());
 
 // ── Agente: piensa y actúa (la clave la pone el servidor; las manos, el workspace)
-/** Las palabras del vocabulario, tal cual, para que el agente no las reescriba. */
-const VOCABULARIO_PROMPT = vocabularioParaPrompt();
-
-const AGENTE_SISTEMA = promptDelSistema(VOCABULARIO_PROMPT);
+const AGENTE_SISTEMA = promptDelSistema();
 
 let manifiestoMotor = "";
 
