@@ -97,8 +97,12 @@ export async function ejecutarAgente(
         const segundos = Math.round((Date.now() - t0) / 1000);
         const cortada = respuesta.finishReason === "length";
         const agotada = tokens >= 32768;
-        if (!cortada && vaciosSeguidos === 0) {
+        // 'load' es lo que devuelve el proveedor cuando está saturado: cero tokens y
+        // 250 ms (medido dos veces seguidas el 25-oct). Reintentar al instante no sirve;
+        // se espera y se prueba hasta tres veces.
+        if (!cortada && vaciosSeguidos < 3) {
           vaciosSeguidos += 1;
+          await new Promise((listo) => setTimeout(listo, 1000 * vaciosSeguidos * vaciosSeguidos));
           continue;
         }
         return {
@@ -110,8 +114,14 @@ export async function ejecutarAgente(
             ? "El modelo ha agotado su salida generando en bucle (" +
               `${tokens.toLocaleString("es-ES")} tokens en ${segundos} s) y no ha devuelto ` +
               "texto ni herramienta alguna. No se ha tocado nada: dime «continúa» para reintentarlo."
-            : "El modelo devolvio una respuesta vacia, sin texto y sin pedir ninguna " +
-              "herramienta. No se ha tocado nada: dime «continua» para reintentarlo.",
+            : respuesta.finishReason === "load"
+              ? "El proveedor del modelo está saturado (finish_reason 'load': cero tokens en " +
+                "un cuarto de segundo). He reintentado tres veces con espera y sigue igual. " +
+                "Lo escrito en disco se queda. Prueba en un minuto, o cambia de modelo en el " +
+                "selector; si vuelve a pasar siempre después de un fichero grande, es que el " +
+                "turno anterior pidió demasiado."
+              : "El modelo devolvio una respuesta vacia, sin texto y sin pedir ninguna " +
+                "herramienta. No se ha tocado nada: dime «continua» para reintentarlo.",
           pasos,
           llamadas,
           ms: Date.now() - t0,

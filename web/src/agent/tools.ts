@@ -244,6 +244,9 @@ const herramientaLocal = {
 };
 
 /** Mensaje único para el caso «la app no tiene este registro»: dice qué hacer. */
+/** Tope de un solo escribir_fichero (≈200 líneas). Ver el porqué en el case. */
+const MAX_FICHERO = 8000;
+
 const SIN_REGISTRO =
   "La app no tiene registrada esta acción (pasa cuando el servidor de dev se reinicia o se " +
   "edita código con la pestaña abierta y quedan dos copias del módulo). NO lo reintentes: " +
@@ -661,6 +664,20 @@ async function ejecutarCrudo(
   try {
     switch (nombre) {
       case "escribir_fichero": {
+        // Un fichero de 9.700 tokens de una sola vez (medido el 25-oct) hace que el
+        // proveedor corte el turno siguiente con finish_reason 'load'. El tope es
+        // mecánico a propósito: pedirlo por prompt no funcionó.
+        const contenido = String(args.contenido ?? "");
+        if (contenido.length > MAX_FICHERO) {
+          return {
+            ok: false,
+            texto:
+              `Demasiado largo: ${contenido.length} caracteres (el tope son ${MAX_FICHERO}). ` +
+              "Escribe el fichero en trozos: primero la estructura y las funciones base, y " +
+              "luego añade el resto con editar_fichero (busca/reemplaza) o con un segundo " +
+              "escribir_fichero a otro fichero si son cosas distintas.",
+          };
+        }
         const datos = await pedirJson("/api/fs/write", {
           path: args.path,
           contenido: args.contenido,
