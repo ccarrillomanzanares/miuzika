@@ -52,13 +52,55 @@ export interface ChatOptions {
   onProgreso?: (progreso: { tokens: number; ms: number; texto: string }) => void;
   /** Corta la petición si no contesta en este tiempo (por defecto 180 s). */
   timeoutMs?: number;
+  /** Interno: cuántas veces se ha reintentado por 'load' (modelo cargando). */
+  reintentosPorCarga?: number;
   /** Tope de tokens de salida. Sin él, un turno llegó a pedir 9.692 y el proveedor
    *  contestó 'load' (saturado) en el turno siguiente, tres veces seguidas. */
   maxTokens?: number;
 }
 
+/**
+ * Espera a que el modelo esté cargado.
+ *
+ * Ollama contesta `finish_reason: "load"` (cero tokens en ~250 ms) cuando la petición
+ * llega mientras el modelo se está cargando: no es falta de contexto ni el modelo
+ * callándose, es una instancia fría. Reintentar la petición grande no ayuda; lo que
+ * ayuda es una petición diminuta hasta que contesta de verdad.
+ */
+async function esperarModeloCargado(modelo: string, intentos = 12): Promise<boolean> {
+  for (let i = 0; i < intentos; i += 1) {
+    try {
+      const res = await fetch(`${LLM_BASE}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: modelo,
+          messages: [{ role: "user", content: "ok" }],
+          max_tokens: 1,
+          stream: false,
+          keep_alive: "30m",
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.ok) {
+        const datos = (await res.json()) as { choices?: { finish_reason?: string }[] };
+        const razon = datos.choices?.[0]?.finish_reason ?? "";
+        if (razon !== "load") return true;
+      }
+    } catch {
+      /* se reintenta */
+    }
+    await new Promise((listo) => setTimeout(listo, 1500));
+  }
+  return false;
+}
+
 /** Prefijo del proxy: el servidor de Vite pone la clave. */
 export const LLM_BASE = "/api/llm";
+
+/** Cuántas peticiones al modelo hay en vuelo a la vez. Si pasa de 1, la app está
+ *  pidiendo dos veces lo mismo y el proveedor contesta 'load' por saturación. */
+let peticionesEnVuelo = 0;
 
 /** Cada turno se apunta en tmp/llm.log (via el servidor) para poder depurar. */
 function registrarTurno(registro: Record<string, unknown>): void {
@@ -141,6 +183,7 @@ export async function chat(
     messages,
     stream: true,
     stream_options: { include_usage: true },
+    keep_alive: "30m",
   };
   if (options.tools && options.tools.length > 0) body.tools = options.tools;
   if (typeof options.temperature === "number") body.temperature = options.temperature;
@@ -148,6 +191,11 @@ export async function chat(
   if (typeof options.maxTokens === "number") body.max_tokens = options.maxTokens;
 
   const t0 = Date.now();
+  const peticion = Math.random().toString(36).slice(2, 8);
+  const cuerpoJson = JSON.stringify(body);
+  const pedido = { herramientas: Array.isArray(body.tools) ? (body.tools as unknown[]).length : 0, bytes: cuerpoJson.length };
+  peticionesEnVuelo += 1;
+  const enVueloAlPedir = peticionesEnVuelo;
   const reloj = new AbortController();
   const temporizador = window.setTimeout(
     () => reloj.abort(new Error("tiempo agotado")),
@@ -171,7 +219,7 @@ export async function chat(
     const res = await fetch(`${LLM_BASE}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify(body),
+      body: cuerpoJson,
       signal: senal,
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
@@ -239,8 +287,25 @@ export async function chat(
         if (eleccion.finish_reason) razon = eleccion.finish_reason;
       }
     }
+  } catch (error) {
+    // Un fallo (timeout, abort, 429) también se apunta: antes no quedaba rastro y sólo
+    // se veía el síntoma en la interfaz.
+    registrarTurno({
+      peticion,
+      en_vuelo: enVueloAlPedir,
+      modelo: modeloDevuelto,
+      ms: Date.now() - t0,
+      mensajes: messages,
+      respuesta: texto,
+      tool_calls: [],
+      finish_reason: "excepcion",
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      usage: uso ?? null,
+    });
+    throw error;
   } finally {
     window.clearTimeout(temporizador);
+    peticionesEnVuelo = Math.max(0, peticionesEnVuelo - 1);
   }
 
   const toolCalls: ToolCall[] = [...parciales.entries()]
@@ -253,7 +318,20 @@ export async function chat(
     }));
 
   const ms = Date.now() - t0;
+
+  // 'load' no es una respuesta: es el modelo cargándose. Se calienta y se repite.
+  if (razon === "load" && (options.reintentosPorCarga ?? 0) < 4) {
+    await esperarModeloCargado(modelo);
+    return chat(messages, {
+      ...options,
+      reintentosPorCarga: (options.reintentosPorCarga ?? 0) + 1,
+    });
+  }
+
   registrarTurno({
+    peticion,
+    en_vuelo: enVueloAlPedir,
+    pedido,
     modelo: modeloDevuelto,
     ms,
     mensajes: messages,
