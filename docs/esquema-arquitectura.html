@@ -4,55 +4,62 @@
 <meta charset="utf-8">
 <title>miuzika · esquema de arquitectura</title>
 <style>
+  /* Paleta propia con prefijo --doc-: el fichero se abre con doble clic, sin el tema
+     de la app; con var(--doc-card) a secas las cajas salían negras y el texto negro. */
+  :root{
+    --doc-bg:#0c0e13; --doc-fg:#e6e8ee; --doc-muted:#8b91a1;
+    --doc-accent:#ff5f6d; --doc-border:#2a2f3d; --doc-card:#141822;
+    color-scheme:dark;
+  }
   *,*::before,*::after{box-sizing:border-box}
-  html,body{margin:0;padding:0;background:transparent}
+  html,body{margin:0;padding:0;background:var(--doc-bg)}
   body{
     font-family:var(--app-font, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
-    color:var(--foreground);
-    font-size:13px; line-height:1.45;
+    color:var(--doc-fg);
+    font-size:13px; line-height:1.45; padding:18px 20px 28px;
   }
-  .wrap{width:980px;max-width:100%;display:flex;flex-direction:column;gap:18px}
+  .wrap{width:100%;max-width:1000px;display:flex;flex-direction:column;gap:18px}
   h1{font-size:15px;font-weight:650;margin:0;letter-spacing:.01em}
-  h2{font-size:12px;font-weight:600;margin:0 0 8px;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.08em}
-  .sub{color:var(--muted-foreground);font-size:11.5px;margin-top:2px}
+  h2{font-size:12px;font-weight:600;margin:0 0 8px;color:var(--doc-muted);text-transform:uppercase;letter-spacing:.08em}
+  .sub{color:var(--doc-muted);font-size:11.5px;margin-top:2px}
   .cifras{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px}
-  .cifra{border:1px solid var(--border);border-radius:8px;padding:7px 11px;min-width:96px}
+  .cifra{border:1px solid var(--doc-border);border-radius:8px;padding:7px 11px;min-width:96px}
   .cifra b{display:block;font-size:15px;font-weight:650}
-  .cifra span{font-size:10.5px;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.06em}
+  .cifra span{font-size:10.5px;color:var(--doc-muted);text-transform:uppercase;letter-spacing:.06em}
 
   .capas{display:grid;grid-template-columns:1fr;gap:10px}
-  .capa{border:1px solid var(--border);border-radius:10px;padding:11px 13px;position:relative}
+  .capa{border:1px solid var(--doc-border);border-radius:10px;padding:11px 13px;position:relative}
   .capa > header{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
   .capa > header b{font-size:12.5px;font-weight:650}
-  .capa > header em{font-style:normal;font-size:10.5px;color:var(--muted-foreground);letter-spacing:.05em;text-transform:uppercase}
-  .capa.nav{background:color-mix(in oklab, var(--card) 92%, transparent)}
-  .capa.srv{border-color:color-mix(in oklab, var(--accent) 45%, var(--border))}
+  .capa > header em{font-style:normal;font-size:10.5px;color:var(--doc-muted);letter-spacing:.05em;text-transform:uppercase}
+  .capa.nav{background:color-mix(in oklab, var(--doc-card) 92%, transparent)}
+  .capa.srv{border-color:color-mix(in oklab, var(--doc-accent) 45%, var(--doc-border))}
   .capa.gpu{border-style:dashed}
   .cajas{display:grid;gap:6px}
   .c2{grid-template-columns:1fr 1fr}
   .c3{grid-template-columns:1fr 1fr 1fr}
-  .caja{border:1px solid var(--border);border-radius:7px;padding:6px 8px;background:color-mix(in oklab, var(--card) 70%, transparent)}
+  .caja{border:1px solid var(--doc-border);border-radius:7px;padding:6px 8px;background:color-mix(in oklab, var(--doc-card) 70%, transparent)}
   .caja b{font-size:11.5px;font-weight:600;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-  .caja span{display:block;font-size:10.5px;color:var(--muted-foreground);margin-top:1px}
-  .nucleo{grid-column:1 / -1;border-color:color-mix(in oklab, var(--accent) 60%, var(--border))}
+  .caja span{display:block;font-size:10.5px;color:var(--doc-muted);margin-top:1px}
+  .nucleo{grid-column:1 / -1;border-color:color-mix(in oklab, var(--doc-accent) 60%, var(--doc-border))}
 
-  .flecha{display:flex;align-items:center;gap:8px;color:var(--muted-foreground);font-size:11px;padding-left:4px}
-  .flecha i{display:block;width:1px;height:14px;background:var(--border);margin-left:14px}
-  .flecha code{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--foreground)}
+  .flecha{display:flex;align-items:center;gap:8px;color:var(--doc-muted);font-size:11px;padding-left:4px}
+  .flecha i{display:block;width:1px;height:14px;background:var(--doc-border);margin-left:14px}
+  .flecha code{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--doc-fg)}
 
   table{border-collapse:collapse;width:100%;font-size:11.5px}
-  th{text-align:left;font-weight:600;color:var(--muted-foreground);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:0 8px 5px 0;border-bottom:1px solid var(--border)}
-  td{padding:5px 8px 5px 0;border-bottom:1px solid color-mix(in oklab,var(--border) 55%,transparent);vertical-align:top}
+  th{text-align:left;font-weight:600;color:var(--doc-muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:0 8px 5px 0;border-bottom:1px solid var(--doc-border)}
+  td{padding:5px 8px 5px 0;border-bottom:1px solid color-mix(in oklab,var(--doc-border) 55%,transparent);vertical-align:top}
   td code{font-family:ui-monospace,monospace;font-size:11px}
-  .ok{color:var(--accent);font-weight:600}
+  .ok{color:var(--doc-accent);font-weight:600}
 
   ol.pasos{margin:0;padding-left:0;list-style:none;counter-reset:p;display:grid;gap:5px}
   ol.pasos li{counter-increment:p;display:grid;grid-template-columns:20px 132px 1fr;gap:8px;font-size:11.5px;align-items:baseline}
-  ol.pasos li::before{content:counter(p);color:var(--muted-foreground);font-family:ui-monospace,monospace;font-size:10.5px;text-align:right}
+  ol.pasos li::before{content:counter(p);color:var(--doc-muted);font-family:ui-monospace,monospace;font-size:10.5px;text-align:right}
   ol.pasos li b{font-family:ui-monospace,monospace;font-size:11px;font-weight:600}
-  ol.pasos li span{color:var(--muted-foreground)}
+  ol.pasos li span{color:var(--doc-muted)}
 
-  .pie{font-size:10.5px;color:var(--muted-foreground)}
+  .pie{font-size:10.5px;color:var(--doc-muted)}
 </style>
 </head>
 <body>
