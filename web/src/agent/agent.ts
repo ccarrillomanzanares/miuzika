@@ -54,8 +54,9 @@ export async function ejecutarAgente(
   let escriturasSinEjecutar = 0;
   /** Fallos idénticos seguidos por herramienta: corta los reintentos ciegos. */
   /** Tope de salida por turno. El modelo razona antes de contestar y ese razonamiento
- *  gasta del mismo presupuesto: con 4.096 se quedaba sin escribir la respuesta. */
-const MAX_TOKENS_SALIDA = 8192;
+ *  gasta del mismo presupuesto: medido, un turno gastó 8.192 tokens y 22.823
+ *  caracteres pensando sin llegar a escribir. Se le deja margen de sobra. */
+const MAX_TOKENS_SALIDA = 32768;
 
 const fallosIguales = new Map<string, number>();
   // Un vacío aislado es un fallo del proveedor, no del modelo: se reintenta una vez
@@ -78,7 +79,7 @@ const fallosIguales = new Map<string, number>();
     if (senal?.aborted) return cancelado();
     pasos += 1;
     let ultimoAviso = 0;
-    const respuesta = await chat(mensajes, {
+    let respuesta = await chat(mensajes, {
       tools: HERRAMIENTAS,
       temperature: 0.2,
       signal: senal,
@@ -95,6 +96,18 @@ const fallosIguales = new Map<string, number>();
       },
     });
     texto = respuesta.content.trim();
+
+    // Si se quedó pensando y no escribió, se repite SIN razonamiento: es más rápido y
+    // la respuesta llega igual. Pensar no es el problema; cortarlo a mitad sí.
+    if (respuesta.finishReason === "sin_salida") {
+      respuesta = await chat(mensajes, {
+        tools: HERRAMIENTAS,
+        temperature: 0.2,
+        signal: senal,
+        maxTokens: MAX_TOKENS_SALIDA,
+        sinRazonamiento: true,
+      });
+    }
 
     const pideHerramientas = respuesta.toolCalls.length > 0;
     const vacia = !pideHerramientas && texto === "";

@@ -52,6 +52,8 @@ export interface ChatOptions {
   onProgreso?: (progreso: { tokens: number; ms: number; texto: string }) => void;
   /** Corta la petición si no contesta en este tiempo (por defecto 180 s). */
   timeoutMs?: number;
+  /** Repetir la petición pidiendo al modelo que NO razone (segunda pasada rápida). */
+  sinRazonamiento?: boolean;
   /** Interno: cuántas veces se ha reintentado por 'load' (modelo cargando). */
   reintentosPorCarga?: number;
   /** Tope de tokens de salida. Sin él, un turno llegó a pedir 9.692 y el proveedor
@@ -189,6 +191,10 @@ export async function chat(
   if (typeof options.temperature === "number") body.temperature = options.temperature;
   if (options.jsonMode) body.response_format = { type: "json_object" };
   if (typeof options.maxTokens === "number") body.max_tokens = options.maxTokens;
+  // Pensar está bien: el problema era cortarlo a mitad. Sólo cuando un turno se queda
+  // sin salida por haber razonado de más se repite SIN razonamiento (medido: pasa de
+  // 22.823 caracteres de razonamiento y 8.192 tokens a 0 y respuesta inmediata).
+  if (options.sinRazonamiento) body.reasoning_effort = "none";
 
   const t0 = Date.now();
   const peticion = Math.random().toString(36).slice(2, 8);
