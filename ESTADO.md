@@ -1,7 +1,9 @@
 # ESTADO · 26-oct-2026
 
 Documento de relevo. Lo que hay, lo que funciona, lo que está roto y por dónde seguir.
-La arquitectura completa está en `docs/ARCHITECTURE.md`; esto es el parte de hoy.
+La arquitectura completa está en `docs/ARCHITECTURE.md`, con dos dibujos:
+`docs/esquema-arquitectura.html` (capas y fuentes de verdad) y
+`docs/flujo-aplicacion.html` (abrir/tocar y un turno del agente). Esto es el parte de hoy.
 
 ## 1. Sesión del 26-oct: revisión de código y limpieza
 

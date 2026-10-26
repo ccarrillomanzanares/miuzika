@@ -109,6 +109,9 @@ Reglas que se deducen de esto:
 
 ---
 
+> Los mismos dos recorridos, dibujados: `docs/esquema-arquitectura.html` (capas) y
+> `docs/flujo-aplicacion.html` (abrir/tocar y un turno del agente).
+
 ## 4. El ciclo de un turno, paso a paso
 
 Esto es lo que ocurre cuando escribes en el chat:

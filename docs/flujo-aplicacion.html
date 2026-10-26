@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>miuzika · diagramas de flujo</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:transparent}
+  body{
+    font-family:var(--app-font, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
+    color:var(--foreground); font-size:13px; line-height:1.45;
+  }
+  .wrap{width:980px;max-width:100%;display:flex;flex-direction:column;gap:22px}
+  h1{font-size:15px;font-weight:650;margin:0}
+  h2{font-size:12px;font-weight:600;margin:0 0 3px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
+  .lead{font-size:11.5px;color:var(--muted-foreground);margin:0 0 12px}
+  .flujo{border:1px solid var(--border);border-radius:10px;padding:14px 16px 18px}
+
+  .paso{display:grid;grid-template-columns:22px minmax(0,1fr);gap:9px;align-items:start}
+  .paso .n{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;
+    color:var(--muted-foreground);text-align:right;padding-top:8px;
+  }
+  .caja{border:1px solid var(--border);border-radius:7px;padding:6px 9px;background:color-mix(in oklab, var(--card) 72%, transparent)}
+  .caja b{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;font-weight:600}
+  .caja span{display:block;font-size:10.8px;color:var(--muted-foreground);margin-top:1px;overflow-wrap:anywhere}
+  .caja code{overflow-wrap:anywhere}
+  .caja.nav{border-left:3px solid #61afef}
+  .caja.srv{border-left:3px solid var(--accent)}
+  .caja.dec{border-left:3px solid #e5c07b;background:color-mix(in oklab, var(--card) 55%, transparent)}
+  .caja.py{border-left:3px solid #98c379}
+
+  .conector{display:grid;grid-template-columns:22px minmax(0,1fr);gap:9px}
+  .conector i{justify-self:end;display:block;width:1px;height:13px;background:var(--border);margin-right:10px}
+
+  .ramas{display:flex;flex-direction:column;gap:4px;margin:5px 0 5px 31px}
+  .rama{font-size:10.8px;color:var(--muted-foreground);display:grid;grid-template-columns:minmax(0,86px) minmax(0,1fr);gap:8px}
+  .rama code{
+    font-family:ui-monospace,monospace;font-size:10.5px;color:var(--foreground);
+    background:color-mix(in oklab, var(--card) 80%, transparent);
+    border:1px solid var(--border);border-radius:5px;padding:1px 5px;text-align:center;
+    overflow-wrap:anywhere;line-height:1.3;
+  }
+  .rama.mal code{border-color:color-mix(in oklab, var(--accent) 55%, var(--border));color:var(--accent)}
+
+  .fin{border:1px dashed var(--border);border-radius:7px;padding:5px 9px;font-size:11px;color:var(--muted-foreground)}
+  .leyenda{display:flex;gap:16px;flex-wrap:wrap;font-size:10.5px;color:var(--muted-foreground);margin-top:10px}
+  .leyenda i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  .pie{font-size:10.5px;color:var(--muted-foreground);border-top:1px solid var(--border);padding-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div>
+    <h1>miuzika · flujo de la aplicación</h1>
+    <div class="lead">Dos recorridos distintos. El primero lo dispara una persona; el segundo, un mensaje en el chat.</div>
+  </div>
+
+  <!-- ============================================================ FLUJO 1 -->
+  <div class="flujo">
+    <h2>Flujo 1 · abrir y tocar</h2>
+    <p class="lead">Del disco a los altavoces. Todo lo que se puede romper aquí: un WAV que falta, un .sf2 que no carga, un proyecto vacío.</p>
+
+    <div class="paso"><div class="n">1</div>
+      <div class="caja nav"><b>npm run dev</b><span>Vite sirve <code>web/</code> en <code>[::1]:5173</code> y monta los 25 endpoints de <code>/api</code>. Sin este proceso no hay nada.</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">2</div>
+      <div class="caja nav"><b>boot()</b><span>migra un proyecto viejo de <code>localStorage</code> si lo hay, deja el lienzo <b>vacío</b> a propósito y refresca el prompt con el manifiesto (11.939 caracteres).</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">3</div>
+      <div class="caja nav"><b>«Proyectos» → /api/proyectos</b><span>lista las carpetas que tienen <code>proyecto.json</code>: nombre, BPM, compases, pistas, fecha.</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">4</div>
+      <div class="caja nav"><b>elegir → GET ?path=</b><span>el maestro entero (sin el recorte de 20 KB) → <code>interpretarProyectoEnDisco()</code> valida formato y versión.</span></div>
+    </div>
+    <div class="ramas">
+      <div class="rama mal"><code>ilegible</code><span>se dice en el diálogo y no se abre: nunca se pisa un fichero roto con uno vacío.</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">5</div>
+      <div class="caja dec"><b>hidratarAssets()</b><span>por cada asset del proyecto, 4 a la vez: <code>/api/picos</code> (caché por mtime) y decide cómo suena.</span></div>
+    </div>
+    <div class="ramas">
+      <div class="rama"><code>≤ 30 s</code><span><code>/api/audio</code> → <code>decodeAudioData</code> → openDAW lo toca como AudioBuffer.</span></div>
+      <div class="rama"><code>&gt; 30 s</code><span>no se decodifica: <code>&lt;audio&gt;</code> con Range lo lee del disco por trozos. 10 stems de 6 min = 20 MB, no 1,3 GB.</span></div>
+      <div class="rama mal"><code>sin ruta</code><span>«faltan N WAV»: el proyecto los referencia y sonarían vacíos.</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">6</div>
+      <div class="caja nav"><b>openDAW WASM</b><span><code>projectToOpenDaw()</code> traduce el IR (beats) a pulsos (960/negra); los <code>.sf2</code> van por un gestor propio, no por el de la librería (se queda en <i>progress</i> para siempre).</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">7</div>
+      <div class="caja nav"><b>▶ play</b><span>el motor mueve la posición; un tick pinta el playhead y sincroniza los stems largos por reloj (corrige deriva &gt; 120 ms).</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">8</div>
+      <div class="caja nav"><b>editar</b><span>arrastrar/mover/borrar clip, mute, solo, piano roll → todo pasa por <code>applyOps()</code>: transaccional, con undo de 8 pasos.</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">9</div>
+      <div class="caja srv"><b>autoguardado · 1,5 s</b><span>POST <code>/api/proyectos</code> → valida que sea <code>{formato:"miuzika-proyecto", schemaVersion:1}</code> antes de escribir. <code>guardadoEn</code> delata quién escribió y cuándo.</span></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ FLUJO 2 -->
+  <div class="flujo">
+    <h2>Flujo 2 · un turno del agente</h2>
+    <p class="lead">El bucle real, con las puertas y los cortes. Los números de las ramas son los que están en el código, no intenciones.</p>
+
+    <div class="paso"><div class="n">1</div>
+      <div class="caja nav"><b>escribes en el chat</b><span><code>chat.ts</code> → <code>responderAlUsuario()</code>. Si ya hay un turno en marcha, no arranca otro.</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">2</div>
+      <div class="caja srv"><b>/api/manifiesto</b><span>regenera las firmas del motor con <code>ast</code> (8.949 caracteres) y se rehace el prompt: literal con huella + carpeta + manifiesto + memoria del proyecto.</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">3</div>
+      <div class="caja nav"><b>llm.ts → SSE</b><span>una petición por paso, en streaming, con 180 s de tope y 32.768 tokens de salida. El latido del chat enseña tokens y segundos.</span></div>
+    </div>
+    <div class="ramas">
+      <div class="rama mal"><code>load</code><span>el proveedor está cargando (0 tokens en 250 ms): <b>no</b> se repite la petición grande, se calienta con una de 1 token cada 1,5 s y luego se repite. Hasta 4 veces.</span></div>
+      <div class="rama mal"><code>sin_salida</code><span>se pasó el turno razonando: se repite <b>sin</b> razonamiento (<code>reasoning_effort:none</code>) y se usa esa respuesta.</span></div>
+      <div class="rama mal"><code>vacío</code><span>5 reintentos con espera 1-2-4-8-16 s; después <b>una</b> reanudación («continúa desde donde lo dejaste»). Si tampoco: se para y dice la causa.</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">4</div>
+      <div class="caja dec"><b>¿pide herramientas?</b><span></span></div>
+    </div>
+    <div class="ramas">
+      <div class="rama"><code>no</code><span>respuesta final → burbuja en el chat → <code>agregarTurno()</code> → <code>agente.json</code> (8 turnos + resumen). Fin del turno.</span></div>
+      <div class="rama"><code>sí</code><span>se ejecutan una por una, en orden, y el resultado vuelve al modelo. Vuelve al paso 3. Máximo 12 pasos.</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">5</div>
+      <div class="caja dec"><b>¿la herramienta toca el proyecto?</b><span>siete lo hacen: crear_proyecto, anadir_pistas, ajustar_pistas, igualar_clips, usar_sample, usar_instrumento, crear_sonido.</span></div>
+    </div>
+    <div class="ramas">
+      <div class="rama"><code>sí</code><span>se ejecuta <b>en la pestaña</b>, como una op: entra en el historial, se deshace con Ctrl+Z y la pestaña es la única que escribe el maestro.</span></div>
+      <div class="rama"><code>no</code><span>va al servidor: escribe, lanza Python, mide o busca.</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">6</div>
+      <div class="caja srv"><b>puertas del servidor</b><span>antes de tocar el disco o la GPU.</span></div>
+    </div>
+    <div class="ramas">
+      <div class="rama mal"><code>409</code><span>el fichero nuevo redefine un símbolo del motor, o se llama <code>patch*.py</code>: se rechaza y se dice dónde existe ya.</span></div>
+      <div class="rama mal"><code>413</code><span>cuerpo de más de 8 MB.</span></div>
+      <div class="rama mal"><code>409 GPU</code><span>script numpy en Lambda: se corta <b>antes</b> de encender la máquina (CPU a precio de GPU).</span></div>
+      <div class="rama"><code>smoke</code><span>si toca el motor: se importa y se renderiza un bombo; si falla, se revierte y el agente recibe el porqué.</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">7</div>
+      <div class="caja py"><b>Python o GPU</b><span><code>/api/run/python</code> (portátil, gratis) o <code>/api/run/lambda</code> (scp del motor, ssh, y vuelta de lo nuevo). La vuelta dice qué ficheros cambiaron, no el árbol entero.</span></div>
+    </div>
+    <div class="conector"><i></i></div>
+
+    <div class="paso"><div class="n">8</div>
+      <div class="caja nav"><b>resultado → modelo</b><span>si pasa de 4.000 caracteres: cabeza + cola al modelo y el texto entero a <code>_salidas/</code>. Un render de 500 líneas no viaja en el contexto.</span></div>
+    </div>
+
+    <div class="ramas">
+      <div class="rama mal"><code>3 iguales</code><span>la misma herramienta falla tres veces con el mismo texto: corta el turno (reintentar no lo arregla).</span></div>
+      <div class="rama mal"><code>3 escrituras</code><span>tres escrituras seguidas sin ejecutar nada: corta para no entrar en bucle de parches.</span></div>
+      <div class="rama mal"><code>12 pasos</code><span>corte de seguridad sin respuesta final.</span></div>
+    </div>
+  </div>
+
+  <div class="leyenda">
+    <span><i style="background:#61afef"></i>navegador</span>
+    <span><i style="background:#ff5f6d"></i>servidor de dev</span>
+    <span><i style="background:#e5c07b"></i>decisión</span>
+    <span><i style="background:#98c379"></i>motor Python / GPU</span>
+  </div>
+
+  <div class="pie">
+    Lo que no está en ningún flujo porque no existe: buses, automatización, medidores en vivo, exportación de stems o de proyecto.
+  </div>
+
+</div>
+</body>
+</html>
