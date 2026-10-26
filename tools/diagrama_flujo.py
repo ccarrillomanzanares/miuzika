@@ -142,10 +142,10 @@ def dibujar_flujo(titulo, subtitulo, calles, nodos, notas):
     """Devuelve el SVG completo y la tabla de detalle."""
     alto = (nodos[-1]["y"] + nodos[-1]["alto"] + 26) if nodos else 200
     partes = [
-        f'<svg class="diag" viewBox="0 0 {W} {alto}" width="100%" height="{alto}" role="img" '
+        f'<svg class="diag" viewBox="0 0 {W} {alto}" width="100%" preserveAspectRatio="xMinYMin meet" role="img" '
         f'aria-label="{html.escape(titulo)}">',
         f'<defs><marker id="{MARCA[0]}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">'
-        '<path d="M0,0 L8,4 L0,8 z" fill="var(--muted-foreground)"/></marker></defs>',
+        '<path d="M0,0 L8,4 L0,8 z" fill="var(--doc-muted)"/></marker></defs>',
     ]
     # calles
     for i, nombre in enumerate(calles):
@@ -299,49 +299,57 @@ NOTAS2 = {
 
 
 CSS = """
+  /* Paleta propia, con prefijo --doc-: este fichero se abre con doble clic, sin el
+     tema de la app. Con var(--doc-card) a secas, fuera de Hermes el fill es inválido y
+     las cajas salían NEGRAS con el texto negro dentro. */
+  :root{
+    --doc-bg:#0c0e13; --doc-fg:#e6e8ee; --doc-muted:#8b91a1;
+    --doc-accent:#ff5f6d; --doc-border:#2a2f3d; --doc-card:#141822;
+    color-scheme:dark;
+  }
   *,*::before,*::after{box-sizing:border-box}
-  html,body{margin:0;padding:0;background:transparent}
-  body{font-family:__FUENTE__;color:var(--foreground);font-size:13px;line-height:1.45}
-  .wrap{width:980px;max-width:100%;display:flex;flex-direction:column;gap:26px}
+  html,body{margin:0;padding:0;background:var(--doc-bg)}
+  body{font-family:__FUENTE__;color:var(--doc-fg);font-size:13px;line-height:1.45;padding:18px 20px 28px}
+  .wrap{width:100%;max-width:1040px;display:flex;flex-direction:column;gap:26px}
   h1{font-size:15px;font-weight:650;margin:0}
-  h2{font-size:12px;font-weight:600;margin:0;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
-  .lead{font-size:11.5px;color:var(--muted-foreground);margin:2px 0 0}
+  h2{font-size:12px;font-weight:600;margin:0;text-transform:uppercase;letter-spacing:.08em;color:var(--doc-muted)}
+  .lead{font-size:11.5px;color:var(--doc-muted);margin:2px 0 0}
 
-  .diag{display:block;margin:10px 0 14px;overflow:visible}
-  .calle{fill:color-mix(in oklab, var(--card) 46%, transparent);stroke:var(--border);stroke-width:1}
-  .cc{fill:var(--muted-foreground);font-size:9.5px;letter-spacing:.10em;text-transform:uppercase;font-weight:600}
-  .forma{fill:color-mix(in oklab, var(--card) 92%, transparent);stroke:var(--border);stroke-width:1.2}
-  .forma.e{fill:color-mix(in oklab, var(--accent) 12%, var(--card));stroke:color-mix(in oklab, var(--accent) 55%, var(--border))}
-  .forma.d{fill:color-mix(in oklab, #e5c07b 10%, var(--card));stroke:color-mix(in oklab, #e5c07b 45%, var(--border))}
-  .forma.b{fill:color-mix(in oklab, #61afef 9%, var(--card));stroke:color-mix(in oklab, #61afef 40%, var(--border));stroke-dasharray:4 2}
-  .t{fill:var(--foreground);font-size:10.5px;font-weight:600}
-  .s{fill:var(--muted-foreground);font-size:9.4px}
-  .sn{fill:color-mix(in oklab, var(--accent) 78%, var(--foreground));font-size:8.5px;font-weight:600}
-  .n{fill:var(--muted-foreground);font-size:8px;font-family:__MONO__}
-  .f{fill:none;stroke:var(--muted-foreground);stroke-width:1.1;opacity:.85}
+  .diag{display:block;width:100%;height:auto;margin:10px 0 14px;overflow:visible}
+  .calle{fill:color-mix(in oklab, var(--doc-card) 46%, transparent);stroke:var(--doc-border);stroke-width:1}
+  .cc{fill:var(--doc-muted);font-size:9.5px;letter-spacing:.10em;text-transform:uppercase;font-weight:600}
+  .forma{fill:color-mix(in oklab, var(--doc-card) 92%, transparent);stroke:var(--doc-border);stroke-width:1.2}
+  .forma.e{fill:color-mix(in oklab, var(--doc-accent) 12%, var(--doc-card));stroke:color-mix(in oklab, var(--doc-accent) 55%, var(--doc-border))}
+  .forma.d{fill:color-mix(in oklab, #e5c07b 10%, var(--doc-card));stroke:color-mix(in oklab, #e5c07b 45%, var(--doc-border))}
+  .forma.b{fill:color-mix(in oklab, #61afef 9%, var(--doc-card));stroke:color-mix(in oklab, #61afef 40%, var(--doc-border));stroke-dasharray:4 2}
+  .t{fill:var(--doc-fg);font-size:10.5px;font-weight:600}
+  .s{fill:var(--doc-muted);font-size:9.4px}
+  .sn{fill:color-mix(in oklab, var(--doc-accent) 78%, var(--doc-fg));font-size:8.5px;font-weight:600}
+  .n{fill:var(--doc-muted);font-size:8px;font-family:__MONO__}
+  .f{fill:none;stroke:var(--doc-muted);stroke-width:1.1;opacity:.85}
   .f.bucle{stroke-dasharray:5 3;opacity:.7}
-  .etq{fill:var(--muted-foreground);font-size:8.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
-  .etq2{fill:var(--muted-foreground);font-size:8px;opacity:.8}
+  .etq{fill:var(--doc-muted);font-size:8.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .etq2{fill:var(--doc-muted);font-size:8px;opacity:.8}
 
   table{border-collapse:collapse;width:100%;font-size:10.8px;margin-top:6px}
-  th{text-align:left;font-weight:600;color:var(--muted-foreground);font-size:9.5px;text-transform:uppercase;
-     letter-spacing:.06em;padding:0 10px 5px 0;border-bottom:1px solid var(--border)}
-  td{padding:5px 10px 5px 0;border-bottom:1px solid color-mix(in oklab,var(--border) 50%,transparent);vertical-align:top}
-  td:first-child{color:var(--muted-foreground);font-family:__MONO__;font-size:9.5px;width:22px}
+  th{text-align:left;font-weight:600;color:var(--doc-muted);font-size:9.5px;text-transform:uppercase;
+     letter-spacing:.06em;padding:0 10px 5px 0;border-bottom:1px solid var(--doc-border)}
+  td{padding:5px 10px 5px 0;border-bottom:1px solid color-mix(in oklab,var(--doc-border) 50%,transparent);vertical-align:top}
+  td:first-child{color:var(--doc-muted);font-family:__MONO__;font-size:9.5px;width:22px}
   td:nth-child(2){width:190px}
-  td:nth-child(2) code{font-family:__MONO__;font-size:10px;color:var(--foreground)}
+  td:nth-child(2) code{font-family:__MONO__;font-size:10px;color:var(--doc-fg)}
   td:nth-child(3){width:300px}
-  td:nth-child(4){color:var(--muted-foreground)}
+  td:nth-child(4){color:var(--doc-muted)}
 
-  .leyenda{display:flex;gap:18px;flex-wrap:wrap;font-size:10px;color:var(--muted-foreground);align-items:center}
-  .leyenda b{font-weight:600;color:var(--foreground)}
+  .leyenda{display:flex;gap:18px;flex-wrap:wrap;font-size:10px;color:var(--doc-muted);align-items:center}
+  .leyenda b{font-weight:600;color:var(--doc-fg)}
   .muestra{display:inline-flex;align-items:center;gap:6px}
-  .muestra i{display:block;width:22px;height:11px;border:1.2px solid var(--border);background:color-mix(in oklab,var(--card) 92%,transparent)}
-  .muestra i.rombo{width:16px;height:16px;transform:rotate(45deg);border-color:color-mix(in oklab,#e5c07b 45%,var(--border))}
-  .muestra i.datos{transform:skewX(-18deg);border-style:dashed;border-color:color-mix(in oklab,#61afef 40%,var(--border))}
-  .muestra i.oval{border-radius:9px;border-color:color-mix(in oklab,var(--accent) 55%,var(--border))}
-  .seccion{border:1px solid var(--border);border-radius:12px;padding:16px 18px 18px}
-  .nota{font-size:10px;color:var(--muted-foreground);border-top:1px solid var(--border);padding-top:9px;margin-top:12px}
+  .muestra i{display:block;width:22px;height:11px;border:1.2px solid var(--doc-border);background:color-mix(in oklab,var(--doc-card) 92%,transparent)}
+  .muestra i.rombo{width:16px;height:16px;transform:rotate(45deg);border-color:color-mix(in oklab,#e5c07b 45%,var(--doc-border))}
+  .muestra i.datos{transform:skewX(-18deg);border-style:dashed;border-color:color-mix(in oklab,#61afef 40%,var(--doc-border))}
+  .muestra i.oval{border-radius:9px;border-color:color-mix(in oklab,var(--doc-accent) 55%,var(--doc-border))}
+  .seccion{border:1px solid var(--doc-border);border-radius:12px;padding:16px 18px 18px}
+  .nota{font-size:10px;color:var(--doc-muted);border-top:1px solid var(--doc-border);padding-top:9px;margin-top:12px}
 """
 
 
