@@ -3,10 +3,9 @@ import numpy as np
 
 SR = 44100
 
-# Tempo del proyecto. Debe coincidir con cancion.BPM (smoke.py lo comprueba).
-BPM = 90.0
-SPB = 60.0 / BPM      # segundos por pulso (negra)
-BAR = 4.0 * SPB       # segundos por compas (4/4)
+# Aquí NO hay tempo: la biblioteca no tiene canción. Cada obra calcula su
+# SPB = 60/BPM y su BAR con SU tempo (los tenía metidos a 90 BPM de una obra
+# concreta, y el smoke test obligaba a que siguieran casando con ella).
 
 # ---------------------------------------------------------------- basicos
 def db2lin(db):

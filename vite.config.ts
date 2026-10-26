@@ -388,7 +388,7 @@ export default defineConfig(({ mode }) => {
     });
 
   /** Ficheros que forman el motor: reescribirlos exige pasar el smoke test. */
-  const MOTOR = new Set(["dsp.py", "instruments.py", "render.py", "midi.py", "cancion.py"]);
+  const MOTOR = new Set(["dsp.py", "instruments.py", "render.py", "midi.py"]);
 
   /** ¿Es codigo del motor? Valen los dos: el numpy de codigo/ y el de GPU en gpu/. */
   const esDeCodigo = (ruta: string): boolean => {
@@ -1592,7 +1592,7 @@ export default defineConfig(({ mode }) => {
               // de arrancar la máquina, que es lo caro.
               const fuente = readFileSync(script, "utf8");
               const usaGpu = /\b(?:from|import)\s+motor_gpu\b/.test(fuente) || /\btorch\b/.test(fuente);
-              const usaNumpy = /\b(?:from|import)\s+(?:dsp|instruments|render|cancion)\b/.test(fuente);
+              const usaNumpy = /\b(?:from|import)\s+(?:dsp|instruments|render|midi|cancion|tema)\b/.test(fuente);
               if (usaNumpy && !usaGpu) {
                 anotar(
                   ficheroHerramientas,

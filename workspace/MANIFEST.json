@@ -1,54 +1,8 @@
 {
- "generado": "2026-10-26T08:07:38",
+ "generado": "2026-10-26T08:22:25",
  "raiz": "workspace/",
  "regla": "Estos simbolos YA existen. Reutilizalos con 'from <modulo> import <simbolo>'. Escribir un fichero nuevo que los redefina sera rechazado (409).",
  "modulos": {
-  "cancion": {
-   "archivo": "codigo/cancion.py",
-   "importa_de": [],
-   "simbolos": {
-    "bar_de": {
-     "tipo": "funcion",
-     "firma": "(t)",
-     "doc": ""
-    },
-    "t_de": {
-     "tipo": "funcion",
-     "firma": "(bar)",
-     "doc": ""
-    },
-    "acorde_de": {
-     "tipo": "funcion",
-     "firma": "(bar)",
-     "doc": ""
-    },
-    "silabas": {
-     "tipo": "funcion",
-     "firma": "(palabra)",
-     "doc": ""
-    },
-    "desglosar": {
-     "tipo": "funcion",
-     "firma": "(texto)",
-     "doc": "devuelve [(vocal, consonante_inicial)] por silaba"
-    },
-    "ajustar": {
-     "tipo": "funcion",
-     "firma": "(cont, n)",
-     "doc": ""
-    },
-    "linea": {
-     "tipo": "funcion",
-     "firma": "(texto, bar, beats, cont, vel=1.0)",
-     "doc": "devuelve [(t_seg, dur_seg, midi, vocal, cons, vel)]"
-    },
-    "silabas_voz": {
-     "tipo": "funcion",
-     "firma": "()",
-     "doc": ""
-    }
-   }
-  },
   "dsp": {
    "archivo": "codigo/dsp.py",
    "importa_de": [],
@@ -305,8 +259,7 @@
   "render": {
    "archivo": "codigo/render.py",
    "importa_de": [
-    "dsp",
-    "midi"
+    "dsp"
    ],
    "simbolos": {
     "log": {
@@ -360,56 +313,6 @@
     "midi_add": {
      "tipo": "funcion",
      "firma": "(track, start_beat, dur_beat, pitch, vel)",
-     "doc": ""
-    },
-    "gen_bateria": {
-     "tipo": "funcion",
-     "firma": "(stem, master)",
-     "doc": ""
-    },
-    "gen_bajo": {
-     "tipo": "funcion",
-     "firma": "(stem, master)",
-     "doc": ""
-    },
-    "gen_drone": {
-     "tipo": "funcion",
-     "firma": "(stem, master)",
-     "doc": ""
-    },
-    "gen_organo": {
-     "tipo": "funcion",
-     "firma": "(stem, master)",
-     "doc": ""
-    },
-    "gen_guitarra": {
-     "tipo": "funcion",
-     "firma": "(stem, master)",
-     "doc": ""
-    },
-    "cadena_voz": {
-     "tipo": "funcion",
-     "firma": "(x, drive=1.0, rev_mix=0.16, dly_mix=0.2, sil=None, bright=1.0)",
-     "doc": ""
-    },
-    "gen_voz": {
-     "tipo": "funcion",
-     "firma": "(stem, master)",
-     "doc": ""
-    },
-    "gen_piano": {
-     "tipo": "funcion",
-     "firma": "(stem, master)",
-     "doc": ""
-    },
-    "gen_fx": {
-     "tipo": "funcion",
-     "firma": "(stem, master)",
-     "doc": ""
-    },
-    "masterizar": {
-     "tipo": "funcion",
-     "firma": "(master)",
      "doc": ""
     }
    }

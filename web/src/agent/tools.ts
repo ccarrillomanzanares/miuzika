@@ -278,7 +278,7 @@ export const HERRAMIENTAS: ToolSpec[] = [
       name: "escribir_fichero",
       description:
         "Escribe o sobrescribe un fichero de texto dentro de 'workspace/'. El MOTOR YA EXISTE " +
-        "en codigo/ (dsp, instruments, render, midi, cancion): NO lo reescribas ni redefinas sus " +
+        "en codigo/ (dsp, instruments, render, midi): NO lo reescribas ni redefinas sus " +
         "funciones, importalas. Un fichero nuevo que redefina un simbolo del motor es RECHAZADO " +
         "(409), igual que los scripts patch*/parche* (para eso esta editar_fichero). " +
         "Para un sample rapido: copia plantillas/one_shot.py y cambia PARAMS.",
@@ -718,7 +718,10 @@ async function ejecutarCrudo(
           path: args.path,
           contenido: args.contenido,
         });
-        return { ok: true, texto: `Escrito ${datos.path} (${datos.bytes} bytes).` };
+        // `nota` dice si el motor pasó el smoke test (o que en gpu/ sólo se ha
+        // comprobado la sintaxis): es la prueba de que el cambio es seguro.
+        const nota = typeof datos.nota === "string" && datos.nota !== "" ? ` ${datos.nota}` : "";
+        return { ok: true, texto: `Escrito ${datos.path} (${datos.bytes} bytes).${nota}` };
       }
       case "leer_fichero": {
         const datos = await pedirJson("/api/fs/read", { path: args.path });

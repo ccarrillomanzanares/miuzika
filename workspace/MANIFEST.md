@@ -2,15 +2,6 @@
 
 Reutiliza estos simbolos; NO los redefinas.
 
-- **codigo/cancion.py**  (importa de: -)
-    - `bar_de(t)`
-    - `t_de(bar)`
-    - `acorde_de(bar)`
-    - `silabas(palabra)`
-    - `desglosar(texto)`  -- devuelve [(vocal, consonante_inicial)] por silaba
-    - `ajustar(cont, n)`
-    - `linea(texto, bar, beats, cont, vel=1.0)`  -- devuelve [(t_seg, dur_seg, midi, vocal, cons, vel)]
-    - `silabas_voz()`
 - **codigo/dsp.py**  (importa de: -)
     - `db2lin(db)`
     - `lin2db(x)`
@@ -60,7 +51,7 @@ Reutiliza estos simbolos; NO los redefinas.
     - `palmada(vel=1.0, pitch=1.0, dur=0.3, seed=0)`  -- Palmada de manos: tres golpes de ruido muy juntos y cola corta.
 - **codigo/midi.py**  (importa de: -)
     - `write_midi(path, tracks, bpm=90.0, ppq=480, name='miuzika')`  -- tracks: lista de dicts {name, channel, program, notes=[(start_beats, dur_beats, pitch, vel)]}
-- **codigo/render.py**  (importa de: dsp, midi)
+- **codigo/render.py**  (importa de: dsp)
     - `log(msg)`
     - `pcm_bytes(x, width=3)`
     - `riff_header(sr, ch, width, data_size)`
@@ -71,16 +62,6 @@ Reutiliza estos simbolos; NO los redefinas.
     - `reverb_st(x, ir_l, ir_r, mix=0.2)`
     - `actividad(sil, n)`
     - `midi_add(track, start_beat, dur_beat, pitch, vel)`
-    - `gen_bateria(stem, master)`
-    - `gen_bajo(stem, master)`
-    - `gen_drone(stem, master)`
-    - `gen_organo(stem, master)`
-    - `gen_guitarra(stem, master)`
-    - `cadena_voz(x, drive=1.0, rev_mix=0.16, dly_mix=0.2, sil=None, bright=1.0)`
-    - `gen_voz(stem, master)`
-    - `gen_piano(stem, master)`
-    - `gen_fx(stem, master)`
-    - `masterizar(master)`
 - **codigo/voces.py**  (importa de: -)
     - `voces(excluidas=None)`  -- Lista de voces del motor, con sus parámetros tal como están en el código.
     - `voces_gpu(ruta=None)`  -- Voces del motor de GPU, leídas del código con `ast` (sin torch).

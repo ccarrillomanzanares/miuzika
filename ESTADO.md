@@ -25,7 +25,32 @@ estaba mal, con medida antes/después:
 
 Puertas: `tsc` 0 · **121** tests (5 nuevos) · OPENDAW OK · `build:web` OK.
 
-## 2. Lo que funciona hoy
+## 2. Biblioteca y obra, separadas (misma sesión)
+
+El motor mezclaba dos cosas y el agente importaba la segunda creyendo que era la
+primera: `cancion.py` (140 compases a 90 BPM de *«quiéreme despacio»*) estaba en
+`codigo/`, en el manifiesto y blindado por el smoke, y **`dsp.py` llevaba el tempo
+dentro** (`BPM = 90.0`). Medido: cualquier script que usara `dsp.SPB` componía en el
+compás de otra canción.
+
+Ahora:
+
+```text
+workspace/codigo/render.py      150 líneas  biblioteca (place, reverb_st, StemWriter…)
+workspace/codigo/dsp.py         302 líneas  sin BPM, sin SPB, sin BAR
+workspace/herramientas/smoke.py            sin cancion, sin tempo
+workspace/obras/quereme-despacio/
+    cancion.py                  250 líneas  datos de la obra
+    tema.py                     476 líneas  sus gen_* y su master
+workspace/_archivo/experimental-26oct/    21 scripts del agente, archivados
+```
+
+El manifiesto que ve el agente pasó de 9.694 a **8.949 caracteres** y ya no lista
+`cancion`. `render` sigue dentro: es biblioteca de verdad y la usan
+`proyectos/stahl` y `proyectos/ghosts-again`. El prompt de sistema cambió una línea
+(la lista del motor) y su huella: `fa680222` → `fc68ad65`.
+
+## 3. Lo que funciona hoy
 
 - **Disco como verdad**: `proyectos/<slug>/proyecto.json` + WAV por ruta. Sin IndexedDB.
 - **Arranque limpio**: no abre ningún proyecto; se elige con «Proyectos».
@@ -40,20 +65,16 @@ Puertas: `tsc` 0 · **121** tests (5 nuevos) · OPENDAW OK · `build:web` OK.
   de salida, segunda pasada con `reasoning_effort: "none"` si el turno se va razonando.
 - **Progreso visible**: burbuja en el chat con tokens y segundos.
 
-## 3. Lo que sigue roto o a medias
+## 4. Lo que sigue roto o a medias
 
 1. **El agente no entrega piezas de forma fiable**: se le pide la canción entera en un
-   turno (15-20 pasos sin checkpoints) y un fallo tira todo el trabajo.
-2. **`codigo/` mezcla biblioteca y obra**: `cancion.py` (140 compases a 90 BPM de una
-   canción concreta) y `render.py` aparecen en el manifiesto como API. El agente los
-   importa y hereda el tempo de otra obra. **Es la deuda más gorda.**
-3. **Mezcla**: sin empezar. Sin buses, sin automatización, sin medidores en vivo, y
+   turno (15-20 pasos sin checkpoints) y un fallo tira todo el trabajo. De ahí la
+   propuesta de la partitura como dato.
+2. **Mezcla**: sin empezar. Sin buses, sin automatización, sin medidores en vivo, y
    `set_device` en unidades 0..1 en vez de Hz/dB/ms.
-4. **`theory.ts` y `parecidosA`** existen, tienen tests y nadie los llama.
-5. **`codigo/experimental/`**: 20 ficheros del agente, con dos `render_final*.py` que
-   reimplementan el motor.
+3. **`theory.ts` y `parecidosA`** existen, tienen tests y nadie los llama.
 
-## 4. Cómo empezar la próxima sesión
+## 5. Cómo empezar la próxima sesión
 
 1. `npx tsc --noEmit` y `npm run test:unit` → 121 tests en verde, 0 errores.
 2. `npm run dev` y la app en `localhost:5173` (sólo `[::1]`).

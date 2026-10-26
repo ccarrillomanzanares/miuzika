@@ -1,7 +1,11 @@
 """Smoke test del motor de workspace/codigo.
 
-Importa todos los modulos y renderiza 0,5 s de un bombo para comprobar que el motor
-sigue usable. Sale 0 si todo va bien; imprime el motivo si falla.
+Importa los módulos del motor y renderiza un bombo y una caja para comprobar que
+sigue usable: audio con señal, nota afinada y reverb estéreo con la forma correcta.
+Sale 0 si todo va bien; imprime el motivo si falla.
+
+Ojo: aquí NO entra ninguna obra (obras/<slug>/cancion.py): la biblioteca no tiene
+canción y el smoke no debe depender de ninguna.
 
 Uso: python herramientas/smoke.py
 """
@@ -18,7 +22,6 @@ def main() -> int:
     try:
         import numpy as np
 
-        import cancion
         import dsp
         import instruments
         import midi
@@ -36,14 +39,6 @@ def main() -> int:
         if not (200.0 < hz < 230.0):
             print(f"FALLO: note_hz(57)={hz:.2f}, se esperaba ~220")
             return 1
-        spb = 60.0 / float(cancion.BPM)
-        if abs(dsp.SPB - spb) > 1e-9 or abs(dsp.BAR - 4.0 * spb) > 1e-9:
-            print(
-                f"FALLO: tempo desincronizado. dsp.SPB={dsp.SPB:.6f} BAR={dsp.BAR:.6f} "
-                f"pero cancion.BPM={cancion.BPM} implica SPB={spb:.6f}"
-            )
-            return 1
-
         # reverb_st debe devolver la MISMA forma que la entrada: reverb() añade la
         # cola del IR (len(ir)-1 muestras) y sin recortar la mezcla revienta.
         golpe = np.asarray(instruments.snare(vel=1.0), dtype=np.float32)
@@ -60,7 +55,7 @@ def main() -> int:
             print("FALLO: reverb_st devuelve señal vacia o con NaN/inf")
             return 1
         print(f"smoke OK: kick {len(x)} muestras, rms={rms:.4f}, pico={pico:.4f}, A3={hz:.2f}Hz")
-        print("modulos importados: cancion, dsp, instruments, midi, render")
+        print("modulos importados: dsp, instruments, midi, render")
         return 0
     except Exception:
         print("FALLO en el smoke test:")

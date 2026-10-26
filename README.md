@@ -501,9 +501,13 @@ Tres cosas distintas, cada una en su sitio:
 ### Pendiente
 
 El estado real, con medidas, vive en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-§11. Lo primero de la lista: **separar biblioteca y obra** en `workspace/codigo/`
-(`cancion.py` y `render.py` son una canción concreta, no API reutilizable), y la
-**partitura como dato** (propuesta sin aceptar).
+§11. Lo primero de la lista: la **partitura como dato** (propuesta sin aceptar) y la
+**mezcla** (buses, automatización, unidades reales).
+
+El motor y las obras están separados: `workspace/codigo/` es biblioteca reutilizable
+(`dsp`, `instruments`, `midi`, `render`) y `workspace/obras/<slug>/` guarda una
+canción concreta (`cancion.py` + `tema.py`). El manifiesto que ve el agente sólo
+lista lo primero.
 
 ## Licencia
 

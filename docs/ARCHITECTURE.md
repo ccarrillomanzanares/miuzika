@@ -65,9 +65,11 @@ dentro de `npm run dev`. Si Vite no corre, no hay app.
            │ spawn python -u                              │ ssh / scp
 ┌──────────▼───────────────────────────┐   ┌──────────────▼─────────────────────┐
 │  MOTOR numpy  workspace/codigo/      │   │  MOTOR torch  workspace/gpu/       │
-│  dsp · instruments · midi            │   │  motor_gpu · voces_gpu             │
-│  render · cancion  ← obra, no API    │   │  (sólo en Lambda)                  │
-│  voces · gate_voz · sfz2sf2 …        │   │                                    │
+│  dsp · instruments · midi · render   │   │  motor_gpu · voces_gpu             │
+│  voces · gate_voz · sfz2sf2 …        │   │  (sólo en Lambda)                  │
+│                                      │   │                                    │
+│  OBRAS  workspace/obras/<slug>/      │   │  ← aquí, y sólo aquí, vive una     │
+│  cancion.py (datos) + tema.py        │   │    canción concreta                │
 └──────────────────────────────────────┘   └────────────────────────────────────┘
 ```
 
@@ -208,8 +210,9 @@ workspace/
 ├── herramientas/          ← manifiesto, picos, verificar_audio, midi_lector, smoke
 ├── plantillas/            ← one_shot.py y demás
 ├── catalogo/              ← 4.231 samples CC0 de VCSL (9,6 GB, gitignored)
+├── obras/<slug>/          ← cancion.py (datos) + tema.py (arreglo): UNA canción, no API
 ├── _salidas/              ← salidas largas de herramientas (fuera del proyecto a propósito)
-└── _referencias/, _archivo/
+├── _referencias/, _archivo/
 ```
 
 **`_salidas/` está fuera del proyecto y es compartida** por un motivo concreto: el
@@ -285,20 +288,45 @@ si la respuesta pasa de 4.000 caracteres se recorta y se guarda entera en `_sali
 | qué hace | timbres, MIDI, mezcla, análisis, catálogo | saturación ×4, IR estéreo, reverb FFT, shimmer, granular, compresor multibanda, voces pesadas |
 | qué **no** hace | nada de GPU | **no escribe `.mid`** |
 
-### La deuda central: el «motor» son dos cosas distintas
+### Biblioteca y obra: separadas el 26-oct
 
-`codigo/` mezcla, en la misma carpeta y con el mismo estatus en el manifiesto:
+`codigo/` mezclaba dos cosas con el mismo estatus en el manifiesto, y el agente
+importaba la segunda creyendo que era la primera:
 
-- **biblioteca reutilizable**: `dsp.py` (filtros, STFT, reverb, LUFS, crest),
-  `instruments.py` (timbres), `midi.py` (escritor MIDI), `voces.py`, `gate_voz.py`,
+- **la biblioteca** — `dsp.py` (filtros, STFT, reverb, LUFS, crest), `instruments.py`
+  (24 timbres), `midi.py` (escritor MIDI), `render.py` (utilidades de mezcla:
+  `place`, `reverb_st`, `StemWriter`, `write_wav`), `voces.py`, `gate_voz.py`,
   `sfz2sf2.py`, `catalogo.py`, `importar_sample.py`;
-- **una obra concreta**: `cancion.py` (BPM 90, 140 compases, secciones y armonía de
-  «quiéreme despacio») y `render.py` (el arreglo que la convierte en stems).
+- **una obra** — `cancion.py` (140 compases a 90 BPM, secciones, armonía, letra) y el
+  `render.py` de antes, que era el arreglo de **esa** canción.
 
-El manifiesto se lo presenta al agente como si todo fuera API. El agente importa
-`cancion` y hereda el tempo y la estructura de otra canción. **Esto es lo primero que
-hay que separar**: `cancion.py` y `render.py` a `workspace/obras/<slug>/` y el
-manifiesto sin ellos. No lo he hecho porque cambia lo que el agente ve.
+Lo que estaba mal, en concreto:
+
+1. `cancion.py` se llamaba como si fuera infraestructura: el agente lo importaba y
+   heredaba el tempo y la forma de otra canción.
+2. **`dsp.py` llevaba el tempo dentro** (`BPM = 90.0`, `SPB`, `BAR`) y el smoke test
+   *obligaba* a que siguiera casando con `cancion.BPM`: un candado que impedía
+   arreglarlo sin tocar dos ficheros.
+3. `render.py` era mitad biblioteca (lo que usan `proyectos/stahl` y
+   `proyectos/ghosts-again`) y mitad obra.
+
+Ahora:
+
+```text
+workspace/codigo/render.py            150 líneas · biblioteca (place, reverb_st, StemWriter…)
+workspace/codigo/dsp.py               302 líneas · sin BPM, sin SPB, sin BAR
+workspace/herramientas/smoke.py                  · sin cancion, sin tempo
+workspace/obras/quereme-despacio/
+    cancion.py                        250 líneas · datos de la obra
+    tema.py                           476 líneas · sus gen_* y su master
+workspace/_archivo/experimental-26oct/           · 21 scripts del agente, archivados
+```
+
+El manifiesto ya no lista `cancion` (7 módulos, 8,9 KB de firmas). `render` sigue
+apareciendo: es biblioteca de verdad y la usan dos proyectos.
+
+`obras/` no está en las carpetas compartidas a propósito: se llega a ella con una ruta
+explícita (`obras/<slug>/...`) desde el proyecto, no por el atajo de `COMPARTIDO`.
 
 ### El reparto, en la práctica
 
@@ -307,7 +335,7 @@ manifiesto sin ellos. No lo he hecho porque cambia lo que el agente ve.
 - MIDI y muestras rápidas → numpy local, gratis.
 - **Un script numpy en Lambda es CPU a precio de GPU**, y el servidor lo rechaza
   (409) *antes* de encender la máquina: lee el fuente y, si importa
-  `dsp`/`instruments`/`render`/`cancion` sin `motor_gpu`, corta.
+  `dsp`/`instruments`/`render`/`midi`/`cancion`/`tema` sin `motor_gpu`, corta.
 
 ---
 
@@ -369,23 +397,22 @@ await __miuzika.herramienta('anadir_pistas', JSON.stringify({ wavs:['salida/x.wa
 | alias `oboe` con «е» cirílica | el oboe no se reconocía | arreglado |
 | `boot()` con 50 líneas muertas | prometía abrir el último proyecto (ya no lo hace) | arranque limpio real |
 | `leerCuerpo` sin tope | un POST de 9 MB se comía la memoria | 413 por encima de 8 MB |
+| el motor mezclaba biblioteca y obra | `cancion.py` y el `render.py` de una obra en el manifiesto; `dsp.BPM = 90` con un smoke que lo blindaba | biblioteca en `codigo/`, obra en `obras/quereme-despacio/`, `dsp` sin tempo |
+| `codigo/experimental/` | 21 scripts del agente, dos reimplementando el motor | archivados en `_archivo/experimental-26oct/` |
+| prompt en reposo | sin manifiesto (salida temprana en `cargarAgenteDelProyecto`) | 2.890 → 11.939 caracteres con manifiesto y contexto |
 
 **Pendiente, por orden de importancia:**
 
-1. **Separar biblioteca de obra** en `codigo/` (§8). Es lo que más confunde al agente.
-2. **Partitura como dato**: que la canción sea un `partitura.json` validado y un
+1. **Partitura como dato**: que la canción sea un `partitura.json` validado y un
    renderizador fijo, en vez de un guion Python por pieza. Propuesto, sin aceptar.
-3. **Mezcla**: no hay buses, ni automatización, ni medidores en vivo. `set_device`
+2. **Mezcla**: no hay buses, ni automatización, ni medidores en vivo. `set_device`
    existe pero con unidades normalizadas 0..1, no en Hz/dB/ms.
-4. **`parecidosA`** (búsqueda por parecido acústico) y **`theory.ts`** (acordes,
+3. **`parecidosA`** (búsqueda por parecido acústico) y **`theory.ts`** (acordes,
    grados, voicings) existen y tienen tests, pero **no están conectados** a ninguna
    herramienta: nadie los llama.
-5. **`codigo/experimental/`** acumula 20 ficheros del agente, incluidos dos
-   `render_final*.py` de 484 y 279 líneas que reimplementan el motor. Es justo lo que
-   la puerta intenta impedir; están ahí por haber nacido antes que ella.
-6. **`openDawToProject`** sólo lo usa la prueba de contrato, no la UI: no hay
+4. **`openDawToProject`** sólo lo usa la prueba de contrato, no la UI: no hay
    importación de `.odw` desde la app.
-7. Tres clases CSS usadas sin estilo (`.cancel`, `.code-example`, `.texto`).
+5. Tres clases CSS usadas sin estilo (`.cancel`, `.code-example`, `.texto`).
 
 ---
 

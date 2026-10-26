@@ -108,8 +108,7 @@
           <div class="caja"><b>instruments.py</b><span>24 voces</span></div>
           <div class="caja"><b>midi.py</b><span>escritor MIDI</span></div>
           <div class="caja"><b>voces · gate_voz</b><span>catálogo y puerta</span></div>
-          <div class="caja" style="border-style:dashed"><b>cancion.py</b><span>140 compases a 90 BPM: UNA obra, no una API</span></div>
-          <div class="caja" style="border-style:dashed"><b>render.py</b><span>el arreglo de esa obra</span></div>
+          <div class="caja"><b>render.py</b><span>utilidades de mezcla: place, reverb_st, StemWriter</span></div>
         </div>
       </div>
       <div class="capa gpu">
@@ -122,6 +121,15 @@
       </div>
     </div>
 
+  </div>
+
+  <div class="capa" style="border-style:dashed">
+    <header><b>Obras</b><em>workspace/obras/&lt;slug&gt; · no es motor</em></header>
+    <div class="cajas c2">
+      <div class="caja"><b>cancion.py</b><span>datos de UNA canción: 140 compases a 90 BPM, secciones, armonía</span></div>
+      <div class="caja"><b>tema.py</b><span>su arreglo: gen_* y master, con el tempo de ella</span></div>
+    </div>
+    <div class="sub" style="margin-top:8px">Fuera del manifiesto a propósito: el agente no la ve como API. <code>dsp</code> ya no lleva tempo dentro.</div>
   </div>
 
   <div>
@@ -169,13 +177,14 @@
       <tr><td>abrir 21 pistas / 11 WAV</td><td>38 s</td><td class="ok">16,8 s en frío · 0,5 s en caliente</td></tr>
       <tr><td>reintento sin razonamiento</td><td>su texto se descartaba</td><td class="ok">se usa la respuesta del reintento</td></tr>
       <tr><td>clip mal nombrado en pista de un solo clip</td><td>borraba el bueno</td><td class="ok">error con la lista de clips</td></tr>
+      <tr><td>biblioteca y obra mezcladas en el motor</td><td><code>cancion.py</code> y el <code>render.py</code> de una obra en el manifiesto; <code>dsp.BPM=90</code> blindado por el smoke</td><td class="ok">biblioteca en <code>codigo/</code>, obra en <code>obras/</code></td></tr>
     </table>
   </div>
 
   <div class="pie">
     Documento completo y deuda pendiente: <code>docs/ARCHITECTURE.md</code>.
-    Lo pendiente más gordo, en orden: separar biblioteca y obra en <code>codigo/</code>;
-    la partitura como dato; y la mezcla (buses, automatización, unidades reales).
+    Lo pendiente más gordo, en orden: la partitura como dato; y la mezcla (buses,
+    automatización, unidades reales).
   </div>
 
 </div>

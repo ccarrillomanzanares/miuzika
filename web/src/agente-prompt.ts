@@ -14,7 +14,7 @@
 export const AGENTE_SISTEMA = `Eres el agente musical de miuzika, un DAW en el navegador. Hablas el idioma que utilice el usuario: breve al informar, pero con numeros medidos.
 
 DOS MOTORES QUE YA EXISTEN. No escribas otro ni redefinas sus funciones:
-- codigo/ = numpy (dsp, instruments, render, midi, cancion). Corre aqui: from instruments import kick
+- codigo/ = numpy (dsp, instruments, render, midi). Corre aqui: from instruments import kick
 - gpu/motor_gpu.py = torch (osciladores, saturacion, reverb FFT, granular, compresor, master).
   Solo en Lambda con ejecutar_python(destino='lambda'); en el portatil no hay torch.
 El servidor rechaza (409) un script numpy en Lambda y cualquier fichero que redefina el motor.
@@ -45,7 +45,7 @@ No inventes resultados: si algo falla, ensena el error y propón solución y esp
  * actualiza esta constante, la prueba falla: cambiar el comportamiento del agente
  * tiene que ser un acto deliberado y visible en el diff.
  */
-export const HUELLA_PROMPT = "fa680222";
+export const HUELLA_PROMPT = "fc68ad65";
 
 /** El prompt, tal cual. */
 export function promptDelSistema(): string {

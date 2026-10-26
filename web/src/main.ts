@@ -1545,7 +1545,10 @@ async function crearSonidoDesdeAgente(
       `WAV: ${rutaWav}`,
       medidas ? `Medidas: ${medidas}` : "",
       ...avisos.map((a) => `- ${a}`),
-      `Para oirlo en la cancion: anadir_pistas(wavs=["${rutaWav}"], compases=<los del tema>).`,
+      // Ruta RELATIVA al proyecto (la convención de todo lo demás): el servidor la
+      // resuelve dentro de proyectos/<slug>/. Con "proyectos/<slug>/..." también
+      // funcionaba, pero el agente acababa mezclando las dos formas.
+      `Para oirlo en la cancion: anadir_pistas(wavs=["${rutaWavDeSonido(receta)}"], compases=<los del tema>).`,
     ]
       .filter((l) => l !== "")
       .join("\n");
@@ -2480,6 +2483,11 @@ async function boot(): Promise<void> {
   // Proyecto de la versión anterior (localStorage + IndexedDB) -> disco.
   const migracion = await migrarProyectoAntiguo();
   setProject(null, false);
+  // `cargarAgenteDelProyecto` sale antes cuando el slug no cambia ("" -> ""), así que
+  // el prompt de sistema se quedaba con el texto pelado: sin manifiesto y sin la
+  // línea del proyecto. El turno lo refresca igual antes de enviar, pero el estado en
+  // reposo mentía a quien lo mirase (y a `__miuzika.conversacion`).
+  await refrescarManifiesto();
   setPlaying(false);
   ready = true;
   updateActions();

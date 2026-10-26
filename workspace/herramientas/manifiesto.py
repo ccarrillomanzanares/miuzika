@@ -19,7 +19,9 @@ MD_OUT = RAIZ / "MANIFEST.md"
 
 # Modulos que forman el MOTOR. Los scripts one-off (sample_*.py, pruebas) NO entran:
 # si entraran, la puerta rechazaria cualquier script nuevo que definiera "main".
-NUCLEO = {"dsp", "instruments", "render", "midi", "cancion", "motor_gpu"}
+NUCLEO = {"dsp", "instruments", "render", "midi", "motor_gpu"}
+# Las OBRAS (workspace/obras/<slug>/cancion.py, tema.py) no son motor y no entran:
+# son los datos de una canción concreta, no API reutilizable.
 
 # Nombres de entrada, no API: cualquier script puede definir su propio main().
 IGNORAR = {"main", "run"}
