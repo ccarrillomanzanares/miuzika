@@ -11,6 +11,8 @@
  */
 
 import type { Project } from "../../src/core/types.ts";
+import { idsDeAssets } from "../../src/core/project.ts";
+import { rutaEnWorkspace } from "../../src/core/rutas.ts";
 
 /** Por encima de estos segundos el WAV no se decodifica: se reproduce por streaming. */
 export const SEGUNDOS_STREAMING = 30;
@@ -52,10 +54,13 @@ export function idDeAsset(nombre: string): string {
   return id;
 }
 
-/** Ruta que entiende el servidor: lo compartido tal cual y el resto en el proyecto. */
+/**
+ * Ruta que entiende el servidor: lo compartido tal cual y el resto en el proyecto.
+ * La lista de carpetas compartidas es la misma que usa el servidor
+ * (`src/core/rutas.ts`); antes eran dos listas y a ésta le faltaba `catalogo/`.
+ */
 export function rutaEnProyecto(ruta: string, slugProyecto: string): string {
-  if (/^(codigo|gpu|herramientas|plantillas|proyectos|_archivo|_salidas)\//.test(ruta)) return ruta;
-  return `proyectos/${slugProyecto}/${ruta}`;
+  return rutaEnWorkspace(ruta, slugProyecto);
 }
 
 /** Duración y picos de un WAV sin decodificarlo en el navegador (los da el servidor). */
@@ -138,17 +143,7 @@ export async function loadAudioFile(file: File, bpm: number, src: string): Promi
   return asset;
 }
 
-/** Ids de asset que el proyecto referencia (declarados o dentro de un clip). */
-export function idsDeAssets(project: Project): string[] {
-  const ids = new Set<string>();
-  for (const asset of project.audioAssets ?? []) ids.add(asset.id);
-  for (const track of project.tracks) {
-    for (const clip of track.clips) {
-      if (clip.audio) ids.add(clip.audio.assetId);
-    }
-  }
-  return [...ids];
-}
+export { idsDeAssets };
 
 /**
  * Carga del disco los WAV que el proyecto referencia y aún no están en memoria.
@@ -163,18 +158,18 @@ export async function hidratarAssets(
   let cargados = 0;
   const faltan: string[] = [];
 
-  for (const id of idsDeAssets(project)) {
+  const uno = async (id: string): Promise<void> => {
     const meta = project.audioAssets?.find((asset) => asset.id === id);
     const enMemoria = audioAssets.get(id);
     if (enMemoria) {
       // Ya decodificado en esta sesión: sólo se refresca el nombre.
       if (meta) enMemoria.name = meta.name;
-      continue;
+      return;
     }
     if (!meta?.ruta) {
       // Sin ruta no hay nada que buscar: el WAV era del navegador y ya no está.
       faltan.push(meta?.name ?? id);
-      continue;
+      return;
     }
     const completa = rutaEnProyecto(meta.ruta, slugProyecto);
     try {
@@ -204,7 +199,21 @@ export async function hidratarAssets(
     } catch {
       faltan.push(meta.name);
     }
-  }
+  };
+
+  // Cuatro a la vez: en serie, 21 pistas con 11 WAV tardaban 38 s en abrir (medido,
+  // un viaje al servidor por asset). Más de cuatro satura el `spawn` de Python.
+  const cola = [...idsDeAssets(project)];
+  const A_LA_VEZ = 4;
+  await Promise.all(
+    Array.from({ length: Math.min(A_LA_VEZ, cola.length) }, async () => {
+      for (;;) {
+        const id = cola.shift();
+        if (id === undefined) return;
+        await uno(id);
+      }
+    }),
+  );
   return { cargados, faltan };
 }
 

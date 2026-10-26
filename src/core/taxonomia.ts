@@ -128,7 +128,7 @@ export const ETIQUETAS: Etiqueta[] = [
   { id: "vientos", es: "Vientos", en: "Winds", bst: "is-w", familia: "tonal",
     alias: ["saxo", "saxofón", "saxophone", "saxello", "tenor saxophone", "flauta", "flute",
             "clarinete", "clarinet", "trompeta", "trumpet", "trombón", "trombone", "recorder",
-            "didgeridoo", "cuerno", "horn", "oboе"] },
+            "didgeridoo", "cuerno", "horn", "oboe"] },
   { id: "sintetizador", es: "Sintetizador", en: "Synth", bst: "is-e", familia: "tonal",
     alias: ["synth", "sintetizador analógico", "saw", "diente de sierra", "tx81z", "fm piano", "fm"] },
 

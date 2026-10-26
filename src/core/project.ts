@@ -168,6 +168,23 @@ function validateNote(note: Note, path: string, error: (path: string, message: s
   }
 }
 
+/**
+ * Ids de asset que el proyecto referencia (declarados o dentro de un clip).
+ *
+ * Vive aquí y no en el navegador porque lo necesitan los tres que ordenan el
+ * audio: el fichero maestro, la caché en memoria y el recolector de basura de RAM.
+ */
+export function idsDeAssets(project: Project): string[] {
+  const ids = new Set<string>();
+  for (const asset of project.audioAssets ?? []) ids.add(asset.id);
+  for (const track of project.tracks) {
+    for (const clip of track.clips) {
+      if (clip.audio) ids.add(clip.audio.assetId);
+    }
+  }
+  return [...ids];
+}
+
 interface ProjectStats {
   tracks: number;
   clips: number;

@@ -1,9 +1,12 @@
 /**
  * Panel de chat del agente (columna derecha).
  *
- * Cabecera, historial, caja de texto, envío y botón para plegarlo. El historial
- * y el texto a medio escribir se guardan en localStorage: recargar la página (o
- * un reinicio del servidor) ya no borra nada. `onSend` es el enganche del agente.
+ * Cabecera, historial, caja de texto, envío y botón para plegarlo.
+ *
+ * Aquí NO se guarda nada: el panel se pinta con lo que hay en memoria y arranca
+ * vacío. La memoria del agente es del proyecto (`proyectos/<slug>/agente.json`) y
+ * la carga main.ts al abrirlo. Lo único que persiste es si el panel estaba
+ * plegado y dónde ejecuta Python (cpu o GPU). `onSend` es el enganche del agente.
  */
 
 import { CURSOR_PLANTILLA } from "./plantilla.ts";
@@ -43,8 +46,6 @@ interface Entrada {
 }
 
 const COLLAPSE_KEY = "miuzika.chat.collapsed";
-const LOG_KEY = "miuzika.chat.log";
-const DRAFT_KEY = "miuzika.chat.borrador";
 /** Donde ejecuta Python el agente: "cpu" (este portatil) o "lambda" (GPU). */
 const DESTINO_KEY = "miuzika.destino";
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -76,14 +77,6 @@ export function initChat(): ChatApi {
 
   const historial: Entrada[] = [];
   const dueno = new WeakMap<HTMLDivElement, Entrada>();
-
-  const guardar = (): void => {
-    try {
-      // Ya no se guarda: el chat arranca vacío y la memoria del proyecto está en disco.
-    } catch {
-      /* sin persistencia */
-    }
-  };
 
   const pintar = (entrada: Entrada): HTMLDivElement => {
     const div = document.createElement("div");
@@ -124,7 +117,6 @@ export function initChat(): ChatApi {
     historial.push(entrada);
     const div = pintar(entrada);
     log.scrollTop = log.scrollHeight;
-    guardar();
     return div;
   };
 
@@ -133,7 +125,6 @@ export function initChat(): ChatApi {
     if (entrada) entrada.text = text;
     element.innerHTML = escapeHtml(text).replace(/\n/g, "<br>");
     log.scrollTop = log.scrollHeight;
-    guardar();
   };
 
   const setBusy = (busy: boolean): void => {
@@ -163,14 +154,7 @@ export function initChat(): ChatApi {
 
   toggleButton.addEventListener("click", () => setOpen(!isOpen(), true));
 
-  input.addEventListener("input", () => {
-    autosize();
-    try {
-      localStorage.setItem(DRAFT_KEY, input.value);
-    } catch {
-      /* sin persistencia */
-    }
-  });
+  input.addEventListener("input", () => autosize());
   input.addEventListener("keydown", (event) => {
     // Enter envía; Shift+Enter escribe un salto de línea.
     if (event.key === "Enter" && !event.shiftKey) {
@@ -199,11 +183,6 @@ export function initChat(): ChatApi {
     add("user", text);
     input.value = "";
     autosize();
-    try {
-      localStorage.removeItem(DRAFT_KEY);
-    } catch {
-      /* sin persistencia */
-    }
     if (handler) {
       handler(text);
     } else {
@@ -246,8 +225,6 @@ export function initChat(): ChatApi {
   let startOpen = true;
   try {
     startOpen = localStorage.getItem(COLLAPSE_KEY) !== "1";
-    localStorage.removeItem(LOG_KEY);
-    localStorage.removeItem(DRAFT_KEY);
   } catch {
     /* sin persistencia */
   }
@@ -263,8 +240,10 @@ export function initChat(): ChatApi {
     setBusy,
     clear: () => {
       historial.length = 0;
+      // OJO: sin esto, la burbuja de «está trabajando» se queda huérfana en un
+      // panel vacío (parecía que el agente seguía en un proyecto que no era).
+      ocultarProgreso();
       log.innerHTML = "";
-      guardar();
     },
     isOpen,
     setOpen,

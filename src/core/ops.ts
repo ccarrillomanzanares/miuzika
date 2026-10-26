@@ -260,6 +260,12 @@ function resolveTrack(project: Project, ref: string): Track {
   throw new OpError(`No encuentro la pista "${ref}". Disponibles: ${available || "ninguna"}`);
 }
 
+/**
+ * Clip de una pista por id, por nombre exacto o por nombre parcial (si es único).
+ *
+ * No se cae al «único clip» cuando el nombre no coincide: con una pista de un solo
+ * clip, `remove_clip` con un nombre mal escrito borraba el bueno sin decir nada.
+ */
 function resolveClip(track: Track, ref: string) {
   const cleaned = ref.trim();
   const byId = track.clips.find((clip) => clip.id === cleaned);
@@ -267,9 +273,13 @@ function resolveClip(track: Track, ref: string) {
   const lower = cleaned.toLowerCase();
   const byName = track.clips.filter((clip) => clip.name.toLowerCase() === lower);
   if (byName.length === 1) return byName[0]!;
-  if (track.clips.length === 1) return track.clips[0]!;
+  const byParcial = track.clips.filter((clip) => clip.name.toLowerCase().includes(lower));
+  if (lower !== "" && byParcial.length === 1) return byParcial[0]!;
   const available = track.clips.map((clip) => `${clip.id}(${clip.name})`).join(", ");
-  throw new OpError(`No encuentro el clip "${ref}" en "${track.name}". Disponibles: ${available || "ninguno"}`);
+  throw new OpError(
+    `No encuentro el clip "${ref}" en "${track.name}" (${track.clips.length} clip(s)). ` +
+      `Disponibles: ${available || "ninguno"}`,
+  );
 }
 
 function resolveDevice(track: Track, ref: string): Device {

@@ -16,6 +16,7 @@ import { createReadStream } from "node:fs";
 import { defineConfig, loadEnv } from "vite";
 import { buscarEnCatalogo } from "./src/core/buscar.ts";
 import type { EntradaCatalogo } from "./src/core/buscar.ts";
+import { CARPETAS_COMPARTIDAS, CARPETAS_OCULTAS } from "./src/core/rutas.ts";
 
 import {
   apagar as apagarLambda,
@@ -109,13 +110,46 @@ export default defineConfig(({ mode }) => {
     res.end(JSON.stringify(cuerpo));
   };
 
-  const leerCuerpo = (req: IncomingMessage, alTerminar: (cuerpo: string) => void): void => {
+  /** Cuerpo de texto en crudo; devuelve null si pasa del tope. */
+  const leerCuerpoCrudo = (
+    req: IncomingMessage,
+    alTerminar: (cuerpo: string | null) => void,
+    limite = 8 * 1024 * 1024,
+  ): void => {
     let cuerpo = "";
+    let total = 0;
+    let pasado = false;
     req.on("data", (trozo: Buffer) => {
+      total += trozo.length;
+      if (total > limite) {
+        pasado = true;
+        cuerpo = "";
+        return;
+      }
       cuerpo += trozo.toString("utf8");
     });
-    req.on("end", () => alTerminar(cuerpo));
+    req.on("end", () => alTerminar(pasado ? null : cuerpo));
+    req.on("error", () => alTerminar(null));
   };
+
+  /** Cuerpo de texto de una API: contestar 413 es mejor que quedarse sin memoria. */
+  const leerCuerpo = (
+    req: IncomingMessage,
+    res: ServerResponse,
+    alTerminar: (cuerpo: string) => void,
+    limite?: number,
+  ): void =>
+    leerCuerpoCrudo(
+      req,
+      (cuerpo) => {
+        if (cuerpo === null) {
+          responderJson(res, 413, { error: "cuerpo demasiado grande (máx. 8 MB)" });
+          return;
+        }
+        alTerminar(cuerpo);
+      },
+      limite,
+    );
 
   /** Cuerpo binario (WAV subido desde el navegador), con tope de tamaño. */
   const leerCuerpoBinario = (
@@ -145,8 +179,9 @@ export default defineConfig(({ mode }) => {
     req.on("error", () => cerrar(null));
   };
 
-  /** Carpetas compartidas por todos los proyectos: motor y utilidades. */
-  const COMPARTIDO = ["codigo/", "gpu/", "herramientas/", "plantillas/", "_archivo/", "_salidas/", "catalogo/", "proyectos/"];
+  /** Carpetas compartidas por todos los proyectos: motor y utilidades. La lista
+   *  vive en `src/core/rutas.ts` porque el navegador usa la misma regla. */
+  const COMPARTIDO: readonly string[] = CARPETAS_COMPARTIDAS;
 
   /**
    * Identificador del código servido: la marca de tiempo más nueva de web/ y de
@@ -254,14 +289,32 @@ export default defineConfig(({ mode }) => {
     return salida.sort((a, b) => String(b.actualizado).localeCompare(String(a.actualizado)));
   };
 
-  /** Inventario de lo que hay en workspace/ (lo ve el agente y lo ve la app). */
-  const listarTrabajo = (): { path: string; bytes: number }[] => {
+  /**
+   * Inventario de ficheros del espacio de trabajo.
+   *
+   * `carpeta` opcional: "" = la raíz (sin las carpetas ocultas), "proyectos/<slug>",
+   * "codigo"… Las carpetas de CARPETAS_OCULTAS no se recorren nunca: `catalogo/`
+   * son 4.231 ficheros y metía 573 KB en el contexto del modelo, que llega
+   * recortado a cabeza y cola (o sea: el agente no veía el medio, que es donde
+   * estaban sus ficheros). Se consulta con `buscar_sonido`, no listando.
+   */
+  const MAX_LISTADO = 2000;
+  const listarTrabajo = (
+    carpeta = "",
+  ): { path: string; bytes: number }[] => {
     if (!existsSync(carpetaTrabajo)) return [];
+    const relativa = carpeta.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+    const inicio = relativa === "" ? carpetaTrabajo : resolve(carpetaTrabajo, relativa);
+    const dentro = inicio === carpetaTrabajo || inicio.startsWith(carpetaTrabajo + sep);
+    if (!dentro || !existsSync(inicio)) return [];
     const salida: { path: string; bytes: number }[] = [];
     const recorrer = (dir: string): void => {
+      if (salida.length >= MAX_LISTADO) return;
       for (const entrada of readdirSync(dir, { withFileTypes: true })) {
+        if (salida.length >= MAX_LISTADO) return;
         const completo = resolve(dir, entrada.name);
         if (entrada.isDirectory()) {
+          if ((CARPETAS_OCULTAS as readonly string[]).includes(entrada.name)) continue;
           recorrer(completo);
         } else {
           salida.push({
@@ -271,8 +324,23 @@ export default defineConfig(({ mode }) => {
         }
       }
     };
-    recorrer(carpetaTrabajo);
+    recorrer(inicio);
     return salida;
+  };
+
+  /** Ficheros de la carpeta del proyecto que cambiaron desde `desde` (ms). */
+  const escritosDesde = (slug: string, desde: number): string[] => {
+    const carpeta = resolve(carpetaTrabajo, "proyectos", slug);
+    if (!existsSync(carpeta)) return [];
+    return listarTrabajo(`proyectos/${slug}`)
+      .filter((f) => {
+        try {
+          return statSync(resolve(carpetaTrabajo, f.path)).mtimeMs >= desde;
+        } catch {
+          return false;
+        }
+      })
+      .map((f) => f.path.slice(`proyectos/${slug}/`.length));
   };
 
   /** Lanza un script de workspace/ y devuelve salida, errores y codigo. */
@@ -417,7 +485,7 @@ export default defineConfig(({ mode }) => {
               responderJson(res, 405, { error: "usa POST" });
               return;
             }
-            leerCuerpo(req, async (cuerpo) => {
+            leerCuerpo(req, res, async (cuerpo) => {
               try {
                 const datos = JSON.parse(cuerpo) as { path?: string; contenido?: string };
                 if (!datos.path || typeof datos.contenido !== "string") {
@@ -539,7 +607,7 @@ export default defineConfig(({ mode }) => {
               responderJson(res, 405, { error: "usa POST" });
               return;
             }
-            leerCuerpo(req, (cuerpo) => {
+            leerCuerpo(req, res, (cuerpo) => {
               try {
                 const datos = JSON.parse(cuerpo) as { path?: string };
                 const destino = datos.path ? resolverEnTrabajo(datos.path, slugProyecto(req.headers["x-miuzika-proyecto"])) : null;
@@ -575,7 +643,22 @@ export default defineConfig(({ mode }) => {
               responderJson(res, 405, { error: "usa GET" });
               return;
             }
-            responderJson(res, 200, { ok: true, raiz: "workspace/", ficheros: listarTrabajo() });
+            // Sin `carpeta`: el proyecto activo (lo que el agente necesita ver).
+            // Con `carpeta=codigo` o `carpeta=` se pide otra zona del espacio.
+            const url = new URL(req.url ?? "/", "http://localhost");
+            const pedida = url.searchParams.get("carpeta");
+            const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
+            const carpeta =
+              pedida !== null ? pedida.replace(/^\/+|\/+$/g, "") : `proyectos/${slug}`;
+            const ficheros = listarTrabajo(carpeta);
+            responderJson(res, 200, {
+              ok: true,
+              raiz: "workspace/",
+              carpeta: carpeta === "" ? "." : carpeta,
+              ficheros,
+              // Sin este aviso, un listado cortado se lee como «aquí no está».
+              truncado: ficheros.length >= MAX_LISTADO,
+            });
           });
 
           // Fichero maestro por proyecto: proyectos/<slug>/proyecto.json.
@@ -609,7 +692,7 @@ export default defineConfig(({ mode }) => {
             }
 
             if (req.method === "POST") {
-              leerCuerpo(req, (cuerpo) => {
+              leerCuerpo(req, res, (cuerpo) => {
                 try {
                   const datos = JSON.parse(cuerpo) as { path?: string; contenido?: string };
                   if (!datos.path || typeof datos.contenido !== "string" || datos.contenido.trim() === "") {
@@ -676,7 +759,7 @@ export default defineConfig(({ mode }) => {
               responderJson(res, 405, { error: "usa POST" });
               return;
             }
-            leerCuerpo(req, async (cuerpo) => {
+            leerCuerpo(req, res, async (cuerpo) => {
               try {
                 const d = JSON.parse(cuerpo) as {
                   path?: string;
@@ -820,6 +903,12 @@ export default defineConfig(({ mode }) => {
           });
 
           // Picos de un WAV calculados en el servidor: la onda se dibuja sin decodificar.
+          //
+          // Con caché por (ruta, mtime, cubos): cada /api/picos lanzaba un Python que
+          // leía el fichero entero, y abrir un proyecto de 21 pistas con 11 WAV
+          // tardaba 38 s (medido). El WAV sólo cambia si cambia su mtime, así que la
+          // segunda apertura no vuelve a leerlo.
+          const cachePicos = new Map<string, unknown>();
           server.middlewares.use("/api/picos", async (req, res) => {
             const url = new URL(req.url ?? "/", "http://localhost");
             const rel = url.searchParams.get("path") ?? "";
@@ -831,6 +920,12 @@ export default defineConfig(({ mode }) => {
               responderJson(res, 404, { error: "no existe" });
               return;
             }
+            const clave = `${destino}|${statSync(destino).mtimeMs}|${cubos}`;
+            const guardado = cachePicos.get(clave);
+            if (guardado !== undefined) {
+              responderJson(res, 200, { ok: true, ...(guardado as Record<string, unknown>) });
+              return;
+            }
             const r = await correr("herramientas/picos.py", [destino, cubos], 120);
             if (r.codigo !== 0) {
               responderJson(res, 400, { error: (r.errores || r.salida).slice(-800) });
@@ -838,6 +933,8 @@ export default defineConfig(({ mode }) => {
             }
             try {
               const datos = JSON.parse(r.salida) as Record<string, unknown>;
+              if (cachePicos.size > 200) cachePicos.clear();
+              cachePicos.set(clave, datos);
               responderJson(res, 200, { ok: true, ...datos });
             } catch (error) {
               responderJson(res, 500, { error: "salida no es JSON: " + String(error) });
@@ -850,7 +947,7 @@ export default defineConfig(({ mode }) => {
               responderJson(res, 405, { error: "usa POST" });
               return;
             }
-            leerCuerpo(req, async (cuerpo) => {
+            leerCuerpo(req, res, async (cuerpo) => {
               try {
                 const datos = JSON.parse(cuerpo) as { origen?: string };
                 const origen = String(datos.origen ?? "").trim();
@@ -878,7 +975,7 @@ export default defineConfig(({ mode }) => {
               responderJson(res, 405, { error: "usa POST" });
               return;
             }
-            leerCuerpo(req, async (cuerpo) => {
+            leerCuerpo(req, res, async (cuerpo) => {
               try {
                 const datos = JSON.parse(cuerpo) as { sfz?: string; nombre?: string };
                 const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
@@ -934,7 +1031,7 @@ export default defineConfig(({ mode }) => {
               responderJson(res, 405, { error: "usa POST" });
               return;
             }
-            leerCuerpo(req, async (cuerpo) => {
+            leerCuerpo(req, res, async (cuerpo) => {
               try {
                 const d = JSON.parse(cuerpo) as { path?: string };
                 const destino = d.path ? resolverEnTrabajo(d.path, slugProyecto(req.headers["x-miuzika-proyecto"])) : null;
@@ -1075,7 +1172,7 @@ export default defineConfig(({ mode }) => {
               responderJson(res, 405, { error: "usa POST" });
               return;
             }
-            leerCuerpo(req, (cuerpo) => {
+            leerCuerpo(req, res, (cuerpo) => {
               try {
                 const datos = JSON.parse(cuerpo) as { consulta?: string; limite?: number; familia?: string };
                 const { entradas, total, raiz } = leerCatalogo();
@@ -1110,7 +1207,7 @@ export default defineConfig(({ mode }) => {
               responderJson(res, 405, { error: "usa POST" });
               return;
             }
-            leerCuerpo(req, async (cuerpo) => {
+            leerCuerpo(req, res, async (cuerpo) => {
               try {
                 const datos = JSON.parse(cuerpo) as { archivo?: string; nombre?: string };
                 const archivo = String(datos.archivo ?? "");
@@ -1194,7 +1291,7 @@ export default defineConfig(({ mode }) => {
               responderJson(res, 405, { error: "usa POST" });
               return;
             }
-            leerCuerpo(req, async (cuerpo) => {
+            leerCuerpo(req, res, async (cuerpo) => {
               const rutaInstruments = resolve(carpetaTrabajo, "codigo", "instruments.py");
               try {
                 const datos = JSON.parse(cuerpo) as {
@@ -1418,7 +1515,7 @@ export default defineConfig(({ mode }) => {
               responderJson(res, 400, { error: `falta ${faltanLambda.join(", ")} en .env` });
               return;
             }
-            leerCuerpo(req, (cuerpo) => {
+            leerCuerpo(req, res, (cuerpo) => {
               let id = maquinaLambda?.id ?? "";
               try {
                 const datos = JSON.parse(cuerpo === "" ? "{}" : cuerpo) as { id?: string };
@@ -1465,7 +1562,7 @@ export default defineConfig(({ mode }) => {
               responderJson(res, 400, { error: `falta ${faltanLambda.join(", ")} en .env` });
               return;
             }
-            leerCuerpo(req, (cuerpo) => {
+            leerCuerpo(req, res, (cuerpo) => {
               let datos: { path?: string; argumentos?: string[]; timeout_segundos?: number };
               try {
                 datos = JSON.parse(cuerpo) as typeof datos;
@@ -1527,6 +1624,7 @@ export default defineConfig(({ mode }) => {
               if (!usaGpu) {
                 avisos.push("El script no importa motor_gpu: la GPU está encendida pero no se usa.");
               }
+              const t0Lambda = Date.now();
               ejecutarEnLambda(cfgLambda, {
                 scriptRel: relativo,
                 argumentos,
@@ -1566,7 +1664,10 @@ export default defineConfig(({ mode }) => {
                     por_timeout: r.errores.includes("cortado a los"),
                     salida: r.salida.slice(-8000),
                     errores: r.errores.slice(-8000),
-                    ficheros: listarTrabajo(),
+                    // Sólo lo que ha cambiado en la carpeta del proyecto: el árbol
+                    // entero son 573 KB de JSON que nadie lee (y el catálogo, 4.231
+                    // ficheros, cuesta segundos recorrerlo en cada llamada).
+                    escritos: escritosDesde(slug, t0Lambda),
                     lambda: { ip: r.ip, id: r.id, nota: r.nota, traidos: r.traidos, avisos },
                   });
                 })
@@ -1584,7 +1685,7 @@ export default defineConfig(({ mode }) => {
               responderJson(res, 405, { error: "usa POST" });
               return;
             }
-            leerCuerpo(req, (cuerpo) => {
+            leerCuerpo(req, res, (cuerpo) => {
               let datos: { path?: string; argumentos?: string[]; timeout_segundos?: number };
               try {
                 datos = JSON.parse(cuerpo) as typeof datos;
@@ -1669,7 +1770,7 @@ export default defineConfig(({ mode }) => {
                   por_timeout: porTiempo,
                   salida: salida.slice(-8000),
                   errores: errores.slice(-8000),
-                  ficheros: listarTrabajo(),
+                  escritos: escritosDesde(slug, t0),
                 });
               };
 

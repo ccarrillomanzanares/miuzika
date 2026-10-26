@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>miuzika · esquema de arquitectura</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:transparent}
+  body{
+    font-family:var(--app-font, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
+    color:var(--foreground);
+    font-size:13px; line-height:1.45;
+  }
+  .wrap{width:980px;max-width:100%;display:flex;flex-direction:column;gap:18px}
+  h1{font-size:15px;font-weight:650;margin:0;letter-spacing:.01em}
+  h2{font-size:12px;font-weight:600;margin:0 0 8px;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.08em}
+  .sub{color:var(--muted-foreground);font-size:11.5px;margin-top:2px}
+  .cifras{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px}
+  .cifra{border:1px solid var(--border);border-radius:8px;padding:7px 11px;min-width:96px}
+  .cifra b{display:block;font-size:15px;font-weight:650}
+  .cifra span{font-size:10.5px;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.06em}
+
+  .capas{display:grid;grid-template-columns:1fr;gap:10px}
+  .capa{border:1px solid var(--border);border-radius:10px;padding:11px 13px;position:relative}
+  .capa > header{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+  .capa > header b{font-size:12.5px;font-weight:650}
+  .capa > header em{font-style:normal;font-size:10.5px;color:var(--muted-foreground);letter-spacing:.05em;text-transform:uppercase}
+  .capa.nav{background:color-mix(in oklab, var(--card) 92%, transparent)}
+  .capa.srv{border-color:color-mix(in oklab, var(--accent) 45%, var(--border))}
+  .capa.gpu{border-style:dashed}
+  .cajas{display:grid;gap:6px}
+  .c2{grid-template-columns:1fr 1fr}
+  .c3{grid-template-columns:1fr 1fr 1fr}
+  .caja{border:1px solid var(--border);border-radius:7px;padding:6px 8px;background:color-mix(in oklab, var(--card) 70%, transparent)}
+  .caja b{font-size:11.5px;font-weight:600;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .caja span{display:block;font-size:10.5px;color:var(--muted-foreground);margin-top:1px}
+  .nucleo{grid-column:1 / -1;border-color:color-mix(in oklab, var(--accent) 60%, var(--border))}
+
+  .flecha{display:flex;align-items:center;gap:8px;color:var(--muted-foreground);font-size:11px;padding-left:4px}
+  .flecha i{display:block;width:1px;height:14px;background:var(--border);margin-left:14px}
+  .flecha code{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--foreground)}
+
+  table{border-collapse:collapse;width:100%;font-size:11.5px}
+  th{text-align:left;font-weight:600;color:var(--muted-foreground);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:0 8px 5px 0;border-bottom:1px solid var(--border)}
+  td{padding:5px 8px 5px 0;border-bottom:1px solid color-mix(in oklab,var(--border) 55%,transparent);vertical-align:top}
+  td code{font-family:ui-monospace,monospace;font-size:11px}
+  .ok{color:var(--accent);font-weight:600}
+
+  ol.pasos{margin:0;padding-left:0;list-style:none;counter-reset:p;display:grid;gap:5px}
+  ol.pasos li{counter-increment:p;display:grid;grid-template-columns:20px 132px 1fr;gap:8px;font-size:11.5px;align-items:baseline}
+  ol.pasos li::before{content:counter(p);color:var(--muted-foreground);font-family:ui-monospace,monospace;font-size:10.5px;text-align:right}
+  ol.pasos li b{font-family:ui-monospace,monospace;font-size:11px;font-weight:600}
+  ol.pasos li span{color:var(--muted-foreground)}
+
+  .pie{font-size:10.5px;color:var(--muted-foreground)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div>
+    <h1>miuzika · arquitectura real (26-oct-2026)</h1>
+    <div class="sub">Todo dentro de <code>npm run dev</code>. No hay nada desplegado: si Vite no corre, no hay app.</div>
+    <div class="cifras">
+      <div class="cifra"><b>12.638</b><span>líneas TS</span></div>
+      <div class="cifra"><b>121</b><span>tests</span></div>
+      <div class="cifra"><b>25</b><span>endpoints</span></div>
+      <div class="cifra"><b>17</b><span>herramientas</span></div>
+      <div class="cifra"><b>17</b><span>ops</span></div>
+      <div class="cifra"><b>4.231</b><span>samples CC0</span></div>
+    </div>
+  </div>
+
+  <div class="capas">
+
+    <div class="capa nav">
+      <header><b>Navegador</b><em>web/src · pinta y manda</em></header>
+      <div class="cajas c3">
+        <div class="caja nucleo"><b>main.ts</b><span>orquestador: estado, ops, autoguardado, arranque</span></div>
+        <div class="caja"><b>timeline.ts</b><span>canvas: pistas, clips, onda</span></div>
+        <div class="caja"><b>chat.ts</b><span>panel del chat (no persiste)</span></div>
+        <div class="caja"><b>opendaw-engine.ts</b><span>playback WASM</span></div>
+        <div class="caja"><b>stem-player.ts</b><span>stems largos por &lt;audio&gt;</span></div>
+        <div class="caja"><b>audio-store.ts</b><span>caché de AudioBuffers</span></div>
+        <div class="caja"><b>agent/agent.ts</b><span>bucle del turno y sus cortes</span></div>
+        <div class="caja"><b>agent/tools.ts</b><span>17 herramientas: contrato con el LLM</span></div>
+        <div class="caja"><b>llm.ts</b><span>SSE, timeout, reintentos</span></div>
+      </div>
+    </div>
+
+    <div class="flecha"><i></i><code>fetch /api/*</code> · 25 endpoints · la clave del LLM nunca entra en el bundle</div>
+
+    <div class="capa srv">
+      <header><b>Servidor de desarrollo</b><em>vite.config.ts · 1.861 líneas</em></header>
+      <div class="cajas c2">
+        <div class="caja nucleo"><b>vite.config.ts</b><span>confina todo a workspace/ · escribe, lanza Python, sirve WAV con Range · puertas: smoke del motor, 409 de duplicados, ast.parse en gpu/ · proxy /api/llm con la clave del .env</span></div>
+        <div class="caja"><b>server/lambda.ts</b><span>encender · sincronizar por scp · ejecutar · traer lo nuevo</span></div>
+      </div>
+    </div>
+
+    <div class="flecha"><i></i><code>spawn python -u</code> &nbsp;·&nbsp; <code>ssh / scp</code></div>
+
+    <div class="cajas c2">
+      <div class="capa">
+        <header><b>Motor numpy</b><em>workspace/codigo</em></header>
+        <div class="cajas c2">
+          <div class="caja"><b>dsp.py</b><span>filtros, STFT, reverb, LUFS</span></div>
+          <div class="caja"><b>instruments.py</b><span>24 voces</span></div>
+          <div class="caja"><b>midi.py</b><span>escritor MIDI</span></div>
+          <div class="caja"><b>voces · gate_voz</b><span>catálogo y puerta</span></div>
+          <div class="caja" style="border-style:dashed"><b>cancion.py</b><span>140 compases a 90 BPM: UNA obra, no una API</span></div>
+          <div class="caja" style="border-style:dashed"><b>render.py</b><span>el arreglo de esa obra</span></div>
+        </div>
+      </div>
+      <div class="capa gpu">
+        <header><b>Motor torch</b><em>workspace/gpu · sólo Lambda</em></header>
+        <div class="cajas">
+          <div class="caja"><b>motor_gpu.py</b><span>saturar ×4, IR estéreo, reverb FFT, shimmer, granular, compresor multibanda</span></div>
+          <div class="caja"><b>voces_gpu.py</b><span>timbres pesados</span></div>
+          <div class="caja"><b>no escribe .mid</b><span>los MIDI salen de numpy</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div>
+    <h2>Quién manda</h2>
+    <table>
+      <tr><th>pregunta</th><th>dueño</th><th>consecuencia</th></tr>
+      <tr>
+        <td>¿qué hay en la canción?</td>
+        <td><code>proyectos/&lt;slug&gt;/proyecto.json</code></td>
+        <td>lo escribe <b>sólo</b> la pestaña abierta (autoguardado 1,5 s). Editarlo desde fuera no sobrevive.</td>
+      </tr>
+      <tr>
+        <td>¿cómo suena un sonido?</td>
+        <td>el render</td>
+        <td>pico, crest, centroide, duración. Se mide; no se declara.</td>
+      </tr>
+      <tr>
+        <td>¿qué recuerda el agente?</td>
+        <td><code>proyectos/&lt;slug&gt;/agente.json</code></td>
+        <td>8 turnos + resumen rodante, inyectados en el prompt al abrir el proyecto.</td>
+      </tr>
+    </table>
+  </div>
+
+  <div>
+    <h2>Un turno, de principio a fin</h2>
+    <ol class="pasos">
+      <li><b>chat.ts</b><span>submit → onSend → main.responderAlUsuario</span></li>
+      <li><b>main.ts</b><span>pide /api/manifiesto y rehace el prompt: literal con huella + carpeta + manifiesto + memoria del proyecto</span></li>
+      <li><b>main.ts</b><span>latido de 1 s y burbuja «pensando · N s · N tokens» en el chat</span></li>
+      <li><b>agent.ts</b><span>bucle de hasta 12 pasos; cada paso es una llamada SSE al modelo</span></li>
+      <li><b>llm.ts</b><span><code>load</code> → calienta con 1 token · <code>sin_salida</code> → repite sin razonar</span></li>
+      <li><b>tools.ts</b><span>ejecuta cada herramienta pedida y le devuelve el texto al modelo</span></li>
+      <li><b>servidor</b><span>confina, escribe/ejecuta, devuelve <code>{ok, codigo, salida, errores, escritos}</code></span></li>
+      <li><b>main.ts</b><span>al cerrar: burbuja final + «✓ pasos · herramientas» + turno a agente.json</span></li>
+    </ol>
+  </div>
+
+  <div>
+    <h2>Lo que se arregló hoy (medido)</h2>
+    <table>
+      <tr><th>qué</th><th>antes</th><th>después</th></tr>
+      <tr><td><code>listar_ficheros</code> metía el workspace entero en el contexto</td><td>586.682 B, recortados a cabeza y cola</td><td class="ok">11.097 B la raíz · 5.022 B el proyecto</td></tr>
+      <tr><td><code>ejecutar_python</code> devolvía el árbol en cada llamada</td><td>recorrido de 4.231 ficheros</td><td class="ok">sólo lo escrito en el proyecto</td></tr>
+      <tr><td>abrir 21 pistas / 11 WAV</td><td>38 s</td><td class="ok">16,8 s en frío · 0,5 s en caliente</td></tr>
+      <tr><td>reintento sin razonamiento</td><td>su texto se descartaba</td><td class="ok">se usa la respuesta del reintento</td></tr>
+      <tr><td>clip mal nombrado en pista de un solo clip</td><td>borraba el bueno</td><td class="ok">error con la lista de clips</td></tr>
+    </table>
+  </div>
+
+  <div class="pie">
+    Documento completo y deuda pendiente: <code>docs/ARCHITECTURE.md</code>.
+    Lo pendiente más gordo, en orden: separar biblioteca y obra en <code>codigo/</code>;
+    la partitura como dato; y la mezcla (buses, automatización, unidades reales).
+  </div>
+
+</div>
+</body>
+</html>

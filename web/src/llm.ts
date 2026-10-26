@@ -61,6 +61,9 @@ export interface ChatOptions {
   maxTokens?: number;
 }
 
+/** Prefijo del proxy: el servidor de Vite pone la clave. */
+export const LLM_BASE = "/api/llm";
+
 /**
  * Espera a que el modelo esté cargado.
  *
@@ -96,9 +99,6 @@ async function esperarModeloCargado(modelo: string, intentos = 12): Promise<bool
   }
   return false;
 }
-
-/** Prefijo del proxy: el servidor de Vite pone la clave. */
-export const LLM_BASE = "/api/llm";
 
 /** Cuántas peticiones al modelo hay en vuelo a la vez. Si pasa de 1, la app está
  *  pidiendo dos veces lo mismo y el proveedor contesta 'load' por saturación. */

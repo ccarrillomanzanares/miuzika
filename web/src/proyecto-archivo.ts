@@ -12,6 +12,7 @@
  */
 
 import type { AudioAsset, Project } from "../../src/core/types.ts";
+import { idsDeAssets } from "../../src/core/project.ts";
 
 export const FORMATO = "miuzika-proyecto";
 export const VERSION = 1;
@@ -73,17 +74,7 @@ export function rutaRelativa(src: string): string {
   return limpia.join("/");
 }
 
-/** Ids de asset que el proyecto referencia (declarados o dentro de un clip). */
-export function idsDeAssets(project: Project): string[] {
-  const ids = new Set<string>();
-  for (const asset of project.audioAssets ?? []) ids.add(asset.id);
-  for (const track of project.tracks) {
-    for (const clip of track.clips) {
-      if (clip.audio) ids.add(clip.audio.assetId);
-    }
-  }
-  return [...ids];
-}
+export { idsDeAssets };
 
 /**
  * Construye el contenido del fichero maestro. A cada asset referenciado se le

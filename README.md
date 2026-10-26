@@ -27,6 +27,14 @@ No hay exportadores ni planner separado: el estado del proyecto *es* su
 - **Abrir**: JSON, bundle `.miuzika.zip` o **proyectos del disco** (`Proyectos`).
 - **Fichero maestro** `workspace/proyectos/<slug>/proyecto.json`, escrito solo
   1,5 s después de cada cambio (o con «Guardar» / Ctrl+S).
+- **Agente (LLM) con 17 herramientas**: escribe y ejecuta Python, mide lo que
+  suena, crea sonidos y entrega pistas. Su memoria es del proyecto
+  (`agente.json`); el prompt de sistema es un literal con huella.
+- **Motor numpy** (`workspace/codigo/`) para timbres, MIDI y análisis, y **motor
+  torch** (`workspace/gpu/`) para el audio pesado en Lambda.
+
+La arquitectura completa, con las fronteras y los acoplamientos peligrosos, está en
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Arranque
 
@@ -115,6 +123,13 @@ web/
     audio-store.ts       WAVs del disco: metadatos, streaming y decodificación
     proyecto-archivo.ts  fichero maestro: serializar, validar y slug del proyecto
     proyecto-disco.ts    /api/proyectos y /api/audio/subir desde el navegador
+    llm.ts               streaming SSE contra /api/llm (la clave no entra aquí)
+    chat.ts              panel del chat (no persiste nada)
+    agent/
+      agent.ts           bucle del turno: piensa → herramienta → observa
+      tools.ts           las 17 herramientas que ve el modelo
+      contexto.ts        recorte de salidas largas y turnos en agente.json
+      actividad.ts       frases de la barra de estado
   public/drums/          kit WAV para Playfield
   public/opendaw-wasm/   engine.wasm y plugins
 docs/                   arquitectura, openDAW, plan de pruebas y notas legales
@@ -122,7 +137,9 @@ docs/                   arquitectura, openDAW, plan de pruebas y notas legales
 server/
   lambda.ts             instancias GPU de Lambda: encender, sincronizar, ejecutar, apagar
 workspace/
-  codigo/               motor numpy (referencia y tests)
+  codigo/               motor numpy: dsp, instruments, midi, voces, puertas, sfz2sf2
+  herramientas/         manifiesto (ast), picos, verificar_audio, midi_lector, smoke
+  catalogo/             4.231 samples CC0 de VCSL + su índice (fuera de git)
   gpu/                  motor DSP de GPU, buscador de mezclas, pruebas de calidad
   plantillas/           ejemplos de composicion (vitrina_base.py)
   proyectos/<slug>/     cada proyecto: scripts y salida/ (fuera de git por tamano)
@@ -483,27 +500,10 @@ Tres cosas distintas, cada una en su sitio:
 
 ### Pendiente
 
-- **Fichero maestro por proyecto y abrir proyecto desde disco** (sección de arriba):
-  es la tarea con la que empieza la próxima sesión.
-- **DDSP** (Apache-2.0) entrenado con nuestros propios stems: timbre real de
-  instrumento en lugar de síntesis. Es el siguiente salto de calidad de verdad; el
-  resto (sobremuestreo, reverb, búsqueda de mezcla) ya está medido y en su sitio.
-- **Intentar de verdad que el agente reutilice el motor de GPU** en un script
-  nuevo: encender, pedir un sample al agente y mirar el log del turno.
-- **A/B ciego** GPU 1× vs 4× para confirmar de oído lo que dice el número.
-- Reverb con IR de 5 s sobre el pad, y escuchar si gana densidad.
-- El motor GPU no tiene todavía `midi` propio: los .mid salen del motor numpy.
-- El agente no sabe puntuar con CLAP desde dentro de la app (el piloto vive en
-  `tools/piloto-gpu/`).
-
-## Limitaciones
-
-- Strudel → WAV: máximo 64 compases por render.
-- Strudel depende de sample maps remotos y de sus licencias.
-- Los WAV de más de 30 s se reproducen por streaming (`<audio>`), no decodificados:
-  10 stems de 6 minutos ocupan ~20 MB en lugar de ~1,3 GB.
-- openDAW sigue decodificando los WAV cortos y los samples de batería.
-- El motor de patrones clásico asume 4/4.
+El estado real, con medidas, vive en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+§11. Lo primero de la lista: **separar biblioteca y obra** en `workspace/codigo/`
+(`cancion.py` y `render.py` son una canción concreta, no API reutilizable), y la
+**partitura como dato** (propuesta sin aceptar).
 
 ## Licencia
 

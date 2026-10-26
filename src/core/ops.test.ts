@@ -43,6 +43,30 @@ test("set_device valida parámetros y enumera los válidos", () => {
   assert.equal(changed.tracks[0]!.devices[0]!.params.wet, 1, "se recorta al rango");
 });
 
+test("un clip mal nombrado no se sustituye por el único que haya", () => {
+  const project = applyOps(baseProject(), [
+    { op: "add_track", id: "trk_a", name: "A" },
+    { op: "add_notes", trackId: "trk_a", startBar: 0, name: "unico", notes: [{ pitch: 60, start: 0, duration: 1, velocity: 100 }] },
+  ]).project;
+  const clipId = project.tracks[0]!.clips[0]!.id;
+  assert.throws(
+    () => applyOps(project, [{ op: "remove_clip", trackId: "trk_a", clipId: "otro-que-no-existe" }]),
+    new RegExp(`Disponibles: ${clipId}`),
+  );
+  assert.equal(project.tracks[0]!.clips.length, 1, "el clip sigue ahí");
+});
+
+test("un nombre parcial único sí resuelve el clip", () => {
+  const project = applyOps(baseProject(), [
+    { op: "add_track", id: "trk_a", name: "A" },
+    { op: "add_notes", trackId: "trk_a", startBar: 0, name: "Redoble de caja", notes: [{ pitch: 60, start: 0, duration: 1, velocity: 100 }] },
+  ]).project;
+  const { project: borrado } = applyOps(project, [
+    { op: "remove_clip", trackId: "trk_a", clipId: "redoble" },
+  ]);
+  assert.equal(borrado.tracks[0]!.clips.length, 0);
+});
+
 test("una op inválida revierte toda la transacción", () => {
   const project = baseProject();
   const ops: Op[] = [

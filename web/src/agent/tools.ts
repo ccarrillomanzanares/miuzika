@@ -18,7 +18,6 @@ export interface ResultadoHerramienta {
   texto: string;
 }
 
-/** Peticion con limite de tiempo: el chat nunca se queda colgado esperando. */
 /** Slug del proyecto abierto: el servidor resuelve ahi las rutas no compartidas. */
 let proyectoActivo = "";
 
@@ -45,34 +44,54 @@ export function cabecerasProyecto(extra?: Record<string, string>): Record<string
   return { "x-miuzika-proyecto": proyectoActivo, ...(extra ?? {}) };
 }
 
-async function pedirJson(
+/**
+ * Peticion con limite de tiempo y cancelable: el chat nunca se queda colgado
+ * esperando y el boton «Cancelar» corta tambien lo que este en vuelo.
+ *
+ * `senal` es el AbortSignal del turno: sin el, cancelar dejaba la herramienta
+ * corriendo hasta su propio tope.
+ */
+async function pedir(
   ruta: string,
-  cuerpo?: unknown,
-  limiteMs = 45000,
-  externo?: AbortSignal,
-): Promise<Record<string, unknown>> {
+  opciones: { cuerpo?: unknown; metodo?: "GET" | "POST"; limiteMs?: number; senal?: AbortSignal } = {},
+): Promise<Response> {
   const control = new AbortController();
-  const temporizador = setTimeout(() => control.abort(), limiteMs);
-  // Cancelar el turno tiene que cortar también la petición en vuelo.
+  const temporizador = setTimeout(() => control.abort(), opciones.limiteMs ?? 45000);
   const alAbortar = (): void => control.abort();
-  externo?.addEventListener("abort", alAbortar, { once: true });
+  opciones.senal?.addEventListener("abort", alAbortar, { once: true });
+  const cuerpo = opciones.cuerpo;
+  const metodo = opciones.metodo ?? (cuerpo === undefined ? "GET" : "POST");
   try {
-    const res = await fetch(ruta, {
-      method: cuerpo === undefined ? "GET" : "POST",
+    return await fetch(ruta, {
+      method: metodo,
       headers: cabecerasProyecto(
         cuerpo === undefined ? undefined : { "Content-Type": "application/json" },
       ),
       body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
       signal: control.signal,
     });
-    const texto = await res.text();
-    const datos = texto === "" ? {} : (JSON.parse(texto) as Record<string, unknown>);
-    if (!res.ok) throw new Error(String(datos.error ?? `HTTP ${res.status}`));
-    return datos;
   } finally {
     clearTimeout(temporizador);
-    externo?.removeEventListener("abort", alAbortar);
+    opciones.senal?.removeEventListener("abort", alAbortar);
   }
+}
+
+async function pedirJson(
+  ruta: string,
+  cuerpo?: unknown,
+  limiteMs = 45000,
+  senal?: AbortSignal,
+): Promise<Record<string, unknown>> {
+  const res = await pedir(ruta, { cuerpo, limiteMs, senal });
+  const texto = await res.text();
+  let datos: Record<string, unknown> = {};
+  try {
+    datos = texto === "" ? {} : (JSON.parse(texto) as Record<string, unknown>);
+  } catch {
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${texto.slice(0, 200)}`);
+  }
+  if (!res.ok) throw new Error(String(datos.error ?? `HTTP ${res.status}`));
+  return datos;
 }
 
 /** Peticion de pistas reales al proyecto del DAW (se ejecuta en el navegador). */
@@ -290,9 +309,20 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "listar_ficheros",
       description:
-        "Lista los ficheros de workspace/ con su tamano en bytes. Usalo para comprobar " +
-        "que lo que has generado existe de verdad.",
-      parameters: { type: "object", properties: {} },
+        "Lista los ficheros de la carpeta del proyecto abierto (o de la carpeta que pidas) con " +
+        "su tamano en bytes. Usalo para comprobar que lo que has generado existe de verdad. " +
+        "No lista el catalogo de samples: para eso esta buscar_sonido.",
+      parameters: {
+        type: "object",
+        properties: {
+          carpeta: {
+            type: "string",
+            description:
+              "Opcional. Por defecto, la carpeta del proyecto. Otras: 'codigo', 'gpu', " +
+              "'herramientas', 'plantillas', '_salidas' o '' (la raiz del espacio de trabajo).",
+          },
+        },
+      },
     },
   },
   {
@@ -639,7 +669,13 @@ export const HERRAMIENTAS: ToolSpec[] = [
         "clipeadas y correlacion estereo. Usala en vez de escribir tu propio analizador.",
       parameters: {
         type: "object",
-        properties: { path: { type: "string", description: "Ruta del WAV en workspace/" } },
+        properties: {
+          path: { type: "string", description: "Ruta del WAV en workspace/" },
+          timeout_segundos: {
+            type: "number",
+            description: "Cuanto puede tardar la medida (por defecto 180, maximo 1800)",
+          },
+        },
         required: ["path"],
       },
     },
@@ -689,12 +725,25 @@ async function ejecutarCrudo(
         return { ok: true, texto: String(datos.contenido ?? "") };
       }
       case "listar_ficheros": {
-        const datos = await pedirJson("/api/fs/list");
+        const carpeta = typeof args.carpeta === "string" ? args.carpeta.trim() : "";
+        const consulta = carpeta === "" ? "/api/fs/list" : `/api/fs/list?carpeta=${encodeURIComponent(carpeta)}`;
+        const datos = await pedirJson(consulta, undefined, 30000, senal);
         const ficheros = (datos.ficheros ?? []) as { path: string; bytes: number }[];
-        if (ficheros.length === 0) return { ok: true, texto: "workspace/ esta vacio." };
+        const donde = String(datos.carpeta ?? ".");
+        if (ficheros.length === 0) {
+          return { ok: true, texto: `No hay ficheros en ${donde}/.` };
+        }
+        const total = ficheros.reduce((suma, f) => suma + f.bytes, 0);
+        const truncado = datos.truncado === true;
         return {
           ok: true,
-          texto: ficheros.map((f) => `${f.path} (${f.bytes} B)`).join("\n"),
+          texto:
+            `${ficheros.length}${truncado ? "+ (cortado)" : ""} fichero(s) en ${donde}/ ` +
+            `(${(total / 1024).toFixed(0)} KB):\n` +
+            ficheros.map((f) => `${f.path} (${f.bytes} B)`).join("\n") +
+            (truncado
+              ? "\n[La lista está cortada: pide una carpeta más concreta (p. ej. 'salida').]"
+              : ""),
         };
       }
       case "editar_fichero": {
@@ -719,8 +768,7 @@ async function ejecutarCrudo(
       }
       case "listar_voces": {
         try {
-          const res = await fetch("/api/voces");
-          const datos = (await res.json()) as {
+          const datos = (await pedirJson("/api/voces", undefined, 240000, senal)) as {
             voces?: {
               clave: string;
               familia: string;
@@ -755,8 +803,12 @@ async function ejecutarCrudo(
           const pideCaracter = /\b(corto|largo|seco|brillante|oscuro|grave|agudo|sucio|limpio|redondo|apagado|chillon|metalico)\b/i.test(
             consulta,
           );
-          const res = await fetch(pideCaracter ? "/api/voces?medir=1" : "/api/voces");
-          const datos = (await res.json()) as {
+          const datos = (await pedirJson(
+            pideCaracter ? "/api/voces?medir=1" : "/api/voces",
+            undefined,
+            240000,
+            senal,
+          )) as {
             voces?: {
               clave: string;
               etiqueta: string;
@@ -780,10 +832,10 @@ async function ejecutarCrudo(
           // La biblioteca CC0 (4.231 samples), buscada en el servidor.
           let biblioteca: string[] = [];
           try {
-            const rc = await fetch("/api/catalogo/buscar", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ consulta, limite: 6 }),
+            const rc = await pedir("/api/catalogo/buscar", {
+              cuerpo: { consulta, limite: 6 },
+              limiteMs: 30000,
+              senal,
             });
             if (rc.ok) {
               const dc = (await rc.json()) as {
@@ -854,10 +906,11 @@ async function ejecutarCrudo(
       case "medir_referencia": {
         const origen = String(args.origen ?? "").trim();
         if (!origen) return { ok: false, texto: "Falta el enlace o la ruta de la referencia." };
-        const res = await fetch("/api/referencia/medir", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ origen }),
+        const res = await pedir("/api/referencia/medir", {
+          cuerpo: { origen },
+          // Descargar de YouTube y analizar 4 minutos: el servidor da 900 s.
+          limiteMs: 900000,
+          senal,
         });
         const datos = (await res.json()) as Record<string, unknown> & { ok?: boolean; error?: string };
         if (!datos.ok) return { ok: false, texto: `No se pudo medir: ${datos.error ?? res.status}` };
@@ -918,10 +971,11 @@ async function ejecutarCrudo(
         }
         try {
           const destino = args.destino === "gpu" ? "gpu" : "cpu";
-          const res = await fetch("/api/voces/nueva", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ nombre, fuente, destino }),
+          const res = await pedir("/api/voces/nueva", {
+            cuerpo: { nombre, fuente, destino },
+            // En GPU la puerta renderiza en Lambda: 900 s de tope alli.
+            limiteMs: destino === "gpu" ? 960000 : 120000,
+            senal,
           });
           const datos = (await res.json()) as {
             ok?: boolean;
@@ -997,10 +1051,11 @@ async function ejecutarCrudo(
         return ajustar({ pistas });
       }
       case "verificar_audio": {
+        const tope = Number(args.timeout_segundos);
         const datos = await pedirJson(
           "/api/verificar",
           { path: args.path },
-          Number(args.timeout_segundos) * 1000 + 45000 || 225000,
+          Number.isFinite(tope) && tope > 0 ? tope * 1000 + 45000 : 225000,
           senal,
         );
         return { ok: datos.ok === true, texto: String(datos.informe ?? "(sin informe)") };
@@ -1032,6 +1087,13 @@ async function ejecutarCrudo(
           partes.push(
             `maquina ${String(info.ip ?? "?")} (${String(info.nota ?? "")})` +
               (traidos.length > 0 ? `; devueltos: ${traidos.join(", ")}` : ""),
+          );
+        }
+        const escritos = Array.isArray(datos.escritos) ? (datos.escritos as string[]) : [];
+        if (escritos.length > 0) {
+          partes.push(
+            `ficheros escritos: ${escritos.slice(0, 12).join(", ")}` +
+              (escritos.length > 12 ? ` y ${escritos.length - 12} mas` : ""),
           );
         }
         if (salida !== "") partes.push(`salida:\n${salida}`);

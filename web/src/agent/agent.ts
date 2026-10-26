@@ -10,6 +10,16 @@ import type { ChatMessage } from "../llm.ts";
 import { HERRAMIENTAS, ejecutarHerramienta, resumenLlamada } from "./tools.ts";
 import type { PasoHerramienta } from "./actividad.ts";
 
+/**
+ * Tope de salida por turno. El modelo razona antes de contestar y ese razonamiento
+ * gasta del mismo presupuesto (medido: 8.192 tokens y 22.823 caracteres pensando
+ * sin llegar a escribir nada), así que se le deja margen de sobra.
+ */
+const MAX_TOKENS_SALIDA = 32768;
+
+/** Tope de pasos de un turno: sin esto, un bucle no termina nunca. */
+const MAX_PASOS_POR_DEFECTO = 12;
+
 export interface EventoAgente {
   /** "progreso": el modelo está escribiendo; se emite como mucho cada 700 ms. */
   tipo: "herramienta" | "aviso" | "progreso";
@@ -41,7 +51,7 @@ export async function ejecutarAgente(
   mensajes: ChatMessage[],
   opciones: OpcionesAgente = {},
 ): Promise<ResultadoAgente> {
-  const maxPasos = opciones.maxPasos ?? 12;
+  const maxPasos = opciones.maxPasos ?? MAX_PASOS_POR_DEFECTO;
   const alEvento = opciones.alEvento;
   const senal = opciones.signal;
   const t0 = Date.now();
@@ -52,13 +62,12 @@ export async function ejecutarAgente(
   const herramientas: PasoHerramienta[] = [];
   /** Escrituras seguidas sin una ejecucion correcta: corta el bucle de parches. */
   let escriturasSinEjecutar = 0;
-  /** Fallos idénticos seguidos por herramienta: corta los reintentos ciegos. */
-  /** Tope de salida por turno. El modelo razona antes de contestar y ese razonamiento
- *  gasta del mismo presupuesto: medido, un turno gastó 8.192 tokens y 22.823
- *  caracteres pensando sin llegar a escribir. Se le deja margen de sobra. */
-const MAX_TOKENS_SALIDA = 32768;
-
-const fallosIguales = new Map<string, number>();
+  /**
+   * Fallos identicos seguidos, POR TURNO. Antes vivia fuera de la funcion y un
+   * fallo de una sesion anterior contaba en la siguiente: el segundo intento del
+   * dia cortaba el turno por «tres veces igual».
+   */
+  const fallosIguales = new Map<string, number>();
   // Un vacío aislado es un fallo del proveedor, no del modelo: se reintenta una vez
   // en silencio. Si se repite, se para y se avisa (para no entrar en bucle).
   let vaciosSeguidos = 0;
@@ -107,6 +116,10 @@ const fallosIguales = new Map<string, number>();
         maxTokens: MAX_TOKENS_SALIDA,
         sinRazonamiento: true,
       });
+      // Se recalcula con la SEGUNDA respuesta: antes se quedaba el texto de la
+      // primera (vacía) y una respuesta buena del reintento se tiraba como si
+      // fuera otro turno en blanco.
+      texto = respuesta.content.trim();
     }
 
     const pideHerramientas = respuesta.toolCalls.length > 0;

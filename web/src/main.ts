@@ -1190,14 +1190,14 @@ async function importarPistasDesdeAgente(
     }
   }
 
-  // 2) si no hay proyecto, se crea con el tempo y la duracion del propio material
+  // 3) si no hay proyecto, no hay donde colgar las pistas
   if (!project) {
     return { ok: false, texto: "No se pudo crear el proyecto." };
   }
 
   let current: Project = project;
 
-  // 3) si lo hemos creado aqui, ajustamos tempo y compases al material real
+  // 4) si lo hemos creado aqui, ajustamos tempo y compases al material real
   if (creadoAqui) {
     let finBeat = 0;
     for (const bloque of material) {
@@ -1491,10 +1491,12 @@ async function crearSonidoDesdeAgente(
   }
 
   const rutaScript = rutaScriptDeSonido(receta);
+  // El slug va explícito: `cabecerasProyecto()` depende de que el agente haya
+  // llamado antes a setProyectoActivo y, si no, el fichero acaba en «sin-proyecto».
   const escribir = (ruta: string, contenido: string): Promise<Response> =>
     fetch("/api/fs/write", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-miuzika-proyecto": slug },
       body: JSON.stringify({ path: ruta, contenido }),
     });
 
@@ -1642,7 +1644,6 @@ function igualarClipsDesdeAgente(peticion: PeticionIgualar): { ok: boolean; text
   if (!(objetivo > 0)) return { ok: false, texto: "No hay clips que igualar." };
 
   const ops: Op[] = [];
-  let mudos = 0;
   for (const pista of pistas) {
     for (const clip of pista.clips) {
       if (Math.abs(clip.length - objetivo) > 1e-6) {
@@ -1655,9 +1656,6 @@ function igualarClipsDesdeAgente(peticion: PeticionIgualar): { ok: boolean; text
       ok: true,
       texto: `Nada que igualar: los ${pistas.length} clips ya duran ${(objetivo / bar).toFixed(2)} compases.`,
     };
-  }
-  for (const pista of pistas) {
-    if (pista.kind === "audio") mudos += 1;
   }
   const siguiente = applyOps(project, [
     ...ops,
@@ -1759,7 +1757,11 @@ function ajustarPistasDesdeAgente(peticion: { pistas: AjustePista[] }): { ok: bo
   if (hechas.length > 0) partes.push(`Ajustadas ${hechas.length} pista(s):\n${hechas.join("\n")}`);
   if (faltan.length > 0) {
     const nombres = project.tracks.map((t) => t.name).join(", ");
-    partes.push(`No encuentro: ${faltan.join(", ")}. Las pistas son: ${nombres}.`);
+    partes.push(
+      nombres === ""
+        ? `No encuentro: ${faltan.join(", ")}. El proyecto no tiene pistas todavía.`
+        : `No encuentro: ${faltan.join(", ")}. Las pistas son: ${nombres}.`,
+    );
   }
   if (partes.length === 0) partes.push("No habia nada que cambiar.");
   return { ok: hechas.length > 0, texto: partes.join("\n\n") };
@@ -2467,79 +2469,21 @@ async function migrarProyectoAntiguo(): Promise<string> {
 }
 
 /**
- * Arranque: el disco es la fuente de verdad. Se abre el último proyecto usado
- * (queda apuntado en localStorage) leyendo su `proyecto.json`; si no hay apunte,
- * el más reciente que haya en `workspace/proyectos/`.
+ * Arranque: el disco es la fuente de verdad, pero **no se abre ningún proyecto
+ * solo**. El usuario decide con «Proyectos» (o pidiendo una pieza nueva).
+ *
+ * Antes se abría el último apuntado en `localStorage` y sustituía lo que el
+ * usuario estuviera mirando; en un proyecto vacío se leía como fallo de carga.
+ * El lienzo vacío ya explica qué hacer, así que aquí no se escribe nada.
  */
 async function boot(): Promise<void> {
-  let aviso = "";
-  let cargados = 0;
-  let faltan: string[] = [];
-
   // Proyecto de la versión anterior (localStorage + IndexedDB) -> disco.
   const migracion = await migrarProyectoAntiguo();
-
-  const slugGuardado = ((): string => {
-    try {
-      return localStorage.getItem(CLAVE_ABIERTO) ?? "";
-    } catch {
-      return "";
-    }
-  })();
-
-  const abrir = async (slug: string): Promise<Project | null> => {
-    try {
-      return interpretarProyectoEnDisco(await leerProyectoDeDisco(rutaDeProyecto(slug))).proyecto;
-    } catch {
-      return null;
-    }
-  };
-
-  // Arranque limpio: NO se abre ningún proyecto solo. El usuario decide con «Proyectos»
-  // (o pidiendo una pieza nueva). Abrir el último sin querer hizo que «proyecto cargado»
-  // sustituyera al que se estaba mirando, y encima en proyectos vacíos parecía un fallo.
-  let slug = "";
-  void abrir;
-  void slugGuardado;
-  void listarProyectos;
-
-  if (project) {
-    setBusy(true, "Cargando los WAV del proyecto…");
-    try {
-      const hidratado = await hidratarAssets(project, slug);
-      cargados = hidratado.cargados;
-      faltan = hidratado.faltan;
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (project) {
-    setProject(project, false);
-    // Si viene vacío se dice: «pulsa play» sobre un proyecto sin pistas parece que la
-    // app no ha cargado nada (pasó tres veces seguidas el 25-oct).
-    addMessage(
-      "assistant",
-      project.tracks.length === 0
-        ? `Proyecto cargado del disco: "${project.name}". Está **vacío**: 0 pistas, ` +
-            `${project.lengthBars} compases a ${project.bpm} BPM. La última petición no llegó ` +
-            `a entregar pistas.`
-        : `Proyecto cargado del disco: "${project.name}". ${project.tracks.length} pista(s). ` +
-            `Pulsa play para escuchar.`,
-    );
-    if (migracion) addMessage("system", migracion);
-    if (aviso) addMessage("system", aviso);
-    if (cargados > 0) addMessage("system", `WAV cargados de proyectos/${slug}/: ${cargados}.`);
-    if (faltan.length > 0) warnMissingAudio(faltan);
-  } else {
-    setProject(null, false);
-    // Sin mensaje de arranque: que la línea de tiempo esté vacía ya lo dice.
-    if (migracion) addMessage("system", migracion);
-  }
-
+  setProject(null, false);
   setPlaying(false);
   ready = true;
   updateActions();
+  if (migracion) addMessage("system", migracion);
 }
 
 updateActions();

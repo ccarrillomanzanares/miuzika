@@ -1,8 +1,9 @@
 # Plan por fases
 
-Estado: **0 hecha · 3 en curso**. El orden no es el de la lista: se empieza por la
-creación de sonidos porque es la que no depende de nada y la que desbloquea el
-resto (para mezclar hay que tener sonidos que mezclar).
+Estado: **Fase 0 hecha · Fase 3 casi (faltan 3.6 y 3.7) · 1, 2, 4 y 5 pendientes**.
+El orden no es el de la lista: se empezó por la creación de sonidos porque es la que
+no depende de nada y desbloquea el resto (para mezclar hay que tener sonidos que
+mezclar). La arquitectura y la deuda viva están en `docs/ARCHITECTURE.md`.
 
 ---
 
