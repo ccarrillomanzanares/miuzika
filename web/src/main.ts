@@ -60,6 +60,7 @@ import { crearAcciones } from "./agent/acciones.ts";
 import { CARPETA_VERSIONES, nombreDeVersion } from "../../src/core/versiones.ts";
 import { ejecutarHerramienta } from "./agent/tools.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
+import { PanelPad } from "./pad.ts";
 import { locale, traducirPagina } from "./i18n.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -396,6 +397,8 @@ async function guardarAgente(): Promise<void> {
 }
 
 let project: Project | null = null;
+/** Panel del touchpad (se crea más abajo; applyProject le avisa de los cambios). */
+let panelPad: PanelPad | null = null;
 let busy = false;
 let ready = false;
 let restoring = false;
@@ -562,10 +565,14 @@ function stopOpenDaw(): void {
   setPlaying(false);
 }
 
-async function startOpenDawPlayback(view: Project): Promise<void> {
+/**
+ * Carga el proyecto en openDAW. Con `reproducir: false` deja el motor listo sin
+ * arrancar el transporte: es lo que usa el pad para sonar en directo.
+ */
+async function startOpenDawPlayback(view: Project, reproducir = true): Promise<void> {
   if (openDawHandle) stopOpenDaw();
   const generation = ++openDawGeneration;
-  setBusy(true, "Cargando WAVs y arrancando openDAW…");
+  setBusy(true, reproducir ? "Cargando WAVs y arrancando openDAW…" : "Preparando los instrumentos…");
   try {
     const { faltan } = await hidratarAssets(view, slugDeProyecto(view));
     warnMissingAudio(faltan);
@@ -588,12 +595,14 @@ async function startOpenDawPlayback(view: Project): Promise<void> {
       paraEngine,
       soundfonts,
       gm,
+      { reproducir },
     );
     if (generation !== openDawGeneration) {
       handle.stop();
       return;
     }
     openDawHandle = handle;
+    if (!reproducir) return;
     setPlaying(true);
     await stemPlayer.reproducir(handle.beat);
     const cuantos = stemPlayer.vocesActivas;
@@ -852,6 +861,7 @@ function applyProject(next: Project | null): void {
     return;
   }
   setProyectoActivo(slugDeProyecto(view));
+  panelPad?.proyectoCambiado();
   timeline.setProject(view);
   // setProject cambia los datos y los cabezales, pero no repinta el lienzo:
   // sin esto, un proyecto aplicado por el agente deja la timeline vacia.
@@ -1086,10 +1096,12 @@ function openCodeEditor(): void {
 playButton.addEventListener("click", () => {
   const view = project;
   if (!ready || busy || !view || view.tracks.length === 0) return;
-  if (openDawHandle) {
+  if (openDawHandle?.isPlaying) {
     stopOpenDaw();
     return;
   }
+  // Un motor cargado sin reproducir (el del pad) se descarga y se arranca de nuevo.
+  if (openDawHandle) stopOpenDaw();
   void startOpenDawPlayback(view);
 });
 
@@ -1156,6 +1168,41 @@ const acciones = crearAcciones({
   avisar: (texto) => addMessage("system", texto),
 });
 registrarAcciones(acciones);
+
+// El touchpad como instrumento (web/src/pad.ts).
+panelPad = new PanelPad({
+  proyecto: () => project,
+  motorActual: () => openDawHandle,
+  motor: async () => {
+    const view = project;
+    if (!view) return null;
+    if (!openDawHandle) await startOpenDawPlayback(view, false);
+    return openDawHandle;
+  },
+  parar: () => stopOpenDaw(),
+  cursor: () => timeline.currentBeat,
+  guardarClip: (trackId, startBeat, notas) => {
+    const view = project;
+    if (!view) return;
+    try {
+      const { project: siguiente } = applyOps(view, [
+        {
+          op: "add_notes",
+          trackId,
+          startBar: Math.round(startBeat / beatsPerBar(view)),
+          name: `Pad ${horaActual()}`,
+          notes: notas,
+        },
+      ]);
+      setProject(siguiente);
+    } catch (error) {
+      addMessage("system", `No se pudo guardar lo grabado: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+  avisar: (texto) => addMessage("system", texto),
+  dibujar: (beat) => timeline.draw(beat),
+});
+$<HTMLButtonElement>("pad").addEventListener("click", () => panelPad?.abrir());
 
 /** ¿Es un MIDI? Un .mid NO es audio: son notas, y hay que leerlas, no decodificarlas. */
 function esMidi(file: File): boolean {

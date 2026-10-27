@@ -18,6 +18,7 @@ import { rutasCatalogo } from "./api/catalogo.ts";
 import { rutasVoces } from "./api/voces.ts";
 import { rutasGpu } from "./api/gpu.ts";
 import { rutasPython } from "./api/python.ts";
+import { rutasPad } from "./api/pad.ts";
 
 export function miuzikaApi(env: Record<string, string>): Plugin {
   const ctx = crearContexto(env);
@@ -31,6 +32,7 @@ export function miuzikaApi(env: Record<string, string>): Plugin {
       rutasVoces(server, ctx);
       rutasGpu(server, ctx);
       rutasPython(server, ctx);
+      rutasPad(server, ctx);
     },
   };
 }

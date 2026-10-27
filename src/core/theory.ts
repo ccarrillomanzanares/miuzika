@@ -53,6 +53,11 @@ const SCALES: Record<Mode, readonly number[]> = {
 
 export const MODES = Object.keys(SCALES) as Mode[];
 
+/** Intervalos de la escala de un modo, en semitonos desde la tónica. */
+export function intervalosDe(mode: Mode): readonly number[] {
+  return SCALES[mode] ?? SCALES.major;
+}
+
 /** Tupla para `z.enum`. */
 export const MODE_NAMES = Object.keys(SCALES) as [Mode, ...Mode[]];
 

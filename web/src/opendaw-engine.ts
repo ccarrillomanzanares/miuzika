@@ -19,6 +19,18 @@ export interface OpenDawPlaybackHandle {
   seek: (beat: number) => void;
   /** Aplica mute/solo/volumen/pan al proyecto vivo del engine. */
   syncMix: (source: MiuzikaProject) => void;
+  /** Arranca el transporte (si se cargó con `reproducir: false`). */
+  play: () => void;
+  /**
+   * Nota en directo en el instrumento de una pista (el touchpad): `velocidad`
+   * 1..127 la empieza, 0 la suelta. Suena con el transporte parado o en marcha.
+   */
+  nota: (nombrePista: string, pitch: number, velocidad: number) => void;
+}
+
+export interface OpcionesOpenDaw {
+  /** false: carga el proyecto y deja el motor listo, sin arrancar el transporte. */
+  reproducir?: boolean;
 }
 
 interface EngineBoot {
@@ -247,6 +259,7 @@ export async function playWithOpenDaw(
   audioAssets: ReadonlyMap<string, OpenDawAudioInput> = new Map(),
   soundfonts: ReadonlyMap<string, { uuid: Uint8Array; name: string; bytes: ArrayBuffer }> = new Map(),
   gm: { uuid: Uint8Array; name: string; bytes: ArrayBuffer } | null = null,
+  opciones: OpcionesOpenDaw = {},
 ): Promise<OpenDawPlaybackHandle> {
   const { context, core, UUID, Option, AudioData } = await bootEngine();
   const hasDrums = source.tracks.some((track) => track.instrument.type === "drumkit");
@@ -346,9 +359,12 @@ export async function playWithOpenDaw(
     onTick(owner.getValue() / 960);
   });
   // El primer comando puede perderse mientras el processor termina de arrancar.
-  project.engine.play();
-  await new Promise((resolve) => setTimeout(resolve, 150));
-  if (!project.engine.isPlaying.getValue()) project.engine.play();
+  const arrancar = async (): Promise<void> => {
+    project.engine.play();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    if (!project.engine.isPlaying.getValue()) project.engine.play();
+  };
+  if (opciones.reproducir !== false) await arrancar();
 
   return {
     context,
@@ -362,6 +378,19 @@ export async function playWithOpenDaw(
       project.engine.setPosition(Math.max(0, beat) * 960);
     },
     syncMix,
+    play: () => {
+      void arrancar();
+    },
+    nota: (nombrePista, pitch, velocidad) => {
+      const unit = units.get(nombrePista);
+      if (!unit) return;
+      const nota = Math.min(127, Math.max(0, Math.round(pitch)));
+      project.engine.noteSignal(
+        velocidad > 0
+          ? { type: "note-on", uuid: unit.uuid, pitch: nota, velocity: Math.min(1, velocidad / 127) }
+          : { type: "note-off", uuid: unit.uuid, pitch: nota },
+      );
+    },
     stop: () => {
       project.engine.stop(true);
       subscription.terminate();

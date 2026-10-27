@@ -950,3 +950,59 @@ button.active {
   0%, 100% { opacity: 0.25; transform: scale(0.8); }
   50% { opacity: 1; transform: scale(1.15); }
 }
+
+/* ── Pad (touchpad como instrumento) ──────────────────────────────────────── */
+.dialogo-pad {
+  width: min(720px, 92vw);
+}
+
+.dialogo-pad[open] {
+  position: fixed;
+  inset: auto 16px 16px auto;
+  margin: 0;
+}
+
+.pad-mandos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pad-mandos select {
+  margin-left: 4px;
+}
+
+.pad-octava button {
+  min-width: 24px;
+  margin: 0 4px;
+}
+
+.pad-grabar.grabando {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pad-lienzo {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.dialogo-pad.armado .pad-lienzo {
+  border-color: var(--accent);
+  cursor: none;
+}
+
+.pad-estado {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
