@@ -17,6 +17,8 @@
  *  - `r` (o `-`) es silencio; `[D3 F3 A3]` o `D3+F3+A3` es un acorde.
  *  - `|` es una barra de compás: se ignora (sólo ayuda a leer).
  *  - `~` al final de una nota la liga con la siguiente si es la misma altura.
+ *  - `( … )x4` repite el grupo 4 veces (se pueden anidar): un riff de un compás
+ *    tocado cuatro veces ya no son 32 notas escritas, son 8 y un `x4`.
  */
 
 import type { Note } from "./types.ts";
@@ -77,16 +79,63 @@ export interface ResultadoNotacion {
   notas: Note[];
   /** Negras que ocupa la frase (con los silencios). */
   beats: number;
+  /** Negras de cada tramo entre barras «|», en orden (para comprobar los compases). */
+  tramos: number[];
+}
+
+/**
+ * Tramos entre barras que no cuadran con el compás: cada tramo tiene que medir un
+ * número entero de compases. El último puede quedarse corto (la frase acaba antes).
+ * Medido el 27-oct: dos compases de 5 negras en un estribillo desplazaron todo lo
+ * que venía detrás.
+ */
+export function tramosIrregulares(tramos: readonly number[], beatsPorCompas: number): string[] {
+  const avisos: string[] = [];
+  tramos.forEach((beats, i) => {
+    const compases = beats / beatsPorCompas;
+    const entero = Math.abs(compases - Math.round(compases)) < 1e-3 && Math.round(compases) >= 1;
+    const ultimo = i === tramos.length - 1;
+    if (!entero && !(ultimo && beats < beatsPorCompas)) {
+      avisos.push(`el tramo ${i + 1} (entre barras) mide ${Number(beats.toFixed(3))} negras y el compás tiene ${beatsPorCompas}`);
+    }
+  });
+  return avisos;
+}
+
+/** Máximo de elementos tras desplegar las repeticiones (un `x1000` no cuelga nada). */
+const MAX_ELEMENTOS = 8000;
+
+/** Despliega `( … )xN` (también `*N` o `×N`), de dentro hacia fuera. */
+export function desplegarRepeticiones(texto: string): string {
+  let actual = texto;
+  const grupo = /\(([^()]*)\)\s*[x×*]\s*(\d{1,3})/;
+  for (let vuelta = 0; vuelta < 100 && grupo.test(actual); vuelta += 1) {
+    actual = actual.replace(grupo, (_, dentro: string, veces: string) => {
+      const n = Number(veces);
+      if (n < 1) throw new ErrorNotacion("una repetición necesita x1 o más");
+      return Array.from({ length: n }, () => dentro.trim()).join(" | ");
+    });
+    if (actual.length > MAX_ELEMENTOS * 12) throw new ErrorNotacion("demasiadas repeticiones: parte la frase");
+  }
+  if (/[()]/.test(actual)) throw new ErrorNotacion("paréntesis sin cerrar o sin «xN» detrás");
+  return actual;
 }
 
 export function leerNotacion(texto: string, velocidad = 90): ResultadoNotacion {
+  texto = desplegarRepeticiones(texto);
   const notas: Note[] = [];
   let t = 0;
   let duracion = 1;
   /** Notas que esperan ligadura: altura → índice en `notas`. */
   let ligadas = new Map<number, number>();
+  const tramos: number[] = [];
+  let inicioTramo = 0;
   for (const token of trocear(texto)) {
-    if (token === "|") continue;
+    if (token === "|") {
+      if (t > inicioTramo + 1e-9) tramos.push(Number((t - inicioTramo).toFixed(4)));
+      inicioTramo = t;
+      continue;
+    }
     const m = /^(\[[^\]]+\]|[^:!~]+)(?::([^!~]+))?(?:!(\d{1,3}))?(~)?$/.exec(token);
     if (!m) throw new ErrorNotacion(`no entiendo «${token}»`);
     const [, cabeza, dur, vel, liga] = m;
@@ -114,7 +163,8 @@ export function leerNotacion(texto: string, velocidad = 90): ResultadoNotacion {
     t += duracion;
   }
   if (notas.length === 0) throw new ErrorNotacion("la frase no tiene ninguna nota");
-  return { notas, beats: Number(t.toFixed(4)) };
+  if (t > inicioTramo + 1e-9) tramos.push(Number((t - inicioTramo).toFixed(4)));
+  return { notas, beats: Number(t.toFixed(4)), tramos };
 }
 
 const NOMBRES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];

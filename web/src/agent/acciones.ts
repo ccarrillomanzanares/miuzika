@@ -20,7 +20,7 @@ import { aplicarPalabras } from "../../../src/core/palabras.ts";
 import { OpError, applyOps } from "../../../src/core/ops.ts";
 import type { Op } from "../../../src/core/ops.ts";
 import { notasDeProgresion } from "../../../src/core/composicion.ts";
-import { leerNotacion } from "../../../src/core/notacion.ts";
+import { leerNotacion, tramosIrregulares } from "../../../src/core/notacion.ts";
 import { notasDeBateria } from "../../../src/core/bateria.ts";
 import { nombreDeNota, resumenParaAgente } from "../../../src/core/resumen.ts";
 import { normalizarTexto, slugDe } from "../../../src/core/nombres.ts";
@@ -791,12 +791,31 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         instrument: { ...pista.instrument, ...(tipoPedido ? { type: tipoPedido } : {}), ...(programa !== undefined ? { program: programa } : {}) },
       });
     }
+    // Lo que ya había en ese tramo se sustituye, pero SÓLO en ese tramo: un clip que
+    // empieza antes o acaba después conserva sus trozos de fuera. Antes se borraba el
+    // clip entero y un redoble de un compás se comió 16 compases de batería (27-oct).
     const sustituidos: string[] = [];
+    const conservados: { startBar: number; length: number; notes: Note[]; name: string }[] = [];
     for (const clip of pista?.clips ?? []) {
-      if (clip.start < fin - 1e-6 && clip.start + clip.length > inicio + 1e-6) {
-        ops.push({ op: "remove_clip", trackId, clipId: clip.id });
-        sustituidos.push(clip.id);
-      }
+      const finClip = clip.start + clip.length;
+      if (!(clip.start < fin - 1e-6 && finClip > inicio + 1e-6)) continue;
+      ops.push({ op: "remove_clip", trackId, clipId: clip.id });
+      sustituidos.push(clip.id);
+      const trozo = (desde: number, hasta: number): void => {
+        if (hasta - desde < 1e-6) return;
+        const startBar = Math.floor(desde / barBeats + 1e-9);
+        const base = startBar * barBeats;
+        const notes = clip.notes
+          .filter((n) => clip.start + n.start >= desde - 1e-6 && clip.start + n.start < hasta - 1e-6)
+          .map((n) => ({
+            ...n,
+            start: Number((clip.start + n.start - base).toFixed(4)),
+            duration: Number(Math.min(n.duration, hasta - (clip.start + n.start)).toFixed(4)),
+          }));
+        if (notes.length > 0) conservados.push({ startBar, length: hasta - base, notes, name: clip.name });
+      };
+      trozo(clip.start, Math.min(finClip, inicio));
+      trozo(Math.max(clip.start, fin), finClip);
     }
     // add_notes acepta 2000 notas por op: lo largo va en trozos al mismo clip.
     const trozos: Note[][] = [];
@@ -813,6 +832,12 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       }
       // El clip dura lo que dice la frase (con sus silencios del final), en compases.
       siguiente = applyOps(siguiente, [{ op: "set_clip_length", trackId, clipId, lengthBeats: compases * barBeats }]).project;
+      // Y los trozos que quedaban fuera del tramo vuelven, cada uno en su clip.
+      for (const c of conservados) {
+        siguiente = applyOps(siguiente, [{ op: "add_notes", trackId, startBar: c.startBar, name: c.name.slice(0, 60), notes: c.notes }]).project;
+        const nuevo = siguiente.tracks.find((t) => t.id === trackId)?.clips.at(-1)?.id ?? "";
+        siguiente = applyOps(siguiente, [{ op: "set_clip_length", trackId, clipId: nuevo, lengthBeats: c.length }]).project;
+      }
       e.fijar(siguiente);
       return { ok: true, texto: "", trackId, clipId, desde: startBar + 1, compases, sustituidos };
     } catch (error) {
@@ -829,7 +854,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     return (
       `${notas} notas en «${pista?.name ?? r.trackId}» (${r.trackId}, ${instrumento}), clip ${r.clipId}, ` +
       `compases ${r.desde}-${r.desde + r.compases - 1}` +
-      (r.sustituidos.length > 0 ? ` (sustituye ${r.sustituidos.join(", ")})` : "") +
+      (r.sustituidos.length > 0 ? ` (sustituye lo que había en ese tramo de ${r.sustituidos.join(", ")}; lo de fuera se conserva)` : "") +
       "."
     );
   }
@@ -862,6 +887,16 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       leido = leerNotacion(peticion.notas, peticion.velocidad ?? 90);
     } catch (error) {
       return { ok: false, texto: `${mensajeDe(error)}. No se ha cambiado nada.` };
+    }
+    const proyecto = e.proyecto();
+    const irregulares = proyecto ? tramosIrregulares(leido.tramos, beatsPerBar(proyecto)) : [];
+    if (irregulares.length > 0) {
+      return {
+        ok: false,
+        texto:
+          `Los compases no cuadran: ${irregulares.join("; ")}. Corrige las duraciones (o quita la barra si ` +
+          "el tramo ocupa varios compases). No se ha cambiado nada.",
+      };
     }
     const repeticiones = Math.max(1, Math.min(64, Math.round(peticion.repeticiones ?? 1)));
     const notas: Note[] = [];

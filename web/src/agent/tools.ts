@@ -15,7 +15,7 @@ import type { PeticionProgresion } from "../../../src/core/composicion.ts";
 import type { PeticionBateria } from "../../../src/core/bateria.ts";
 import { PATRONES } from "../../../src/core/composicion.ts";
 import { PALABRAS } from "../../../src/core/palabras.ts";
-import { DEVICE_TYPES, INSTRUMENT_TYPES } from "../../../src/core/types.ts";
+import { DEVICE_PARAMS, DEVICE_TYPES, INSTRUMENT_TYPES } from "../../../src/core/types.ts";
 import { firmasDeOps } from "../../../src/core/ops.ts";
 import { MODE_NAMES } from "../../../src/core/theory.ts";
 
@@ -264,6 +264,16 @@ const HERRAMIENTAS_DEL_PROYECTO = new Set([
   "usar_instrumento",
 ]);
 
+/** «reverb(wet 0..1, decay 0..1, …); eq(low -24..24, …)»: lo que acepta cada efecto. */
+function parametrosDeEfectos(): string {
+  return DEVICE_TYPES.map(
+    (tipo) =>
+      `${tipo}(${Object.entries(DEVICE_PARAMS[tipo])
+        .map(([clave, [min, max]]) => `${clave} ${min}..${max}`)
+        .join(", ")})`,
+  ).join("; ");
+}
+
 /** Herramientas que devuelven texto por páginas y no pasan por el recorte. */
 const PAGINADAS = new Set(["leer_fichero", "leer_web"]);
 
@@ -303,7 +313,9 @@ export const HERRAMIENTAS: ToolSpec[] = [
         "(efectos) y mezclar (ganancia, paneo, master) sin escribir Python. trackId acepta id, nombre " +
         "exacto o número de pista. Notas: {pitch 0-127 (60 = C4), start y duration en negras desde " +
         "el inicio del clip, velocity 1-127}. startBar empieza en 0. Tipos de efecto: " +
-        `${DEVICE_TYPES.join(", ")}. Instrumentos: ${INSTRUMENT_TYPES.join(", ")}. Operaciones:\n` +
+        `${DEVICE_TYPES.join(", ")}; sus parámetros (y rangos): ${parametrosDeEfectos()}. ` +
+        `Instrumentos: ${INSTRUMENT_TYPES.join(", ")} (con program 0-127 suenan con General MIDI). ` +
+        "Operaciones:\n" +
         firmasDeOps(),
       parameters: {
         type: "object",
@@ -358,7 +370,8 @@ export const HERRAMIENTAS: ToolSpec[] = [
         "alteración + octava, C4 = 60 (D2, Eb4, F#3, do4, sib2) o número MIDI; ':dur' en negras " +
         "(1 negra, .5 corchea, 1/3 tresillo, 4 redonda) y si falta se repite la anterior; '!vel' 1-127 " +
         "para una nota; 'r' silencio; [D3 F3 A3] acorde; '|' barra de compás (se ignora); '~' liga con " +
-        "la siguiente igual. Ejemplo de 2 compases de bajo: \"D2:1.5 D2:.5 F2:1 Eb2 | D2:2 r:1 C2\".",
+        "la siguiente igual; '( … )x4' repite un grupo. Ejemplo, riff de un compás cuatro veces y un " +
+        "remate: \"(E2:.5 B2 E3 B2 E2 B2 E3 B2)x4 | D2:2 r:2\".",
       parameters: {
         type: "object",
         properties: {
@@ -578,7 +591,10 @@ export const HERRAMIENTAS: ToolSpec[] = [
         properties: {
           nombre: { type: "string", description: "Nombre que ha pedido el usuario" },
           bpm: { type: "number", description: "Tempo (por defecto 120)" },
-          compases: { type: "integer", description: "Duracion en compases (por defecto 32)" },
+          compases: {
+            type: "integer",
+            description: "No lo pongas salvo que la duración esté decidida: el proyecto crece solo con el material",
+          },
           tonica: { type: "string", description: "Tónica en notación americana: C, F#, Bb (re = D)" },
           modo: {
             type: "string",
@@ -973,7 +989,7 @@ async function ejecutarCrudo(
         return local.crearProyecto({
           nombre: String(args.nombre ?? "").trim(),
           bpm: Number(args.bpm ?? 120) || 120,
-          compases: Number(args.compases ?? 32) || 32,
+          compases: Number(args.compases ?? 8) || 8,
           ...(tonica ? { tonica } : {}),
           ...(modo ? { modo } : {}),
         });

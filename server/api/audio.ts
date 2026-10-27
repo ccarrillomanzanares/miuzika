@@ -147,7 +147,14 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
         }
         const r = await correr("codigo/analizar_referencia.py", [origen], 900);
         if (r.codigo !== 0) {
-          responderJson(res, 400, { error: (r.errores || r.salida).slice(-800) });
+          const crudo = (r.errores || r.salida).slice(-800);
+          // Lo que falta en el equipo, dicho de forma que el agente se lo pueda pedir a la persona.
+          const falta = /No module named ['"]?yt_dlp/.test(crudo)
+            ? "Falta yt-dlp en el Python del equipo: instálalo con «python -m pip install yt-dlp» (y ffmpeg en el PATH). Mientras, pide un enlace a otra fuente o un audio."
+            : /ffmpeg/i.test(crudo) && /(not found|no se reconoce|No such file)/i.test(crudo)
+              ? "Falta ffmpeg en el PATH del equipo para decodificar el audio."
+              : "";
+          responderJson(res, 400, { error: falta ? `${falta}\n${crudo}` : crudo });
           return;
         }
         responderJson(res, 200, JSON.parse(r.salida));

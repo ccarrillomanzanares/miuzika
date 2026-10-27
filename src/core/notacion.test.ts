@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { aNotacion, alturaDe, leerNotacion } from "./notacion.ts";
+import { aNotacion, alturaDe, leerNotacion, tramosIrregulares } from "./notacion.ts";
 import { notaDePieza, notasDeBateria } from "./bateria.ts";
 
 test("alturas: letras, solfeo, alteraciones y números MIDI", () => {
@@ -87,4 +87,23 @@ test("aNotacion es la inversa de leerNotacion en líneas secuenciales", () => {
     { pitch: 60, start: 0, duration: 4, velocity: 90 },
     { pitch: 64, start: 1, duration: 1, velocity: 90 },
   ]), null);
+});
+
+test("repeticiones con ( … )xN, anidadas, y errores claros", () => {
+  const r = leerNotacion("(E2:.5 B2 E3 B2)x2 (D2:1 (A1:.5)x2)x2");
+  assert.equal(r.beats, 4 + 4);
+  assert.equal(r.notas.filter((n) => n.pitch === 40).length, 2);
+  assert.equal(r.notas.filter((n) => n.pitch === 33).length, 4);
+  assert.throws(() => leerNotacion("(E2 B2"), /paréntesis/);
+  assert.throws(() => leerNotacion("(E2)x0"), /x1/);
+});
+
+test("tramos entre barras: se detecta el compás que no cuadra", () => {
+  const r = leerNotacion("C4:1 D4 E4 F4 | G4:2 A4:2 B4:1 | C5:4 | D5:2");
+  assert.deepEqual(r.tramos, [4, 5, 4, 2]);
+  const avisos = tramosIrregulares(r.tramos, 4);
+  assert.equal(avisos.length, 1);
+  assert.match(avisos[0]!, /tramo 2/);
+  // Un tramo de dos compases sin barra en medio es válido.
+  assert.deepEqual(tramosIrregulares([8, 4], 4), []);
 });
