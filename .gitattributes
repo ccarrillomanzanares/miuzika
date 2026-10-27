@@ -1,0 +1,10 @@
+# Finales de línea: LF en el repositorio para todo el texto. En este equipo
+# convivían ficheros con CRLF y con LF (tiempo.ts, picos.py…), y cualquier
+# herramienta que no fuera la de Windows los veía «modificados» sin serlo.
+* text=auto eol=lf
+
+*.wav binary
+*.sf2 binary
+*.mid binary
+*.wasm binary
+*.png binary
