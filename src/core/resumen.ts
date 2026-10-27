@@ -62,10 +62,48 @@ function lineaPista(track: Track, indice: number, barBeats: number): string[] {
 }
 
 /**
- * Resumen del proyecto. Con `clipId`, además, las notas de ese clip (hasta
- * `maxNotas`), que es lo que hace falta para reescribirlo con `replace_clip_notes`.
+ * Sólo un clip: su pista, dónde está y sus notas. Medido el 27-oct: con `clip`
+ * se devolvía el resumen entero (6 pistas, 50 clips) MÁS las notas; pasaba de 4000
+ * caracteres, se recortaba y el agente gastaba otro paso en leer el resto.
+ */
+function resumenDeClip(project: Project, clipId: string, maxNotas: number): string {
+  const barBeats = beatsPerBar(project);
+  const pista = project.tracks.find((track) => track.clips.some((clip) => clip.id === clipId));
+  const clip = pista?.clips.find((candidato) => candidato.id === clipId);
+  if (!pista || !clip) {
+    const ids = project.tracks.flatMap((track) => track.clips.map((c) => c.id)).slice(0, 60).join(", ");
+    return `No hay ningún clip con id ${clipId}. Clips: ${ids || "ninguno"}.`;
+  }
+  const lineas = [
+    `${project.key.tonic} ${project.key.mode} · ${project.bpm} BPM · ${project.timeSignature.numerator}/${project.timeSignature.denominator}`,
+    `Pista ${pista.id} «${pista.name}» · ${lineaClip(clip, barBeats)}`,
+  ];
+  if (clip.notes.length === 0) {
+    lineas.push("(sin notas)");
+    return lineas.join("\n");
+  }
+  // En la misma notación compacta con la que escribe escribir_notas, si se puede:
+  // ocupa una fracción y el modelo la lee como una partitura.
+  const compacta = aNotacion(clip.notes);
+  if (compacta !== null) {
+    lineas.push("Notas en notación compacta (negras desde el inicio del clip):", compacta);
+    return lineas.join("\n");
+  }
+  lineas.push("Notas (pitch, start, duration, velocity; tiempos en negras desde el inicio del clip):");
+  const notas = [...clip.notes].sort((a, b) => a.start - b.start || a.pitch - b.pitch);
+  for (const nota of notas.slice(0, maxNotas)) {
+    lineas.push(`${nota.pitch} ${nombreDeNota(nota.pitch)} ${redondear(nota.start, 3)} ${redondear(nota.duration, 3)} ${nota.velocity}`);
+  }
+  if (notas.length > maxNotas) lineas.push(`… y ${notas.length - maxNotas} más.`);
+  return lineas.join("\n");
+}
+
+/**
+ * Resumen del proyecto. Con `clipId`, SÓLO ese clip y sus notas (hasta `maxNotas`),
+ * que es lo que hace falta para reescribirlo.
  */
 export function resumenParaAgente(project: Project, opciones: { clipId?: string; maxNotas?: number } = {}): string {
+  if (opciones.clipId) return resumenDeClip(project, opciones.clipId, opciones.maxNotas ?? 400);
   const barBeats = beatsPerBar(project);
   const stats = projectStats(project);
   const minutos = Math.floor(stats.seconds / 60);
@@ -90,28 +128,5 @@ export function resumenParaAgente(project: Project, opciones: { clipId?: string;
     }
   }
 
-  if (opciones.clipId) {
-    const clip = project.tracks.flatMap((track) => track.clips).find((candidato) => candidato.id === opciones.clipId);
-    if (!clip) {
-      lineas.push(`No hay ningún clip con id ${opciones.clipId}.`);
-    } else {
-      // En la misma notación compacta con la que escribe escribir_notas, si se puede:
-      // ocupa una fracción y el modelo la lee como una partitura.
-      const compacta = clip.notes.length > 0 ? aNotacion(clip.notes) : null;
-      if (compacta !== null) {
-        lineas.push(`Notas de ${clip.id} en notación compacta (negras desde el inicio del clip):`, compacta);
-        return lineas.join("\n");
-      }
-      const max = opciones.maxNotas ?? 400;
-      lineas.push(`Notas de ${clip.id} (pitch, start, duration, velocity; tiempos en negras desde el inicio del clip):`);
-      const notas = [...clip.notes].sort((a, b) => a.start - b.start || a.pitch - b.pitch);
-      for (const nota of notas.slice(0, max)) {
-        lineas.push(
-          `${nota.pitch} ${nombreDeNota(nota.pitch)} ${redondear(nota.start, 3)} ${redondear(nota.duration, 3)} ${nota.velocity}`,
-        );
-      }
-      if (notas.length > max) lineas.push(`… y ${notas.length - max} más.`);
-    }
-  }
   return lineas.join("\n");
 }

@@ -57,6 +57,7 @@ import type { TurnoAgente } from "./agent/contexto.ts";
 import { fraseBarra, lineaResumen, pasoTerminado, segundos } from "./agent/actividad.ts";
 import { cabeceraDeProyecto, registrarAcciones, setProyectoActivo } from "./agent/tools.ts";
 import { crearAcciones } from "./agent/acciones.ts";
+import { CARPETA_VERSIONES, nombreDeVersion } from "../../src/core/versiones.ts";
 import { ejecutarHerramienta } from "./agent/tools.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 import { locale, traducirPagina } from "./i18n.ts";
@@ -181,6 +182,7 @@ async function responderAlUsuario(texto: string): Promise<void> {
   cancelador = new AbortController();
   $<HTMLButtonElement>("cancelar").hidden = false;
   await refrescarManifiesto();
+  await guardarVersion(texto);
   conversacion.push({ role: "user", content: texto });
   const burbuja = chat.add("assistant", "…");
   const t0 = Date.now();
@@ -354,6 +356,29 @@ async function cargarAgenteDelProyecto(vista: Project | null): Promise<void> {
   await refrescarManifiesto();
 }
 
+/**
+ * Foto del proyecto ANTES del turno, en `proyectos/<carpeta>/versiones/`: es lo
+ * que permite al agente (herramienta `versiones`) volver atrás una pista o el
+ * proyecto entero. El servidor se queda con las últimas MAX_VERSIONES.
+ */
+async function guardarVersion(pedido: string): Promise<void> {
+  const vista = project;
+  if (!vista) return;
+  try {
+    const { datos } = serializarProyecto(vista, audioAssets);
+    await fetch(`/api/fs/write`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: `proyectos/${slugDeProyecto(vista)}/${CARPETA_VERSIONES}/${nombreDeVersion(new Date(), pedido)}`,
+        contenido: JSON.stringify(datos),
+      }),
+    });
+  } catch {
+    /* una foto que falla no puede impedir el turno */
+  }
+}
+
 async function guardarAgente(): Promise<void> {
   if (slugAgente === "") return;
   try {
@@ -427,7 +452,9 @@ function sincronizarStems(): void {
   stemPlayer.definir(defs);
 }
 
-const HISTORY_LIMIT = 8;
+// Un turno del agente hace decenas de cambios: con 8 el deshacer no llegaba ni al
+// principio del turno. Para ir más atrás están las versiones (una por turno).
+const HISTORY_LIMIT = 60;
 /** Historial de undo: en memoria, de la sesión. El disco guarda el estado, no los pasos. */
 let history: Project[] = [];
 let future: Project[] = [];

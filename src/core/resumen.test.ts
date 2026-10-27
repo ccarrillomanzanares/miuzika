@@ -26,6 +26,13 @@ test("el resumen lleva ids, dispositivos y, si se pide, las notas del clip", () 
   const conNotas = resumenParaAgente(project, { clipId: "clp_1" });
   assert.match(conNotas, /notación compacta/);
   assert.match(conNotas, /E2:1!100/);
+  assert.match(conNotas, /Pista trk_bajo «Bajo»/);
+  // Sólo el clip: ni el resto de pistas ni los rangos de efectos.
+  assert.doesNotMatch(conNotas, /Rangos de los fx/);
+  assert.match(resumenParaAgente(project, { clipId: "clp_99" }), /No hay ningún clip con id clp_99\. Clips: clp_1/);
+  // El dispositivo también se acepta como texto.
+  const conTexto = applyOps(project, [{ op: "add_device", trackId: "trk_bajo", device: "Reverb" } as never]);
+  assert.match(conTexto.results.join(" "), /reverb/);
 });
 
 test("la chuleta de ops sale del esquema y cubre todas", () => {

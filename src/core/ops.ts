@@ -126,10 +126,15 @@ const AddDeviceOp = z.object({
   op: z.literal("add_device"),
   trackId: IdSchema,
   id: IdSchema.optional(),
-  device: z.object({
-    type: z.enum(DEVICE_TYPES),
-    params: z.record(z.string(), ParamValueSchema).optional(),
-  }),
+  // «"reverb"» vale igual que «{type:"reverb"}»: el modelo lo escribe así a menudo
+  // (medido el 27-oct: tres add_device seguidos rechazados por eso).
+  device: z.preprocess(
+    (valor) => (typeof valor === "string" ? { type: valor.trim().toLowerCase() } : valor),
+    z.object({
+      type: z.enum(DEVICE_TYPES),
+      params: z.record(z.string(), ParamValueSchema).optional(),
+    }),
+  ),
 });
 
 const SetDeviceOp = z.object({

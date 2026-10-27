@@ -30,7 +30,8 @@ export const CARPETAS_COMPARTIDAS = [
  * contexto del modelo (recortados a cabeza y cola, así que el medio —que es donde
  * están sus ficheros— no lo veía). Se consulta con `buscar_sonido`, no listando.
  */
-export const CARPETAS_OCULTAS = ["catalogo", "node_modules", ".git", "__pycache__", "dist-web", "_referencias"] as const;
+// «versiones»: las fotos por turno (src/core/versiones.ts) se ven con la herramienta `versiones`.
+export const CARPETAS_OCULTAS = ["catalogo", "node_modules", ".git", "__pycache__", "dist-web", "_referencias", "versiones"] as const;
 
 /** ¿La ruta empieza por una carpeta compartida? */
 export function esRutaCompartida(ruta: string): boolean {

@@ -23,10 +23,21 @@ import { MODE_NAMES } from "../../../src/core/theory.ts";
 export type ResultadoHerramienta = ResultadoAccion;
 
 /** Slug del proyecto abierto: el servidor resuelve ahi las rutas no compartidas. */
-let proyectoActivo = "";
+/**
+ * Vive en `globalThis`, como las acciones (ver `registrarAcciones`): tras una
+ * recarga en caliente puede haber dos copias de este módulo, y la que fija el
+ * proyecto (main.ts) no es la que hace las peticiones del agente. Medido el
+ * 27-oct: ejecutar_python y listar_ficheros caían en «proyectos/sin-proyecto/»
+ * con un proyecto abierto.
+ */
+const estadoProyecto = globalThis as unknown as { __miuzikaProyectoActivo?: string };
 
 export function setProyectoActivo(slug: string): void {
-  proyectoActivo = slug;
+  estadoProyecto.__miuzikaProyectoActivo = slug;
+}
+
+function proyectoActivo(): string {
+  return estadoProyecto.__miuzikaProyectoActivo ?? "";
 }
 
 /** Donde corre Python: en este portatil (cpu) o en una GPU de Lambda Cloud. */
@@ -50,7 +61,7 @@ export function cabeceraDeProyecto(slug: string): Record<string, string> {
 
 /** Cabeceras con el proyecto activo (lo usa tambien main.ts). */
 export function cabecerasProyecto(extra?: Record<string, string>): Record<string, string> {
-  return { ...cabeceraDeProyecto(proyectoActivo), ...(extra ?? {}) };
+  return { ...cabeceraDeProyecto(proyectoActivo()), ...(extra ?? {}) };
 }
 
 /**
@@ -217,6 +228,7 @@ export interface PeticionNotas extends PeticionEscritura {
 export interface PeticionBateriaPista extends PeticionBateria, PeticionEscritura {}
 
 export interface AccionesEstudio {
+  versiones(peticion: { accion: string; version?: string; pistas?: string[] }): Promise<ResultadoAccion>;
   leerProyecto(peticion: { clipId?: string }): ResultadoAccion;
   editarProyecto(peticion: { ops: unknown[] }): ResultadoAccion;
   escribirProgresion(peticion: PeticionProgresionPista): ResultadoAccion;
@@ -250,6 +262,7 @@ function acciones(): AccionesEstudio | null {
 
 /** Herramientas que se resuelven en la pestaña, contra el proyecto abierto. */
 const HERRAMIENTAS_DEL_PROYECTO = new Set([
+  "versiones",
   "leer_proyecto",
   "editar_proyecto",
   "escribir_progresion",
@@ -275,7 +288,7 @@ function parametrosDeEfectos(): string {
 }
 
 /** Herramientas que devuelven texto por páginas y no pasan por el recorte. */
-const PAGINADAS = new Set(["leer_fichero", "leer_web"]);
+const PAGINADAS = new Set(["leer_fichero", "leer_web", "leer_proyecto"]);
 
 /** Tope de un solo escribir_fichero (≈200 líneas). Ver el porqué en el case. */
 const MAX_FICHERO = 8000;
@@ -293,13 +306,34 @@ export const HERRAMIENTAS: ToolSpec[] = [
       description:
         "Devuelve el estado REAL del proyecto abierto: tempo, compás, tonalidad, pistas con su id, " +
         "instrumento, ganancia, paneo, efectos (con sus parámetros) y clips (compás, duración, rango " +
-        "de notas). Con `clip`, además las notas de ese clip. Léelo antes de editar: los ids que " +
+        "de notas). Con `clip`, SÓLO ese clip y sus notas (más corto). Léelo antes de editar: los ids que " +
         "devuelve son los que piden editar_proyecto y escribir_progresion.",
       parameters: {
         type: "object",
         properties: {
           clip: { type: "string", description: "Opcional: id de un clip (clp_3) para ver sus notas" },
         },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "versiones",
+      description:
+        "Versiones guardadas del proyecto: al empezar CADA turno se guarda una foto del proyecto tal " +
+        "como estaba. Úsala cuando la persona quiera volver atrás («la batería de antes», «deshaz lo de " +
+        "la melodía»): accion=listar enseña las fotos con el pedido que vino después; accion=restaurar " +
+        "copia de una foto las `pistas` pedidas (id o nombre) o, sin `pistas`, el proyecto entero. " +
+        "Restaura de la foto, no reconstruyas a mano: así vuelve exactamente lo que había.",
+      parameters: {
+        type: "object",
+        properties: {
+          accion: { type: "string", enum: ["listar", "restaurar"] },
+          version: { type: "string", description: "Nombre de la foto o su número en la lista (1 = la más nueva)" },
+          pistas: { type: "array", items: { type: "string" }, description: "Pistas a restaurar; vacío = todo" },
+        },
+        required: ["accion"],
       },
     },
   },
@@ -981,7 +1015,7 @@ async function ejecutarCrudo(
           reemplaza: args.reemplaza,
           todas: args.todas,
         });
-        return { ok: true, texto: `Editado ${datos.path}: ${datos.reemplazos} reemplazo(s).` };
+        return { ok: true, texto: `Editado ${datos.path ?? args.path}: ${datos.reemplazos} reemplazo(s).` };
       }
       case "crear_proyecto": {
         const tonica = typeof args.tonica === "string" ? args.tonica.trim() : "";
@@ -1250,6 +1284,12 @@ async function ejecutarCrudo(
         });
         return local.ajustarPistas({ pistas });
       }
+      case "versiones":
+        return await local.versiones({
+          accion: String(args.accion ?? "listar"),
+          version: args.version === undefined ? undefined : String(args.version),
+          pistas: Array.isArray(args.pistas) ? args.pistas.map(String) : undefined,
+        });
       case "leer_proyecto":
         return local.leerProyecto(typeof args.clip === "string" && args.clip.trim() !== "" ? { clipId: args.clip.trim() } : {});
       case "editar_proyecto": {

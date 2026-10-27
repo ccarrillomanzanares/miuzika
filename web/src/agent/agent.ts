@@ -25,8 +25,10 @@ const MAX_TOKENS_SALIDA = 32768;
  * canción entera, unos 30. No es un tope de gasto (el plan de Ollama es una cuota
  * fija): es el freno por si el modelo entra en bucle. Los cortes por fallos
  * repetidos y por escribir sin ejecutar siguen actuando antes.
+ * Subido a 80 el 27-oct: un pase de arreglo sobre una canción de 92 compases
+ * (melodía, coro, guitarra y efectos de 6 pistas) gastó 33 pasos en un turno.
  */
-const MAX_PASOS_POR_DEFECTO = 40;
+const MAX_PASOS_POR_DEFECTO = 80;
 
 /** Argumentos de una llamada ya ejecutada por encima de esto se resumen en el historial. */
 const UMBRAL_ARGUMENTOS = 1200;

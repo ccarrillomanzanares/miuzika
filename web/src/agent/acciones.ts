@@ -33,6 +33,8 @@ import {
   rutaEnProyecto,
 } from "../audio-store.ts";
 import { listarProyectos } from "../proyecto-disco.ts";
+import { interpretarProyectoEnDisco } from "../proyecto-archivo.ts";
+import { CARPETA_VERSIONES, describirVersion, restaurarVersion } from "../../../src/core/versiones.ts";
 import { cabeceraDeProyecto, cabecerasProyecto } from "./tools.ts";
 import type {
   AccionesEstudio,
@@ -1051,7 +1053,60 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       return { ok: false, texto: `No se pudo convertir: ${error instanceof Error ? error.message : String(error)}` };
     }
   }
+  /**
+   * Fotos del proyecto tomadas al empezar cada turno (main.ts, guardarVersion):
+   * `listar` las enseña; `restaurar` copia las pistas pedidas (o todo) de una.
+   */
+  async function versiones(peticion: { accion: string; version?: string; pistas?: string[] }): Promise<ResultadoAccion> {
+    const project = e.proyecto();
+    if (!project) return { ok: false, texto: "No hay proyecto abierto." };
+    const carpeta = `proyectos/${carpetaDeProyecto(project)}/${CARPETA_VERSIONES}`;
+    try {
+      const lista = await fetch(`/api/fs/list?carpeta=${encodeURIComponent(carpeta)}`, { headers: cabecerasProyecto() });
+      const datos = (await lista.json()) as { ficheros?: { path: string }[] };
+      const nombres = (datos.ficheros ?? [])
+        .map((f) => f.path.split("/").pop() ?? "")
+        .filter((n) => n.endsWith(".json"))
+        .sort()
+        .reverse();
+      if (nombres.length === 0) {
+        return { ok: true, texto: "Aún no hay versiones: se guarda una al empezar cada turno." };
+      }
+      if (peticion.accion !== "restaurar") {
+        return {
+          ok: true,
+          texto:
+            `${nombres.length} versión(es), de la más nueva a la más vieja. Cada una es el proyecto ANTES del ` +
+            `pedido que se indica:\n` +
+            nombres.slice(0, 30).map((n, i) => `${i + 1}. ${n} (${describirVersion(n)})`).join("\n"),
+        };
+      }
+      const pedida = (peticion.version ?? "").trim();
+      const nombre = /^\d{1,2}$/.test(pedida) ? nombres[Number(pedida) - 1] : nombres.find((n) => n === pedida || n.startsWith(pedida));
+      if (!nombre) {
+        return { ok: false, texto: `No encuentro la versión «${pedida}». Usa versiones con accion=listar y pasa su nombre o su número.` };
+      }
+      const res = await fetch("/api/fs/read", {
+        method: "POST",
+        headers: cabecerasProyecto({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ path: `${carpeta}/${nombre}` }),
+      });
+      if (!res.ok) return { ok: false, texto: `No se pudo leer ${nombre} (HTTP ${res.status}).` };
+      const { contenido } = (await res.json()) as { contenido: string };
+      const antigua = interpretarProyectoEnDisco(contenido).proyecto;
+      const { project: siguiente, hechas } = restaurarVersion(project, antigua, peticion.pistas ?? []);
+      e.fijar(siguiente);
+      return {
+        ok: true,
+        texto: `Desde ${nombre} (${describirVersion(nombre)}):\n${hechas.join("\n")}\nSe deshace con Ctrl+Z.`,
+      };
+    } catch (error) {
+      return { ok: false, texto: `Error con las versiones: ${mensajeDe(error)}` };
+    }
+  }
+
   return {
+    versiones,
     leerProyecto,
     editarProyecto,
     escribirProgresion,

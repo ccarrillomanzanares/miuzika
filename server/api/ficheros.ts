@@ -1,9 +1,10 @@
 /** Ficheros del workspace: leer, escribir, editar y listar (las manos del agente), más el log de turnos, el manifiesto del motor y el id del código servido. */
 
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
+import { CARPETA_VERSIONES, versionesSobrantes } from "../../src/core/versiones.ts";
 
 export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
   const { anotar, registrarTurno, ficheroHerramientas, carpetaTrabajo, responderJson, leerCuerpo, idDeBuild, arranqueServidor, slugProyecto, resolverEnTrabajo, MAX_LISTADO, listarTrabajo, correr, MOTOR, esDeCodigo, esDeGpu, smokeOTeReverto } = ctx;
@@ -79,6 +80,16 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
         const previo = esMotor && !nuevo ? readFileSync(destino, "utf8") : null;
         mkdirSync(dirname(destino), { recursive: true });
         writeFileSync(destino, datos.contenido, "utf8");
+        // Fotos de versiones (una por turno del agente): se guardan las últimas.
+        if (basename(dirname(destino)) === CARPETA_VERSIONES && nombre.endsWith(".json")) {
+          for (const viejo of versionesSobrantes(readdirSync(dirname(destino)))) {
+            try {
+              unlinkSync(resolve(dirname(destino), viejo));
+            } catch {
+              /* otra escritura lo borró antes */
+            }
+          }
+        }
 
         let nota = "";
         if (esDeGpu(datos.path)) {
@@ -276,7 +287,7 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
             reemplazos: todas ? total : 1,
           }),
         );
-        responderJson(res, 200, { ok: true, reemplazos: todas ? total : 1, bytes: Buffer.byteLength(despues, "utf8") });
+        responderJson(res, 200, { ok: true, path: d.path, reemplazos: todas ? total : 1, bytes: Buffer.byteLength(despues, "utf8") });
       } catch (error) {
         responderJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
       }
