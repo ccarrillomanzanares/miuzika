@@ -264,6 +264,9 @@ const HERRAMIENTAS_DEL_PROYECTO = new Set([
   "usar_instrumento",
 ]);
 
+/** Herramientas que devuelven texto por páginas y no pasan por el recorte. */
+const PAGINADAS = new Set(["leer_fichero", "leer_web"]);
+
 /** Tope de un solo escribir_fichero (≈200 líneas). Ver el porqué en el case. */
 const MAX_FICHERO = 8000;
 
@@ -404,6 +407,18 @@ export const HERRAMIENTAS: ToolSpec[] = [
   {
     type: "function",
     function: {
+      name: "listar_instrumentos",
+      description:
+        "Lista los instrumentos General MIDI que suenan de verdad en el DAW (piano, guitarras, bajos, " +
+        "cuerdas, vientos, pads…) y los kits de batería, con su número de programa. Úsalo para elegir " +
+        "`programa` en escribir_notas, escribir_progresion o escribir_bateria. Es más rápido y suena " +
+        "mejor que buscar samples para tocar notas.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "buscar_web",
       description:
         "Busca en internet y devuelve título, enlace y un extracto de cada resultado. Para datos de una " +
@@ -423,10 +438,14 @@ export const HERRAMIENTAS: ToolSpec[] = [
     type: "function",
     function: {
       name: "leer_web",
-      description: "Lee el texto de una página web (un enlace de buscar_web) para sacar datos concretos.",
+      description:
+        "Lee el texto de una página web (un enlace de buscar_web), por páginas de 6.000 caracteres.",
       parameters: {
         type: "object",
-        properties: { url: { type: "string" } },
+        properties: {
+          url: { type: "string" },
+          desde: { type: "integer", description: "Carácter desde el que seguir leyendo (por defecto 0)" },
+        },
         required: ["url"],
       },
     },
@@ -455,10 +474,15 @@ export const HERRAMIENTAS: ToolSpec[] = [
     type: "function",
     function: {
       name: "leer_fichero",
-      description: "Devuelve el contenido de un fichero de workspace/ (hasta 20.000 caracteres).",
+      description:
+        "Devuelve un fichero de workspace/ por páginas de 6.000 caracteres; si hay más, el resultado " +
+        "dice el `desde` con el que seguir.",
       parameters: {
         type: "object",
-        properties: { path: { type: "string" } },
+        properties: {
+          path: { type: "string" },
+          desde: { type: "integer", description: "Carácter desde el que leer (por defecto 0)" },
+        },
         required: ["path"],
       },
     },
@@ -512,8 +536,9 @@ export const HERRAMIENTAS: ToolSpec[] = [
             type: "string",
             enum: ["cpu", "lambda"],
             description:
-              "Donde ejecutar: 'cpu' (este portatil) o 'lambda' (GPU en la nube). Si se omite " +
-              "se usa lo que tenga elegido la persona en el panel; no lo cambies por tu cuenta.",
+              "Donde ejecutar: 'cpu' (este equipo, por defecto) o 'lambda' (GPU en la nube, DE PAGO). " +
+              "'lambda' sólo para scripts que usan motor_gpu o torch, y sólo si la persona la ha " +
+              "permitido en el selector del chat.",
           },
         },
         required: ["path"],
@@ -899,8 +924,17 @@ async function ejecutarCrudo(
         return { ok: true, texto: `Escrito ${datos.path} (${datos.bytes} bytes).${nota}` };
       }
       case "leer_fichero": {
-        const datos = await pedirJson("/api/fs/read", { path: args.path });
-        return { ok: true, texto: String(datos.contenido ?? "") };
+        const desde = Math.max(0, Math.trunc(Number(args.desde) || 0));
+        const datos = await pedirJson("/api/fs/read", { path: args.path, desde });
+        const siguiente = typeof datos.siguiente === "number" ? datos.siguiente : null;
+        return {
+          ok: true,
+          texto:
+            String(datos.contenido ?? "") +
+            (siguiente !== null
+              ? `\n[… sigue: ${Number(datos.total) - siguiente} caracteres más. leer_fichero(path, desde=${siguiente})]`
+              : ""),
+        };
       }
       case "listar_ficheros": {
         const carpeta = typeof args.carpeta === "string" ? args.carpeta.trim() : "";
@@ -1261,6 +1295,18 @@ async function ejecutarCrudo(
           humanizar: args.humanizar !== false,
         });
       }
+      case "listar_instrumentos": {
+        const datos = (await pedirJson("/api/gm", undefined, 30000, senal)) as { ruta?: string | null; instrumentos?: string };
+        if (!datos.ruta) {
+          return {
+            ok: true,
+            texto:
+              "No hay SoundFont General MIDI instalado (workspace/catalogo/gm/). Las pistas MIDI suenan con los " +
+              "sintetizadores de openDAW; para instrumentos reales, usar_instrumento con un SFZ de la biblioteca.",
+          };
+        }
+        return { ok: true, texto: datos.instrumentos ?? "(sin lista)" };
+      }
       case "buscar_web": {
         const consulta = String(args.consulta ?? "").trim();
         if (consulta === "") return { ok: false, texto: "Falta la consulta." };
@@ -1285,9 +1331,15 @@ async function ejecutarCrudo(
           content?: string;
         };
         const contenido = (datos.content ?? "").trim();
+        if (contenido === "") return { ok: false, texto: `La página no devolvió texto: ${url}` };
+        const desde = Math.max(0, Math.trunc(Number(args.desde) || 0));
+        const trozo = contenido.slice(desde, desde + 6000);
+        const resto = contenido.length - (desde + trozo.length);
         return {
-          ok: contenido !== "",
-          texto: contenido !== "" ? `${datos.title ?? url}\n\n${contenido}` : `La página no devolvió texto: ${url}`,
+          ok: true,
+          texto:
+            `${datos.title ?? url}\n\n${trozo}` +
+            (resto > 0 ? `\n[… sigue: ${resto} caracteres más. leer_web(url, desde=${desde + trozo.length})]` : ""),
         };
       }
       case "verificar_audio": {
@@ -1302,8 +1354,18 @@ async function ejecutarCrudo(
       }
       case "ejecutar_python": {
         const segundos = Number(args.timeout_segundos) || 300;
-        const destino: Destino =
-          args.destino === "lambda" || args.destino === "cpu" ? args.destino : destinoPreferido;
+        // La GPU sólo si el modelo la PIDE y la persona la PERMITE en el selector. Antes
+        // bastaba con que el selector estuviera en GPU: el 27-oct un script que sólo
+        // buscaba ficheros encendió una A10 de pago.
+        if (args.destino === "lambda" && destinoPreferido !== "lambda") {
+          return {
+            ok: false,
+            texto:
+              "La GPU no está permitida: el selector del chat está en CPU. Ejecuta en CPU, o pide a la " +
+              "persona que la active si de verdad hace falta (cuesta dinero por hora).",
+          };
+        }
+        const destino: Destino = args.destino === "lambda" ? "lambda" : "cpu";
         // En Lambda el primer arranque son ~3 minutos: el limite del cliente lo cubre.
         const margen = destino === "lambda" ? segundos * 1000 + 15 * 60 * 1000 : segundos * 1000 + 45000;
         const datos = await pedirJson(
@@ -1424,7 +1486,9 @@ export async function ejecutarHerramienta(
   senal?: AbortSignal,
 ): Promise<ResultadoHerramienta> {
   const resultado = await ejecutarCrudo(nombre, argumentosJson, senal);
-  if (resultado.texto.length <= UMBRAL_SALIDA) return resultado;
+  // Las que ya leen por páginas no se recortan: si no, cada página se guardaba en
+  // otro fichero que al leerse se volvía a recortar (el agente leía en círculo).
+  if (resultado.texto.length <= UMBRAL_SALIDA || PAGINADAS.has(nombre)) return resultado;
 
   let aviso: string;
   try {

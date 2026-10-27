@@ -17,8 +17,8 @@
     "node": ">=24"
   },
   "scripts": {
-    "test": "node --test \"src/**/*.test.ts\" \"web/**/*.test.ts\" && node scripts/bundle-run.mjs src/host/opendaw/check.ts tmp/opendaw-check.mjs",
-    "test:unit": "node --test \"src/**/*.test.ts\" \"web/**/*.test.ts\"",
+    "test": "node --test \"src/**/*.test.ts\" \"web/**/*.test.ts\" \"server/**/*.test.ts\" && node scripts/bundle-run.mjs src/host/opendaw/check.ts tmp/opendaw-check.mjs",
+    "test:unit": "node --test \"src/**/*.test.ts\" \"web/**/*.test.ts\" \"server/**/*.test.ts\"",
     "test:opendaw": "node scripts/bundle-run.mjs src/host/opendaw/check.ts tmp/opendaw-check.mjs",
     "typecheck": "tsc --noEmit",
     "dev": "vite",

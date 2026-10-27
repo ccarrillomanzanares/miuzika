@@ -312,8 +312,12 @@ def postproceso(x):
 
 
 def main():
-    # Las voces de GPU viven en gpu/voces_gpu.py y solo corren alli (torch).
-    modulo = __import__("voces_gpu" if DESTINO == "gpu" else "instruments")
+    # Las voces de GPU viven en gpu/voces_gpu.py y sólo corren allí (torch). El import
+    # explícito es también la señal con la que el servidor permite usar la GPU.
+    if DESTINO == "gpu":
+        import voces_gpu as modulo
+    else:
+        import instruments as modulo
     fn = getattr(modulo, VOZ, None)
     if fn is None:
         raise SystemExit(f"VOZ desconocida: {VOZ} ({DESTINO})")

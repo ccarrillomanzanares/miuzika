@@ -373,34 +373,6 @@ export function crearContexto(env: Record<string, string>) {
   /** ¿Es el motor de GPU? Ese no se puede validar aqui: no hay torch en el portatil. */
   const esDeGpu = (ruta: string): boolean => ruta.replace(/\\/g, "/").startsWith("gpu/");
 
-  /** simbolo -> modulo donde ya existe (del MANIFEST.json). */
-  const simbolosDelMotor = (): Map<string, string> => {
-    const mapa = new Map<string, string>();
-    try {
-      const crudo = JSON.parse(
-        readFileSync(resolve(carpetaTrabajo, "MANIFEST.json"), "utf8"),
-      ) as { modulos?: Record<string, { simbolos?: Record<string, unknown> }> };
-      for (const [modulo, info] of Object.entries(crudo.modulos ?? {})) {
-        for (const simbolo of Object.keys(info.simbolos ?? {})) {
-          if (!mapa.has(simbolo)) mapa.set(simbolo, modulo);
-        }
-      }
-    } catch {
-      /* sin manifiesto: no se bloquea nada */
-    }
-    return mapa;
-  };
-
-  /** Nombres de nivel superior definidos en un fuente Python (regex, sin ejecutarlo). */
-  const nombresDefinidos = (codigo: string): string[] => {
-    const nombres: string[] = [];
-    for (const linea of codigo.split("\n")) {
-      const m = /^(?:async\s+)?def\s+([A-Za-z_]\w*)|^class\s+([A-Za-z_]\w*)/.exec(linea);
-      if (m) nombres.push(m[1] ?? m[2]);
-    }
-    return nombres;
-  };
-
   /** Tras tocar el motor: smoke test y, si falla, se revierte. */
   const smokeOTeReverto = async (
     destino: string,
@@ -449,8 +421,6 @@ export function crearContexto(env: Record<string, string>) {
     MOTOR,
     esDeCodigo,
     esDeGpu,
-    simbolosDelMotor,
-    nombresDefinidos,
     smokeOTeReverto,
   };
 }

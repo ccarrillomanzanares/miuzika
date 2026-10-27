@@ -169,9 +169,11 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       // instruments, render) allí es CPU a precio de GPU. Se corta antes
       // de arrancar la máquina, que es lo caro.
       const fuente = readFileSync(script, "utf8");
-      const usaGpu = /\b(?:from|import)\s+motor_gpu\b/.test(fuente) || /\btorch\b/.test(fuente);
-      const usaNumpy = /\b(?:from|import)\s+(?:dsp|instruments|render|midi|cancion|tema)\b/.test(fuente);
-      if (usaNumpy && !usaGpu) {
+      // Sólo se enciende la GPU para un script que la USA (importa torch o el motor de
+      // GPU). Antes sólo se rechazaban los que importaban el motor numpy, y el 27-oct
+      // un script que listaba ficheros encendió una A10 de pago.
+      const usaGpu = /^\s*(?:from|import)\s+(?:motor_gpu|voces_gpu|torch)\b/m.test(fuente);
+      if (!usaGpu) {
         anotar(
           ficheroHerramientas,
           JSON.stringify({
@@ -183,11 +185,9 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
         );
         responderJson(res, 409, {
           error:
-            "Ese script usa el motor numpy (dsp/instruments/render) y NO importa motor_gpu: en " +
-            "Lambda pagarías GPU para renderizar en CPU. Dos salidas: (1) reescríbelo con motor_gpu " +
-            "(torch: osc, saturar(veces=4), ir_estereo, reverb, shimmer, congelar, granular, " +
-            "compresor_multibanda, limitador) y repite con destino='lambda'; (2) si quieres CPU, " +
-            "usa destino='cpu': es gratis y corre en el portátil. No hay una tercera.",
+            "Ese script no usa la GPU (no importa motor_gpu, voces_gpu ni torch): en Lambda pagarías " +
+            "GPU para nada. Ejecútalo con destino='cpu', que es gratis. Si de verdad necesitas la GPU, " +
+            "escríbelo con motor_gpu (osc, saturar, reverb, shimmer, granular, compresor_multibanda…).",
         });
         return;
       }
@@ -199,9 +199,6 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       const relativo = relative(carpetaTrabajo, script).split(sep).join("/");
 
       const avisos: string[] = [];
-      if (!usaGpu) {
-        avisos.push("El script no importa motor_gpu: la GPU está encendida pero no se usa.");
-      }
       const t0Lambda = Date.now();
       ejecutarEnLambda(cfgLambda, {
         scriptRel: relativo,

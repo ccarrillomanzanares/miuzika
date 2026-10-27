@@ -6,7 +6,7 @@ import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 
 export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
-  const { anotar, registrarTurno, ficheroHerramientas, carpetaTrabajo, responderJson, leerCuerpo, idDeBuild, arranqueServidor, slugProyecto, resolverEnTrabajo, MAX_LISTADO, listarTrabajo, correr, MOTOR, esDeCodigo, esDeGpu, simbolosDelMotor, nombresDefinidos, smokeOTeReverto } = ctx;
+  const { anotar, registrarTurno, ficheroHerramientas, carpetaTrabajo, responderJson, leerCuerpo, idDeBuild, arranqueServidor, slugProyecto, resolverEnTrabajo, MAX_LISTADO, listarTrabajo, correr, MOTOR, esDeCodigo, esDeGpu, smokeOTeReverto } = ctx;
 
   server.middlewares.use("/api/agent-log", (req, res) => {
     if (req.method !== "POST") {
@@ -60,26 +60,18 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
           return;
         }
 
-        // (2) no redefinir simbolos que el motor ya tiene
+        // (1b) los motores no crecen con scripts sueltos: un fichero NUEVO en codigo/ o gpu/
+        // se rechaza. Antes el agente dejaba ahí sus pruebas (buscar_sfz.py, info_saxo*.py…)
+        // y pasaban a parecer biblioteca. Editar lo que ya existe sigue pasando por el smoke.
         if (nuevo && esDeCodigo(datos.path)) {
-          const existentes = simbolosDelMotor();
-          const choques = nombresDefinidos(datos.contenido)
-            .filter((s) => existentes.has(s))
-            .map((s) => ({ simbolo: s, modulo: existentes.get(s) ?? "?" }));
-          if (choques.length > 0) {
-            const detalle = [...new Map(choques.map((c) => [c.simbolo, c])).values()]
-              .slice(0, 8)
-              .map((c) => `${c.simbolo} ya existe en ${c.modulo}`)
-              .join("; ");
-            anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "duplicado" }));
-            responderJson(res, 409, {
-              error:
-                `Duplicarias ${choques.length} simbolo(s) del motor: ${detalle}. ` +
-                "Importalos (from <modulo> import <simbolo>) o usa nombres nuevos. " +
-                "Si es funcionalidad de esta canción, escríbela en la carpeta del proyecto, no en el motor.",
-            });
-            return;
-          }
+          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "fichero nuevo en el motor" }));
+          responderJson(res, 409, {
+            error:
+              "codigo/ y gpu/ son los motores compartidos: no se añaden ficheros desde el chat. Escribe el " +
+              "script en la carpeta del proyecto (p. ej. 'scripts/mi_script.py'); desde ahí puede importar el " +
+              "motor igual. Para un timbre nuevo usa crear_voz.",
+          });
+          return;
         }
 
         // (3) escribir; si es el motor, smoke test con rollback
@@ -152,7 +144,7 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
     }
     leerCuerpo(req, res, (cuerpo) => {
       try {
-        const datos = JSON.parse(cuerpo) as { path?: string };
+        const datos = JSON.parse(cuerpo) as { path?: string; desde?: number };
         const destino = datos.path ? resolverEnTrabajo(datos.path, slugProyecto(req.headers["x-miuzika-proyecto"])) : null;
         if (!destino) {
           responderJson(res, 403, { error: "ruta fuera de workspace/" });
@@ -165,7 +157,13 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
         responderJson(res, 200, {
           ok: true,
           path: datos.path,
-          contenido: readFileSync(destino, "utf8").slice(0, 20000),
+          // Por páginas: el agente pide `desde` para seguir leyendo. Antes se cortaba a
+          // 20.000 caracteres y la salida larga se guardaba en otro fichero, que al
+          // releerse se volvía a cortar y guardar: el agente leía en círculo.
+          // Sin `desde` (la app leyendo agente.json, por ejemplo) se devuelve entero.
+          ...(datos.desde === undefined
+            ? { contenido: readFileSync(destino, "utf8") }
+            : pagina(readFileSync(destino, "utf8"), Number(datos.desde) || 0)),
         });
       } catch (error) {
         responderJson(res, 500, {
@@ -284,4 +282,13 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
       }
     });
   });
+}
+
+/** Una página de un texto largo: contenido, dónde sigue y cuánto mide. */
+const PAGINA = 6000;
+function pagina(texto: string, desde: number): { contenido: string; desde: number; siguiente: number | null; total: number } {
+  const inicio = Math.max(0, Math.min(Math.trunc(desde), texto.length));
+  const fin = Math.min(texto.length, inicio + PAGINA);
+  return { contenido: texto.slice(inicio, fin), desde: inicio, siguiente: fin < texto.length ? fin : null, total: texto.length };
+
 }

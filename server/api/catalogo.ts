@@ -4,6 +4,7 @@ import { createReadStream, existsSync, readFileSync, readdirSync, statSync } fro
 import { basename, resolve, sep } from "node:path";
 import { buscarEnCatalogo } from "../../src/core/buscar.ts";
 import type { EntradaCatalogo } from "../../src/core/buscar.ts";
+import { presetsDeSf2, textoDePresets } from "../gm.ts";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 
@@ -242,6 +243,8 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
     });
   });
 
+  let presetsGm: { clave: string; texto: string } | null = null;
+
   // El SoundFont General MIDI de la instalación: el primer .sf2 de catalogo/gm/.
   // Con él, cualquier pista MIDI con programa suena con un instrumento real.
   server.middlewares.use("/api/gm", (_req, res) => {
@@ -253,11 +256,23 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
       responderJson(res, 200, { ok: true, ruta: null, aviso: "no hay ningún .sf2 en workspace/catalogo/gm/" });
       return;
     }
+    const completo = resolve(carpeta, fichero);
+    const estado = statSync(completo);
+    // La lista de presets se lee una vez por versión del fichero (son ~30 MB).
+    const clave = `${completo}|${estado.mtimeMs}`;
+    if (presetsGm?.clave !== clave) {
+      try {
+        presetsGm = { clave, texto: textoDePresets(presetsDeSf2(readFileSync(completo))) };
+      } catch (error) {
+        presetsGm = { clave, texto: `No se pudo leer la lista de presets: ${String(error)}` };
+      }
+    }
     responderJson(res, 200, {
       ok: true,
       ruta: `catalogo/gm/${fichero}`,
       nombre: fichero,
-      bytes: statSync(resolve(carpeta, fichero)).size,
+      bytes: estado.size,
+      instrumentos: presetsGm.texto,
     });
   });
 }
