@@ -78,3 +78,30 @@ prompt porque ya va en el esquema de `crear_sonido`).
 2. `HUELLA_PROMPT` = `huellaDe(AGENTE_SISTEMA)` (la prueba dice el valor nuevo si falla).
 3. Añadir a la lista de reglas de `agente-prompt.test.ts`: `leer_proyecto`,
    `escribir_progresion`, `UNA sección por turno`, `IDIOMA`.
+
+---
+
+## v3 (27-oct, noche) · huella `0b6a0c79` → `e65881d8`
+
+Tras dos pruebas reales («doubledare» y «La Mer») el agente seguía tardando en
+componer, dijo que la melodía no hacía falta, rellenó 64 compases con copias, no
+puso ni un efecto y no sabía que había instrumentos General MIDI. Cambios, con el
+visto bueno del usuario:
+
+- **HAZ, NO PREGUNTES**: sólo se pregunta lo que bloquea; en el mismo turno se
+  propone la forma y se construye la primera sección. Sustituye a «propón la forma
+  y espera el visto bueno», que lo frenaba.
+- **UNA CANCIÓN CON SENTIDO**: forma, progresión, motivo y línea principal antes de
+  las notas; todo sale del motivo con variación; contraste, dirección armónica,
+  bajo con bombo, melodía cantable.
+- **COMPONER** con escribir_notas (notación compacta), escribir_bateria (rejilla) y
+  escribir_progresion; leer_proyecto(clip) devuelve la misma notación.
+- **INSTRUMENTOS**: programa General MIDI por pista (listar_instrumentos).
+- **VERSIONES**: el usuario decide que una versión puede conservar la melodía y la
+  armonía del original. No se copian letras. (Publicar una versión requiere la
+  licencia mecánica correspondiente.)
+- **PRODUCCIÓN Y MEZCLA**: efectos según el estilo, además del margen en la suma.
+- Los scripts del agente van a la carpeta del proyecto, nunca a los motores; la GPU
+  sólo si la persona la permite.
+
+Tamaño: 4.979 caracteres.

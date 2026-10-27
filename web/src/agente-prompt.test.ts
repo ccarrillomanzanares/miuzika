@@ -39,6 +39,12 @@ test("las reglas duras siguen en el texto", () => {
     "escribir_progresion",
     "UNA sección por turno",
     "IDIOMA",
+    // 27-oct (v3): arranca construyendo, compone con sentido y en notación compacta.
+    "HAZ, NO PREGUNTES",
+    "UNA CANCIÓN CON SENTIDO",
+    "escribir_notas",
+    "listar_instrumentos",
+    "No copies letras",
   ]) {
     assert.ok(texto.includes(regla), `falta la regla: ${regla}`);
   }
