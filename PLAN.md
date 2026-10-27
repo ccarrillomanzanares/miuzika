@@ -1,6 +1,11 @@
 # Plan por fases
 
 Estado: **Fase 0 hecha · Fase 3 casi (faltan 3.6 y 3.7) · 1, 2, 4 y 5 pendientes**.
+
+**27-oct**: la decisión que bloqueaba el resto («partitura como dato, sí o no») está
+tomada: **sí, y ya existía**. Es `proyecto.json` con sus ops; el agente las usa con
+`editar_proyecto` y `escribir_progresion` (ver `docs/REVISION-2026-10-27.md`). La
+Fase 1 pasa a ser lo siguiente.
 El orden no es el de la lista: se empezó por la creación de sonidos porque es la que
 no depende de nada y desbloquea el resto (para mezclar hay que tener sonidos que
 mezclar). La arquitectura y la deuda viva están en `docs/ARCHITECTURE.md`.
