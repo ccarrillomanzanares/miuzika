@@ -21,7 +21,7 @@ test("el prompt se entrega tal cual, sin sustituciones", () => {
   assert.ok(!texto.includes("{{"), "no debe quedar ningún marcador por sustituir");
 });
 
-test("las diez reglas duras siguen en el texto", () => {
+test("las reglas duras siguen en el texto", () => {
   const texto = promptDelSistema();
   for (const regla of [
     "compases=N",
@@ -34,6 +34,11 @@ test("las diez reglas duras siguen en el texto", () => {
     "150 lineas",
     "No inventes resultados",
     "buscar_sonido",
+    // 27-oct: el agente compone en el proyecto, por secciones y en el idioma de cada uno.
+    "leer_proyecto",
+    "escribir_progresion",
+    "UNA sección por turno",
+    "IDIOMA",
   ]) {
     assert.ok(texto.includes(regla), `falta la regla: ${regla}`);
   }
