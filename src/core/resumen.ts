@@ -47,9 +47,11 @@ function lineaPista(track: Track, indice: number, barBeats: number): string[] {
     track.muted ? "MUTE" : "",
     track.solo ? "SOLO" : "",
   ].filter((x) => x !== "");
-  const instrumento =
-    (track.instrument.preset ? `${track.instrument.type}:${track.instrument.preset}` : track.instrument.type) +
-    (track.instrument.program !== undefined ? ` GM ${track.instrument.program}` : "");
+  // Con `archivo` suena el instrumento de la biblioteca, no el programa GM.
+  const instrumento = track.instrument.archivo
+    ? `biblioteca «${track.instrument.preset ?? track.instrument.archivo}»`
+    : (track.instrument.preset ? `${track.instrument.type}:${track.instrument.preset}` : track.instrument.type) +
+      (track.instrument.program !== undefined ? ` GM ${track.instrument.program}` : "");
   const lineas = [`${indice + 1}. ${track.id} «${track.name}» [${track.kind}, ${instrumento}] ${estado.join(" · ")}`];
   for (const device of track.devices) {
     const params = Object.entries(device.params)

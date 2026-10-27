@@ -73,43 +73,107 @@ def _leer_wav(ruta):
     return datos
 
 
-def parsear_sfz(ruta):
-    """Devuelve la lista de regiones del SFZ (heredando los valores de <group>)."""
-    regiones = []
-    actuales = {}
-    grupo = {}
-    with open(ruta, encoding="utf-8", errors="replace") as f:
-        for linea in f:
-            limpia = linea.split("//")[0].strip()
-            if not limpia:
-                continue
-            if limpia.lower().startswith("<region>"):
-                actuales = dict(grupo)
-                continue
-            if limpia.lower().startswith("<group>"):
-                grupo = {}
-                actuales = grupo
-                continue
-            if limpia.startswith("<"):
-                actuales = {}
-                continue
-            if "=" in limpia:
-                clave, valor = limpia.split("=", 1)
-                actuales[clave.strip().lower()] = valor.strip()
-                if actuales is grupo:
-                    continue
-                # guardar la región cuando se cierra con la siguiente o al final
-                if actuales not in regiones and "sample" in actuales:
-                    regiones.append(actuales)
-    # `actuales` es el mismo dict que se va rellenando: hay que copiar al cerrar.
-    finales = []
-    vistos = set()
+# Tamaño máximo del .sf2: el navegador lo carga entero en memoria. El Steinway de
+# VCSL son 1,3 GB de WAV (126 muestras de 28 s en estéreo a 24 bits por cada pedal):
+# convertido sin más, ~600 MB que el DAW no puede abrir.
+MAX_BYTES = 40 * 1024 * 1024
+# Cada muestra se corta a esta duración (con un fundido): una nota de piano de 28 s
+# no hace falta para tocar; si el sf2 sigue grande se baja hasta MIN_SEGUNDOS.
+MAX_SEGUNDOS = 6.0
+MIN_SEGUNDOS = 2.5
+FUNDIDO_S = 0.25
+
+
+def suenan_por_defecto(regiones):
+    """Las regiones que suenan al pulsar una tecla sin tocar nada más.
+
+    El SFZ condiciona regiones a controladores (locc64/hicc64 = pedal) y a
+    `trigger=release` (el ruido de soltar la tecla). SF2 no tiene nada de eso:
+    sin este filtro sonaban A LA VEZ las muestras con pedal, sin pedal y las de
+    soltar. Un controlador sin mover vale 0 (como dice el estándar SFZ).
+    """
+    elegidas = []
     for region in regiones:
-        clave = region.get("sample")
-        if clave and (clave, region.get("lokey"), region.get("hikey")) not in vistos:
-            vistos.add((clave, region.get("lokey"), region.get("hikey")))
-            finales.append(region)
-    return finales
+        if region.get("trigger", "attack").lower() not in ("attack", "first", "legato"):
+            continue
+        valida = True
+        for clave, valor in region.items():
+            m = re.fullmatch(r"(lo|hi)cc(\d+)", clave)
+            if not m:
+                continue
+            try:
+                limite = float(valor)
+            except ValueError:
+                continue
+            if (m.group(1) == "lo" and limite > 0) or (m.group(1) == "hi" and limite < 0):
+                valida = False
+                break
+        if valida:
+            elegidas.append(region)
+    return elegidas or regiones
+
+
+def capas_reducidas(regiones, maximo):
+    """Deja como mucho `maximo` capas de intensidad por rango de teclas.
+
+    Las que quedan se reparten (la más suave, la más fuerte y las del medio) y se
+    estiran para cubrir 0-127 sin huecos.
+    """
+    por_tecla = {}
+    for region in regiones:
+        clave = (region.get("lokey"), region.get("hikey"), region.get("pitch_keycenter"))
+        por_tecla.setdefault(clave, []).append(region)
+    salida = []
+    for grupo in por_tecla.values():
+        grupo = sorted(grupo, key=lambda r: int(_campo(r, "lovel", 0) or 0))
+        if len(grupo) > maximo:
+            if maximo == 1:
+                # La del medio: ni la más apagada ni la más dura.
+                indices = [len(grupo) // 2]
+            else:
+                indices = sorted({round(i * (len(grupo) - 1) / (maximo - 1)) for i in range(maximo)})
+            grupo = [dict(grupo[i]) for i in indices]
+            for i, region in enumerate(grupo):
+                region["lovel"] = "0" if i == 0 else str(int(_campo(region, "lovel", 0) or 0))
+                siguiente = grupo[i + 1] if i + 1 < len(grupo) else None
+                region["hivel"] = str(int(_campo(siguiente, "lovel", 128) or 128) - 1) if siguiente else "127"
+        salida.extend(grupo)
+    return salida
+
+
+def _frames_de(ruta):
+    try:
+        with wave.open(ruta, "rb") as w:
+            return w.getnframes() * SR / max(1, w.getframerate())
+    except Exception:
+        return 0
+
+
+def ajustar_tamano(regiones, carpeta_sfz, max_bytes=MAX_BYTES):
+    """(regiones, segundos por muestra) que caben en `max_bytes` (16 bits mono)."""
+    def estimar(lista, segundos):
+        total = 0
+        for region in lista:
+            frames = _frames_de(os.path.join(carpeta_sfz, region["sample"]))
+            total += (min(frames, segundos * SR) + 46) * 2
+        return total
+
+    capas = max(len(v) for v in _agrupar(regiones).values()) if regiones else 1
+    segundos = MAX_SEGUNDOS
+    lista = regiones
+    while estimar(lista, segundos) > max_bytes and capas > 1:
+        capas -= 1
+        lista = capas_reducidas(regiones, capas)
+    while estimar(lista, segundos) > max_bytes and segundos > MIN_SEGUNDOS:
+        segundos = max(MIN_SEGUNDOS, segundos - 0.5)
+    return lista, segundos
+
+
+def _agrupar(regiones):
+    grupos = {}
+    for region in regiones:
+        grupos.setdefault((region.get("lokey"), region.get("hikey"), region.get("pitch_keycenter")), []).append(region)
+    return grupos
 
 
 def parsear_sfz_secuencial(ruta):
@@ -157,7 +221,7 @@ def _campo(region, nombre, defecto=None):
         return defecto
 
 
-def construir(regiones, carpeta_sfz, nombre_preset):
+def construir(regiones, carpeta_sfz, nombre_preset, max_segundos=None):
     """Devuelve (pcm_bytes, shdr_lista, zonas) listo para escribir."""
     pcm = bytearray()
     shdr = []
@@ -172,6 +236,10 @@ def construir(regiones, carpeta_sfz, nombre_preset):
             datos = datos[offset:]
         if len(datos) < 32:
             continue
+        if max_segundos and len(datos) > max_segundos * SR:
+            datos = datos[: int(max_segundos * SR)].copy()
+            n = int(FUNDIDO_S * SR)
+            datos[-n:] *= np.linspace(1.0, 0.0, n)
         # SF2 exige 46 muestras de silencio al final de cada sample.
         datos = np.concatenate([datos, np.zeros(46)])
         entero = np.clip(datos * 32767.0, -32768, 32767).astype("<i2")
@@ -350,14 +418,18 @@ def main(argv):
         print(json.dumps({"ok": False, "error": "el SFZ no tiene regiones"}))
         return 1
     nombre = os.path.splitext(os.path.basename(entrada))[0]
-    pcm, shdr, zonas = construir(regiones, os.path.dirname(os.path.abspath(entrada)), nombre)
+    carpeta = os.path.dirname(os.path.abspath(entrada))
+    regiones_sfz = len(regiones)
+    regiones, segundos = ajustar_tamano(suenan_por_defecto(regiones), carpeta)
+    pcm, shdr, zonas = construir(regiones, carpeta, nombre, segundos)
     escribir(salida, pcm, shdr, zonas, nombre)
     print(
         json.dumps(
             {
                 "ok": True,
                 "salida": salida,
-                "regiones_sfz": len(regiones),
+                "regiones_sfz": regiones_sfz,
+                "segundos_por_muestra": segundos,
                 "zonas": len(zonas),
                 "muestras_pcm": len(pcm) // 2,
                 "bytes": os.path.getsize(salida),

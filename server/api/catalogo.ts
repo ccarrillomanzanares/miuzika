@@ -5,6 +5,8 @@ import { basename, resolve, sep } from "node:path";
 import { buscarEnCatalogo } from "../../src/core/buscar.ts";
 import type { EntradaCatalogo } from "../../src/core/buscar.ts";
 import { presetsDeSf2, textoDePresets } from "../gm.ts";
+import { instrumentosDeSfz, resolverInstrumento, textoDeBiblioteca } from "../../src/core/biblioteca.ts";
+import type { InstrumentoBiblioteca } from "../../src/core/biblioteca.ts";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 
@@ -14,6 +16,27 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
   // Un instrumento de la biblioteca, convertido a .sf2 dentro del proyecto.
   // Es la forma de tocar 46 regiones en vez de estirar un sample (que suena
   // a armónica y desafina: medido, +1054 cents en el saxo).
+  // Los .sfz de catalogo/ (183 en VCSL), leídos una vez: el catálogo no cambia
+  // mientras corre el servidor (si se añade un pack, se reinicia).
+  let bibliotecaSfz: InstrumentoBiblioteca[] | null = null;
+  const biblioteca = (): InstrumentoBiblioteca[] => {
+    if (bibliotecaSfz) return bibliotecaSfz;
+    const rutas: string[] = [];
+    const raiz = resolve(carpetaTrabajo, "catalogo");
+    const recorrer = (dir: string, relativa: string): void => {
+      if (!existsSync(dir)) return;
+      for (const entrada of readdirSync(dir, { withFileTypes: true })) {
+        if (entrada.name.startsWith("_")) continue;
+        const rel = `${relativa}/${entrada.name}`;
+        if (entrada.isDirectory()) recorrer(resolve(dir, entrada.name), rel);
+        else if (entrada.name.toLowerCase().endsWith(".sfz")) rutas.push(rel);
+      }
+    };
+    recorrer(raiz, "catalogo");
+    bibliotecaSfz = instrumentosDeSfz(rutas);
+    return bibliotecaSfz;
+  };
+
   server.middlewares.use("/api/instrumentos/crear", (req, res) => {
     if (req.method !== "POST") {
       responderJson(res, 405, { error: "usa POST" });
@@ -23,14 +46,24 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
       try {
         const datos = JSON.parse(cuerpo) as { sfz?: string; nombre?: string };
         const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
-        const sfzRel = String(datos.sfz ?? "");
-        const sfz = sfzRel ? resolverEnTrabajo(sfzRel, slug) : null;
+        let sfzRel = String(datos.sfz ?? "").trim();
+        let sfz = sfzRel ? resolverEnTrabajo(sfzRel, slug) : null;
         if (!sfz || !existsSync(sfz)) {
-          responderJson(res, 404, { error: `no existe el SFZ: ${sfzRel}` });
-          return;
+          // También por nombre, como sale en listar_instrumentos: «Grand Piano, Steinway B».
+          const { instrumento, error } = resolverInstrumento(sfzRel, biblioteca());
+          if (!instrumento) {
+            responderJson(res, 404, { error: error ?? `no existe el SFZ: ${sfzRel}` });
+            return;
+          }
+          sfzRel = instrumento.ruta;
+          sfz = resolverEnTrabajo(sfzRel, slug);
+          if (!sfz || !existsSync(sfz)) {
+            responderJson(res, 404, { error: `no existe el SFZ: ${sfzRel}` });
+            return;
+          }
         }
         const carpeta = resolve(carpetaTrabajo, "proyectos", slug);
-        const nombre = String(datos.nombre ?? basename(sfz, ".sfz"));
+        const nombre = String(datos.nombre || basename(sfz, ".sfz"));
         const r = await correr(
           "codigo/sfz_a_proyecto.py",
           [sfz, carpeta, nombre],
@@ -40,7 +73,7 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
           responderJson(res, 400, { error: (r.errores || r.salida).slice(-800) });
           return;
         }
-        responderJson(res, 200, JSON.parse(r.salida));
+        responderJson(res, 200, { ...JSON.parse(r.salida), sfz: sfzRel });
       } catch (error) {
         responderJson(res, 500, { error: String(error) });
       }
@@ -253,7 +286,12 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
       ? readdirSync(carpeta).filter((f) => f.toLowerCase().endsWith(".sf2")).sort()[0]
       : undefined;
     if (!fichero) {
-      responderJson(res, 200, { ok: true, ruta: null, aviso: "no hay ningún .sf2 en workspace/catalogo/gm/" });
+      responderJson(res, 200, {
+        ok: true,
+        ruta: null,
+        aviso: "no hay ningún .sf2 en workspace/catalogo/gm/",
+        biblioteca: textoDeBiblioteca(biblioteca()),
+      });
       return;
     }
     const completo = resolve(carpeta, fichero);
@@ -273,6 +311,7 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
       nombre: fichero,
       bytes: estado.size,
       instrumentos: presetsGm.texto,
+      biblioteca: textoDeBiblioteca(biblioteca()),
     });
   });
 }

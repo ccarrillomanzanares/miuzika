@@ -786,7 +786,9 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         kind: "midi",
         instrument: { type: instrumento, ...(programa !== undefined ? { program: programa } : {}) },
       });
-    } else if (programa !== undefined || tipoPedido) {
+    } else if ((programa !== undefined || tipoPedido) && !pista.instrument.archivo) {
+      // Una pista con instrumento de la biblioteca (archivo .sf2) no se pisa con un
+      // programa GM: escribir_notas suele llevar `programa` por costumbre.
       ops.push({
         op: "set_instrument",
         trackId,
@@ -1005,10 +1007,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
    * El .sf2 trae sus 46 regiones con la nota raíz que declara el SFZ, que es lo que
    * evita el «suena a armónica» de estirar un único sample.
    */
-  async function instrumentar(peticion: {
-    sfz: string;
-    nombre: string;
-  }): Promise<ResultadoAccion> {
+  async function instrumentar(peticion: { sfz: string; nombre: string; pista?: string }): Promise<ResultadoAccion> {
     // Se comprueba ANTES de convertir: si no, se convertía un SFZ de 46 regiones para
     // nada y luego se avisaba de que no había proyecto.
     if (!e.proyecto()) return { ok: false, texto: "Abre o crea un proyecto antes de añadir un instrumento." };
@@ -1024,30 +1023,35 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         zonas?: number;
         notas?: number[];
         error?: string;
+        sfz?: string;
       };
       if (!datos.ok || !datos.archivo) {
         return { ok: false, texto: `No se pudo convertir: ${datos.error ?? res.status}` };
       }
       const project = e.proyecto();
       if (!project) return { ok: false, texto: "El proyecto se cerró mientras se convertía el instrumento." };
-      const despues = applyOps(project, [
-        {
-          op: "add_track",
-          name: peticion.nombre.slice(0, 60),
-          kind: "midi",
-          instrument: { type: "soundfont", preset: peticion.nombre.slice(0, 64), archivo: datos.archivo },
-        },
-      ]).project;
+      const sonido = (datos.sfz ?? peticion.sfz).split("/").pop()!.replace(/\.sfz$/i, "");
+      const instrumento = { type: "soundfont" as const, preset: sonido.slice(0, 64), archivo: datos.archivo };
+      const notas = datos.notas ?? [];
+      const rango = notas.length === 2 ? ` (suena de ${nombreDeNota(notas[0]!)} a ${nombreDeNota(notas[1]!)})` : "";
+      if (peticion.pista) {
+        const despues = applyOps(project, [{ op: "set_instrument", trackId: peticion.pista, instrument: instrumento }]);
+        e.fijar(despues.project);
+        return {
+          ok: true,
+          texto: `${despues.results.join(" ")}: «${sonido}», ${datos.zonas ?? 0} zonas${rango}. Las notas de la pista se conservan.`,
+        };
+      }
+      const nombre = (peticion.nombre || sonido).slice(0, 60);
+      const despues = applyOps(project, [{ op: "add_track", name: nombre, kind: "midi", instrument: instrumento }]).project;
       e.fijar(despues);
       const pista = despues.tracks.at(-1);
-      const notas = datos.notas ?? [];
       return {
         ok: true,
         texto:
-          `Instrumento «${peticion.nombre}» listo: ${datos.zonas ?? 0} zonas` +
-          (notas.length === 2 ? ` (notas ${notas[0]}-${notas[1]})` : "") +
-          ` en ${datos.archivo}. Pista ${pista ? `«${pista.name}» (${pista.id})` : ""} creada: escribe sus notas ` +
-          `con escribir_progresion o editar_proyecto (add_notes).`,
+          `Instrumento «${sonido}» listo: ${datos.zonas ?? 0} zonas${rango} en ${datos.archivo}. ` +
+          `Pista ${pista ? `«${pista.name}» (${pista.id})` : ""} creada: escribe sus notas con escribir_notas ` +
+          `o escribir_progresion (pista = su id).`,
       };
     } catch (error) {
       return { ok: false, texto: `No se pudo convertir: ${error instanceof Error ? error.message : String(error)}` };

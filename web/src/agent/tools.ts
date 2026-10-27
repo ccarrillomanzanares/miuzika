@@ -155,8 +155,11 @@ export interface PeticionProyecto {
 
 /** Convierte un instrumento de la biblioteca a .sf2 y lo pone como pista. */
 export interface PeticionInstrumento {
+  /** Nombre de listar_instrumentos («Grand Piano, Steinway B») o ruta del .sfz. */
   sfz: string;
   nombre: string;
+  /** Pista existente a la que se le cambia el instrumento (conserva sus notas). */
+  pista?: string;
 }
 
 /** Ajuste de una pista por su nombre: es como se aplica una mezcla. */
@@ -456,10 +459,11 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "listar_instrumentos",
       description:
-        "Lista los instrumentos General MIDI que suenan de verdad en el DAW (piano, guitarras, bajos, " +
-        "cuerdas, vientos, pads…) y los kits de batería, con su número de programa. Úsalo para elegir " +
-        "`programa` en escribir_notas, escribir_progresion o escribir_bateria. Es más rápido y suena " +
-        "mejor que buscar samples para tocar notas.",
+        "Lista los instrumentos que suenan en el DAW: los General MIDI (guitarras, bajos, cuerdas, " +
+        "vientos, synths, pads, kits de batería), con su número de `programa` para escribir_notas, " +
+        "escribir_progresion o escribir_bateria; y los de la biblioteca de samples grabados (pianos de " +
+        "cola, órganos, clavecines, arpas, saxo, láminas), que se ponen con usar_instrumento. Para " +
+        "piano, órgano, clavecín, arpa, saxo y láminas, elige la biblioteca: suena a instrumento real.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -658,8 +662,8 @@ export const HERRAMIENTAS: ToolSpec[] = [
         "Busca en el catalogo del motor y en la biblioteca CC0 lo que pide el usuario en lenguaje natural. " +
         "Entiende los nombres habituales y los regionalismos (tarola = caja, hi-hat = charles, platillo " +
         "crash = crash) y el caracter medido (corto, largo, seco, brillante, oscuro, grave, agudo, sucio, " +
-        "limpio). Usala para elegir un sample o un timbre concreto ANTES de crearlo. Para componer " +
-        "notas NO hace falta: las pistas MIDI ya suenan con los instrumentos del DAW. Una o dos " +
+        "limpio). Usala para elegir un sample suelto (un golpe, un efecto, una textura). Para TOCAR " +
+        "notas con un instrumento grabado no hace falta: listar_instrumentos y usar_instrumento. Una o dos " +
         "consultas bastan; no la repitas con sinónimos.",
       parameters: {
         type: "object",
@@ -728,21 +732,22 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "usar_instrumento",
       description:
-        "Convierte un instrumento de la biblioteca (.sfz de VCSL) en un SoundFont dentro del proyecto y " +
-        "crea su pista MIDI. ESTA es la forma de tener un instrumento afinado: usa sus 46 regiones y la " +
-        "raíz que declara el SFZ. NO cojas un solo sample y lo estires para tocar varias notas: suena a " +
-        "armonica y desafina (medido: +1054 cents). Después escribe sus notas con escribir_progresion o " +
-        "editar_proyecto (add_notes) sobre la pista que crea.",
+        "Pone un instrumento GRABADO de la biblioteca de samples (VCSL) en una pista: pianos de cola " +
+        "(Steinway B, Kawai), órganos, clavecines, arpas, saxo, láminas, percusión… (la lista sale en " +
+        "listar_instrumentos). Con `pista`, cambia el sonido de esa pista y conserva sus notas; sin ella, " +
+        "crea una pista nueva. Tarda unos segundos (convierte el instrumento). Después escribe o deja " +
+        "las notas como siempre.",
       parameters: {
         type: "object",
         properties: {
           sfz: {
             type: "string",
-            description: "Ruta del .sfz dentro de workspace/catalogo/ (p. ej. catalogo/VCSL-1.2.2-RC/Aerophones/Reed Aerophones/Tenor Saxophone - Non-Vibrato.sfz)",
+            description: "Nombre del instrumento tal como sale en listar_instrumentos (p. ej. «Grand Piano, Steinway B», «Pipe Organ - Quiet»)",
           },
-          nombre: { type: "string", description: "Nombre del instrumento y de la pista" },
+          nombre: { type: "string", description: "Nombre de la pista (si se crea)" },
+          pista: { type: "string", description: "Opcional: id o nombre de una pista existente para cambiarle el instrumento" },
         },
-        required: ["sfz", "nombre"],
+        required: ["sfz"],
       },
     },
   },
@@ -1189,7 +1194,8 @@ async function ejecutarCrudo(
       case "usar_instrumento":
         return local.usarInstrumento({
           sfz: String(args.sfz ?? "").trim(),
-          nombre: String(args.nombre ?? "").trim() || "instrumento",
+          nombre: String(args.nombre ?? "").trim(),
+          ...(typeof args.pista === "string" && args.pista.trim() !== "" ? { pista: args.pista.trim() } : {}),
         });
       case "usar_sample":
         return local.usarSample({
@@ -1352,16 +1358,16 @@ async function ejecutarCrudo(
         });
       }
       case "listar_instrumentos": {
-        const datos = (await pedirJson("/api/gm", undefined, 30000, senal)) as { ruta?: string | null; instrumentos?: string };
-        if (!datos.ruta) {
-          return {
-            ok: true,
-            texto:
-              "No hay SoundFont General MIDI instalado (workspace/catalogo/gm/). Las pistas MIDI suenan con los " +
-              "sintetizadores de openDAW; para instrumentos reales, usar_instrumento con un SFZ de la biblioteca.",
-          };
-        }
-        return { ok: true, texto: datos.instrumentos ?? "(sin lista)" };
+        const datos = (await pedirJson("/api/gm", undefined, 30000, senal)) as {
+          ruta?: string | null;
+          instrumentos?: string;
+          biblioteca?: string;
+        };
+        const gm = datos.ruta
+          ? (datos.instrumentos ?? "(sin lista)")
+          : "No hay SoundFont General MIDI instalado (workspace/catalogo/gm/): las pistas MIDI suenan con los " +
+            "sintetizadores de openDAW.";
+        return { ok: true, texto: [gm, datos.biblioteca ?? ""].filter(Boolean).join("\n\n") };
       }
       case "buscar_web": {
         const consulta = String(args.consulta ?? "").trim();
