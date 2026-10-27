@@ -12,7 +12,7 @@
  */
 
 import type { AudioAsset, Project } from "../../src/core/types.ts";
-import { idsDeAssets } from "../../src/core/project.ts";
+import { carpetaDeNombre, idsDeAssets } from "../../src/core/project.ts";
 
 export const FORMATO = "miuzika-proyecto";
 export const VERSION = 1;
@@ -40,14 +40,7 @@ export interface ResultadoGuardado {
 
 /** Carpeta del proyecto en `workspace/proyectos/`. Mismo slug que usa la app. */
 export function slugDeNombre(nombre: string): string {
-  const base = nombre
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-  return base || "proyecto";
+  return carpetaDeNombre(nombre);
 }
 
 /** Ruta del fichero maestro para un slug ("vitrina" -> proyectos/vitrina/proyecto.json). */

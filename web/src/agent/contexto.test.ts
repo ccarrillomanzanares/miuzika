@@ -7,6 +7,7 @@ import {
   agregarTurno,
   bloqueContexto,
   interpretarAgente,
+  recortarConversacion,
   recortarSalida,
   serializarAgente,
   type TurnoAgente,
@@ -98,4 +99,23 @@ test("un agente.json roto o vacío no rompe la carga", () => {
     resumen: "",
     turnos: [{ usuario: "ok", asistente: "b" }],
   });
+});
+
+test("recortar la conversación nunca deja un resultado de herramienta huérfano", () => {
+  const conversacion = [{ role: "system" }];
+  for (let turno = 0; turno < 6; turno += 1) {
+    conversacion.push({ role: "user" }, { role: "assistant" }, { role: "tool" }, { role: "tool" }, { role: "assistant" });
+  }
+  recortarConversacion(conversacion, 12);
+  assert.equal(conversacion[0]!.role, "system");
+  assert.equal(conversacion[1]!.role, "user");
+  assert.ok(conversacion.length - 1 <= 12);
+});
+
+test("un turno más largo que el tope se conserva entero desde su petición", () => {
+  const conversacion = [{ role: "system" }, { role: "user" }, { role: "assistant" }, { role: "user" }];
+  for (let i = 0; i < 20; i += 1) conversacion.push({ role: i % 2 ? "tool" : "assistant" });
+  recortarConversacion(conversacion, 5);
+  assert.equal(conversacion[1]!.role, "user");
+  assert.equal(conversacion.length, 22);
 });

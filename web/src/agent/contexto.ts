@@ -156,3 +156,41 @@ export function serializarAgente(
     turnos: turnos.slice(-MAX_TURNOS),
   };
 }
+
+/** Lo mínimo de un mensaje de chat que hace falta para recortar la conversación. */
+interface MensajeRecortable {
+  role: string;
+}
+
+/**
+ * Deja la conversación en `[sistema, ...últimos mensajes]` con como mucho `max`
+ * mensajes detrás del sistema, cortando SIEMPRE justo antes de un mensaje del
+ * usuario.
+ *
+ * Antes se cortaba por número a secas, y el corte podía caer entre un
+ * `assistant` con `tool_calls` y sus `tool`: el primer mensaje que quedaba era un
+ * resultado de herramienta sin la llamada que lo pidió, y el proveedor rechaza esa
+ * conversación (o el modelo se confunde con un resultado que no sabe de dónde viene).
+ */
+export function recortarConversacion<T extends MensajeRecortable>(mensajes: T[], max: number): void {
+  if (mensajes.length - 1 <= max) return;
+  const desde = mensajes.length - max;
+  let corte = -1;
+  for (let i = desde; i < mensajes.length; i += 1) {
+    if (mensajes[i]!.role === "user") {
+      corte = i;
+      break;
+    }
+  }
+  // Si en la ventana no hay ningún mensaje del usuario (un turno larguísimo), se
+  // conserva el turno entero desde su petición: mejor largo que roto.
+  if (corte === -1) {
+    for (let i = desde - 1; i >= 1; i -= 1) {
+      if (mensajes[i]!.role === "user") {
+        corte = i;
+        break;
+      }
+    }
+  }
+  if (corte > 1) mensajes.splice(1, corte - 1);
+}

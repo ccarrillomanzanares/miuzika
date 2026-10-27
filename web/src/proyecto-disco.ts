@@ -33,12 +33,6 @@ export async function listarProyectos(): Promise<ProyectoListado[]> {
   return (datos.proyectos ?? []) as ProyectoListado[];
 }
 
-/** Inventario de workspace/ (rutas relativas y tamaños). */
-export async function listarFicheros(): Promise<{ path: string; bytes: number }[]> {
-  const datos = await pedirJson("/api/fs/list");
-  return (datos.ficheros ?? []) as { path: string; bytes: number }[];
-}
-
 /** Contenido completo del fichero maestro (sin el recorte de 20 KB de /api/fs/read). */
 export async function leerProyectoDeDisco(ruta: string): Promise<string> {
   const datos = await pedirJson(`/api/proyectos?path=${encodeURIComponent(ruta)}`);

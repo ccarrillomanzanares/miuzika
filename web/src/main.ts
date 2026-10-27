@@ -1,19 +1,10 @@
-import type { CodeSource, InstrumentType, Project } from "../../src/core/types.ts";
+import type { CodeSource, Project } from "../../src/core/types.ts";
 import { promptDelSistema } from "./agente-prompt.ts";
 import { plantillaEncargo } from "./plantilla.ts";
 import { setGeneradorPlantilla } from "./chat.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
-import { createProject, projectStats } from "../../src/core/project.ts";
+import { carpetaDeProyecto, createProject, projectStats } from "../../src/core/project.ts";
 import { compasesDeAudio } from "../../src/core/tiempo.ts";
-import {
-  normalizarReceta,
-  rutaScriptDeSonido,
-  rutaWavDeSonido,
-  scriptDeSonido,
-  vozPorClave,
-} from "../../src/core/sonidos.ts";
-import type { RecetaSonido, VozSonido } from "../../src/core/sonidos.ts";
-import { aplicarPalabras } from "../../src/core/palabras.ts";
 import { applyOps } from "../../src/core/ops.ts";
 import type { Op } from "../../src/core/ops.ts";
 import {
@@ -40,12 +31,10 @@ import {
   nombreDeProyectoDesdeFicheros,
   rutaDeProyecto,
   serializarProyecto,
-  slugDeNombre,
 } from "./proyecto-archivo.ts";
 import {
   guardarProyectoEnDisco,
   leerProyectoDeDisco,
-  listarFicheros,
   listarProyectos,
   subirAudio,
 } from "./proyecto-disco.ts";
@@ -61,33 +50,21 @@ import {
   agregarTurno,
   bloqueContexto,
   interpretarAgente,
+  recortarConversacion,
   serializarAgente,
 } from "./agent/contexto.ts";
 import type { TurnoAgente } from "./agent/contexto.ts";
 import { fraseBarra, lineaResumen, pasoTerminado, segundos } from "./agent/actividad.ts";
-import {
-  cabecerasProyecto,
-  registrarAjustador,
-  registrarCreador,
-  registrarCreadorSonido,
-  registrarImportador,
-  registrarImportadorSample,
-  registrarInstrumentador,
-  registrarIgualador,
-  setProyectoActivo,
-} from "./agent/tools.ts";
-import type {
-  AjustePista,
-  PeticionIgualar,
-  PeticionPistas,
-  PeticionProyecto,
-  PeticionSample,
-  PeticionSonido,
-} from "./agent/tools.ts";
+import { cabeceraDeProyecto, registrarAcciones, setProyectoActivo } from "./agent/tools.ts";
+import { crearAcciones } from "./agent/acciones.ts";
 import { ejecutarHerramienta } from "./agent/tools.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
+import { locale, traducirPagina } from "./i18n.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
+
+// Textos fijos de la página en el idioma del navegador (la conversación no pasa por aquí).
+traducirPagina();
 
 const canvas = $<HTMLCanvasElement>("timeline");
 const wrap = $("canvas-wrap");
@@ -282,8 +259,9 @@ async function responderAlUsuario(texto: string): Promise<void> {
     $<HTMLButtonElement>("cancelar").hidden = true;
     chat.setBusy(false);
   }
-  // El historial no puede crecer sin limite: sistema + los ultimos turnos.
-  if (conversacion.length > 30) conversacion.splice(1, conversacion.length - 25);
+  // El historial no puede crecer sin limite: sistema + los ultimos turnos, cortando
+  // siempre por un mensaje del usuario (nunca entre una llamada y su resultado).
+  recortarConversacion(conversacion, 25);
 }
 
 chat.onSend((texto) => {
@@ -448,21 +426,9 @@ const HISTORY_LIMIT = 8;
 let history: Project[] = [];
 let future: Project[] = [];
 
-/** Nombre de proyecto a partir del fichero entregado (salida/sacramento_multitrack.mid -> sacramento). */
-function nombreDesdeRuta(ruta: string): string {
-  const base = (ruta.split("/").pop() ?? "proyecto").replace(/\.[^.]+$/, "");
-  const limpio = base
-    .replace(/^midi_/i, "")
-    .replace(/_(multitrack|master|mix|stems?)$/i, "")
-    .replace(/[-_]+/g, " ")
-    .trim();
-  return (limpio || base || "proyecto").slice(0, 40);
-}
-
-/** Carpeta del proyecto en workspace/proyectos/: solo el nombre, en slug. */
+/** Carpeta del proyecto en workspace/proyectos/ (fija desde que se crea: ver meta.carpeta). */
 function slugDeProyecto(origen: Project): string {
-  // Una sola regla para todos: la del fichero maestro (proyecto-archivo.ts).
-  return slugDeNombre(origen.name);
+  return carpetaDeProyecto(origen);
 }
 
 function currentBeat(): number {
@@ -470,7 +436,7 @@ function currentBeat(): number {
 }
 
 timeline.onSeek = (beat) => {
-  const view = activeProject(project);
+  const view = project;
   if (!view) return;
   if (openDawHandle) openDawHandle.seek(beat);
   timeline.draw(beat);
@@ -528,13 +494,9 @@ function setBusy(value: boolean, text = ""): void {
   updateActions();
 }
 
-function activeProject(source: Project | null): Project | null {
-  return source;
-}
-
 function updateActions(): void {
   const enabled = ready && !busy;
-  const view = activeProject(project);
+  const view = project;
   const hasProject = project !== null;
   const hasTracks = Boolean(view && view.tracks.length > 0);
 
@@ -676,7 +638,7 @@ function programarGuardado(): void {
 }
 
 function horaActual(): string {
-  return new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return new Date().toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 /**
@@ -781,6 +743,13 @@ async function redo(): Promise<void> {
 }
 
 function setProject(next: Project | null, record = true): void {
+  // El historial es de UN proyecto: deshacer nunca debe resucitar otro proyecto
+  // dentro de la carpeta del actual.
+  if (!project || !next || slugDeProyecto(project) !== slugDeProyecto(next)) {
+    history = [];
+    future = [];
+    record = false;
+  }
   if (record && project) recordHistory();
   applyProject(next);
   updateHistoryButtons();
@@ -789,7 +758,7 @@ function setProject(next: Project | null, record = true): void {
 /** Cambio en vivo (mute/solo): no reinicia el engine ni el playhead. */
 function commitLive(next: Project): void {
   if (!project) return;
-  const view = activeProject(next);
+  const view = next;
   if (!view) return;
   recordHistory();
   project = next;
@@ -829,7 +798,7 @@ function applyProject(next: Project | null): void {
   void cargarAgenteDelProyecto(next);
   persist();
   updateActions();
-  const view = activeProject(next);
+  const view = next;
   if (!view) {
     timeline.setProject({
       schemaVersion: 1,
@@ -1080,7 +1049,7 @@ function openCodeEditor(): void {
 // --- Eventos ---------------------------------------------------------------
 
 playButton.addEventListener("click", () => {
-  const view = activeProject(project);
+  const view = project;
   if (!ready || busy || !view || view.tracks.length === 0) return;
   if (openDawHandle) {
     stopOpenDaw();
@@ -1100,7 +1069,7 @@ redoButton.addEventListener("click", () => void redo());
 
 $("new-song").addEventListener("click", () => {
   if (!ready) return;
-  if (project && project.tracks.length > 0 && !confirm("¿Empezar una canción nueva? Se perderá la actual.")) return;
+  if (project && project.tracks.length > 0 && !confirm("¿Cerrar este proyecto y empezar otro? El actual queda guardado en disco.")) return;
   setProject(null);
   chat.clear();
 });
@@ -1115,674 +1084,6 @@ $("sel-solo").addEventListener("click", () => toggleTracksFlag(selectedTrackIds,
 $("sel-delete").addEventListener("click", deleteSelectedTracks);
 $("sel-all").addEventListener("click", () => timeline.selectAll());
 $("sel-clear").addEventListener("click", () => timeline.clearSelection());
-
-/**
- * Crea pistas reales en el proyecto desde ficheros de workspace/: los .mid como
- * pistas MIDI con sus notas y los .wav como pistas de audio. Reutiliza el mismo
- * camino que el importador de «Audio» (loadAudioFile -> persistAudioAsset -> ops).
- */
-async function importarPistasDesdeAgente(
-  peticion: PeticionPistas,
-): Promise<{ ok: boolean; texto: string }> {
-  const inicio = Math.max(0, Math.min(511, Math.trunc(peticion.inicioCompas)));
-  const MAX_NOTAS = 2000; // tope de la op add_notes
-  const hechas: string[] = [];
-  const fallos: string[] = [];
-  /**
-   * La duracion de una toma se cuenta en COMPASES, no en segundos de fichero: asi
-   * el MIDI (que acaba en su ultima nota) y el WAV (que lleva cola) del mismo
-   * instrumento acaban en el mismo compas. Si el agente no la dice, se toma la del
-   * audio, que es lo que dura el material.
-   */
-  const compasesToma = peticion.compases && peticion.compases > 0 ? Math.trunc(peticion.compases) : 0;
-  const clipsMidi: { trackId: string; clipId: string }[] = [];
-  let largoAudio = 0;
-  const avisos: string[] = [];
-
-  // 1) sin proyecto hace falta el nombre ANTES de leer nada: la carpeta del
-  //    proyecto es lo que permite resolver 'salida/...'. Se crea provisional y
-  //    luego se ajustan tempo y compases con set_song.
-  let creadoAqui = false;
-  if (!project) {
-    if (!peticion.nombreProyecto) {
-      const sugerencia = nombreDesdeRuta(peticion.midis[0] ?? peticion.wavs[0] ?? "");
-      return {
-        ok: false,
-        texto:
-          "No hay proyecto abierto y no me has dado nombre. PREGUNTA al usuario como quiere llamar el " +
-          "proyecto" +
-          (sugerencia ? ` (sugerencia: "${sugerencia}")` : "") +
-          " y vuelve a llamar con nombre_proyecto. No inventes el nombre.",
-      };
-    }
-    setProject(
-      createProject({
-        name: peticion.nombreProyecto.slice(0, 40),
-        bpm: 120,
-        lengthBars: 32,
-      }),
-    );
-    creadoAqui = true;
-  }
-
-  // 2) leer los MIDI (la carpeta del proyecto ya existe, asi que 'salida/...' resuelve)
-  interface PistaMidi {
-    name: string;
-    program?: number;
-    channel?: number;
-    notes: { pitch: number; start: number; duration: number; velocity: number }[];
-  }
-  const material: { ruta: string; bpm: number; tracks: PistaMidi[] }[] = [];
-  for (const ruta of peticion.midis) {
-    try {
-      const res = await fetch(`/api/midi?path=${encodeURIComponent(ruta)}`, {
-        headers: cabecerasProyecto(),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const datos = (await res.json()) as { bpm?: number; tracks?: PistaMidi[] };
-      material.push({
-        ruta,
-        bpm: Number(datos.bpm) || 120,
-        tracks: (datos.tracks ?? []).filter((pista) => (pista.notes?.length ?? 0) > 0),
-      });
-    } catch (error) {
-      fallos.push(`${ruta}: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  // 3) si no hay proyecto, no hay donde colgar las pistas
-  if (!project) {
-    return { ok: false, texto: "No se pudo crear el proyecto." };
-  }
-
-  let current: Project = project;
-
-  // 4) si lo hemos creado aqui, ajustamos tempo y compases al material real
-  if (creadoAqui) {
-    let finBeat = 0;
-    for (const bloque of material) {
-      for (const pista of bloque.tracks) {
-        for (const nota of pista.notes) finBeat = Math.max(finBeat, nota.start + nota.duration);
-      }
-    }
-    if (material.length > 0) {
-      const bpm = material[0]?.bpm ?? project.bpm;
-      const compases = Math.max(4, Math.min(512, Math.ceil(finBeat / 4) + 1));
-      current = applyOps(current, [{ op: "set_song", bpm, lengthBars: compases }]).project;
-    }
-  }
-
-  // Un MIDI a 90 BPM dentro de un proyecto a 120 no suena "mal": suena a 120, porque
-  // las notas son beats. Sin este aviso parece que el fichero venia roto.
-  if (!creadoAqui && material.length > 0) {
-    for (const bloque of material) {
-      if (Math.abs(bloque.bpm - current.bpm) > 0.5) {
-        avisos.push(
-          `${bloque.ruta}: el MIDI esta a ${bloque.bpm} BPM y el proyecto a ${current.bpm}. ` +
-            "Las notas se colocan en beats, asi que sonaran mas rapidas o mas lentas; " +
-            "si quieres el tempo del fichero, cambia el del proyecto.",
-        );
-      }
-    }
-  }
-
-  let contador = current.tracks.length;
-
-  for (const bloque of material) {
-    {
-      const pistas = bloque.tracks;
-      for (const pista of pistas) {
-        const prog = pista.program ?? 0;
-        const canal = pista.channel ?? 0;
-        const tipo: InstrumentType =
-          canal === 9
-            ? "drumkit"
-            : prog === 38
-              ? "bass"
-              : prog === 89 || prog === 91
-                ? "pad"
-                : prog === 53
-                  ? "lead"
-                  : "synth";
-        const id = `trk_ag_${contador++}`;
-        const nombre = pista.name.slice(0, 60);
-        current = applyOps(current, [
-          { op: "add_track", id, name: nombre, kind: "midi", instrument: { type: tipo, program: prog } },
-        ]).project;
-        for (let i = 0; i < pista.notes.length; i += MAX_NOTAS) {
-          const trozo = pista.notes.slice(i, i + MAX_NOTAS);
-          if (i === 0) {
-            current = applyOps(current, [
-              { op: "add_notes", trackId: id, startBar: inicio, name: nombre, notes: trozo },
-            ]).project;
-            const clipId = current.tracks.find((t) => t.id === id)?.clips.at(-1)?.id;
-            if (clipId) clipsMidi.push({ trackId: id, clipId });
-          } else {
-            // Los trozos siguen en el MISMO clip: si no, cada trozo crea un clip
-            // nuevo desde el compas inicial y se solapan (Bateria: 2376 notas).
-            const clipId = current.tracks.find((t) => t.id === id)?.clips.at(-1)?.id;
-            current = applyOps(current, [
-              { op: "add_notes", trackId: id, clipId, notes: trozo },
-            ]).project;
-          }
-        }
-        hechas.push(`${nombre} (MIDI, ${pista.notes.length} notas)`);
-      }
-    }
-  }
-
-  // prefijo comun de los WAV, para que las pistas no se llamen "tema_bateria"
-  // Prefijo a quitar de los nombres: el del fichero comun y, si no hay varios,
-  // el del propio proyecto ("sacramento_bajo.wav" -> "bajo").
-  let prefijo = project ? `${slugDeProyecto(project)}_` : "";
-  if (peticion.wavs.length > 1) {
-    const bases = peticion.wavs.map((r) => (r.split("/").pop() ?? r).replace(/\.[^.]+$/, ""));
-    let comun = bases[0] ?? "";
-    for (const base of bases.slice(1)) {
-      while (comun.length > 0 && !base.startsWith(comun)) comun = comun.slice(0, -1);
-    }
-    if (comun.includes("_")) prefijo = comun.slice(0, comun.lastIndexOf("_") + 1);
-  }
-
-  for (const ruta of peticion.wavs) {
-    try {
-      const fichero = ruta.split("/").pop() ?? "audio.wav";
-      const sinExt = fichero.replace(/\.[^.]+$/, "");
-      const recortado = prefijo && sinExt.startsWith(prefijo) ? sinExt.slice(prefijo.length) : sinExt;
-      const nombre = (recortado || sinExt || "Audio").slice(0, 60);
-
-      // Los stems largos NO se decodifican: streaming con <audio> y picos del
-      // servidor. Asi caben muchos a la vez (la RAM no crece con la duracion).
-      const meta = await metadatosWav(rutaEnProyecto(ruta, slugDeProyecto(project)));
-      if (meta.duracionSeg >= SEGUNDOS_STREAMING) {
-        const durationBeats = (meta.duracionSeg * current.bpm) / 60;
-        const assetId = `aud_st_${Date.now().toString(36)}_${contador++}`;
-        registrarAssetStreaming({
-          id: assetId,
-          name: nombre,
-          durationBeats,
-          src: ruta,
-          peaks: Float32Array.from(meta.picos),
-        });
-        const existente = current.tracks.find((t) => t.kind === "audio" && t.name === nombre);
-        current = applyOps(current, [
-          { op: "register_audio_asset", assetId, name: nombre, durationBeats, ruta },
-          ...(existente
-            ? [
-                // Reimportar REEMPLAZA los clips de esa pista: asi se corrige una
-                // tanda mal recortada sin acabar con dos pistas iguales.
-                ...existente.clips.map((clip) => ({
-                  op: "remove_clip" as const,
-                  trackId: existente.id,
-                  clipId: clip.id,
-                })),
-                {
-                  op: "add_audio_clip" as const,
-                  assetId,
-                  startBar: inicio,
-                  lengthBeats:
-                    compasesToma > 0
-                      ? compasesToma * beatsPerBar(current)
-                      : compasesDeAudio(durationBeats, beatsPerBar(current)),
-                  gainDb: 0,
-                  name: nombre,
-                  trackId: existente.id,
-                },
-              ]
-            : [
-                {
-                  op: "add_audio_clip" as const,
-                  assetId,
-                  startBar: inicio,
-                  lengthBeats:
-                    compasesToma > 0
-                      ? compasesToma * beatsPerBar(current)
-                      : compasesDeAudio(durationBeats, beatsPerBar(current)),
-                  gainDb: 0,
-                  name: nombre,
-                  track: { name: nombre },
-                },
-              ]),
-        ]).project;
-        if (compasesToma > 0 && compasesToma * beatsPerBar(current) > durationBeats + 1e-6) {
-          avisos.push(
-            `${nombre}: pediste ${compasesToma} compases pero el WAV dura ${durationBeats.toFixed(1)} beats ` +
-              `(${(durationBeats / beatsPerBar(current)).toFixed(2)} compases). El clip se queda en lo que hay.`,
-          );
-        }
-        largoAudio = Math.max(
-          largoAudio,
-          compasesToma > 0 ? compasesToma * beatsPerBar(current) : compasesDeAudio(durationBeats, beatsPerBar(current)),
-        );
-        hechas.push(
-          `${nombre} (audio streaming, ${durationBeats.toFixed(1)} beats, sin decodificar)`,
-        );
-        continue;
-      }
-
-      const res = await fetch(`/api/audio?path=${encodeURIComponent(rutaEnProyecto(ruta, slugDeProyecto(project)))}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const file = new File([blob], fichero, { type: "audio/wav" });
-      // El asset apunta a su ruta en disco: el proyecto es portable sin más.
-      const asset = await loadAudioFile(file, current.bpm, ruta);
-      current = applyOps(current, [
-        {
-          op: "register_audio_asset",
-          assetId: asset.id,
-          name: asset.name,
-          durationBeats: asset.durationBeats,
-          ruta,
-        },
-        {
-          op: "add_audio_clip",
-          assetId: asset.id,
-          startBar: inicio,
-          lengthBeats:
-            compasesToma > 0
-              ? compasesToma * beatsPerBar(current)
-              : compasesDeAudio(asset.durationBeats, beatsPerBar(current)),
-          gainDb: 0,
-          name: nombre,
-          track: { name: nombre },
-        },
-      ]).project;
-      if (compasesToma > 0 && compasesToma * beatsPerBar(current) > asset.durationBeats + 1e-6) {
-        avisos.push(
-          `${nombre}: pediste ${compasesToma} compases pero el WAV dura ${asset.durationBeats.toFixed(1)} beats. ` +
-            "El clip se queda en lo que hay.",
-        );
-      }
-      largoAudio = Math.max(
-        largoAudio,
-        compasesToma > 0 ? compasesToma * beatsPerBar(current) : compasesDeAudio(asset.durationBeats, beatsPerBar(current)),
-      );
-      hechas.push(`${nombre} (audio, ${asset.durationBeats.toFixed(1)} beats)`);
-    } catch (error) {
-      fallos.push(`${ruta}: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  // La toma entera mide lo mismo: compases dichos por el agente o, si no, lo que
-  // dura el audio. Los clips MIDI se estiran hasta ahi (nunca se recortan: sus
-  // notas ya caben dentro).
-  const barBeatsToma = beatsPerBar(current);
-  const largoToma =
-    compasesToma > 0 ? compasesToma * barBeatsToma : largoAudio;
-  if (largoToma > 0) {
-    const opsFinales: Op[] = [];
-    for (const { trackId, clipId } of clipsMidi) {
-      const pista = current.tracks.find((t) => t.id === trackId);
-      const clip = pista?.clips.find((c) => c.id === clipId);
-      if (clip && clip.length < largoToma - 1e-6) {
-        opsFinales.push({ op: "set_clip_length", trackId, clipId, lengthBeats: largoToma });
-      }
-    }
-    if (opsFinales.length > 0) current = applyOps(current, opsFinales).project;
-    current = applyOps(current, [
-      {
-        op: "set_song",
-        bpm: current.bpm,
-        lengthBars: Math.max(
-          current.lengthBars,
-          inicio + Math.ceil(largoToma / barBeatsToma - 1e-6),
-        ),
-      },
-    ]).project;
-  }
-
-  if (hechas.length > 0) {
-    setProject(current);
-    addMessage("system", `Pistas anadidas al proyecto: ${hechas.length}.`);
-  }
-  const texto = [
-    hechas.length > 0 ? `Anadidas ${hechas.length} pistas:` : "No se anadio ninguna pista.",
-    ...hechas.map((linea) => `- ${linea}`),
-    ...(fallos.length > 0 ? ["Fallos:", ...fallos.map((linea) => `- ${linea}`)] : []),
-    ...avisos,
-    // El mismo material dos veces suena doble: se avisa en el acto, no después.
-    ...(peticion.midis.length > 0 && peticion.wavs.length > 0
-      ? [
-          "AVISO: has anadido MIDI y WAV del mismo tema. Suenan los dos a la vez (doble nivel y fase). " +
-            "Pregunta al usuario cual dejar y silencia el otro juego con ajustar_pistas.",
-        ]
-      : []),
-  ].join("\n");
-  return { ok: hechas.length > 0, texto };
-}
-
-/**
- * Crea un sonido desde el chat: receta -> script -> render -> medida -> disco.
- *
- * La voz y sus parametros salen del catalogo del motor (/api/voces), las palabras
- * del vocabulario humano, y el resultado se guarda con su ficha en
- * proyectos/<slug>/sonidos/, asi que se puede repetir y volver a escuchar.
- */
-async function crearSonidoDesdeAgente(
-  peticion: PeticionSonido,
-): Promise<{ ok: boolean; texto: string }> {
-  if (!project) {
-    return { ok: false, texto: "No hay proyecto abierto: crea uno primero (su carpeta es donde vive el sonido)." };
-  }
-  const slug = slugDeProyecto(project);
-  const avisos: string[] = [];
-
-  let catalogo: VozSonido[] = [];
-  try {
-    const res = await fetch("/api/voces");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    catalogo = ((await res.json()) as { voces?: VozSonido[] }).voces ?? [];
-  } catch (error) {
-    return {
-      ok: false,
-      texto: `No pude leer el catalogo del motor: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-
-  let receta: RecetaSonido;
-  try {
-    const normalizada = normalizarReceta(
-      { nombre: peticion.nombre || peticion.voz, voz: peticion.voz, args: peticion.args },
-      catalogo,
-    );
-    receta = normalizada.receta;
-    avisos.push(...normalizada.avisos);
-  } catch (error) {
-    return { ok: false, texto: error instanceof Error ? error.message : String(error) };
-  }
-
-  const voz = vozPorClave(catalogo, receta.voz);
-  const destino: "cpu" | "gpu" = (voz as { destino?: string } | undefined)?.destino === "gpu" ? "gpu" : "cpu";
-  receta = { ...receta, destino };
-  if (destino === "gpu") {
-    avisos.push("Esta voz renderiza en la GPU: usa Lambda (1,29 $/h si esta apagada, ~3 min de arranque).");
-  }
-
-  if (peticion.palabras && peticion.palabras.length > 0) {
-    const conPalabras = aplicarPalabras(receta, peticion.palabras, vozPorClave(catalogo, receta.voz));
-    receta = conPalabras.receta;
-    avisos.push(...conPalabras.avisos, ...conPalabras.descartadas.map((d) => d.motivo));
-  }
-
-  const rutaScript = rutaScriptDeSonido(receta);
-  // El slug va explícito: `cabecerasProyecto()` depende de que el agente haya
-  // llamado antes a setProyectoActivo y, si no, el fichero acaba en «sin-proyecto».
-  const escribir = (ruta: string, contenido: string): Promise<Response> =>
-    fetch("/api/fs/write", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-miuzika-proyecto": slug },
-      body: JSON.stringify({ path: ruta, contenido }),
-    });
-
-  try {
-    const w = await escribir(rutaScript, scriptDeSonido(receta, { slug }));
-    if (!w.ok) throw new Error(`no pude escribir el script (${w.status})`);
-    const r = await fetch(destino === "gpu" ? "/api/run/lambda" : "/api/run/python", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        path: rutaScript,
-        timeout_segundos: destino === "gpu" ? 600 : 180,
-      }),
-    });
-    const corrida = (await r.json()) as { codigo?: number; salida?: string; errores?: string };
-    if (!r.ok || (corrida.codigo ?? 1) !== 0) {
-      throw new Error(
-        `el render fallo: ${(corrida.errores || corrida.salida || `HTTP ${r.status}`).slice(-600)}`,
-      );
-    }
-
-    // Ficha junto al WAV: es lo que permite repetirlo con otras palabras.
-    const rutaFicha = `proyectos/${slug}/${rutaWavDeSonido(receta).replace(/\.wav$/, ".json")}`;
-    await escribir(rutaFicha, JSON.stringify(receta, null, 2));
-
-    // Medida objetiva: no se entrega un sonido sin saber como esta.
-    const rutaWav = `proyectos/${slug}/${rutaWavDeSonido(receta)}`;
-    let informe = "";
-    try {
-      const v = await fetch("/api/verificar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: rutaWav }),
-      });
-      if (v.ok) informe = String(((await v.json()) as { informe?: string }).informe ?? "");
-    } catch {
-      /* medir es opcional: el sonido ya esta hecho */
-    }
-    const medidas = informe
-      .split("\n")
-      .filter((l) => /pico|clipeadas/.test(l))
-      .join(" ");
-
-    const texto = [
-      `Sonido "${receta.nombre}" creado (voz ${receta.voz} en ${destino.toUpperCase()}${receta.palabras?.length ? ` · ${receta.palabras.join(", ")}` : ""}).`,
-      `WAV: ${rutaWav}`,
-      medidas ? `Medidas: ${medidas}` : "",
-      ...avisos.map((a) => `- ${a}`),
-      // Ruta RELATIVA al proyecto (la convención de todo lo demás): el servidor la
-      // resuelve dentro de proyectos/<slug>/. Con "proyectos/<slug>/..." también
-      // funcionaba, pero el agente acababa mezclando las dos formas.
-      `Para oirlo en la cancion: anadir_pistas(wavs=["${rutaWavDeSonido(receta)}"], compases=<los del tema>).`,
-    ]
-      .filter((l) => l !== "")
-      .join("\n");
-    return { ok: true, texto };
-  } catch (error) {
-    return { ok: false, texto: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-/**
- * Mete un sample de la biblioteca en el proyecto: lo convierte y normaliza en el
- * servidor (`codigo/importar_sample.py`) y lo deja como clip de audio.
- *
- * El sample queda copiado dentro del proyecto: el proyecto sigue siendo portable y
- * no depende de que la biblioteca siga en su sitio.
- */
-async function usarSampleDesdeAgente(
-  peticion: PeticionSample,
-): Promise<{ ok: boolean; texto: string }> {
-  if (!project) return { ok: false, texto: "No hay proyecto abierto: el sample tiene que entrar en alguno." };
-  const archivo = peticion.archivo.trim();
-  if (archivo === "") return { ok: false, texto: "Falta la ruta del sample." };
-  const nombre =
-    (peticion.nombre ?? archivo.split("/").pop() ?? "sample")
-      .replace(/\.[^.]+$/, "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 40) || "sample";
-
-  try {
-    const res = await fetch("/api/catalogo/importar", {
-      method: "POST",
-      // El slug va explícito: `cabecerasProyecto()` depende de que el agente haya
-      // pasado por `setProyectoActivo`, y si no, el sample acaba en "sin-proyecto".
-      headers: { "Content-Type": "application/json", "x-miuzika-proyecto": slugDeProyecto(project) },
-      body: JSON.stringify({ archivo, nombre }),
-    });
-    const datos = (await res.json()) as {
-      ok?: boolean;
-      ruta?: string;
-      duracion_s?: number;
-      pico_original_dbfs?: number;
-      error?: string;
-    };
-    if (!res.ok || !datos.ok || !datos.ruta) {
-      return { ok: false, texto: `No pude importar el sample: ${datos.error ?? `HTTP ${res.status}`}` };
-    }
-    const puesto = await importarPistasDesdeAgente({
-      midis: [],
-      wavs: [datos.ruta],
-      inicioCompas: 0,
-      ...(peticion.compases && peticion.compases > 0 ? { compases: peticion.compases } : {}),
-    });
-    return {
-      ok: puesto.ok,
-      texto:
-        `Sample "${nombre}" en el proyecto (${datos.duracion_s} s, pico ${datos.pico_original_dbfs} -> -1 dBFS).\n` +
-        `Fichero: proyectos/${slugDeProyecto(project)}/${datos.ruta}\n` +
-        puesto.texto,
-    };
-  } catch (error) {
-    return { ok: false, texto: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-/**
- * Iguala la duracion de los clips: todos al mismo numero de compases.
- *
- * Los clips se miden en compases, asi que el MIDI de un instrumento y el WAV del
- * mismo material tienen que acabar en el mismo compas. Va por ops (se deshace con
- * Ctrl+Z) y no toca notas, niveles ni tempo.
- */
-function igualarClipsDesdeAgente(peticion: PeticionIgualar): { ok: boolean; texto: string } {
-  if (!project) return { ok: false, texto: "No hay ningun proyecto abierto." };
-  const bar = beatsPerBar(project);
-  const normal = (texto: string): string =>
-    texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-
-  const pedidas = (peticion.pistas ?? []).filter((n) => n.trim() !== "");
-  const pistas =
-    pedidas.length === 0
-      ? project.tracks
-      : project.tracks.filter((t) => pedidas.some((n) => normal(t.name).includes(normal(n))));
-  if (pistas.length === 0) {
-    return { ok: false, texto: `No encuentro ninguna pista que se llame asi: ${pedidas.join(", ")}` };
-  }
-
-  const masLargo = Math.max(0, ...pistas.flatMap((t) => t.clips.map((c) => c.length)));
-  const objetivo =
-    peticion.compases && peticion.compases > 0
-      ? Math.trunc(peticion.compases) * bar
-      : compasesDeAudio(masLargo, bar);
-  if (!(objetivo > 0)) return { ok: false, texto: "No hay clips que igualar." };
-
-  const ops: Op[] = [];
-  for (const pista of pistas) {
-    for (const clip of pista.clips) {
-      if (Math.abs(clip.length - objetivo) > 1e-6) {
-        ops.push({ op: "set_clip_length", trackId: pista.id, clipId: clip.id, lengthBeats: objetivo });
-      }
-    }
-  }
-  if (ops.length === 0) {
-    return {
-      ok: true,
-      texto: `Nada que igualar: los ${pistas.length} clips ya duran ${(objetivo / bar).toFixed(2)} compases.`,
-    };
-  }
-  const siguiente = applyOps(project, [
-    ...ops,
-    {
-      op: "set_song",
-      bpm: project.bpm,
-      lengthBars: Math.max(project.lengthBars, Math.ceil(objetivo / bar - 1e-6)),
-    },
-  ]).project;
-  commitLive(siguiente);
-  return {
-    ok: true,
-    texto:
-      `Igualados ${ops.length} clips a ${(objetivo / bar).toFixed(2)} compases (${objetivo} beats) ` +
-      `en ${pistas.length} pistas. El proyecto queda en ${siguiente.lengthBars} compases.`,
-  };
-}
-
-/** Crea un proyecto vacio con el nombre pedido (lo llama el agente tras preguntar). */
-function crearProyectoDesdeAgente(peticion: PeticionProyecto): { ok: boolean; texto: string } {
-  const nombre = peticion.nombre.trim();
-  if (!nombre) return { ok: false, texto: "Falta el nombre del proyecto." };
-  const previo = project?.name ?? null;
-  const bpm = Math.min(300, Math.max(20, Math.round(peticion.bpm)));
-  const compases = Math.min(512, Math.max(4, Math.round(peticion.compases)));
-  setProject(createProject({ name: nombre.slice(0, 40), bpm, lengthBars: compases }));
-  const carpeta = project ? slugDeProyecto(project) : "?";
-  if (previo) {
-    addMessage("system", `Sustituido el proyecto “${previo}” por “${nombre}” (Ctrl+Z lo recupera).`);
-  }
-  addMessage("system", `Proyecto “${nombre}” creado (carpeta proyectos/${carpeta}/).`);
-  return {
-    ok: true,
-    texto: `Proyecto "${nombre}" creado. Carpeta: proyectos/${carpeta}/. Ahora escribe los .wav y .mid en salida/... y llamalos con anadir_pistas.`,
-  };
-}
-
-/**
- * Mueve faders por nombre de pista: es como el agente aplica una mezcla.
- *
- * Va por ops (set_track), asi que es un cambio normal del proyecto: entra en el
- * historial, se deshace con Ctrl+Z y no reinicia el engine (commitLive).
- */
-function ajustarPistasDesdeAgente(peticion: { pistas: AjustePista[] }): { ok: boolean; texto: string } {
-  if (!project) return { ok: false, texto: "No hay ningun proyecto abierto." };
-  const normal = (texto: string): string =>
-    texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-
-  const ops: Op[] = [];
-  const hechas: string[] = [];
-  const faltan: string[] = [];
-
-  for (const ajuste of peticion.pistas) {
-    const buscado = normal(ajuste.nombre);
-    if (buscado === "") continue;
-    const pista =
-      project.tracks.find((t) => normal(t.name) === buscado) ??
-      project.tracks.find((t) => normal(t.name).includes(buscado)) ??
-      project.tracks.find((t) => buscado.includes(normal(t.name)));
-    if (!pista) {
-      faltan.push(ajuste.nombre);
-      continue;
-    }
-    const op: Op = { op: "set_track", trackId: pista.id };
-    const cambios: string[] = [];
-    if (typeof ajuste.gainDb === "number" && Number.isFinite(ajuste.gainDb)) {
-      op.gainDb = Math.min(12, Math.max(-60, ajuste.gainDb));
-      cambios.push(`${op.gainDb >= 0 ? "+" : ""}${op.gainDb.toFixed(1)} dB`);
-    }
-    if (typeof ajuste.pan === "number" && Number.isFinite(ajuste.pan)) {
-      op.pan = Math.min(1, Math.max(-1, ajuste.pan));
-      cambios.push(`paneo ${op.pan.toFixed(2)}`);
-    }
-    if (typeof ajuste.muted === "boolean") {
-      op.muted = ajuste.muted;
-      cambios.push(ajuste.muted ? "mute" : "sin mute");
-    }
-    if (typeof ajuste.solo === "boolean") {
-      op.solo = ajuste.solo;
-      cambios.push(ajuste.solo ? "solo" : "sin solo");
-    }
-    if (cambios.length === 0) continue;
-    ops.push(op);
-    hechas.push(`${pista.name}: ${cambios.join(", ")}`);
-  }
-
-  if (ops.length > 0) {
-    try {
-      commitLive(applyOps(project, ops).project);
-    } catch (error) {
-      return {
-        ok: false,
-        texto: `No se pudo ajustar: ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
-  }
-
-  const partes: string[] = [];
-  if (hechas.length > 0) partes.push(`Ajustadas ${hechas.length} pista(s):\n${hechas.join("\n")}`);
-  if (faltan.length > 0) {
-    const nombres = project.tracks.map((t) => t.name).join(", ");
-    partes.push(
-      nombres === ""
-        ? `No encuentro: ${faltan.join(", ")}. El proyecto no tiene pistas todavía.`
-        : `No encuentro: ${faltan.join(", ")}. Las pistas son: ${nombres}.`,
-    );
-  }
-  if (partes.length === 0) partes.push("No habia nada que cambiar.");
-  return { ok: hechas.length > 0, texto: partes.join("\n\n") };
-}
 
 /**
  * Contexto del proyecto para la plantilla: lo que ya existe, medido. Así el encargo
@@ -1811,65 +1112,15 @@ setGeneradorPlantilla(() => {
   });
 });
 
-registrarImportador(importarPistasDesdeAgente);
-registrarCreador(crearProyectoDesdeAgente);
-registrarAjustador(ajustarPistasDesdeAgente);
-registrarIgualador(igualarClipsDesdeAgente);
-registrarCreadorSonido(crearSonidoDesdeAgente);
-registrarImportadorSample(usarSampleDesdeAgente);
-registrarInstrumentador(instrumentarDesdeAgente);
-
-/**
- * Un instrumento de la biblioteca, convertido a SoundFont y puesto como pista.
- * El .sf2 trae sus 46 regiones con la nota raíz que declara el SFZ, que es lo que
- * evita el «suena a armónica» de estirar un único sample.
- */
-async function instrumentarDesdeAgente(peticion: {
-  sfz: string;
-  nombre: string;
-}): Promise<{ ok: boolean; texto: string }> {
-  try {
-    const res = await fetch("/api/instrumentos/crear", {
-      method: "POST",
-      headers: cabecerasProyecto({ "Content-Type": "application/json" }),
-      body: JSON.stringify(peticion),
-    });
-    const datos = (await res.json()) as {
-      ok?: boolean;
-      archivo?: string;
-      zonas?: number;
-      notas?: number[];
-      error?: string;
-    };
-    if (!datos.ok || !datos.archivo) {
-      return { ok: false, texto: `No se pudo convertir: ${datos.error ?? res.status}` };
-    }
-    if (!project) {
-      return { ok: false, texto: "Abre o crea un proyecto antes de añadir un instrumento." };
-    }
-    const despues = applyOps(project, [
-      {
-        op: "add_track",
-        name: peticion.nombre.slice(0, 60),
-        kind: "midi",
-        instrument: { type: "soundfont", preset: peticion.nombre.slice(0, 64), archivo: datos.archivo },
-      },
-    ]).project;
-    setProject(despues);
-    const pista = despues.tracks.at(-1);
-    const notas = datos.notas ?? [];
-    return {
-      ok: true,
-      texto:
-        `Instrumento «${peticion.nombre}» listo: ${datos.zonas ?? 0} zonas` +
-        (notas.length === 2 ? ` (notas ${notas[0]}-${notas[1]})` : "") +
-        ` en ${datos.archivo}. Pista ${pista ? `«${pista.name}»` : ""} creada: añade notas con ` +
-        `anadir_notas o usa el piano roll.`,
-    };
-  } catch (error) {
-    return { ok: false, texto: `No se pudo convertir: ${error instanceof Error ? error.message : String(error)}` };
-  }
-}
+// Las herramientas del agente que tocan el proyecto (agent/acciones.ts) trabajan
+// sobre ESTA pestaña a través de un contrato pequeño.
+const acciones = crearAcciones({
+  proyecto: () => project,
+  fijar: (siguiente) => setProject(siguiente),
+  enVivo: (siguiente) => commitLive(siguiente),
+  avisar: (texto) => addMessage("system", texto),
+});
+registrarAcciones(acciones);
 
 /** ¿Es un MIDI? Un .mid NO es audio: son notas, y hay que leerlas, no decodificarlas. */
 function esMidi(file: File): boolean {
@@ -1895,7 +1146,7 @@ async function importarMidiDesdeDisco(file: File): Promise<void> {
     if (!project) return;
     const slug = slugDeProyecto(project);
     const { path } = await subirAudio(file, slug);
-    const puesto = await importarPistasDesdeAgente({ midis: [path], wavs: [], inicioCompas: 0 });
+    const puesto = await acciones.anadirPistas({ midis: [path], wavs: [], inicioCompas: 0 });
     addMessage("system", puesto.ok ? `MIDI «${file.name}» importado.` : puesto.texto);
   } catch (error) {
     addMessage(
@@ -2089,7 +1340,7 @@ function fechaCorta(iso: string): string {
   if (!iso) return "sin fecha";
   const fecha = new Date(iso);
   if (Number.isNaN(fecha.getTime())) return "sin fecha";
-  return fecha.toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return fecha.toLocaleString(locale(), { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 /**
@@ -2224,6 +1475,10 @@ async function abrirProyectoDeDisco(ruta: string): Promise<void> {
     const texto = await leerProyectoDeDisco(ruta);
     const disco = interpretarProyectoEnDisco(texto);
     const carpeta = carpetaDeRuta(ruta);
+    // La carpeta de la que se abre es la del proyecto, se llame como se llame: antes
+    // un proyecto abierto de proyectos/stahl/ llamado «Stahl II» se guardaba en
+    // proyectos/stahl-ii/, sin sus WAV.
+    disco.proyecto.meta = { ...disco.proyecto.meta, carpeta };
     const { cargados, faltan } = await hidratarAssets(disco.proyecto, carpeta);
     // `restoring` sigue en true al aplicar el proyecto: abrir no debe reescribir
     // el fichero maestro (pisaría lo que haya en disco, incluido guardadoEn).
@@ -2270,7 +1525,7 @@ $("lista-sonidos").addEventListener("click", (event) => {
   if (traer) {
     objetivo.disabled = true;
     objetivo.textContent = "…";
-    void usarSampleDesdeAgente({ archivo: traer, nombre: objetivo.dataset.nombre ?? "sample" }).then(
+    void acciones.usarSample({ archivo: traer, nombre: objetivo.dataset.nombre ?? "sample" }).then(
       (r) => {
         objetivo.disabled = false;
         objetivo.textContent = r.ok ? "✓" : "error";
@@ -2485,82 +1740,6 @@ window.addEventListener("keydown", (event) => {
 // --- Arranque --------------------------------------------------------------
 
 /**
- * Migración de una sola vez. La versión anterior guardaba el proyecto en
- * `localStorage` (`miuzika.project`) y los WAV en IndexedDB; ya no se leen. Si
- * ese proyecto sigue ahí y su carpeta no tiene fichero maestro, se escribe a
- * disco adoptando los WAV que se llamen igual en `salida/` o `entrada/`.
- */
-async function migrarProyectoAntiguo(): Promise<string> {
-  let crudo: string | null = null;
-  try {
-    crudo = localStorage.getItem("miuzika.project");
-  } catch {
-    return "";
-  }
-  if (!crudo) return "";
-
-  let viejo: Project;
-  try {
-    viejo = JSON.parse(crudo) as Project;
-  } catch {
-    return "";
-  }
-  if (!viejo || viejo.schemaVersion !== 1 || !Array.isArray(viejo.tracks)) return "";
-
-  const slug = slugDeProyecto(viejo);
-  try {
-    // Si ya hay maestro, no hay nada que migrar: se tira la copia vieja.
-    await leerProyectoDeDisco(rutaDeProyecto(slug));
-    localStorage.removeItem("miuzika.project");
-    return "";
-  } catch {
-    /* no hay maestro: se migra */
-  }
-
-  try {
-    const ficheros = await listarFicheros();
-    const deLaCarpeta = ficheros.filter((f) => f.path.startsWith(`proyectos/${slug}/`));
-    const candidatos: { base: string; ruta: string }[] = [];
-    for (const fichero of deLaCarpeta) {
-      if (!/\.[^.]+$/.test(fichero.path)) continue;
-      const base = (fichero.path.split("/").pop() ?? "").replace(/\.[^.]+$/, "").toLowerCase();
-      candidatos.push({ base, ruta: fichero.path.slice(`proyectos/${slug}/`.length) });
-    }
-    // El nombre del asset puede venir sin el prefijo del proyecto ("bajo" para
-    // "vitrina_bajo.wav"), así que primero exacto y después por sufijo.
-    const buscarRuta = (nombre: string): string | undefined => {
-      const buscado = nombre.toLowerCase();
-      const exacto = candidatos.find((candidato) => candidato.base === buscado);
-      if (exacto) return exacto.ruta;
-      const sufijos = [`_${buscado}`, `-${buscado}`, ` ${buscado}`];
-      return candidatos.find((candidato) => sufijos.some((sufijo) => candidato.base.endsWith(sufijo)))?.ruta;
-    };
-    let adoptados = 0;
-    for (const asset of viejo.audioAssets ?? []) {
-      if (asset.ruta) continue;
-      const ruta = buscarRuta(asset.name);
-      if (ruta) {
-        asset.ruta = ruta;
-        adoptados++;
-      }
-    }
-    const { datos } = serializarProyecto(viejo, audioAssets);
-    await guardarProyectoEnDisco(rutaDeProyecto(slug), JSON.stringify(datos, null, 2));
-    localStorage.removeItem("miuzika.project");
-    return (
-      `Migrado a disco el proyecto “${viejo.name}” que estaba en el navegador: proyectos/${slug}/proyecto.json` +
-      (adoptados > 0
-        ? `, con ${adoptados} WAV adoptado(s) de la carpeta por su nombre.`
-        : ". Sus WAV viejos estaban en IndexedDB y no se pueden recuperar; vuelve a importarlos si faltan.")
-    );
-  } catch (error) {
-    return `No se pudo migrar el proyecto del navegador a disco: ${
-      error instanceof Error ? error.message : String(error)
-    }`;
-  }
-}
-
-/**
  * Arranque: el disco es la fuente de verdad, pero **no se abre ningún proyecto
  * solo**. El usuario decide con «Proyectos» (o pidiendo una pieza nueva).
  *
@@ -2569,8 +1748,6 @@ async function migrarProyectoAntiguo(): Promise<string> {
  * El lienzo vacío ya explica qué hacer, así que aquí no se escribe nada.
  */
 async function boot(): Promise<void> {
-  // Proyecto de la versión anterior (localStorage + IndexedDB) -> disco.
-  const migracion = await migrarProyectoAntiguo();
   setProject(null, false);
   // `cargarAgenteDelProyecto` sale antes cuando el slug no cambia ("" -> ""), así que
   // el prompt de sistema se quedaba con el texto pelado: sin manifiesto y sin la
@@ -2580,7 +1757,6 @@ async function boot(): Promise<void> {
   setPlaying(false);
   ready = true;
   updateActions();
-  if (migracion) addMessage("system", migracion);
 }
 
 updateActions();
@@ -2612,11 +1788,9 @@ if (import.meta.env.DEV) {
     get future() {
       return future;
     },
-    anadirPistas: importarPistasDesdeAgente,
+    acciones,
     abrirArchivos,   // mismo camino que «Abrir» y el arrastre: sirve para probarlo
     stems: stemPlayer,
-    crearProyecto: crearProyectoDesdeAgente,
-    ajustarPistas: ajustarPistasDesdeAgente,
     costeGpu,
     nuevoProyecto: (nombre: string, bpm: number, lengthBars: number) =>
       setProject(createProject({ name: nombre, bpm, lengthBars })),
@@ -2636,7 +1810,7 @@ async function cargarSoundfontsDelProyecto(
     const archivo = track.instrument.type === "soundfont" ? track.instrument.archivo : undefined;
     if (!archivo || mapa.has(archivo)) continue;
     const respuesta = await fetch(`/api/audio?path=${encodeURIComponent(archivo)}`, {
-      headers: { "x-miuzika-proyecto": slugDeProyecto(view) },
+      headers: cabeceraDeProyecto(slugDeProyecto(view)),
     }).catch(() => null);
     if (!respuesta || !respuesta.ok) continue;
     mapa.set(archivo, {

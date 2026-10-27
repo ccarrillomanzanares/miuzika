@@ -11,12 +11,15 @@ import { UMBRAL_SALIDA, recortarSalida } from "./contexto.ts";
 import { buscarEnCatalogo } from "../../../src/core/buscar.ts";
 import type { EntradaCatalogo } from "../../../src/core/buscar.ts";
 import { etiquetasEnFrase } from "../../../src/core/taxonomia.ts";
+import type { PeticionProgresion } from "../../../src/core/composicion.ts";
+import { PATRONES } from "../../../src/core/composicion.ts";
+import { PALABRAS } from "../../../src/core/palabras.ts";
+import { DEVICE_TYPES, INSTRUMENT_TYPES } from "../../../src/core/types.ts";
+import { firmasDeOps } from "../../../src/core/ops.ts";
+import { MODE_NAMES } from "../../../src/core/theory.ts";
 
-export interface ResultadoHerramienta {
-  ok: boolean;
-  /** Texto que vuelve al modelo como resultado de la herramienta. */
-  texto: string;
-}
+/** Texto que vuelve al modelo como resultado de la herramienta. */
+export type ResultadoHerramienta = ResultadoAccion;
 
 /** Slug del proyecto abierto: el servidor resuelve ahi las rutas no compartidas. */
 let proyectoActivo = "";
@@ -35,13 +38,18 @@ export function setDestino(destino: Destino): void {
   destinoPreferido = destino === "lambda" ? "lambda" : "cpu";
 }
 
-export function getDestino(): Destino {
-  return destinoPreferido;
+/**
+ * Cabecera con la carpeta de un proyecto. Va CODIFICADA: una cabecera HTTP sólo
+ * admite Latin-1 y `fetch` lanza con una carpeta como «夜の歌». El servidor la
+ * descodifica en `slugProyecto` (server/contexto.ts).
+ */
+export function cabeceraDeProyecto(slug: string): Record<string, string> {
+  return { "x-miuzika-proyecto": encodeURIComponent(slug) };
 }
 
 /** Cabeceras con el proyecto activo (lo usa tambien main.ts). */
 export function cabecerasProyecto(extra?: Record<string, string>): Record<string, string> {
-  return { "x-miuzika-proyecto": proyectoActivo, ...(extra ?? {}) };
+  return { ...cabeceraDeProyecto(proyectoActivo), ...(extra ?? {}) };
 }
 
 /**
@@ -94,7 +102,22 @@ async function pedirJson(
   return datos;
 }
 
-/** Peticion de pistas reales al proyecto del DAW (se ejecuta en el navegador). */
+// ---------------------------------------------------------------------------
+// Acciones que tocan el proyecto abierto
+//
+// Las herramientas que cambian el proyecto se ejecutan en la pestaña, porque es
+// la dueña de `proyecto.json` (ver docs/ARCHITECTURE.md §3). La pestaña las
+// registra aquí con `registrarAcciones`, de una vez. Antes eran siete registros
+// sueltos, cada uno duplicado en `globalThis`.
+// ---------------------------------------------------------------------------
+
+/** Resultado de una acción: el texto vuelve al modelo como resultado de la herramienta. */
+export interface ResultadoAccion {
+  ok: boolean;
+  texto: string;
+}
+
+/** Pistas reales a partir de ficheros de workspace/ (la entrega de una canción). */
 export interface PeticionPistas {
   midis: string[];
   wavs: string[];
@@ -109,65 +132,19 @@ export interface PeticionPistas {
   nombreProyecto?: string;
 }
 
-type ImportadorLocal = (peticion: PeticionPistas) => Promise<{ ok: boolean; texto: string }>;
-
-let importadorLocal: ImportadorLocal | null = null;
-
 export interface PeticionProyecto {
   nombre: string;
   bpm: number;
   compases: number;
+  /** Tónica y modo, si el usuario los ha dicho («re menor» → D minor). */
+  tonica?: string;
+  modo?: string;
 }
-
-type CreadorProyecto = (peticion: PeticionProyecto) => { ok: boolean; texto: string };
 
 /** Convierte un instrumento de la biblioteca a .sf2 y lo pone como pista. */
 export interface PeticionInstrumento {
   sfz: string;
   nombre: string;
-}
-
-type Instrumentador = (peticion: PeticionInstrumento) => Promise<{ ok: boolean; texto: string }>;
-
-let instrumentadorLocal: Instrumentador | null = null;
-
-export function registrarInstrumentador(fn: Instrumentador | null): void {
-  instrumentadorLocal = fn;
-  registro.instrumentador = fn;
-}
-
-let creadorProyecto: CreadorProyecto | null = null;
-
-/**
- * El registro vive también en `globalThis`. Con el servidor de dev, editar
- * main.ts o este fichero puede dejar DOS copias del módulo cargadas a la vez: la
- * que registra (main) y la que el bucle del agente consulta. Sin esto, la app
- * dice «no puede crear proyectos» con la app perfectamente viva y el agente
- * reintenta en bucle. Pasó el 23-oct y costó 12 pasos.
- */
-interface RegistroGlobal {
-  creador?: CreadorProyecto | null;
-  importador?: ImportadorLocal | null;
-  ajustador?: Ajustador | null;
-  igualador?: Igualador | null;
-  sonidos?: CreadorSonido | null;
-  samples?: ImportadorSample | null;
-  instrumentador?: Instrumentador | null;
-}
-
-const registro: RegistroGlobal =
-  ((globalThis as unknown as { __miuzikaHerramientas?: RegistroGlobal }).__miuzikaHerramientas ??= {});
-
-/** main.ts registra aqui como se crea un proyecto con nombre. */
-export function registrarCreador(fn: CreadorProyecto | null): void {
-  creadorProyecto = fn;
-  registro.creador = fn;
-}
-
-/** main.ts registra aqui como se crean pistas de verdad (necesita el proyecto). */
-export function registrarImportador(fn: ImportadorLocal | null): void {
-  importadorLocal = fn;
-  registro.importador = fn;
 }
 
 /** Ajuste de una pista por su nombre: es como se aplica una mezcla. */
@@ -179,16 +156,6 @@ export interface AjustePista {
   solo?: boolean;
 }
 
-type Ajustador = (peticion: { pistas: AjustePista[] }) => { ok: boolean; texto: string };
-
-let ajustador: Ajustador | null = null;
-
-/** main.ts registra aqui como se mueven los faders (necesita el proyecto). */
-export function registrarAjustador(fn: Ajustador | null): void {
-  ajustador = fn;
-  registro.ajustador = fn;
-}
-
 /** Igualar la duracion de los clips (en compases) sin tocar el resto del proyecto. */
 export interface PeticionIgualar {
   /** Compases que deben durar los clips. Si falta, se toma el clip mas largo. */
@@ -197,19 +164,9 @@ export interface PeticionIgualar {
   pistas?: string[];
 }
 
-type Igualador = (peticion: PeticionIgualar) => { ok: boolean; texto: string };
-
-let igualador: Igualador | null = null;
-
-/** main.ts registra aqui como se igualan los clips (necesita el proyecto). */
-export function registrarIgualador(fn: Igualador | null): void {
-  igualador = fn;
-  registro.igualador = fn;
-}
-
 /**
  * Crear un sonido: la voz sale del catálogo del motor y las palabras son el
- * vocabulario humano («corto», «gordo», «sucio») traducido a parámetros.
+ * vocabulario canónico («corto», «gordo», «sucio»), traducido a parámetros.
  */
 export interface PeticionSonido {
   nombre: string;
@@ -219,16 +176,6 @@ export interface PeticionSonido {
   palabras?: string[];
   /** Valores concretos de parámetros de la voz (opcional). */
   args?: Record<string, number | boolean | number[]>;
-}
-
-type CreadorSonido = (peticion: PeticionSonido) => Promise<{ ok: boolean; texto: string }>;
-
-let creadorSonido: CreadorSonido | null = null;
-
-/** main.ts registra aqui como se renderiza y guarda un sonido (necesita el proyecto). */
-export function registrarCreadorSonido(fn: CreadorSonido | null): void {
-  creadorSonido = fn;
-  registro.sonidos = fn;
 }
 
 /** Meter un sample de la biblioteca en el proyecto (clip + asset, normalizado). */
@@ -241,37 +188,140 @@ export interface PeticionSample {
   compases?: number;
 }
 
-type ImportadorSample = (peticion: PeticionSample) => Promise<{ ok: boolean; texto: string }>;
-
-let importadorSample: ImportadorSample | null = null;
-
-/** main.ts registra aqui como se importa un sample (necesita el proyecto abierto). */
-export function registrarImportadorSample(fn: ImportadorSample | null): void {
-  importadorSample = fn;
-  registro.samples = fn;
+/** Escribir una progresión de acordes como notas en una pista. */
+export interface PeticionProgresionPista extends PeticionProgresion {
+  /** Pista destino (id o nombre). Si no existe, se crea con ese nombre. */
+  pista: string;
+  /** Instrumento de la pista si se crea (por defecto: bass para «bajo», pad para el resto). */
+  instrumento?: string;
+  /** Compás donde empieza, contando desde 1. */
+  desdeCompas?: number;
 }
 
-/** Lo registrado, mirando primero lo local y después el registro compartido. */
-const herramientaLocal = {
-  creador: (): CreadorProyecto | null => creadorProyecto ?? registro.creador ?? null,
-  importador: (): ImportadorLocal | null => importadorLocal ?? registro.importador ?? null,
-  ajustador: (): Ajustador | null => ajustador ?? registro.ajustador ?? null,
-  igualador: (): Igualador | null => igualador ?? registro.igualador ?? null,
-  sonidos: (): CreadorSonido | null => creadorSonido ?? registro.sonidos ?? null,
-  samples: (): ImportadorSample | null => importadorSample ?? registro.samples ?? null,
-  instrumentador: (): Instrumentador | null => instrumentadorLocal ?? registro.instrumentador ?? null,
-};
+export interface AccionesEstudio {
+  leerProyecto(peticion: { clipId?: string }): ResultadoAccion;
+  editarProyecto(peticion: { ops: unknown[] }): ResultadoAccion;
+  escribirProgresion(peticion: PeticionProgresionPista): ResultadoAccion;
+  crearProyecto(peticion: PeticionProyecto): Promise<ResultadoAccion>;
+  anadirPistas(peticion: PeticionPistas): Promise<ResultadoAccion>;
+  ajustarPistas(peticion: { pistas: AjustePista[] }): ResultadoAccion;
+  igualarClips(peticion: PeticionIgualar): ResultadoAccion;
+  crearSonido(peticion: PeticionSonido): Promise<ResultadoAccion>;
+  usarSample(peticion: PeticionSample): Promise<ResultadoAccion>;
+  usarInstrumento(peticion: PeticionInstrumento): Promise<ResultadoAccion>;
+}
 
-/** Mensaje único para el caso «la app no tiene este registro»: dice qué hacer. */
+/**
+ * El registro vive también en `globalThis`. Con el servidor de dev, editar
+ * main.ts o este fichero puede dejar DOS copias del módulo cargadas a la vez: la
+ * que registra (main) y la que el bucle del agente consulta. Sin esto, la app
+ * dice «no puede crear proyectos» con la app perfectamente viva y el agente
+ * reintenta en bucle. Pasó el 23-oct y costó 12 pasos.
+ */
+const almacen = globalThis as unknown as { __miuzikaAcciones?: AccionesEstudio | null };
+
+export function registrarAcciones(acciones: AccionesEstudio | null): void {
+  almacen.__miuzikaAcciones = acciones;
+}
+
+function acciones(): AccionesEstudio | null {
+  return almacen.__miuzikaAcciones ?? null;
+}
+
+/** Herramientas que se resuelven en la pestaña, contra el proyecto abierto. */
+const HERRAMIENTAS_DEL_PROYECTO = new Set([
+  "leer_proyecto",
+  "editar_proyecto",
+  "escribir_progresion",
+  "crear_proyecto",
+  "anadir_pistas",
+  "ajustar_pistas",
+  "igualar_clips",
+  "crear_sonido",
+  "usar_sample",
+  "usar_instrumento",
+]);
+
 /** Tope de un solo escribir_fichero (≈200 líneas). Ver el porqué en el case. */
 const MAX_FICHERO = 8000;
 
+/** Mensaje único para el caso «la app no tiene registradas sus acciones»: dice qué hacer. */
 const SIN_REGISTRO =
   "La app no tiene registrada esta acción (pasa cuando el servidor de dev se reinicia o se " +
   "edita código con la pestaña abierta y quedan dos copias del módulo). NO lo reintentes: " +
   "pide al usuario que recargue la página (F5) y repite después.";
-
 export const HERRAMIENTAS: ToolSpec[] = [
+  {
+    type: "function",
+    function: {
+      name: "leer_proyecto",
+      description:
+        "Devuelve el estado REAL del proyecto abierto: tempo, compás, tonalidad, pistas con su id, " +
+        "instrumento, ganancia, paneo, efectos (con sus parámetros) y clips (compás, duración, rango " +
+        "de notas). Con `clip`, además las notas de ese clip. Léelo antes de editar: los ids que " +
+        "devuelve son los que piden editar_proyecto y escribir_progresion.",
+      parameters: {
+        type: "object",
+        properties: {
+          clip: { type: "string", description: "Opcional: id de un clip (clp_3) para ver sus notas" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "editar_proyecto",
+      description:
+        "Cambia el proyecto con operaciones validadas y TRANSACCIONALES: o entran todas o ninguna, y " +
+        "se deshacen con Ctrl+Z. Es la forma directa de componer (notas), arreglar (clips), producir " +
+        "(efectos) y mezclar (ganancia, paneo, master) sin escribir Python. trackId acepta id, nombre " +
+        "exacto o número de pista. Notas: {pitch 0-127 (60 = C4), start y duration en negras desde " +
+        "el inicio del clip, velocity 1-127}. startBar empieza en 0. Tipos de efecto: " +
+        `${DEVICE_TYPES.join(", ")}. Instrumentos: ${INSTRUMENT_TYPES.join(", ")}. Operaciones:\n` +
+        firmasDeOps(),
+      parameters: {
+        type: "object",
+        properties: {
+          ops: {
+            type: "array",
+            description: "Lista de operaciones; cada una es un objeto con `op` y sus campos",
+            items: { type: "object", properties: { op: { type: "string" } }, required: ["op"] },
+          },
+        },
+        required: ["ops"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "escribir_progresion",
+      description:
+        "Escribe una progresión de acordes como notas MIDI en una pista (la crea si no existe), con " +
+        "conducción de voces. Da `acordes` en cifrado americano (Am, F, C/E, G7, Bbmaj7, Dm7b5) o " +
+        "`grados` de la tonalidad del proyecto (1-7). Patrones: bloque (acordes tenidos), pulso " +
+        "(acordes repetidos cada `paso`), arpegio, alberti, bajo (fundamental o bajo del acorde con " +
+        "barra). Para una base completa llámala varias veces: pad en bloque, bajo en «bajo», etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          pista: { type: "string", description: "Id o nombre de la pista destino" },
+          acordes: { type: "array", items: { type: "string" }, description: "Cifrado: ['Am','F','C','G']" },
+          grados: { type: "array", items: { type: "integer" }, description: "Grados 1-7: [1,6,4,5]" },
+          patron: { type: "string", enum: [...PATRONES] },
+          compases_por_acorde: { type: "number", description: "Por defecto 1" },
+          desde_compas: { type: "integer", description: "Compás de inicio, desde 1 (por defecto 1)" },
+          octava: { type: "integer", description: "Octava (C4 = 60). Por defecto 4; en «bajo», 2" },
+          paso: { type: "number", description: "Paso en negras para pulso/arpegio/bajo (0.5 = corcheas)" },
+          velocidad: { type: "integer", description: "1-127, por defecto 90" },
+          repeticiones: { type: "integer", description: "Veces que se repite la progresión (por defecto 1)" },
+          instrumento: { type: "string", enum: [...INSTRUMENT_TYPES], description: "Si hay que crear la pista" },
+        },
+        required: ["pista"],
+      },
+    },
+  },
   {
     type: "function",
     function: {
@@ -395,6 +445,12 @@ export const HERRAMIENTAS: ToolSpec[] = [
           nombre: { type: "string", description: "Nombre que ha pedido el usuario" },
           bpm: { type: "number", description: "Tempo (por defecto 120)" },
           compases: { type: "integer", description: "Duracion en compases (por defecto 32)" },
+          tonica: { type: "string", description: "Tónica en notación americana: C, F#, Bb (re = D)" },
+          modo: {
+            type: "string",
+            enum: [...MODE_NAMES],
+            description: "Modo de la tonalidad (menor = minor, mayor = major)",
+          },
         },
         required: ["nombre"],
       },
@@ -415,7 +471,7 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "buscar_sonido",
       description:
-        "Busca en el catalogo del motor lo que pide el usuario en lenguaje natural (y en su idioma). " +
+        "Busca en el catalogo del motor y en la biblioteca CC0 lo que pide el usuario en lenguaje natural. " +
         "Entiende los nombres habituales y los regionalismos (tarola = caja, hi-hat = charles, platillo " +
         "crash = crash) y el caracter medido (corto, largo, seco, brillante, oscuro, grave, agudo, sucio, " +
         "limpio). Usala ANTES de crear nada: si ya existe algo que encaja, dilo y usalo.",
@@ -424,7 +480,9 @@ export const HERRAMIENTAS: ToolSpec[] = [
         properties: {
           consulta: {
             type: "string",
-            description: "La peticion tal cual la dice el usuario, p.ej. 'un china sucio y corto'",
+            description:
+              "La petición en español o en inglés (el índice está en esos dos idiomas): si el usuario " +
+              "escribe en otro idioma, tradúcela tú, p. ej. «短くて汚いチャイナ» → 'china sucio y corto'.",
           },
           familia: {
             type: "string",
@@ -487,7 +545,8 @@ export const HERRAMIENTAS: ToolSpec[] = [
         "Convierte un instrumento de la biblioteca (.sfz de VCSL) en un SoundFont dentro del proyecto y " +
         "crea su pista MIDI. ESTA es la forma de tener un instrumento afinado: usa sus 46 regiones y la " +
         "raíz que declara el SFZ. NO cojas un solo sample y lo estires para tocar varias notas: suena a " +
-        "armonica y desafina (medido: +1054 cents).",
+        "armonica y desafina (medido: +1054 cents). Después escribe sus notas con escribir_progresion o " +
+        "editar_proyecto (add_notes) sobre la pista que crea.",
       parameters: {
         type: "object",
         properties: {
@@ -516,10 +575,10 @@ export const HERRAMIENTAS: ToolSpec[] = [
           voz: { type: "string", description: "Clave de la voz del catalogo (kick, snare, metal_hit...)" },
           palabras: {
             type: "array",
-            items: { type: "string" },
+            items: { type: "string", enum: PALABRAS.map((p) => p.clave) },
             description:
-              "corto, largo, seco, gordo, hueco, grave, agudo, brillante, oscuro, sucio, limpio, " +
-              "metalico, agresivo, redondo, chillon, apagado",
+              "Vocabulario canónico del sistema. El usuario lo dirá en su idioma («punchy», «kurz», " +
+              "«短い»…): tradúcelo tú a estas claves, en el orden en que lo dice.",
           },
           args: {
             type: "object",
@@ -697,6 +756,11 @@ async function ejecutarCrudo(
     };
   }
 
+  // Las que cambian o leen el proyecto se ejecutan en la pestaña (ver registrarAcciones).
+  const registradas = acciones();
+  if (!registradas && HERRAMIENTAS_DEL_PROYECTO.has(nombre)) return { ok: false, texto: SIN_REGISTRO };
+  const local = registradas as AccionesEstudio;
+
   try {
     switch (nombre) {
       case "escribir_fichero": {
@@ -759,14 +823,14 @@ async function ejecutarCrudo(
         return { ok: true, texto: `Editado ${datos.path}: ${datos.reemplazos} reemplazo(s).` };
       }
       case "crear_proyecto": {
-        const creador = herramientaLocal.creador();
-        if (!creador) {
-          return { ok: false, texto: SIN_REGISTRO };
-        }
-        return creador({
+        const tonica = typeof args.tonica === "string" ? args.tonica.trim() : "";
+        const modo = typeof args.modo === "string" ? args.modo.trim() : "";
+        return local.crearProyecto({
           nombre: String(args.nombre ?? "").trim(),
           bpm: Number(args.bpm ?? 120) || 120,
           compases: Number(args.compases ?? 32) || 32,
+          ...(tonica ? { tonica } : {}),
+          ...(modo ? { modo } : {}),
         });
       }
       case "listar_voces": {
@@ -803,7 +867,7 @@ async function ejecutarCrudo(
         try {
           // Medir las 16 voces cuesta ~2 s: sólo se pide si la consulta lleva una
           // palabra de carácter (corto, brillante…), que es cuando hace falta.
-          const pideCaracter = /\b(corto|largo|seco|brillante|oscuro|grave|agudo|sucio|limpio|redondo|apagado|chillon|metalico)\b/i.test(
+          const pideCaracter = /\b(corto|largo|seco|brillante|oscuro|grave|agudo|sucio|limpio|redondo|apagado|chillon|metalico|short|long|dry|bright|dark|low|deep|high|dirty|clean)\b/i.test(
             consulta,
           );
           const datos = (await pedirJson(
@@ -927,39 +991,25 @@ async function ejecutarCrudo(
           `forma (energía por 4 compases): ${JSON.stringify(datos.forma)}`;
         return { ok: true, texto: linea };
       }
-      case "usar_instrumento": {
-        const instrumentar = herramientaLocal.instrumentador();
-        if (!instrumentar) {
-          return { ok: false, texto: SIN_REGISTRO };
-        }
-        return instrumentar({
+      case "usar_instrumento":
+        return local.usarInstrumento({
           sfz: String(args.sfz ?? "").trim(),
           nombre: String(args.nombre ?? "").trim() || "instrumento",
         });
-      }
-      case "usar_sample": {
-        const usar = herramientaLocal.samples();
-        if (!usar) {
-          return { ok: false, texto: SIN_REGISTRO };
-        }
-        return usar({
+      case "usar_sample":
+        return local.usarSample({
           archivo: String(args.archivo ?? "").trim(),
           ...(typeof args.nombre === "string" && args.nombre.trim() !== ""
             ? { nombre: args.nombre.trim() }
             : {}),
           ...(Number(args.compases) > 0 ? { compases: Math.trunc(Number(args.compases)) } : {}),
         });
-      }
       case "crear_sonido": {
-        const crear = herramientaLocal.sonidos();
-        if (!crear) {
-          return { ok: false, texto: SIN_REGISTRO };
-        }
         const argsSonido =
           typeof args.args === "object" && args.args !== null
             ? (args.args as Record<string, number | boolean | number[]>)
             : undefined;
-        return crear({
+        return local.crearSonido({
           nombre: String(args.nombre ?? "").trim(),
           voz: String(args.voz ?? "").trim(),
           ...(Array.isArray(args.palabras) ? { palabras: (args.palabras as unknown[]).map(String) } : {}),
@@ -1011,22 +1061,13 @@ async function ejecutarCrudo(
           return { ok: false, texto: "No pude llamar a la puerta: " + (error instanceof Error ? error.message : String(error)) };
         }
       }
-      case "igualar_clips": {
-        const igualar = herramientaLocal.igualador();
-        if (!igualar) {
-          return { ok: false, texto: SIN_REGISTRO };
-        }
-        return igualar({
+      case "igualar_clips":
+        return local.igualarClips({
           ...(Number(args.compases) > 0 ? { compases: Math.trunc(Number(args.compases)) } : {}),
           ...(Array.isArray(args.pistas) ? { pistas: (args.pistas as unknown[]).map(String) } : {}),
         });
-      }
-      case "anadir_pistas": {
-        const importador = herramientaLocal.importador();
-        if (!importador) {
-          return { ok: false, texto: SIN_REGISTRO };
-        }
-        return importador({
+      case "anadir_pistas":
+        return local.anadirPistas({
           midis: Array.isArray(args.midis) ? (args.midis as unknown[]).map(String) : [],
           wavs: Array.isArray(args.wavs) ? (args.wavs as unknown[]).map(String) : [],
           inicioCompas: Number(args.inicio_compas ?? 0) || 0,
@@ -1035,12 +1076,7 @@ async function ejecutarCrudo(
             ? { nombreProyecto: args.nombre_proyecto.trim() }
             : {}),
         });
-      }
       case "ajustar_pistas": {
-        const ajustar = herramientaLocal.ajustador();
-        if (!ajustar) {
-          return { ok: false, texto: SIN_REGISTRO };
-        }
         const lista = Array.isArray(args.pistas) ? (args.pistas as Record<string, unknown>[]) : [];
         if (lista.length === 0) return { ok: false, texto: "No has dicho ninguna pista." };
         const pistas: AjustePista[] = lista.map((p) => {
@@ -1051,7 +1087,37 @@ async function ejecutarCrudo(
           if (typeof p.solo === "boolean") ajuste.solo = p.solo;
           return ajuste;
         });
-        return ajustar({ pistas });
+        return local.ajustarPistas({ pistas });
+      }
+      case "leer_proyecto":
+        return local.leerProyecto(typeof args.clip === "string" && args.clip.trim() !== "" ? { clipId: args.clip.trim() } : {});
+      case "editar_proyecto": {
+        const ops = Array.isArray(args.ops) ? (args.ops as unknown[]) : [];
+        if (ops.length === 0) return { ok: false, texto: "Falta `ops`: una lista de operaciones (ver la descripción de la herramienta)." };
+        return local.editarProyecto({ ops });
+      }
+      case "escribir_progresion": {
+        const lista = (valor: unknown): unknown[] | undefined => (Array.isArray(valor) ? valor : undefined);
+        const numero = (valor: unknown): number | undefined =>
+          typeof valor === "number" && Number.isFinite(valor) ? valor : undefined;
+        const acordes = lista(args.acordes)?.map(String);
+        const grados = lista(args.grados)?.map(Number);
+        const patron = PATRONES.find((p) => p === args.patron);
+        const peticion: PeticionProgresionPista = { pista: String(args.pista ?? "").trim() || "Acordes" };
+        if (acordes && acordes.length > 0) peticion.acordes = acordes;
+        if (grados && grados.length > 0) peticion.grados = grados;
+        if (patron) peticion.patron = patron;
+        const opcionales: [keyof PeticionProgresionPista, unknown][] = [
+          ["compasesPorAcorde", numero(args.compases_por_acorde)],
+          ["octava", numero(args.octava)],
+          ["paso", numero(args.paso)],
+          ["velocidad", numero(args.velocidad)],
+          ["repeticiones", numero(args.repeticiones)],
+          ["desdeCompas", numero(args.desde_compas)],
+        ];
+        for (const [clave, valor] of opcionales) if (valor !== undefined) (peticion as unknown as Record<string, unknown>)[clave] = valor;
+        if (typeof args.instrumento === "string") peticion.instrumento = args.instrumento;
+        return local.escribirProgresion(peticion);
       }
       case "verificar_audio": {
         const tope = Number(args.timeout_segundos);

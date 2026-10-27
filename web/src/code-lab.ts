@@ -1,5 +1,6 @@
 /** Editor Strudel: convierte un patrón en un WAV con el motor real. */
 
+import { slugDe } from "../../src/core/nombres.ts";
 import type { CodeSource, Project } from "../../src/core/types.ts";
 
 export interface CodeAudioRequest {
@@ -36,15 +37,7 @@ const escapeAttr = (value: string): string =>
   });
 
 function slug(value: string): string {
-  return (
-    value
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .slice(0, 30) || "strudel"
-  );
+  return slugDe(value, { separador: "_", max: 24, defecto: "strudel" });
 }
 
 export function openCodeLab(options: CodeLabOptions): void {

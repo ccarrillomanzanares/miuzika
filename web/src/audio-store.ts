@@ -13,6 +13,7 @@
 import type { Project } from "../../src/core/types.ts";
 import { idsDeAssets } from "../../src/core/project.ts";
 import { rutaEnWorkspace } from "../../src/core/rutas.ts";
+import { slugDe } from "../../src/core/nombres.ts";
 
 /** Por encima de estos segundos el WAV no se decodifica: se reproduce por streaming. */
 export const SEGUNDOS_STREAMING = 30;
@@ -34,15 +35,7 @@ export const audioAssets = new Map<string, LoadedAsset>();
 let decodeContext: AudioContext | null = null;
 
 function slug(value: string): string {
-  return (
-    value
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .slice(0, 40) || "audio"
-  );
+  return slugDe(value, { separador: "_", max: 24, defecto: "audio" });
 }
 
 /** Id nuevo para un asset, con el nombre del fichero dentro (aud_kick_lz3k9). */
