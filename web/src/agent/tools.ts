@@ -12,6 +12,7 @@ import { buscarEnCatalogo } from "../../../src/core/buscar.ts";
 import type { EntradaCatalogo } from "../../../src/core/buscar.ts";
 import { etiquetasEnFrase } from "../../../src/core/taxonomia.ts";
 import type { PeticionProgresion } from "../../../src/core/composicion.ts";
+import type { PeticionBateria } from "../../../src/core/bateria.ts";
 import { PATRONES } from "../../../src/core/composicion.ts";
 import { PALABRAS } from "../../../src/core/palabras.ts";
 import { DEVICE_TYPES, INSTRUMENT_TYPES } from "../../../src/core/types.ts";
@@ -189,19 +190,38 @@ export interface PeticionSample {
 }
 
 /** Escribir una progresión de acordes como notas en una pista. */
-export interface PeticionProgresionPista extends PeticionProgresion {
+/** Lo común a todas las herramientas que escriben notas en una pista. */
+export interface PeticionEscritura {
   /** Pista destino (id o nombre). Si no existe, se crea con ese nombre. */
   pista: string;
-  /** Instrumento de la pista si se crea (por defecto: bass para «bajo», pad para el resto). */
+  /** Tipo de instrumento si se crea la pista (o para cambiarlo). */
   instrumento?: string;
+  /** Programa General MIDI (0-127): suena con el SoundFont GM si está instalado. */
+  programa?: number;
   /** Compás donde empieza, contando desde 1. */
   desdeCompas?: number;
+  /** Nombre del clip (por defecto, el de la pista). */
+  nombreClip?: string;
 }
+
+export interface PeticionProgresionPista extends PeticionProgresion, PeticionEscritura {}
+
+/** Una línea en notación compacta ("D2:1.5 D2:.5 F2 Eb2 | r:2 [D3 F3 A3]:4"). */
+export interface PeticionNotas extends PeticionEscritura {
+  notas: string;
+  velocidad?: number;
+  repeticiones?: number;
+}
+
+/** Batería en rejilla: pieza → fila de pasos. */
+export interface PeticionBateriaPista extends PeticionBateria, PeticionEscritura {}
 
 export interface AccionesEstudio {
   leerProyecto(peticion: { clipId?: string }): ResultadoAccion;
   editarProyecto(peticion: { ops: unknown[] }): ResultadoAccion;
   escribirProgresion(peticion: PeticionProgresionPista): ResultadoAccion;
+  escribirNotas(peticion: PeticionNotas): ResultadoAccion;
+  escribirBateria(peticion: PeticionBateriaPista): ResultadoAccion;
   crearProyecto(peticion: PeticionProyecto): Promise<ResultadoAccion>;
   anadirPistas(peticion: PeticionPistas): Promise<ResultadoAccion>;
   ajustarPistas(peticion: { pistas: AjustePista[] }): ResultadoAccion;
@@ -233,6 +253,8 @@ const HERRAMIENTAS_DEL_PROYECTO = new Set([
   "leer_proyecto",
   "editar_proyecto",
   "escribir_progresion",
+  "escribir_notas",
+  "escribir_bateria",
   "crear_proyecto",
   "anadir_pistas",
   "ajustar_pistas",
@@ -317,8 +339,95 @@ export const HERRAMIENTAS: ToolSpec[] = [
           velocidad: { type: "integer", description: "1-127, por defecto 90" },
           repeticiones: { type: "integer", description: "Veces que se repite la progresión (por defecto 1)" },
           instrumento: { type: "string", enum: [...INSTRUMENT_TYPES], description: "Si hay que crear la pista" },
+          programa: { type: "integer", description: "Programa General MIDI 0-127 (48 cuerdas, 89 pad cálido, 19 órgano…)" },
         },
         required: ["pista"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "escribir_notas",
+      description:
+        "Escribe una melodía, un bajo o cualquier línea en una pista con NOTACIÓN COMPACTA (la crea si no " +
+        "existe; si ya hay clips en esos compases, los sustituye). Notación: nota = letra o solfeo + " +
+        "alteración + octava, C4 = 60 (D2, Eb4, F#3, do4, sib2) o número MIDI; ':dur' en negras " +
+        "(1 negra, .5 corchea, 1/3 tresillo, 4 redonda) y si falta se repite la anterior; '!vel' 1-127 " +
+        "para una nota; 'r' silencio; [D3 F3 A3] acorde; '|' barra de compás (se ignora); '~' liga con " +
+        "la siguiente igual. Ejemplo de 2 compases de bajo: \"D2:1.5 D2:.5 F2:1 Eb2 | D2:2 r:1 C2\".",
+      parameters: {
+        type: "object",
+        properties: {
+          pista: { type: "string", description: "Id o nombre de la pista" },
+          notas: { type: "string", description: "La frase en notación compacta" },
+          desde_compas: { type: "integer", description: "Compás de inicio, desde 1 (por defecto 1)" },
+          repeticiones: { type: "integer", description: "Veces seguidas que se toca la frase (por defecto 1)" },
+          velocidad: { type: "integer", description: "Velocidad por defecto, 1-127 (90)" },
+          programa: { type: "integer", description: "Programa General MIDI 0-127 (33 bajo eléctrico, 29 guitarra saturada, 0 piano…)" },
+          instrumento: { type: "string", enum: [...INSTRUMENT_TYPES], description: "Tipo si se crea la pista (por defecto lead)" },
+          nombre_clip: { type: "string" },
+        },
+        required: ["pista", "notas"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "escribir_bateria",
+      description:
+        "Escribe batería en REJILLA, como una caja de ritmos: una fila por pieza, un carácter por paso " +
+        "(16 por compás = semicorcheas). 'x' golpe, 'X' acento, 'o' medio, 'g' fantasma, '.' nada, '|' se " +
+        "ignora. La fila se repite hasta llenar `compases`; `final` sustituye el último compás (redoble). " +
+        "Piezas: kick, snare, rim, clap, hat, pedal, openhat, lowtom, midtom, hightom, floortom, crash, " +
+        "ride, bell, china, splash, tambourine, cowbell, shaker (o la nota GM). Si ya hay clips en esos " +
+        "compases, los sustituye. Ejemplo: {\"kick\":\"x...x...x...x...\", \"snare\":\"....X.......X...\"}.",
+      parameters: {
+        type: "object",
+        properties: {
+          pista: { type: "string", description: "Id o nombre de la pista (por defecto se crea como batería)" },
+          patrones: { type: "object", description: "pieza → fila de pasos", additionalProperties: { type: "string" } },
+          compases: { type: "integer", description: "Compases a llenar" },
+          desde_compas: { type: "integer", description: "Compás de inicio, desde 1" },
+          final: { type: "object", description: "Filas del último compás (redoble)", additionalProperties: { type: "string" } },
+          pasos_por_compas: { type: "integer", description: "16 por defecto; 12 para tresillos de corchea" },
+          swing: { type: "number", description: "0-0.5" },
+          humanizar: { type: "boolean", description: "Pequeña variación de velocidad (por defecto true)" },
+          programa: { type: "integer", description: "Kit General MIDI (0 estándar, 8 room, 16 power, 25 electrónico…)" },
+          nombre_clip: { type: "string" },
+        },
+        required: ["pista", "patrones"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "buscar_web",
+      description:
+        "Busca en internet y devuelve título, enlace y un extracto de cada resultado. Para datos de una " +
+        "referencia (tonalidad, tempo, estructura, instrumentación, año, productor) o de técnica. NUNCA " +
+        "para copiar letras ni partituras de obras con derechos.",
+      parameters: {
+        type: "object",
+        properties: {
+          consulta: { type: "string", description: "La búsqueda (mejor en inglés para música anglosajona)" },
+          resultados: { type: "integer", description: "1-10, por defecto 5" },
+        },
+        required: ["consulta"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "leer_web",
+      description: "Lee el texto de una página web (un enlace de buscar_web) para sacar datos concretos.",
+      parameters: {
+        type: "object",
+        properties: { url: { type: "string" } },
+        required: ["url"],
       },
     },
   },
@@ -1118,8 +1227,68 @@ async function ejecutarCrudo(
           ["desdeCompas", numero(args.desde_compas)],
         ];
         for (const [clave, valor] of opcionales) if (valor !== undefined) (peticion as unknown as Record<string, unknown>)[clave] = valor;
-        if (typeof args.instrumento === "string") peticion.instrumento = args.instrumento;
+        Object.assign(peticion, escrituraDe(args));
         return local.escribirProgresion(peticion);
+      }
+      case "escribir_notas": {
+        if (typeof args.notas !== "string" || args.notas.trim() === "") {
+          return { ok: false, texto: "Falta `notas`: la frase en notación compacta." };
+        }
+        return local.escribirNotas({
+          ...escrituraDe(args),
+          notas: args.notas,
+          ...(typeof args.velocidad === "number" ? { velocidad: args.velocidad } : {}),
+          ...(typeof args.repeticiones === "number" ? { repeticiones: args.repeticiones } : {}),
+        });
+      }
+      case "escribir_bateria": {
+        const filas = (valor: unknown): Record<string, string> | undefined =>
+          typeof valor === "object" && valor !== null
+            ? Object.fromEntries(Object.entries(valor as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
+            : undefined;
+        const patrones = filas(args.patrones);
+        if (!patrones || Object.keys(patrones).length === 0) {
+          return { ok: false, texto: "Falta `patrones`: pieza → fila de pasos, p. ej. {\"kick\":\"x...x...\"}." };
+        }
+        const final = filas(args.final);
+        return local.escribirBateria({
+          ...escrituraDe(args),
+          patrones,
+          ...(final ? { final } : {}),
+          ...(typeof args.compases === "number" ? { compases: args.compases } : {}),
+          ...(typeof args.pasos_por_compas === "number" ? { pasosPorCompas: args.pasos_por_compas } : {}),
+          ...(typeof args.swing === "number" ? { swing: args.swing } : {}),
+          humanizar: args.humanizar !== false,
+        });
+      }
+      case "buscar_web": {
+        const consulta = String(args.consulta ?? "").trim();
+        if (consulta === "") return { ok: false, texto: "Falta la consulta." };
+        const maximo = Math.min(10, Math.max(1, Math.round(Number(args.resultados) || 5)));
+        const datos = (await pedirJson("/api/llm/api/web_search", { query: consulta, max_results: maximo }, 45000, senal)) as {
+          results?: { title?: string; url?: string; content?: string }[];
+        };
+        const resultados = datos.results ?? [];
+        if (resultados.length === 0) return { ok: true, texto: `Sin resultados para «${consulta}».` };
+        return {
+          ok: true,
+          texto: resultados
+            .map((r, i) => `${i + 1}. ${r.title ?? "(sin título)"}\n   ${r.url ?? ""}\n   ${(r.content ?? "").replace(/\s+/g, " ").slice(0, 500)}`)
+            .join("\n"),
+        };
+      }
+      case "leer_web": {
+        const url = String(args.url ?? "").trim();
+        if (!/^https?:\/\//i.test(url)) return { ok: false, texto: "Hace falta una URL completa (https://…)." };
+        const datos = (await pedirJson("/api/llm/api/web_fetch", { url }, 60000, senal)) as {
+          title?: string;
+          content?: string;
+        };
+        const contenido = (datos.content ?? "").trim();
+        return {
+          ok: contenido !== "",
+          texto: contenido !== "" ? `${datos.title ?? url}\n\n${contenido}` : `La página no devolvió texto: ${url}`,
+        };
       }
       case "verificar_audio": {
         const tope = Number(args.timeout_segundos);
@@ -1183,6 +1352,16 @@ async function ejecutarCrudo(
         : `Error: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
+}
+
+/** Campos comunes de las herramientas que escriben notas (pista, compás, instrumento). */
+function escrituraDe(args: Record<string, unknown>): PeticionEscritura {
+  const peticion: PeticionEscritura = { pista: String(args.pista ?? "").trim() || "Pista" };
+  if (typeof args.desde_compas === "number") peticion.desdeCompas = args.desde_compas;
+  if (typeof args.instrumento === "string") peticion.instrumento = args.instrumento;
+  if (typeof args.programa === "number") peticion.programa = args.programa;
+  if (typeof args.nombre_clip === "string" && args.nombre_clip.trim() !== "") peticion.nombreClip = args.nombre_clip.trim();
+  return peticion;
 }
 
 /** Resumen de una llamada, para ensenarlo en el chat. */

@@ -25,6 +25,9 @@ const MAX_TOKENS_SALIDA = 32768;
  */
 const MAX_PASOS_POR_DEFECTO = 20;
 
+/** Argumentos de una llamada ya ejecutada por encima de esto se resumen en el historial. */
+const UMBRAL_ARGUMENTOS = 1200;
+
 export interface EventoAgente {
   /** "progreso": el modelo está escribiendo; se emite como mucho cada 700 ms. */
   tipo: "herramienta" | "aviso" | "progreso";
@@ -226,6 +229,16 @@ export async function ejecutarAgente(
         tool_call_id: llamada.id ?? `call_${pasos}_${i}`,
         content: resultado.texto.slice(0, 12000),
       });
+
+      // Lo que ya se aplicó no hace falta reenviarlo: los argumentos largos (listas de
+      // notas, scripts) se sustituyen en el historial por un resumen. Medido el 27-oct:
+      // 20 llamadas de un mismo turno reenviaron 389.000 tokens, casi todo notas ya
+      // escritas. Si la llamada FALLÓ se deja entera: el modelo la necesita para corregir.
+      if (resultado.ok && llamada.function && llamada.function.arguments.length > UMBRAL_ARGUMENTOS) {
+        llamada.function.arguments = JSON.stringify({
+          _omitido: `${llamada.function.arguments.length} caracteres ya aplicados; el estado real está en leer_proyecto`,
+        });
+      }
 
       // Reintentar exactamente lo que falla igual no arregla nada: corta el turno
       // (pasó con crear_proyecto devolviendo 12 veces el mismo error).

@@ -13,6 +13,7 @@
 import type { Clip, Project, Track } from "./types.ts";
 import { DEVICE_PARAMS, beatsPerBar } from "./types.ts";
 import { projectStats } from "./project.ts";
+import { aNotacion } from "./notacion.ts";
 
 const NOMBRES_NOTA = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -46,9 +47,9 @@ function lineaPista(track: Track, indice: number, barBeats: number): string[] {
     track.muted ? "MUTE" : "",
     track.solo ? "SOLO" : "",
   ].filter((x) => x !== "");
-  const instrumento = track.instrument.preset
-    ? `${track.instrument.type}:${track.instrument.preset}`
-    : track.instrument.type;
+  const instrumento =
+    (track.instrument.preset ? `${track.instrument.type}:${track.instrument.preset}` : track.instrument.type) +
+    (track.instrument.program !== undefined ? ` GM ${track.instrument.program}` : "");
   const lineas = [`${indice + 1}. ${track.id} «${track.name}» [${track.kind}, ${instrumento}] ${estado.join(" · ")}`];
   for (const device of track.devices) {
     const params = Object.entries(device.params)
@@ -94,6 +95,13 @@ export function resumenParaAgente(project: Project, opciones: { clipId?: string;
     if (!clip) {
       lineas.push(`No hay ningún clip con id ${opciones.clipId}.`);
     } else {
+      // En la misma notación compacta con la que escribe escribir_notas, si se puede:
+      // ocupa una fracción y el modelo la lee como una partitura.
+      const compacta = clip.notes.length > 0 ? aNotacion(clip.notes) : null;
+      if (compacta !== null) {
+        lineas.push(`Notas de ${clip.id} en notación compacta (negras desde el inicio del clip):`, compacta);
+        return lineas.join("\n");
+      }
       const max = opciones.maxNotas ?? 400;
       lineas.push(`Notas de ${clip.id} (pitch, start, duration, velocity; tiempos en negras desde el inicio del clip):`);
       const notas = [...clip.notes].sort((a, b) => a.start - b.start || a.pitch - b.pitch);

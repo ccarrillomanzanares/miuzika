@@ -550,6 +550,7 @@ async function startOpenDawPlayback(view: Project): Promise<void> {
       if (asset.buffer) paraEngine.set(id, { name: asset.name, buffer: asset.buffer });
     }
     const soundfonts = await cargarSoundfontsDelProyecto(view);
+    const gm = await cargarGm(view);
     const handle = await playWithOpenDaw(
       view,
       (beat) => {
@@ -559,6 +560,7 @@ async function startOpenDawPlayback(view: Project): Promise<void> {
       },
       paraEngine,
       soundfonts,
+      gm,
     );
     if (generation !== openDawGeneration) {
       handle.stop();
@@ -1826,6 +1828,41 @@ async function cargarSoundfontsDelProyecto(
     });
   }
   return mapa;
+}
+
+/** El SoundFont General MIDI, una vez por sesión (son ~30 MB). */
+let gmEnMemoria: { ruta: string; sf: { uuid: Uint8Array; name: string; bytes: ArrayBuffer } } | null = null;
+
+/**
+ * El SoundFont General MIDI de `workspace/catalogo/gm/`, si alguna pista lo usa
+ * (una pista MIDI con `instrument.program`). Sin fichero, esas pistas suenan con
+ * los instrumentos de openDAW, como antes.
+ */
+async function cargarGm(view: Project): Promise<{ uuid: Uint8Array; name: string; bytes: ArrayBuffer } | null> {
+  const loUsa = view.tracks.some(
+    (t) => t.kind === "midi" && t.instrument.program !== undefined && !(t.instrument.type === "soundfont" && t.instrument.archivo),
+  );
+  if (!loUsa) return null;
+  try {
+    const info = (await (await fetch("/api/gm")).json()) as { ruta?: string | null; nombre?: string };
+    if (!info.ruta) {
+      warnPersistence(
+        "Hay pistas con instrumento General MIDI pero no hay SoundFont GM en workspace/catalogo/gm/: suenan con los sintetizadores de openDAW.",
+      );
+      return null;
+    }
+    if (gmEnMemoria?.ruta === info.ruta) return gmEnMemoria.sf;
+    setStatus(`Cargando el SoundFont General MIDI (${info.nombre ?? info.ruta})…`);
+    const respuesta = await fetch(`/api/audio?path=${encodeURIComponent(info.ruta)}`);
+    if (!respuesta.ok) return null;
+    gmEnMemoria = {
+      ruta: info.ruta,
+      sf: { uuid: uuidDeSoundfont(info.ruta), name: info.nombre ?? "gm.sf2", bytes: await respuesta.arrayBuffer() },
+    };
+    return gmEnMemoria.sf;
+  } catch {
+    return null;
+  }
 }
 
 /** 16 bytes estables a partir de la ruta: el adaptador y el motor deben coincidir. */

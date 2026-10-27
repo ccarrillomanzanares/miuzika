@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   beatsToPulses,
   dbToUnit,
+  indicePresetGm,
   mapDevice,
   mapInstrument,
   pulsesToBeats,
@@ -125,4 +126,20 @@ test("instrumentos: batería a Playfield, resto a Vaporisateur", () => {
   assert.equal(mapInstrument("bass").factory, "Vaporisateur");
   assert.equal(mapInstrument("pad").factory, "Vaporisateur");
   assert.ok(mapInstrument("soundfont").warning);
+});
+
+test("preset General MIDI por banco y programa, con kits en el banco 128", () => {
+  const presets = [
+    { bank: 0, preset: 0 },
+    { bank: 0, preset: 33 },
+    { bank: 0, preset: 29 },
+    { bank: 128, preset: 0 },
+    { bank: 128, preset: 25 },
+  ];
+  assert.equal(indicePresetGm(presets, 33, false), 1);
+  assert.equal(indicePresetGm(presets, 29, false), 2);
+  assert.equal(indicePresetGm(presets, 25, true), 4);
+  assert.equal(indicePresetGm(presets, 40, true), 3); // kit que no existe → estándar
+  assert.equal(indicePresetGm(presets, 99, false), 0);
+  assert.equal(indicePresetGm([], 0, false), undefined);
 });

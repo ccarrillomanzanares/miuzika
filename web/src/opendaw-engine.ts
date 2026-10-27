@@ -246,6 +246,7 @@ export async function playWithOpenDaw(
   onTick: (beat: number) => void,
   audioAssets: ReadonlyMap<string, OpenDawAudioInput> = new Map(),
   soundfonts: ReadonlyMap<string, { uuid: Uint8Array; name: string; bytes: ArrayBuffer }> = new Map(),
+  gm: { uuid: Uint8Array; name: string; bytes: ArrayBuffer } | null = null,
 ): Promise<OpenDawPlaybackHandle> {
   const { context, core, UUID, Option, AudioData } = await bootEngine();
   const hasDrums = source.tracks.some((track) => track.instrument.type === "drumkit");
@@ -258,24 +259,32 @@ export async function playWithOpenDaw(
     hasDrums,
     audioAssets,
   );
+  // Se parsean ANTES de exportar y de montar el proyecto: `getOrCreate` es síncrono
+  // y el motor lo llama en cuanto ve un dispositivo Soundfont; y para el General
+  // MIDI hace falta la lista de presets (banco, programa) al exportar.
+  const parseados = new Map<string, unknown>();
+  if (soundfonts.size > 0 || gm) {
+    const { SoundFont2 } = (await import("soundfont2")) as unknown as {
+      SoundFont2: new (bytes: Uint8Array) => unknown;
+    };
+    for (const sf of [...soundfonts.values(), ...(gm ? [gm] : [])]) {
+      const clave = claveDeUuid(sf.uuid);
+      if (!parseados.has(clave)) parseados.set(clave, new SoundFont2(new Uint8Array(sf.bytes)));
+    }
+  }
+  const gmParseado = gm
+    ? (parseados.get(claveDeUuid(gm.uuid)) as { presets: { header: { bank: number; preset: number } }[] })
+    : null;
+
   const exported = await projectToOpenDaw(source, {
     drumSamples: prepared.attachments,
     audioAssets: prepared.audioFiles,
     soundfonts,
+    ...(gm && gmParseado
+      ? { gm: { ...gm, presets: gmParseado.presets.map((p) => ({ bank: p.header.bank, preset: p.header.preset })) } }
+      : {}),
   });
   const { Project } = core;
-
-  // Se parsean antes de montar el proyecto: `getOrCreate` es síncrono y el motor
-  // lo llama en cuanto ve un dispositivo Soundfont.
-  const parseados = new Map<string, unknown>();
-  if (soundfonts.size > 0) {
-    const { SoundFont2 } = (await import("soundfont2")) as unknown as {
-      SoundFont2: new (bytes: Uint8Array) => unknown;
-    };
-    for (const sf of soundfonts.values()) {
-      parseados.set(claveDeUuid(sf.uuid), new SoundFont2(new Uint8Array(sf.bytes)));
-    }
-  }
 
   const env = {
     audioContext: context,
@@ -289,7 +298,7 @@ export async function playWithOpenDaw(
   };
 
   const project = Project.load(env as never, exported.bytes);
-  if (import.meta.env.DEV && soundfonts.size > 0) {
+  if (import.meta.env.DEV && (soundfonts.size > 0 || gm)) {
     // Sonda de desarrollo: qué ha entendido openDAW de cada SoundFont. Si `estado`
     // no es "loaded", el motor no ha podido parsear el fichero.
     const gestor = env.soundfontManager as {

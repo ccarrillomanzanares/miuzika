@@ -44,6 +44,16 @@ const InstrumentSchema = z.object({
   archivo: z.string().max(200).optional(),
 });
 
+/**
+ * El instrumento se acepta también como texto: el modelo escribe a menudo
+ * `"instrument": "bass"` en vez de `{ "type": "bass" }` (pasó el 27-oct, y costó un
+ * paso). Las dos formas significan lo mismo.
+ */
+const InstrumentInput = z.preprocess(
+  (valor) => (typeof valor === "string" ? { type: valor.trim().toLowerCase() } : valor),
+  InstrumentSchema,
+);
+
 const KeySchema = z.object({
   tonic: z.string().min(1).max(4).describe("Tónica: C, D, F#, Bb..."),
   mode: z.enum(MODE_NAMES),
@@ -63,7 +73,7 @@ const AddTrackOp = z.object({
   id: IdSchema.optional(),
   name: z.string().min(1).max(60),
   kind: z.enum(["midi", "audio"]).default("midi"),
-  instrument: InstrumentSchema.optional(),
+  instrument: InstrumentInput.optional(),
   gainDb: GainSchema.optional(),
   pan: z.number().min(-1).max(1).optional(),
 });
@@ -76,6 +86,13 @@ const SetTrackOp = z.object({
   pan: z.number().min(-1).max(1).optional(),
   muted: z.boolean().optional(),
   solo: z.boolean().optional(),
+});
+
+/** Cambia el instrumento de una pista MIDI (p. ej. de sintetizador a guitarra General MIDI). */
+const SetInstrumentOp = z.object({
+  op: z.literal("set_instrument"),
+  trackId: IdSchema,
+  instrument: InstrumentInput,
 });
 
 const RemoveTrackOp = z.object({
@@ -202,6 +219,7 @@ const OpSchema = z.discriminatedUnion("op", [
   SetSongOp,
   AddTrackOp,
   SetTrackOp,
+  SetInstrumentOp,
   RemoveTrackOp,
   AddNotesOp,
   ReplaceClipNotesOp,
@@ -428,6 +446,14 @@ function applyOne(project: Project, op: ParsedOp): string {
       if (op.muted !== undefined) track.muted = op.muted;
       if (op.solo !== undefined) track.solo = op.solo;
       return `Pista actualizada: ${track.name} (${track.id})`;
+    }
+
+    case "set_instrument": {
+      const track = resolveTrack(project, op.trackId);
+      if (track.kind !== "midi") throw new OpError(`"${track.name}" es una pista de audio: no tiene instrumento`);
+      track.instrument = { ...op.instrument };
+      const programa = op.instrument.program !== undefined ? ` (programa GM ${op.instrument.program})` : "";
+      return `Instrumento de ${track.name}: ${op.instrument.type}${programa}`;
     }
 
     case "remove_track": {

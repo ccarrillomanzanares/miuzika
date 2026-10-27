@@ -10,7 +10,7 @@
  * y se deshacen con Ctrl+Z igual que una edición a mano.
  */
 
-import type { InstrumentType, Mode, Project } from "../../../src/core/types.ts";
+import type { InstrumentType, Mode, Note, Project } from "../../../src/core/types.ts";
 import { INSTRUMENT_TYPES, beatsPerBar } from "../../../src/core/types.ts";
 import { carpetaDeNombre, carpetaDeProyecto, createProject } from "../../../src/core/project.ts";
 import { compasesDeAudio } from "../../../src/core/tiempo.ts";
@@ -20,7 +20,9 @@ import { aplicarPalabras } from "../../../src/core/palabras.ts";
 import { OpError, applyOps } from "../../../src/core/ops.ts";
 import type { Op } from "../../../src/core/ops.ts";
 import { notasDeProgresion } from "../../../src/core/composicion.ts";
-import { resumenParaAgente } from "../../../src/core/resumen.ts";
+import { leerNotacion } from "../../../src/core/notacion.ts";
+import { notasDeBateria } from "../../../src/core/bateria.ts";
+import { nombreDeNota, resumenParaAgente } from "../../../src/core/resumen.ts";
 import { normalizarTexto, slugDe } from "../../../src/core/nombres.ts";
 import { MODE_NAMES } from "../../../src/core/theory.ts";
 import {
@@ -37,6 +39,9 @@ import type {
   AjustePista,
   PeticionIgualar,
   PeticionPistas,
+  PeticionBateriaPista,
+  PeticionEscritura,
+  PeticionNotas,
   PeticionProgresionPista,
   PeticionProyecto,
   PeticionSample,
@@ -737,59 +742,154 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     }
   }
 
-  /** Una progresión de acordes, escrita como notas en una pista (que se crea si falta). */
-  function escribirProgresion(peticion: PeticionProgresionPista): ResultadoAccion {
+  /**
+   * Escribe notas en una pista a partir de un compás: la crea si no existe y, si ya
+   * hay clips en ese tramo, los SUSTITUYE (rehacer una sección es lo normal; apilar
+   * clips encima sonaba doble). Es el camino común de escribir_progresion,
+   * escribir_notas y escribir_bateria: una sola transacción, un solo Ctrl+Z.
+   */
+  function escribirEnPista(
+    peticion: PeticionEscritura,
+    notas: Note[],
+    beats: number,
+    porDefecto: InstrumentType,
+  ): { ok: false; texto: string } | { ok: true; texto: string; trackId: string; clipId: string; desde: number; compases: number; sustituidos: string[] } {
     const project = e.proyecto();
     if (!project) return { ok: false, texto: "No hay proyecto abierto: crea uno con crear_proyecto." };
+    if (notas.length === 0) return { ok: false, texto: "No hay ninguna nota que escribir." };
     const barBeats = beatsPerBar(project);
-    let resultado;
-    try {
-      resultado = notasDeProgresion(project.key, barBeats, peticion);
-    } catch (error) {
-      return { ok: false, texto: mensajeDe(error) };
-    }
-    if (resultado.notas.length === 0) return { ok: false, texto: "La progresión no ha dado ninguna nota en rango MIDI." };
+    const startBar = Math.max(0, Math.round((peticion.desdeCompas ?? 1) - 1));
+    const compases = Math.max(1, Math.ceil(beats / barBeats - 1e-6));
+    const inicio = startBar * barBeats;
+    const fin = inicio + compases * barBeats;
 
     const ops: Op[] = [];
-    let pista = pistaPorNombre(project, peticion.pista);
+    const pista = pistaPorNombre(project, peticion.pista);
     let trackId = pista?.id ?? "";
     if (pista && pista.kind !== "midi") {
       return { ok: false, texto: `«${pista.name}» es una pista de audio: elige una MIDI o un nombre nuevo.` };
     }
+    const programa =
+      typeof peticion.programa === "number" && Number.isInteger(peticion.programa) && peticion.programa >= 0 && peticion.programa <= 127
+        ? peticion.programa
+        : undefined;
+    const tipoPedido = INSTRUMENT_TYPES.find((t) => t === peticion.instrumento);
     if (!pista) {
-      const pedido = INSTRUMENT_TYPES.find((t) => t === peticion.instrumento);
-      const instrumento: InstrumentType = pedido ?? (peticion.patron === "bajo" ? "bass" : "pad");
-      trackId = `trk_${slugDe(peticion.pista, { separador: "_", max: 24, defecto: "acordes" })}_${Date.now().toString(36)}`;
-      ops.push({ op: "add_track", id: trackId, name: peticion.pista.slice(0, 60), kind: "midi", instrument: { type: instrumento } });
+      const instrumento: InstrumentType = tipoPedido ?? porDefecto;
+      trackId = `trk_${slugDe(peticion.pista, { separador: "_", max: 24, defecto: "pista" })}_${Date.now().toString(36)}`;
+      ops.push({
+        op: "add_track",
+        id: trackId,
+        name: peticion.pista.slice(0, 60),
+        kind: "midi",
+        instrument: { type: instrumento, ...(programa !== undefined ? { program: programa } : {}) },
+      });
+    } else if (programa !== undefined || tipoPedido) {
+      ops.push({
+        op: "set_instrument",
+        trackId,
+        instrument: { ...pista.instrument, ...(tipoPedido ? { type: tipoPedido } : {}), ...(programa !== undefined ? { program: programa } : {}) },
+      });
     }
-    const startBar = Math.max(0, Math.round((peticion.desdeCompas ?? 1) - 1));
-    // add_notes acepta 2000 notas por op: una progresión larga va en trozos al mismo clip.
-    const trozos: (typeof resultado.notas)[] = [];
-    for (let i = 0; i < resultado.notas.length; i += 2000) trozos.push(resultado.notas.slice(i, i + 2000));
+    const sustituidos: string[] = [];
+    for (const clip of pista?.clips ?? []) {
+      if (clip.start < fin - 1e-6 && clip.start + clip.length > inicio + 1e-6) {
+        ops.push({ op: "remove_clip", trackId, clipId: clip.id });
+        sustituidos.push(clip.id);
+      }
+    }
+    // add_notes acepta 2000 notas por op: lo largo va en trozos al mismo clip.
+    const trozos: Note[][] = [];
+    for (let i = 0; i < notas.length; i += 2000) trozos.push(notas.slice(i, i + 2000));
     try {
-      const nombreClip = `${peticion.pista.slice(0, 40)} ${startBar + 1}`;
+      const nombreClip = `${(peticion.nombreClip ?? peticion.pista).slice(0, 40)} ${startBar + 1}`;
       let siguiente = applyOps(project, [
         ...ops,
         { op: "add_notes", trackId, startBar, name: nombreClip, notes: trozos[0]! },
       ]).project;
       const clipId = siguiente.tracks.find((t) => t.id === trackId)?.clips.at(-1)?.id ?? "";
-      for (const notas of trozos.slice(1)) {
-        siguiente = applyOps(siguiente, [{ op: "add_notes", trackId, clipId, notes: notas }]).project;
+      for (const resto of trozos.slice(1)) {
+        siguiente = applyOps(siguiente, [{ op: "add_notes", trackId, clipId, notes: resto }]).project;
       }
+      // El clip dura lo que dice la frase (con sus silencios del final), en compases.
+      siguiente = applyOps(siguiente, [{ op: "set_clip_length", trackId, clipId, lengthBeats: compases * barBeats }]).project;
       e.fijar(siguiente);
-      pista = siguiente.tracks.find((t) => t.id === trackId);
-      const compases = resultado.beats / barBeats;
-      return {
-        ok: true,
-        texto:
-          `${resultado.notas.length} notas en «${pista?.name ?? peticion.pista}» (${trackId}, clip ${clipId}), ` +
-          `compás ${startBar + 1} a ${startBar + compases}: ${resultado.acordes.join(" - ")}` +
-          `${(peticion.repeticiones ?? 1) > 1 ? ` ×${peticion.repeticiones}` : ""} · patrón ${peticion.patron ?? "bloque"} · ` +
-          `tonalidad del proyecto ${project.key.tonic} ${project.key.mode}.`,
-      };
+      return { ok: true, texto: "", trackId, clipId, desde: startBar + 1, compases, sustituidos };
     } catch (error) {
       return { ok: false, texto: `${mensajeDe(error)}\nNo se ha cambiado nada.` };
     }
+  }
+
+  /** Línea común del resultado: dónde ha quedado lo escrito. */
+  function dondeQueda(r: { trackId: string; clipId: string; desde: number; compases: number; sustituidos: string[] }, notas: number): string {
+    const pista = e.proyecto()?.tracks.find((t) => t.id === r.trackId);
+    const instrumento = pista
+      ? `${pista.instrument.type}${pista.instrument.program !== undefined ? ` GM ${pista.instrument.program}` : ""}`
+      : "";
+    return (
+      `${notas} notas en «${pista?.name ?? r.trackId}» (${r.trackId}, ${instrumento}), clip ${r.clipId}, ` +
+      `compases ${r.desde}-${r.desde + r.compases - 1}` +
+      (r.sustituidos.length > 0 ? ` (sustituye ${r.sustituidos.join(", ")})` : "") +
+      "."
+    );
+  }
+
+  /** Una progresión de acordes, escrita como notas en una pista (que se crea si falta). */
+  function escribirProgresion(peticion: PeticionProgresionPista): ResultadoAccion {
+    const project = e.proyecto();
+    if (!project) return { ok: false, texto: "No hay proyecto abierto: crea uno con crear_proyecto." };
+    let resultado;
+    try {
+      resultado = notasDeProgresion(project.key, beatsPerBar(project), peticion);
+    } catch (error) {
+      return { ok: false, texto: mensajeDe(error) };
+    }
+    const r = escribirEnPista(peticion, resultado.notas, resultado.beats, peticion.patron === "bajo" ? "bass" : "pad");
+    if (!r.ok) return r;
+    return {
+      ok: true,
+      texto:
+        `${dondeQueda(r, resultado.notas.length)} ${resultado.acordes.join(" - ")}` +
+        `${(peticion.repeticiones ?? 1) > 1 ? ` ×${peticion.repeticiones}` : ""} · patrón ${peticion.patron ?? "bloque"} · ` +
+        `tonalidad ${project.key.tonic} ${project.key.mode}.`,
+    };
+  }
+
+  /** Melodía, bajo o cualquier línea en notación compacta (ver src/core/notacion.ts). */
+  function escribirNotas(peticion: PeticionNotas): ResultadoAccion {
+    let leido;
+    try {
+      leido = leerNotacion(peticion.notas, peticion.velocidad ?? 90);
+    } catch (error) {
+      return { ok: false, texto: `${mensajeDe(error)}. No se ha cambiado nada.` };
+    }
+    const repeticiones = Math.max(1, Math.min(64, Math.round(peticion.repeticiones ?? 1)));
+    const notas: Note[] = [];
+    for (let v = 0; v < repeticiones; v += 1) {
+      for (const n of leido.notas) notas.push({ ...n, start: Number((n.start + v * leido.beats).toFixed(4)) });
+    }
+    const r = escribirEnPista(peticion, notas, leido.beats * repeticiones, "lead");
+    if (!r.ok) return r;
+    const alturas = notas.map((n) => n.pitch);
+    return {
+      ok: true,
+      texto: `${dondeQueda(r, notas.length)} Rango ${nombreDeNota(Math.min(...alturas))}-${nombreDeNota(Math.max(...alturas))}.`,
+    };
+  }
+
+  /** Batería en rejilla (ver src/core/bateria.ts). */
+  function escribirBateria(peticion: PeticionBateriaPista): ResultadoAccion {
+    const project = e.proyecto();
+    if (!project) return { ok: false, texto: "No hay proyecto abierto: crea uno con crear_proyecto." };
+    let resultado;
+    try {
+      resultado = notasDeBateria(peticion, beatsPerBar(project));
+    } catch (error) {
+      return { ok: false, texto: `${mensajeDe(error)}. No se ha cambiado nada.` };
+    }
+    const r = escribirEnPista({ ...peticion, instrumento: peticion.instrumento ?? "drumkit" }, resultado.notas, resultado.beats, "drumkit");
+    if (!r.ok) return r;
+    return { ok: true, texto: `${dondeQueda(r, resultado.notas.length)} Piezas: ${Object.keys(peticion.patrones).join(", ")}.` };
   }
 
   /**
@@ -920,6 +1020,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     leerProyecto,
     editarProyecto,
     escribirProgresion,
+    escribirNotas,
+    escribirBateria,
     crearProyecto,
     anadirPistas: importarPistas,
     ajustarPistas,

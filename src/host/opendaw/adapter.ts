@@ -18,6 +18,7 @@ import { beatsPerBar } from "../../core/types.ts";
 import {
   beatsToPulses,
   mapDevice,
+  indicePresetGm,
   mapInstrument,
   pulsesToBeats,
   unitToVelocity,
@@ -68,6 +69,11 @@ export interface OpenDawSoundfont {
   bytes: ArrayBuffer;
 }
 
+/** El SoundFont General MIDI de la instalación y sus presets (banco, programa). */
+export interface OpenDawGm extends OpenDawSoundfont {
+  presets: ReadonlyArray<{ bank: number; preset: number }>;
+}
+
 export interface OpenDawAudioAsset {
   chunks: ReadonlyArray<OpenDawAudioChunk>;
   durationInSeconds: number;
@@ -80,6 +86,8 @@ interface OpenDawBuildOptions {
   audioAssets?: ReadonlyMap<string, OpenDawAudioAsset>;
   /** SoundFonts por ruta de fichero (`instrumento.archivo`). */
   soundfonts?: ReadonlyMap<string, OpenDawSoundfont>;
+  /** SoundFont General MIDI: las pistas con `instrument.program` suenan con él. */
+  gm?: OpenDawGm;
 }
 
 interface HostEnv {
@@ -203,6 +211,51 @@ export async function projectToOpenDaw(
       );
       masterAdapter.namedParameter.volume.setValue(source.master.gainDb);
 
+      const aplicarMezcla = (audioUnitBox: unknown, track: Track): void => {
+        const unit = project.boxAdapters.adapterFor(audioUnitBox as never, adapters.AudioUnitBoxAdapter);
+        unit.namedParameter.volume.setValue(track.gainDb);
+        unit.namedParameter.panning.setValue(track.pan);
+        unit.namedParameter.mute.setValue(track.muted);
+        unit.namedParameter.solo.setValue(track.solo);
+      };
+
+      // Los efectos van en todas las pistas: MIDI, SoundFont y audio. Antes sólo las
+      // de sintetizador los llevaban; en las de audio se avisaba y se descartaban.
+      const aplicarEfectos = (audioUnitBox: { audioEffects: unknown }, track: Track): void => {
+        track.devices.forEach((device, index) => {
+          const mapped = mapDevice(device);
+          if (!mapped.factory) {
+            stats.skippedDevices++;
+            warnings.push(`"${track.name}" / ${device.type}: ${mapped.reason ?? "sin equivalente"}`);
+            return;
+          }
+          const effectFactory = (core.EffectFactories as unknown as Record<string, unknown>)[mapped.factory] as never;
+          const effectBox = project.api.insertEffect(audioUnitBox.audioEffects as never, effectFactory, index);
+          const adapter = project.boxAdapters.adapterFor(effectBox, adapters.Devices.isAny) as unknown as {
+            namedParameter: Record<string, unknown>;
+          };
+          for (const param of mapped.params) setParameter(adapter.namedParameter, param.name, param.value);
+          (effectBox as { enabled: { setValue: (value: boolean) => void } }).enabled.setValue(device.enabled);
+          stats.devices++;
+        });
+      };
+
+      // Un SoundfontFileBox por fichero, aunque lo usen varias pistas (el GM, sobre todo).
+      const ficherosSoundfont = new Map<string, unknown>();
+      const ficheroSoundfont = (sf: OpenDawSoundfont): unknown => {
+        const clave = Array.from(sf.uuid).join(",");
+        let fichero = ficherosSoundfont.get(clave);
+        if (!fichero) {
+          fichero = boxes.SoundfontFileBox.create(
+            project.boxGraph,
+            sf.uuid as never,
+            (box: { fileName: { setValue: (v: string) => void } }) => box.fileName.setValue(sf.name),
+          );
+          ficherosSoundfont.set(clave, fichero);
+        }
+        return fichero;
+      };
+
       for (const track of source.tracks) {
         if (track.kind === "audio") {
           const product = project.api.createInstrument(
@@ -273,93 +326,51 @@ export async function projectToOpenDaw(
             }
           }
 
-          if (track.devices.length > 0) {
-            warnings.push(
-              `"${track.name}": los FX de pistas de audio aún no se exportan a openDAW`,
-            );
-          }
+          aplicarEfectos(product.audioUnitBox, track);
           stats.tracks++;
           continue;
         }
 
-        const instrument = mapInstrument(track.instrument.type);
+        // Tres formas de sonar, por orden: el SoundFont propio de la pista (usar_instrumento),
+        // el General MIDI de la instalación si la pista tiene programa, y si no, los
+        // instrumentos de openDAW. Las tres llevan mezcla, efectos y notas: antes la rama
+        // del SoundFont terminaba en `continue` y sus notas no se exportaban nunca.
         const soundfont =
           track.instrument.type === "soundfont" && track.instrument.archivo
             ? options.soundfonts?.get(track.instrument.archivo)
             : undefined;
-        if (soundfont) {
-          // El dispositivo Soundfont no lleva los bytes: lleva un puntero a un
-          // SoundfontFileBox, y el motor pide el contenido por su uuid.
-          const fichero = boxes.SoundfontFileBox.create(
-            project.boxGraph,
-            soundfont.uuid as never,
-            (box: { fileName: { setValue: (v: string) => void } }) =>
-              box.fileName.setValue(soundfont.name),
-          );
-          const producto = project.api.createInstrument(adapters.InstrumentFactories.Soundfont as never, {
+        const presetGm =
+          !soundfont && options.gm && track.instrument.program !== undefined
+            ? indicePresetGm(options.gm.presets, track.instrument.program, track.instrument.type === "drumkit")
+            : undefined;
+        let product: { audioUnitBox: never; instrumentBox: unknown; trackBox: never };
+        if (soundfont || (options.gm && presetGm !== undefined)) {
+          const fuente = (soundfont ?? options.gm)!;
+          const product0 = project.api.createInstrument(adapters.InstrumentFactories.Soundfont as never, {
             name: track.name,
-            attachment: fichero,
-          } as never);
-          const unidad = project.boxAdapters.adapterFor(
-            producto.audioUnitBox,
-            adapters.AudioUnitBoxAdapter,
-          );
-          unidad.namedParameter.volume.setValue(track.gainDb);
-          unidad.namedParameter.panning.setValue(track.pan);
-          unidad.namedParameter.mute.setValue(track.muted);
-          unidad.namedParameter.solo.setValue(track.solo);
-          stats.tracks++;
-          warnings.push(`"${track.name}": arranca con el SoundFont ${soundfont.name} (preset 0)`);
-          continue;
+            attachment: ficheroSoundfont(fuente),
+          } as never) as unknown as typeof product;
+          product = product0;
+          if (presetGm !== undefined) {
+            (product.instrumentBox as { presetIndex: { setValue: (v: number) => void } }).presetIndex.setValue(presetGm);
+          } else {
+            warnings.push(`"${track.name}": arranca con el SoundFont ${fuente.name} (preset 0)`);
+          }
+        } else {
+          const instrument = mapInstrument(track.instrument.type);
+          if (instrument.warning) warnings.push(`"${track.name}": ${instrument.warning}`);
+          const factory =
+            instrument.factory === "Playfield"
+              ? adapters.InstrumentFactories.Playfield
+              : adapters.InstrumentFactories.Vaporisateur;
+          product = project.api.createInstrument(factory as never, {
+            name: track.name,
+            ...(instrument.factory === "Playfield" ? { attachment: options.drumSamples ?? [] } : {}),
+          } as never) as unknown as typeof product;
         }
-        if (instrument.warning) warnings.push(`"${track.name}": ${instrument.warning}`);
 
-        const factory =
-          instrument.factory === "Playfield"
-            ? adapters.InstrumentFactories.Playfield
-            : adapters.InstrumentFactories.Vaporisateur;
-
-        const product = project.api.createInstrument(factory as never, {
-          name: track.name,
-          ...(instrument.factory === "Playfield"
-            ? { attachment: options.drumSamples ?? [] }
-            : {}),
-        } as never);
-
-        const unit = project.boxAdapters.adapterFor(
-          product.audioUnitBox,
-          adapters.AudioUnitBoxAdapter,
-        );
-        unit.namedParameter.volume.setValue(track.gainDb);
-        unit.namedParameter.panning.setValue(track.pan);
-        unit.namedParameter.mute.setValue(track.muted);
-        unit.namedParameter.solo.setValue(track.solo);
-        track.devices.forEach((device, index) => {
-          const mapped = mapDevice(device);
-          if (!mapped.factory) {
-            stats.skippedDevices++;
-            warnings.push(`"${track.name}" / ${device.type}: ${mapped.reason ?? "sin equivalente"}`);
-            return;
-          }
-          const effectFactory = (core.EffectFactories as unknown as Record<string, unknown>)[
-            mapped.factory
-          ] as never;
-          const effectBox = project.api.insertEffect(
-            product.audioUnitBox.audioEffects,
-            effectFactory,
-            index,
-          );
-          const adapter = project.boxAdapters.adapterFor(effectBox, adapters.Devices.isAny) as unknown as {
-            namedParameter: Record<string, unknown>;
-          };
-          for (const param of mapped.params) {
-            setParameter(adapter.namedParameter, param.name, param.value);
-          }
-          (effectBox as { enabled: { setValue: (value: boolean) => void } }).enabled.setValue(
-            device.enabled,
-          );
-          stats.devices++;
-        });
+        aplicarMezcla(product.audioUnitBox, track);
+        aplicarEfectos(product.audioUnitBox, track);
 
         for (const clip of track.clips) {
           const region = project.api.createNoteRegion({

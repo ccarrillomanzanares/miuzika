@@ -212,3 +212,24 @@ export function velocityToUnit(velocity: number): number {
 export function unitToVelocity(value: number): number {
   return clamp(Math.round(value * 127), 1, 127);
 }
+
+/**
+ * Índice del preset General MIDI en un SoundFont: banco 0 y programa para los
+ * instrumentos; banco 128 para los kits de batería (programa = kit: 0 estándar,
+ * 8 room, 16 power, 25 electrónico…). openDAW elige el preset por su posición en la
+ * lista del fichero, no por banco y programa: de ahí esta traducción.
+ */
+export function indicePresetGm(
+  presets: ReadonlyArray<{ bank: number; preset: number }>,
+  programa: number,
+  bateria: boolean,
+): number | undefined {
+  const banco = bateria ? 128 : 0;
+  const exacto = presets.findIndex((p) => p.bank === banco && p.preset === programa);
+  if (exacto >= 0) return exacto;
+  // Un kit que el fichero no tiene: el estándar; un programa raro: cualquiera del banco 0.
+  const estandar = presets.findIndex((p) => p.bank === banco && p.preset === (bateria ? 0 : programa));
+  if (estandar >= 0) return estandar;
+  const primero = presets.findIndex((p) => p.bank === banco);
+  return primero >= 0 ? primero : undefined;
+}

@@ -73,4 +73,31 @@ if (exported.warnings.length > 0) {
   for (const warning of exported.warnings) console.log(`  - ${warning}`);
 }
 
+// --- General MIDI: pistas con programa suenan con el SoundFont GM, con sus notas y
+// sus efectos (antes la rama SoundFont no exportaba notas ni efectos).
+const conGm = applyOps(createProject({ name: "openDAW GM", lengthBars: 2 }), [
+  { op: "add_track", id: "trk_bajo", name: "Bajo GM", instrument: { type: "bass", program: 33 } },
+  { op: "add_device", trackId: "trk_bajo", device: { type: "compressor" } },
+  { op: "add_notes", trackId: "trk_bajo", startBar: 0, notes: [
+    { pitch: 38, start: 0, duration: 1, velocity: 100 },
+    { pitch: 41, start: 1, duration: 1, velocity: 100 },
+  ] },
+  { op: "add_track", id: "trk_bat", name: "Batería GM", instrument: { type: "drumkit", program: 0 } },
+  { op: "add_notes", trackId: "trk_bat", startBar: 0, notes: [{ pitch: 36, start: 0, duration: 0.25, velocity: 110 }] },
+]).project;
+const gm = {
+  uuid: new Uint8Array(16).fill(7),
+  name: "gm.sf2",
+  bytes: new ArrayBuffer(0),
+  presets: [{ bank: 0, preset: 0 }, { bank: 0, preset: 33 }, { bank: 128, preset: 0 }],
+};
+const exportadoGm = await projectToOpenDaw(conGm, { gm });
+console.log(
+  `GM: ${exportadoGm.stats.tracks} pistas · ${exportadoGm.stats.notes} notas · ${exportadoGm.stats.devices} FX`,
+);
+assert.equal(exportadoGm.stats.notes, 3, "las pistas GM llevan sus notas");
+assert.equal(exportadoGm.stats.devices, 1, "las pistas GM llevan sus efectos");
+const reimportadoGm = await openDawToProject(exportadoGm.bytes);
+assert.equal(reimportadoGm.stats.notes, 3, "las notas GM sobreviven al .odw");
+
 console.log("OPENDAW OK");

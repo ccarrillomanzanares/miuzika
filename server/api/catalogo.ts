@@ -1,6 +1,6 @@
 /** La biblioteca CC0 (VCSL): buscar, escuchar, importar samples e instrumentos SFZ → SF2. */
 
-import { existsSync, readFileSync, statSync, createReadStream } from "node:fs";
+import { createReadStream, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, resolve, sep } from "node:path";
 import { buscarEnCatalogo } from "../../src/core/buscar.ts";
 import type { EntradaCatalogo } from "../../src/core/buscar.ts";
@@ -239,6 +239,25 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
       } catch (error) {
         responderJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
       }
+    });
+  });
+
+  // El SoundFont General MIDI de la instalación: el primer .sf2 de catalogo/gm/.
+  // Con él, cualquier pista MIDI con programa suena con un instrumento real.
+  server.middlewares.use("/api/gm", (_req, res) => {
+    const carpeta = resolve(carpetaTrabajo, "catalogo", "gm");
+    const fichero = existsSync(carpeta)
+      ? readdirSync(carpeta).filter((f) => f.toLowerCase().endsWith(".sf2")).sort()[0]
+      : undefined;
+    if (!fichero) {
+      responderJson(res, 200, { ok: true, ruta: null, aviso: "no hay ningún .sf2 en workspace/catalogo/gm/" });
+      return;
+    }
+    responderJson(res, 200, {
+      ok: true,
+      ruta: `catalogo/gm/${fichero}`,
+      nombre: fichero,
+      bytes: statSync(resolve(carpeta, fichero)).size,
     });
   });
 }

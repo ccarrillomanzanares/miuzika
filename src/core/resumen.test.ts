@@ -24,7 +24,8 @@ test("el resumen lleva ids, dispositivos y, si se pide, las notas del clip", () 
   assert.match(texto, /clp_1/);
   assert.match(texto, /eq: low -24\.\.24/);
   const conNotas = resumenParaAgente(project, { clipId: "clp_1" });
-  assert.match(conNotas, /40 E2 0 1 100/);
+  assert.match(conNotas, /notación compacta/);
+  assert.match(conNotas, /E2:1!100/);
 });
 
 test("la chuleta de ops sale del esquema y cubre todas", () => {
