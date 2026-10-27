@@ -30,6 +30,9 @@ const MAX_TOKENS_SALIDA = 32768;
  */
 const MAX_PASOS_POR_DEFECTO = 80;
 
+/** Corregir y volver a ejecutar sin éxito: a la cuarta, el turno se corta. */
+const MAX_CICLOS_FALLIDOS = 4;
+
 /** Argumentos de una llamada ya ejecutada por encima de esto se resumen en el historial. */
 const UMBRAL_ARGUMENTOS = 1200;
 
@@ -75,6 +78,8 @@ export async function ejecutarAgente(
   const herramientas: PasoHerramienta[] = [];
   /** Escrituras seguidas sin una ejecucion correcta: corta el bucle de parches. */
   let escriturasSinEjecutar = 0;
+  /** Ejecuciones que fallan después de haber corregido algo. */
+  let ciclosFallidos = 0;
   /**
    * Fallos identicos seguidos, POR TURNO. Antes vivia fuera de la funcion y un
    * fallo de una sesion anterior contaba en la siguiente: el segundo intento del
@@ -268,28 +273,38 @@ export async function ejecutarAgente(
         fallosIguales.clear();
       }
 
+      // Freno de bucles de parches. Medido el 28-oct: el freno viejo (3 escrituras sin
+      // una ejecución correcta) cortó un turno sano: escribir el script, ejecutarlo
+      // (falla), corregir DOS sitios con editar_fichero → cortado antes de reintentar.
+      // Ahora cuentan los CICLOS: una ejecución que falla tras haber escrito. Escribir
+      // varias veces seguidas sólo lleva un aviso.
       if (nombre === "escribir_fichero" || nombre === "editar_fichero") {
         escriturasSinEjecutar += 1;
-        if (escriturasSinEjecutar === 2) {
+        if (escriturasSinEjecutar === 4) {
           const ultimo = mensajes[mensajes.length - 1];
           if (ultimo && ultimo.role === "tool") {
             ultimo.content +=
-              "\n\n[AVISO DEL SISTEMA] Llevas 2 escrituras seguidas sin ejecutar nada. " +
+              "\n\n[AVISO DEL SISTEMA] Llevas 4 escrituras seguidas sin ejecutar nada. " +
               "Ejecuta AHORA el script con ejecutar_python (o verificar_audio) antes de escribir otra vez.";
           }
         }
-      } else if ((nombre === "ejecutar_python" || nombre === "verificar_audio") && resultado.ok) {
+      } else if (nombre === "ejecutar_python" || nombre === "verificar_audio") {
+        if (resultado.ok) {
+          ciclosFallidos = 0;
+        } else if (escriturasSinEjecutar > 0) {
+          ciclosFallidos += 1;
+        }
         escriturasSinEjecutar = 0;
       }
-      if (escriturasSinEjecutar >= 3) {
+      if (ciclosFallidos >= MAX_CICLOS_FALLIDOS || escriturasSinEjecutar >= 8) {
         alEvento?.({
           tipo: "aviso",
-          texto: "3 escrituras seguidas sin una ejecucion correcta: corto para no entrar en bucle de parches.",
+          texto: `${MAX_CICLOS_FALLIDOS} arreglos seguidos sin que el script funcione: corto para no entrar en bucle.`,
         });
         return {
           texto:
-            "He parado: llevo 3 escrituras seguidas sin que ninguna ejecucion salga bien. " +
-            "Mira el error de la ultima ejecucion y dime como seguir (o usa editar_fichero con el fragmento exacto).",
+            `He parado: llevo ${MAX_CICLOS_FALLIDOS} arreglos seguidos y el script sigue fallando. ` +
+            "Mira el error de la última ejecución y dime cómo seguir.",
           pasos,
           llamadas,
           ms: Date.now() - t0,
