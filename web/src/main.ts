@@ -1212,6 +1212,20 @@ async function importarPistasDesdeAgente(
     }
   }
 
+  // Un MIDI a 90 BPM dentro de un proyecto a 120 no suena "mal": suena a 120, porque
+  // las notas son beats. Sin este aviso parece que el fichero venia roto.
+  if (!creadoAqui && material.length > 0) {
+    for (const bloque of material) {
+      if (Math.abs(bloque.bpm - current.bpm) > 0.5) {
+        avisos.push(
+          `${bloque.ruta}: el MIDI esta a ${bloque.bpm} BPM y el proyecto a ${current.bpm}. ` +
+            "Las notas se colocan en beats, asi que sonaran mas rapidas o mas lentas; " +
+            "si quieres el tempo del fichero, cambia el del proyecto.",
+        );
+      }
+    }
+  }
+
   let contador = current.tracks.length;
 
   for (const bloque of material) {
@@ -1857,6 +1871,43 @@ async function instrumentarDesdeAgente(peticion: {
   }
 }
 
+/** ¿Es un MIDI? Un .mid NO es audio: son notas, y hay que leerlas, no decodificarlas. */
+function esMidi(file: File): boolean {
+  return /\.(mid|midi)$/i.test(file.name) || /midi/i.test(file.type);
+}
+
+/**
+ * Mete un `.mid` del disco en el proyecto: copia el fichero a `entrada/`, lee sus
+ * pistas con `/api/midi` y las crea como pistas MIDI, con el mismo camino que
+ * `anadir_pistas` (así el resultado se puede deshacer y se guarda solo).
+ *
+ * Antes no existía ninguna vía: «Abrir» lo trataba como un proyecto JSON y fallaba,
+ * y el lienzo prometía «arrastra un WAV aquí» sin tener manejador de arrastre.
+ */
+async function importarMidiDesdeDisco(file: File): Promise<void> {
+  if (!ready) return;
+  setBusy(true, `Leyendo ${file.name}…`);
+  try {
+    if (!project) {
+      const nombre = nombreDeProyectoDesdeFicheros([file]).slice(0, 40) || "MIDI";
+      setProject(createProject({ name: nombre, bpm: 120, lengthBars: 32 }));
+    }
+    if (!project) return;
+    const slug = slugDeProyecto(project);
+    const { path } = await subirAudio(file, slug);
+    const puesto = await importarPistasDesdeAgente({ midis: [path], wavs: [], inicioCompas: 0 });
+    addMessage("system", puesto.ok ? `MIDI «${file.name}» importado.` : puesto.texto);
+  } catch (error) {
+    addMessage(
+      "system",
+      `No se pudo leer «${file.name}»: ${error instanceof Error ? error.message : String(error)}. ` +
+        "Tiene que ser un MIDI estándar (.mid); si es un .midi de algún programa raro, expórtalo de nuevo.",
+    );
+  } finally {
+    setBusy(false);
+  }
+}
+
 /** ¿Es un fichero de audio? (por MIME o por extension) */
 function esAudio(file: File): boolean {
   return file.type.startsWith("audio/") || /\.(wav|mp3|ogg|oga|flac|aif|aiff|m4a)$/i.test(file.name);
@@ -2262,15 +2313,18 @@ $<HTMLInputElement>("audio-file").addEventListener("change", async (event) => {
   await importarAudioDesdeSelector(files);
 });
 
-$<HTMLInputElement>("open").addEventListener("change", async (event) => {
-  const input = event.target as HTMLInputElement;
-  const todos = Array.from(input.files ?? []);
-  input.value = "";
+/**
+ * Reparte lo que se elige en «Abrir» o se suelta sobre el lienzo: un proyecto
+ * (.json / .miuzika.zip), audio (WAV, MP3…) o MIDI (.mid).
+ *
+ * El orden importa: primero el proyecto, porque las pistas necesitan dónde ir.
+ */
+async function abrirArchivos(todos: File[]): Promise<void> {
   if (!ready || todos.length === 0) return;
 
-  // El mismo boton sirve para proyecto (.json/.zip) y para audio (WAV, uno o varios).
-  const audios = todos.filter(esAudio);
-  const proyectos = todos.filter((file) => !esAudio(file));
+  const audios = todos.filter((file) => esAudio(file));
+  const midis = todos.filter((file) => !esAudio(file) && esMidi(file));
+  const proyectos = todos.filter((file) => !esAudio(file) && !esMidi(file));
 
   if (proyectos.length > 1) {
     addMessage("system", `Solo se abre un proyecto a la vez: uso «${proyectos[0].name}».`);
@@ -2326,7 +2380,42 @@ $<HTMLInputElement>("open").addEventListener("change", async (event) => {
     }
   }
 
+  for (const midi of midis) await importarMidiDesdeDisco(midi);
+
   if (audios.length > 0) await importarAudioDesdeSelector(audios);
+}
+
+$<HTMLInputElement>("open").addEventListener("change", async (event) => {
+  const input = event.target as HTMLInputElement;
+  const todos = Array.from(input.files ?? []);
+  input.value = "";
+  await abrirArchivos(todos);
+});
+
+// Arrastrar y soltar sobre la ventana. El estado vacío prometía «arrastra un WAV
+// aquí» desde el primer día y no había ningún manejador: soltar un fichero no hacía
+// absolutamente nada.
+for (const tipo of ["dragenter", "dragover"] as const) {
+  document.addEventListener(tipo, (event: DragEvent) => {
+    if (!event.dataTransfer?.types.includes("Files")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    document.body.classList.add("arrastrando");
+  });
+}
+
+document.addEventListener("dragleave", (event: DragEvent) => {
+  if (event.relatedTarget) return; // se mueve por dentro de la ventana: no parpadea
+  document.body.classList.remove("arrastrando");
+});
+
+document.addEventListener("drop", (event: DragEvent) => {
+  const data = event.dataTransfer;
+  if (!data) return;
+  event.preventDefault();
+  document.body.classList.remove("arrastrando");
+  const ficheros = Array.from(data.files ?? []);
+  if (ficheros.length > 0) void abrirArchivos(ficheros);
 });
 
 window.addEventListener("keydown", (event) => {
@@ -2524,6 +2613,7 @@ if (import.meta.env.DEV) {
       return future;
     },
     anadirPistas: importarPistasDesdeAgente,
+    abrirArchivos,   // mismo camino que «Abrir» y el arrastre: sirve para probarlo
     stems: stemPlayer,
     crearProyecto: crearProyectoDesdeAgente,
     ajustarPistas: ajustarPistasDesdeAgente,

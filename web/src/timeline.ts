@@ -550,7 +550,7 @@ export class TimelineView {
         <div class="ruler-spacer"></div>
         <div class="pista-vacia">
           <strong>${escapeHtml(this.project.name)}</strong> no tiene pistas todavía.
-          <small>Pídele una pieza al agente en el chat, o arrastra un WAV aquí.</small>
+          <small>Pídele una pieza al agente en el chat, o arrastra aquí un WAV, un .mid o un proyecto.</small>
         </div>
       </div>`;
       this.aplicarScrollCabeceras();

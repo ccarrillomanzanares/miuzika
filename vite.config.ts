@@ -836,8 +836,10 @@ export default defineConfig(({ mode }) => {
               .replace(/[\u0300-\u036f]/g, "")
               .replace(/[^A-Za-z0-9._-]+/g, "_")
               .slice(-80);
-            if (!/\.(wav|mp3|ogg|flac|aif|aiff|m4a)$/i.test(base)) {
-              responderJson(res, 400, { error: "sólo audio (.wav, .mp3, .ogg, .flac, .aif, .m4a)" });
+            // .mid entra por aquí porque es el único endpoint binario: no es audio, pero
+            // es un fichero que el navegador tiene que dejar en la carpeta del proyecto.
+            if (!/\.(wav|mp3|ogg|flac|aif|aiff|m4a|mid|midi)$/i.test(base)) {
+              responderJson(res, 400, { error: "sólo audio (.wav, .mp3, .ogg, .flac, .aif, .m4a) o MIDI (.mid)" });
               return;
             }
             leerCuerpoBinario(req, 512 * 1024 * 1024, (datos) => {
