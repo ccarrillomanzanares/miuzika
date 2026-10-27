@@ -17,8 +17,13 @@ import type { PasoHerramienta } from "./actividad.ts";
  */
 const MAX_TOKENS_SALIDA = 32768;
 
-/** Tope de pasos de un turno: sin esto, un bucle no termina nunca. */
-const MAX_PASOS_POR_DEFECTO = 12;
+/**
+ * Tope de pasos de un turno: sin esto, un bucle no termina nunca. Un paso es una
+ * respuesta del modelo (que puede pedir varias herramientas a la vez); los
+ * reintentos por respuesta vacía del proveedor NO cuentan. Con las herramientas de
+ * composición una sección son 6-10 pasos (leer, progresiones, notas, mezcla).
+ */
+const MAX_PASOS_POR_DEFECTO = 20;
 
 export interface EventoAgente {
   /** "progreso": el modelo está escribiendo; se emite como mucho cada 700 ms. */
@@ -152,6 +157,9 @@ export async function ejecutarAgente(
           vaciosSeguidos += 1;
           // 'load' en Ollama es el modelo cargándose: hace falta esperar de verdad.
           await new Promise((listo) => setTimeout(listo, 1000 * 2 ** (vaciosSeguidos - 1)));
+          // Un vacío del proveedor no es trabajo del modelo: no gasta paso. Antes seis
+          // 'load' seguidos se comían la mitad del turno.
+          pasos -= 1;
           continue;
         }
         // Si el proveedor sigue sin contestar, se retoma el turno solo una vez: lo que
@@ -160,6 +168,7 @@ export async function ejecutarAgente(
           reanudaciones += 1;
           vaciosSeguidos = 0;
           mensajes.push({ role: "user", content: "Continúa desde donde lo dejaste." });
+          pasos -= 1;
           continue;
         }
         return {
@@ -272,8 +281,32 @@ export async function ejecutarAgente(
     }
   }
 
-  if (pasos >= maxPasos) {
-    alEvento?.({ tipo: "aviso", texto: `Corte de seguridad: ${maxPasos} pasos sin respuesta final.` });
+  if (pasos >= maxPasos && texto === "") {
+    alEvento?.({ tipo: "aviso", texto: `Corte de seguridad: ${maxPasos} pasos; pido un resumen.` });
+    // Se acabaron los pasos con trabajo a medias: una última llamada SIN herramientas
+    // para que el modelo diga qué ha hecho y qué falta. Antes el turno acababa en
+    // «(sin respuesta final)» y la persona no sabía en qué punto estaba.
+    if (!senal?.aborted) {
+      mensajes.push({
+        role: "user",
+        content:
+          "[AVISO DEL SISTEMA] Se ha acabado el presupuesto de pasos de este turno. No llames a " +
+          "ninguna herramienta: resume, en el idioma de la persona, lo que has hecho de verdad " +
+          "(comprobado), lo que falta y el siguiente paso que propones.",
+      });
+      try {
+        const cierre = await chat(mensajes, {
+          temperature: 0.2,
+          signal: senal,
+          maxTokens: 4096,
+          sinRazonamiento: true,
+        });
+        texto = cierre.content.trim();
+        if (texto !== "") mensajes.push({ role: "assistant", content: cierre.content });
+      } catch {
+        /* sin resumen: se devuelve lo que haya */
+      }
+    }
   }
 
   return { texto, pasos, llamadas, ms: Date.now() - t0, herramientas };

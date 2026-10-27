@@ -223,16 +223,19 @@ async function responderAlUsuario(texto: string): Promise<void> {
     pararLatido();
     // Una linea discreta al final del historial: en que se fue el tiempo del turno.
     chat.add("meta", `✓ ${lineaResumen(resultado)} · ${getModel()}`);
-    // El turno va al historial del proyecto: sobrevive a recargas y reinicios.
-    if ((resultado.texto ?? "").trim() !== "") {
-      const estado = agregarTurno(resumenAgente, turnosAgente, {
-        usuario: texto,
-        asistente: resultado.texto,
-      });
-      resumenAgente = estado.resumen;
-      turnosAgente = estado.turnos;
-      void guardarAgente();
-    }
+    // El turno va al historial del proyecto SIEMPRE, también si no hubo respuesta
+    // final: si no, el encargo del usuario se perdía y el turno siguiente no sabía
+    // qué se le había pedido.
+    const estado = agregarTurno(resumenAgente, turnosAgente, {
+      usuario: texto,
+      asistente:
+        (resultado.texto ?? "").trim() !== ""
+          ? resultado.texto
+          : `(turno sin respuesta final: ${lineaResumen(resultado)})`,
+    });
+    resumenAgente = estado.resumen;
+    turnosAgente = estado.turnos;
+    void guardarAgente();
     setStatus(
       `✓ listo · ${resultado.pasos} paso(s) · ${resultado.llamadas} herramienta(s) · ` +
         `${segundos(resultado.ms)} · ${getModel()}`,
@@ -324,16 +327,19 @@ async function cargarAgenteDelProyecto(vista: Project | null): Promise<void> {
       /* sin historial: se empieza limpio */
     }
   }
-  // La conversación en curso pertenece al proyecto anterior: se tira.
+  // A MITAD de turno (el agente acaba de llamar a crear_proyecto) la conversación NO
+  // se toca: es la del encargo en curso. Antes se vaciaba aquí y la siguiente llamada
+  // al modelo llevaba sólo el prompt de sistema: el agente perdía la petición del
+  // usuario, el proveedor contestaba 'load' a una conversación sin mensaje de usuario
+  // y el turno se gastaba en reintentos (27-oct, proyecto «doubledare»). Sólo se
+  // pone al día el prompt de sistema, que dice qué proyecto está abierto.
+  if (trabajando) {
+    await refrescarManifiesto();
+    return;
+  }
+  // Fuera de un turno, la conversación en curso es del proyecto anterior: se tira, y
+  // el panel se pinta con lo que el modelo recuerda de ESTE proyecto.
   conversacion.length = 1;
-  // Y la vista se sincroniza con lo que el modelo recuerda: se pinta la conversación
-  // guardada de ESTE proyecto. Antes la memoria estaba en disco y el panel salía vacío,
-  // así que el agente «recordaba» cosas que el usuario no veía.
-  // OJO: si el agente crea o cambia de proyecto A MITAD de turno (crear_proyecto), esto
-  // también se ejecuta. Vaciar el chat entonces borraba la petición del usuario y la
-  // burbuja de progreso: la app parecía muerta con el turno corriendo. Sólo se repinta
-  // si no hay turno en marcha.
-  if (trabajando) return;
   chat.clear();
   if (turnosAgente.length > 0) {
     chat.add(

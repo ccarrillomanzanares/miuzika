@@ -474,7 +474,9 @@ export const HERRAMIENTAS: ToolSpec[] = [
         "Busca en el catalogo del motor y en la biblioteca CC0 lo que pide el usuario en lenguaje natural. " +
         "Entiende los nombres habituales y los regionalismos (tarola = caja, hi-hat = charles, platillo " +
         "crash = crash) y el caracter medido (corto, largo, seco, brillante, oscuro, grave, agudo, sucio, " +
-        "limpio). Usala ANTES de crear nada: si ya existe algo que encaja, dilo y usalo.",
+        "limpio). Usala para elegir un sample o un timbre concreto ANTES de crearlo. Para componer " +
+        "notas NO hace falta: las pistas MIDI ya suenan con los instrumentos del DAW. Una o dos " +
+        "consultas bastan; no la repitas con sinónimos.",
       parameters: {
         type: "object",
         properties: {
