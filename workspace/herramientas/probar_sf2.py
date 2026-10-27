@@ -1,6 +1,6 @@
 """Comprueba un SF2 sin depender de nada: lee el fichero y lo toca.
 
-    python codigo/probar_sf2.py <instrumento.sf2> [nota ...]
+    python herramientas/probar_sf2.py <instrumento.sf2> [nota ...]
 
 Qué hace:
   1. Recorre los chunks del RIFF y lee `phdr`, `pbag`, `pgen`, `pinst`, `ibag`,

@@ -1,3 +1,0 @@
-Scripts que genera el agente para UN sonido concreto (sonido_<nombre>.py).
-Son reproducibles desde la receta del proyecto (sonidos/<nombre>.json): no se versionan.
-Las obras (cancion.py, tema.py) NO van aqui: van en workspace/obras/<slug>/.
