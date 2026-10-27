@@ -107,3 +107,9 @@ test("tramos entre barras: se detecta el compás que no cuadra", () => {
   // Un tramo de dos compases sin barra en medio es válido.
   assert.deepEqual(tramosIrregulares([8, 4], 4), []);
 });
+
+test("una repetición de medio compás no rompe la comprobación de compases", () => {
+  const r = leerNotacion("(E2:.5 B2 E3 B2)x4 | D2:4");
+  assert.deepEqual(r.tramos, [8, 4]);
+  assert.deepEqual(tramosIrregulares(r.tramos, 4), []);
+});

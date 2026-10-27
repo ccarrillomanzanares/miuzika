@@ -113,7 +113,9 @@ export function desplegarRepeticiones(texto: string): string {
     actual = actual.replace(grupo, (_, dentro: string, veces: string) => {
       const n = Number(veces);
       if (n < 1) throw new ErrorNotacion("una repetición necesita x1 o más");
-      return Array.from({ length: n }, () => dentro.trim()).join(" | ");
+      // Unidas con espacio, no con barra: el grupo puede no medir un compás entero
+      // («(E2:.5 B2 E3 B2)x4» son cuatro medios compases que forman dos compases).
+      return Array.from({ length: n }, () => dentro.trim()).join(" ");
     });
     if (actual.length > MAX_ELEMENTOS * 12) throw new ErrorNotacion("demasiadas repeticiones: parte la frase");
   }

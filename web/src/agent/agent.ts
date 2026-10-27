@@ -21,9 +21,12 @@ const MAX_TOKENS_SALIDA = 32768;
  * Tope de pasos de un turno: sin esto, un bucle no termina nunca. Un paso es una
  * respuesta del modelo (que puede pedir varias herramientas a la vez); los
  * reintentos por respuesta vacía del proveedor NO cuentan. Con las herramientas de
- * composición una sección son 6-10 pasos (leer, progresiones, notas, mezcla).
+ * composición una sección son 6-10 pasos (leer, progresiones, notas, mezcla); una
+ * canción entera, unos 30. No es un tope de gasto (el plan de Ollama es una cuota
+ * fija): es el freno por si el modelo entra en bucle. Los cortes por fallos
+ * repetidos y por escribir sin ejecutar siguen actuando antes.
  */
-const MAX_PASOS_POR_DEFECTO = 20;
+const MAX_PASOS_POR_DEFECTO = 40;
 
 /** Argumentos de una llamada ya ejecutada por encima de esto se resumen en el historial. */
 const UMBRAL_ARGUMENTOS = 1200;
