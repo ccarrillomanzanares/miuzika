@@ -5,6 +5,17 @@ import { DEVICE_PARAMS, beatsPerBar } from "./types.ts";
 import type { Mode } from "./types.ts";
 import { MODES } from "./theory.ts";
 import { hashString } from "./rng.ts";
+import { slugDe } from "./nombres.ts";
+
+/** Slug de carpeta a partir de un nombre de proyecto (en cualquier alfabeto). */
+export function carpetaDeNombre(nombre: string): string {
+  return slugDe(nombre, { max: 40, defecto: "proyecto" });
+}
+
+/** Carpeta del proyecto: la fijada al crearlo o, en proyectos antiguos, la de su nombre. */
+export function carpetaDeProyecto(project: Project): string {
+  return project.meta.carpeta || carpetaDeNombre(project.name);
+}
 
 export interface Issue {
   severity: "error" | "warning";
@@ -19,6 +30,8 @@ interface CreateProjectInput {
   lengthBars?: number;
   seed?: number;
   prompt?: string;
+  /** Carpeta en `workspace/proyectos/`; por defecto, la del nombre. */
+  carpeta?: string;
 }
 
 export function createProject(input: CreateProjectInput = {}): Project {
@@ -36,7 +49,12 @@ export function createProject(input: CreateProjectInput = {}): Project {
     tracks: [],
     audioAssets: [],
     master: { gainDb: -1 },
-    meta: { generator: "miuzika", createdAt: now, ...(input.prompt ? { prompt: input.prompt } : {}) },
+    meta: {
+      generator: "miuzika",
+      createdAt: now,
+      carpeta: input.carpeta ?? carpetaDeNombre(name),
+      ...(input.prompt ? { prompt: input.prompt } : {}),
+    },
   };
 }
 

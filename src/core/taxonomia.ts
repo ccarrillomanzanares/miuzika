@@ -17,6 +17,8 @@
  * reconozca «tarola», «redoblante» o «hi-hat» como la misma cosa.
  */
 
+import { normalizarTexto } from "./nombres.ts";
+
 export type Familia = "percusión" | "tonal" | "textura" | "ruido" | "efecto";
 
 export interface Etiqueta {
@@ -174,14 +176,9 @@ export const BST: Record<string, string> = {
   "fx-m": "Sound effects · Máquinas",
 };
 
+/** Texto comparable: sin tildes latinas y sin signos, en cualquier alfabeto. */
 export function normalizar(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9ñ\s-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return normalizarTexto(texto.replace(/[^\p{L}\p{N}\p{M}\s-]/gu, " "));
 }
 
 export function etiquetaPorId(id: string): Etiqueta | undefined {

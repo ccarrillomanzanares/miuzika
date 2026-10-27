@@ -16,6 +16,7 @@ import { MODE_NAMES, canonicalPitchClass, pitchClass } from "./theory.ts";
 import { validateProject } from "./project.ts";
 import type { Issue } from "./project.ts";
 import { ParamValueSchema, numericParam } from "./params.ts";
+import { slugDe } from "./nombres.ts";
 
 export class OpError extends Error {
   constructor(message: string) {
@@ -219,6 +220,25 @@ const OpSchema = z.discriminatedUnion("op", [
 
 const OpsSchema = z.array(OpSchema).min(1).max(200);
 
+/** Nombres de las operaciones, en el orden del esquema. */
+export const NOMBRES_OPS = OpSchema.options.map((schema) => schema.shape.op.value);
+
+/**
+ * Chuleta de las operaciones para el agente, SACADA DEL ESQUEMA: un campo nuevo
+ * en una op aparece aquí sin tocar nada más. Una línea por op:
+ * `add_notes(trackId, notes, clipId?, startBar?, name?)`.
+ */
+export function firmasDeOps(): string {
+  return OpSchema.options
+    .map((schema) => {
+      const campos = Object.entries(schema.shape as Record<string, z.ZodType>)
+        .filter(([clave]) => clave !== "op")
+        .map(([clave, campo]) => (campo.safeParse(undefined).success ? `${clave}?` : clave));
+      return `${schema.shape.op.value}(${campos.join(", ")})`;
+    })
+    .join("\n");
+}
+
 export type Op = z.input<typeof OpSchema>;
 type ParsedOp = z.output<typeof OpSchema>;
 
@@ -297,14 +317,10 @@ function resolveDevice(track: Track, ref: string): Device {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Parte legible de un id ("Bajo eléctrico" → "bajo_electrico"); 24 puntos de código
+ *  como mucho para que el id quepa en los 64 caracteres de IdSchema en cualquier alfabeto. */
 function slugify(name: string): string {
-  return name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 32);
+  return slugDe(name, { separador: "_", max: 24, defecto: "x" });
 }
 
 function uniqueId(prefix: string, base: string, existing: Iterable<string>): string {

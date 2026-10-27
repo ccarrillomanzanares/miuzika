@@ -63,6 +63,30 @@ const CARACTER: Record<string, (p: Perfil) => boolean> = {
   limpio: (p) => (p.crest_db ?? 0) >= 14,
 };
 
+/** Las mismas palabras de carácter en inglés: la consulta llega en español o en inglés. */
+const CARACTER_EN: Record<string, string> = {
+  short: "corto",
+  long: "largo",
+  bright: "brillante",
+  dark: "oscuro",
+  high: "agudo",
+  low: "grave",
+  deep: "grave",
+  dry: "seco",
+  dirty: "sucio",
+  clean: "limpio",
+};
+
+/** Palabras de carácter de una consulta ya normalizada, sin repetir. */
+function caracteresDe(texto: string): string[] {
+  const palabras = new Set(texto.split(" "));
+  const encontrados = Object.keys(CARACTER).filter((c) => texto.includes(c));
+  for (const [ingles, clave] of Object.entries(CARACTER_EN)) {
+    if (palabras.has(ingles) && !encontrados.includes(clave)) encontrados.push(clave);
+  }
+  return encontrados;
+}
+
 /**
  * Resuelve una consulta en lenguaje natural contra un catálogo.
  *
@@ -78,7 +102,7 @@ export function buscarEnCatalogo(
   const texto = normalizar(consulta);
   const etiquetas = etiquetasEnFrase(consulta);
   const palabras = texto.split(" ").filter((p) => p.length >= 3);
-  const caracteres = Object.keys(CARACTER).filter((c) => texto.includes(c));
+  const caracteres = caracteresDe(texto);
   const resultados: Resultado[] = [];
 
   // El catálogo grande (4.231 entradas) se consulta con `includes` sobre un texto ya
@@ -152,41 +176,3 @@ export function buscarEnCatalogo(
   return utiles.slice(0, opciones.limite ?? 8);
 }
 
-/**
- * Parecido acústico: ordena el catálogo por distancia al perfil de una referencia.
- * Es lo que resuelve «un bombo como éste» sin palabras.
- */
-export function parecidosA(
-  catalogo: EntradaCatalogo[],
-  referencia: Perfil,
-  limite = 5,
-): Resultado[] {
-  const log = (v: number): number => Math.log10(Math.max(v, 1e-6));
-  const distancia = (p: Perfil): number => {
-    const d: number[] = [];
-    if (p.centroide_hz && referencia.centroide_hz) {
-      d.push(Math.abs(log(p.centroide_hz) - log(referencia.centroide_hz)) * 3);
-    }
-    if (p.duracion_s && referencia.duracion_s) {
-      d.push(Math.abs(log(p.duracion_s) - log(referencia.duracion_s)) * 2);
-    }
-    if (p.crest_db !== undefined && referencia.crest_db !== undefined) {
-      d.push(Math.abs(p.crest_db - referencia.crest_db) / 10);
-    }
-    if (d.length === 0) return 99;
-    return d.reduce((a, b) => a + b, 0) / d.length;
-  };
-  return catalogo
-    .filter((e) => e.perfil)
-    .map((entrada) => {
-      const d = distancia(entrada.perfil ?? {});
-      return {
-        entrada,
-        puntuacion: Math.round((1 - Math.min(d, 1)) * 100),
-        motivos: [`distancia acústica ${d.toFixed(2)}`],
-        etiqueta: false,
-      };
-    })
-    .sort((a, b) => b.puntuacion - a.puntuacion)
-    .slice(0, limite);
-}

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { PALABRAS, aplicarPalabras, buscarPalabra, palabrasDe, vocabularioParaPrompt } from "./palabras.ts";
+import { aplicarPalabras, buscarPalabra } from "./palabras.ts";
 import { POST_POR_DEFECTO, recetaNueva } from "./sonidos.ts";
 import type { VozSonido } from "./sonidos.ts";
 
@@ -37,12 +37,6 @@ test("el vocabulario cubre las palabras que se acordaron", () => {
   }
   assert.equal(buscarPalabra("metálico")?.clave, "metalico", "con tilde también");
   assert.equal(buscarPalabra("Chillón")?.clave, "chillon");
-});
-
-test("se pueden combinar varias palabras en una frase", () => {
-  assert.deepEqual(palabrasDe("un bombo corto, gordo y sucio"), ["corto", "gordo", "sucio"]);
-  assert.deepEqual(palabrasDe("quiero algo brillante y agresivo"), ["brillante", "agresivo"]);
-  assert.deepEqual(palabrasDe("sin palabras conocidas"), []);
 });
 
 test("las palabras mueven la receta: corto y sucio cambian el post", () => {
@@ -100,8 +94,3 @@ test("sumar palabras no se pasa nunca de los límites", () => {
   assert.ok(receta.post.brillo >= -1 && receta.post.brillo <= 1);
 });
 
-test("el vocabulario del prompt lista las palabras y sus ejes", () => {
-  const texto = vocabularioParaPrompt();
-  for (const palabra of PALABRAS) assert.ok(texto.includes(palabra.clave));
-  assert.match(texto, /corto \(eje duracion\)/);
-});

@@ -4,14 +4,10 @@ import assert from "node:assert/strict";
 import {
   canonicalPitchClass,
   chordToMidi,
-  degreeOfPitchClass,
   diatonicTriad,
-  noteToMidi,
   parseChord,
   pitchClass,
-  progressionFromDegrees,
 } from "./theory.ts";
-import { normalizeKey } from "./theory.ts";
 
 test("pitchClass entiende solfeo y alteraciones", () => {
   assert.equal(pitchClass("re"), 2);
@@ -20,12 +16,6 @@ test("pitchClass entiende solfeo y alteraciones", () => {
   assert.equal(pitchClass("Bb"), 10);
   assert.equal(pitchClass("C"), 0);
   assert.equal(canonicalPitchClass("Db"), "C#");
-});
-
-test("noteToMidi usa C4 = 60", () => {
-  assert.equal(noteToMidi("C", 4), 60);
-  assert.equal(noteToMidi("A", 4), 69);
-  assert.equal(noteToMidi("D", 2), 38);
 });
 
 test("parseChord admite calidades y acordes con barra", () => {
@@ -48,7 +38,7 @@ test("chordToMidi genera voicings ascendentes e inversiones", () => {
 });
 
 test("tríadas diatónicas en re menor", () => {
-  const dMinor = normalizeKey({ tonic: "D", mode: "minor" });
+  const dMinor = { tonic: "D", mode: "minor" as const };
   assert.equal(diatonicTriad(dMinor, 0), "Dm");
   assert.equal(diatonicTriad(dMinor, 1), "Edim");
   assert.equal(diatonicTriad(dMinor, 2), "F");
@@ -56,19 +46,8 @@ test("tríadas diatónicas en re menor", () => {
   assert.equal(diatonicTriad(dMinor, 6), "C");
 });
 
-test("progresión por grados se adapta a la tonalidad", () => {
-  const cMajor = normalizeKey({ tonic: "C", mode: "major" });
-  // En mayor: I - vi - IV - V
-  assert.deepEqual(progressionFromDegrees(cMajor, [0, 5, 3, 4]), ["C", "Am", "F", "G"]);
-  // El grado 2 es la tercera (III), no la cuarta.
-  assert.equal(diatonicTriad(cMajor, 2), "Em");
-  const fMinor = normalizeKey({ tonic: "F", mode: "minor" });
-  assert.deepEqual(progressionFromDegrees(fMinor, [0, 5, 2, 6]), ["Fm", "Db", "Ab", "Eb"]);
-});
 
-test("degreeOfPitchClass identifica grados y cromatismos", () => {
-  const dMinor = normalizeKey({ tonic: "D", mode: "minor" });
-  assert.equal(degreeOfPitchClass(dMinor, pitchClass("D")), 0);
-  assert.equal(degreeOfPitchClass(dMinor, pitchClass("F")), 2);
-  assert.equal(degreeOfPitchClass(dMinor, pitchClass("C#")), null);
+test("el grado 2 es la tercera (III), no la cuarta", () => {
+  assert.equal(diatonicTriad({ tonic: "C", mode: "major" }, 2), "Em");
+  assert.equal(diatonicTriad({ tonic: "F", mode: "minor" }, 5), "Db");
 });

@@ -8,7 +8,7 @@ import {
   etiquetasDeTexto,
   etiquetasEnFrase,
 } from "./taxonomia.ts";
-import { buscarEnCatalogo, parecidosA } from "./buscar.ts";
+import { buscarEnCatalogo } from "./buscar.ts";
 import type { EntradaCatalogo } from "./buscar.ts";
 
 const CATALOGO: EntradaCatalogo[] = [
@@ -108,13 +108,6 @@ test("«china brillante» no saca el piano aunque sea brillante", () => {
 
 test("buscar algo que no existe devuelve vacío, no basura", () => {
   assert.deepEqual(buscarEnCatalogo(CATALOGO, "theremin"), []);
-});
-
-test("parecidosA ordena por distancia acústica (bombo como éste)", () => {
-  const referencia = { duracion_s: 0.7, centroide_hz: 100, crest_db: 5.5 };
-  const r = parecidosA(CATALOGO, referencia, 2);
-  assert.equal(r[0].entrada.clave, "kit_bombo");
-  assert.ok(r[0].puntuacion > 60, String(r[0].puntuacion));
 });
 
 test("las opciones acotan por familia y por número", () => {

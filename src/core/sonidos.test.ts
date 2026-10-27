@@ -151,7 +151,9 @@ test("el script lleva la voz, los args, el post y la salida del proyecto", () =>
   assert.match(script, /COLA = 0\.6/);
   assert.match(script, /CUERPO = 0\.5/);
   assert.match(script, /palabras: corto, sucio/);
-  assert.match(script, /"proyectos\/stahl\/sonidos\/bombo-seco\.wav"/);
+  // El WAV sale junto al script, dentro de proyectos/<slug>/sonidos/.
+  assert.match(script, /SALIDA = os\.path\.join\(AQUI, "bombo-seco\.wav"\)/);
+  assert.match(script, /proyectos\/stahl\/sonidos\/bombo-seco\.json/);
   // El bloque ARGS tiene que ser Python válido: nada de JSON.
   const bloque = script.slice(script.indexOf("ARGS = {"), script.indexOf("}", script.indexOf("ARGS = {")));
   assert.doesNotMatch(bloque, /None|true|false/);
@@ -162,8 +164,11 @@ test("el script lleva la voz, los args, el post y la salida del proyecto", () =>
 
 test("las rutas del script y del WAV no se salen de su sitio", () => {
   const receta = recetaNueva("Rugido", "metal_hit", CATALOGO);
-  assert.equal(rutaScriptDeSonido(receta), "codigo/experimental/sonido_rugido.py");
+  // Script, WAV y ficha juntos en el proyecto; nada dentro del motor compartido.
+  assert.equal(rutaScriptDeSonido(receta), "sonidos/rugido.py");
   assert.equal(rutaWavDeSonido(receta), "sonidos/rugido.wav");
+  const script = scriptDeSonido(receta, { slug: "p" });
+  assert.match(script, /SALIDA = os\.path\.join\(AQUI, "rugido\.wav"\)/);
 });
 
 test("la misma receta da el mismo script (el sonido es reproducible)", () => {

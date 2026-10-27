@@ -10,6 +10,7 @@
  * en un bombo, cuya duración está fijada en el código.
  */
 
+import { normalizarTexto } from "./nombres.ts";
 import type { ArgsSonido, PostSonido, RecetaSonido, VozSonido } from "./sonidos.ts";
 
 export type Eje = "duracion" | "tono" | "brillo" | "suciedad" | "caracter" | "cuerpo";
@@ -178,35 +179,12 @@ const LIMITES_POST: Record<string, [number, number]> = {
   cuerpo: [-1, 1],
 };
 
-function normalizar(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
+const normalizar = normalizarTexto;
 
 /** Busca una palabra del vocabulario por su clave o su etiqueta, con o sin tilde. */
 export function buscarPalabra(texto: string): Palabra | undefined {
   const buscado = normalizar(texto);
   return PALABRAS.find((p) => p.clave === buscado || normalizar(p.etiqueta) === buscado);
-}
-
-/**
- * Saca de una frase las palabras del vocabulario que aparezcan.
- * «un bombo corto y gordo» → ["corto", "gordo"], en el orden en que se dicen.
- */
-export function palabrasDe(frase: string, vocabulario: Palabra[] = PALABRAS): string[] {
-  const tokens = normalizar(frase)
-    .replace(/[^a-z0-9ñ\s]/g, " ")
-    .split(/\s+/)
-    .filter((t) => t !== "");
-  const encontradas: string[] = [];
-  for (const token of tokens) {
-    const palabra = vocabulario.find((p) => p.clave === token || normalizar(p.etiqueta) === token);
-    if (palabra && !encontradas.includes(palabra.clave)) encontradas.push(palabra.clave);
-  }
-  return encontradas;
 }
 
 export interface ResultadoPalabras {
@@ -292,7 +270,3 @@ export function aplicarPalabras(
   };
 }
 
-/** Lista para el prompt del agente: qué palabras entiende el sistema. */
-export function vocabularioParaPrompt(): string {
-  return PALABRAS.map((p) => (p.eje ? `${p.clave} (eje ${p.eje})` : p.clave)).join(", ");
-}

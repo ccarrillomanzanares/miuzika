@@ -158,6 +158,12 @@ export interface Project {
   codeSources?: CodeSource[];
   master: { gainDb: number };
   meta: {
+    /**
+     * Carpeta del proyecto en `workspace/proyectos/`. Se fija al crearlo y NO cambia
+     * al renombrarlo: antes la carpeta salía del nombre en cada guardado, así que
+     * renombrar un proyecto lo mudaba a otra carpeta sin sus WAV.
+     */
+    carpeta?: string;
     prompt?: string;
     generator?: string;
     createdAt: string;

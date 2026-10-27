@@ -68,18 +68,8 @@ export function pitchClass(name: string): number {
   return ((semitones % 12) + 12) % 12;
 }
 
-/** MIDI con convención C4 = 60. */
-export function noteToMidi(pitchClassName: string, octave: number): number {
-  return (octave + 1) * 12 + pitchClass(pitchClassName);
-}
-
-
 export function canonicalPitchClass(name: string): string {
   return PITCH_CLASSES[pitchClass(name)]!;
-}
-
-export function normalizeKey(key: KeySignature): KeySignature {
-  return { tonic: canonicalPitchClass(key.tonic), mode: key.mode };
 }
 
 /** Semitonos desde la tónica para un grado (0 = tónica, 7 = octava). */
@@ -89,16 +79,6 @@ function degreeToSemitones(mode: Mode, degree: number): number {
   const octave = Math.floor(degree / size);
   const index = ((degree % size) + size) % size;
   return octave * 12 + scale[index]!;
-}
-
-/** Grado de la escala cuyo pitch class coincide, o null si es cromático. */
-export function degreeOfPitchClass(key: KeySignature, pc: number): number | null {
-  const scale = SCALES[key.mode];
-  const tonic = pitchClass(key.tonic);
-  for (let degree = 0; degree < scale.length; degree++) {
-    if ((tonic + scale[degree]!) % 12 === ((pc % 12) + 12) % 12) return degree;
-  }
-  return null;
 }
 
 const CHORD_QUALITIES: Record<string, readonly number[]> = {
@@ -162,8 +142,6 @@ export function chordToMidi(chord: Chord, octave: number, inversion = 0): number
   return pitches;
 }
 
-/** Acorde por defecto si el prompt no especifica progresión. */
-
 
 /** Nombres con bemoles para tonalidades de bemoles (más legible que A#). */
 const MAJOR_SIGNATURE_BY_PC: Record<number, number> = {
@@ -195,7 +173,6 @@ function prefersFlats(key: KeySignature): boolean {
   return keyAccidentals(key) < 0;
 }
 
-
 const FLAT_PITCH_CLASSES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"] as const;
 
 function pitchClassName(pc: number, flats: boolean): string {
@@ -216,7 +193,3 @@ export function diatonicTriad(key: KeySignature, degree: number): string {
   return `${pitchClassName(pc, prefersFlats(key))}${quality}`;
 }
 
-/** Progresión a partir de grados: [0,5,2,6] = i-VI-III-VII. */
-export function progressionFromDegrees(key: KeySignature, degrees: readonly number[]): string[] {
-  return degrees.map((degree) => diatonicTriad(key, degree));
-}

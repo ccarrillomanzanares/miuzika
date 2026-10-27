@@ -9,6 +9,8 @@
  * funcionen en cualquier voz, incluso en las que no tienen ese parámetro.
  */
 
+import { slugDe } from "./nombres.ts";
+
 export const FORMATO_SONIDO = "miuzika-sonido";
 export const VERSION_SONIDO = 1;
 
@@ -87,14 +89,7 @@ function acotar(valor: number, min: number, max: number): number {
 
 /** Nombre de fichero seguro a partir del nombre que escribe el usuario. */
 export function nombreDeSonido(texto: string): string {
-  const limpio = texto
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-  return limpio === "" ? "sonido" : limpio;
+  return slugDe(texto, { max: 40, defecto: "sonido" });
 }
 
 export function vozPorClave(voces: VozSonido[], clave: string): VozSonido | undefined {
@@ -217,9 +212,13 @@ export function literalPython(valor: number | boolean | number[] | string): stri
   return `[${valor.map((n) => literalPython(n)).join(", ")}]`;
 }
 
-/** Ruta del script generado, relativa a `workspace/`. */
+/**
+ * Ruta del script generado, relativa a la carpeta del proyecto: junto a su WAV y su
+ * ficha. Antes iba a `codigo/experimental/`, dentro del motor COMPARTIDO: cada
+ * sonido de cada proyecto ensuciaba la biblioteca y regeneraba el manifiesto.
+ */
 export function rutaScriptDeSonido(receta: RecetaSonido): string {
-  return `codigo/experimental/sonido_${receta.nombre}.py`;
+  return `sonidos/${receta.nombre}.py`;
 }
 
 /** Ruta del WAV, relativa a la carpeta del proyecto. */
@@ -235,7 +234,6 @@ export function rutaWavDeSonido(receta: RecetaSonido): string {
  * «sucio», «corto») funcionen igual en cualquier voz.
  */
 export function scriptDeSonido(receta: RecetaSonido, opciones: { slug: string }): string {
-  const salida = `proyectos/${opciones.slug}/sonidos/${receta.nombre}.wav`;
   const args = Object.entries(receta.args)
     .map(([clave, valor]) => `    ${JSON.stringify(clave)}: ${literalPython(valor)},`)
     .join("\n");
@@ -250,8 +248,9 @@ import wave
 
 import numpy as np
 
+# El script vive en proyectos/<slug>/sonidos/: workspace/ está tres niveles arriba.
 AQUI = os.path.dirname(os.path.abspath(__file__))
-RAIZ = os.path.abspath(os.path.join(AQUI, "..", ".."))
+RAIZ = os.path.abspath(os.path.join(AQUI, "..", "..", ".."))
 sys.path.insert(0, os.path.join(RAIZ, "codigo"))
 sys.path.insert(0, os.path.join(RAIZ, "gpu"))
 
@@ -263,7 +262,7 @@ ARGS = {
 ${args}
 }
 REPETICIONES = ${receta.post.repeticiones}
-SALIDA = os.path.join(RAIZ, ${literalPython(salida)})
+SALIDA = os.path.join(AQUI, ${literalPython(`${receta.nombre}.wav`)})
 PEAK_DBFS = ${literalPython(receta.post.peakDbfs)}
 FADE_MS = ${literalPython(receta.post.fadeMs)}
 BRILLO = ${literalPython(receta.post.brillo)}
