@@ -549,8 +549,8 @@ export class TimelineView {
       this.heads.innerHTML = `<div class="heads-inner">
         <div class="ruler-spacer"></div>
         <div class="pista-vacia">
-          <strong>${escapeHtml(this.project.name)}</strong> no tiene pistas todavía.
-          <small>Pídele una pieza al agente en el chat, o arrastra aquí un WAV, un .mid o un proyecto.</small>
+          <strong>${escapeHtml(this.project.name)}</strong> has no tracks yet.
+          <small>Ask the agent for a piece in the chat, or drop a WAV, a .mid or a project here.</small>
         </div>
       </div>`;
       this.aplicarScrollCabeceras();
@@ -573,7 +573,7 @@ export class TimelineView {
     if (!project) {
       ctx.fillStyle = "#5d6270";
       ctx.font = "13px ui-sans-serif, system-ui";
-      ctx.fillText("Sin proyecto. Pide una canción en el chat.", 20, RULER + 30);
+      ctx.fillText("No project. Ask for a song in the chat.", 20, RULER + 30);
       return;
     }
 

@@ -47,33 +47,33 @@ export function openCodeLab(options: CodeLabOptions): void {
   overlay.innerHTML = `
     <div class="modal-card code-card">
       <header>
-        <div><strong>Strudel → WAV</strong><span>1 ciclo = 1 compás · render con samples y efectos</span></div>
-        <button class="close" title="Cerrar">×</button>
+        <div><strong>Strudel → WAV</strong><span>1 cycle = 1 bar · rendered with samples and effects</span></div>
+        <button class="close" title="Close">×</button>
       </header>
       <div class="code-body">
         <div class="code-row">
-          <label>Fuente
+          <label>Source
             <select class="code-source">
-              <option value="">Nueva fuente</option>
+              <option value="">New source</option>
               ${sources.map((source) => `<option value="${escapeAttr(source.id)}">${escapeAttr(source.name)}</option>`).join("")}
             </select>
           </label>
-          <label>Nombre
+          <label>Name
             <input class="code-name" maxlength="40" value="Strudel" />
           </label>
-          <label>Compases
+          <label>Bars
             <input class="code-bars" type="number" min="1" max="64" value="8" />
           </label>
         </div>
         <textarea class="code-editor" rows="12" spellcheck="false"></textarea>
         <div class="code-row code-help">
-          <span>Ejemplo: <button class="code-example">cargar ejemplo</button></span>
-          <span class="code-status">Escribe un patrón y pulsa Renderizar WAV.</span>
+          <span>Example: <button class="code-example">load example</button></span>
+          <span class="code-status">Write a pattern and press Render to WAV.</span>
         </div>
       </div>
       <footer>
-        <span class="hint">El resultado se inserta como pista de audio en la timeline.</span>
-        <button class="render-audio">Renderizar WAV</button>
+        <span class="hint">The result is inserted as an audio track in the timeline.</span>
+        <button class="render-audio">Render to WAV</button>
       </footer>
     </div>`;
   document.body.appendChild(overlay);
@@ -91,14 +91,14 @@ export function openCodeLab(options: CodeLabOptions): void {
     barsInput.value = String(source?.bars ?? 8);
     editor.value = source?.code ?? DEFAULT_CODE;
     status.textContent = source
-      ? "Fuente guardada. Renderizar sustituye su pista de audio."
-      : "Escribe un patrón y pulsa Renderizar WAV.";
+      ? "Saved source. Rendering replaces its audio track."
+      : "Write a pattern and press Render to WAV.";
   };
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   sourceSelect.addEventListener("change", () => fill(sourceById.get(sourceSelect.value)));
   example.addEventListener("click", () => {
     editor.value = DEFAULT_CODE;
-    status.textContent = "Ejemplo cargado.";
+    status.textContent = "Example loaded.";
   });
   const lastSource = sources[sources.length - 1];
   fill(lastSource);
@@ -115,25 +115,25 @@ export function openCodeLab(options: CodeLabOptions): void {
     const code = editor.value.trim();
     const bars = Number(barsInput.value);
     if (!name) {
-      status.textContent = "Pon un nombre a la fuente.";
+      status.textContent = "Give the source a name.";
       return;
     }
     if (!Number.isInteger(bars) || bars < 1 || bars > 64) {
-      status.textContent = "Compases debe ser un entero entre 1 y 64.";
+      status.textContent = "Bars must be a whole number between 1 and 64.";
       return;
     }
     if (!code) {
-      status.textContent = "El código está vacío.";
+      status.textContent = "The code is empty.";
       return;
     }
     const sourceId = sourceSelect.value
       ? sourceSelect.value
       : `code_strudel_${slug(name)}`;
     renderAudio.disabled = true;
-    status.textContent = "Renderizando WAV con Strudel…";
+    status.textContent = "Rendering WAV with Strudel…";
     try {
       await options.onRenderAudio({ sourceId, name, code, bars });
-      status.textContent = "WAV renderizado e insertado como pista de audio.";
+      status.textContent = "WAV rendered and inserted as an audio track.";
     } catch (error) {
       status.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
     } finally {

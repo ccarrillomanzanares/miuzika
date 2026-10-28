@@ -33,7 +33,7 @@ export interface DepsPad {
   dibujar(beat: number): void;
 }
 
-const ETIQUETAS_MODO: Record<ModoPad, string> = { teclas: "Teclas", pads: "Pads", deslizar: "Deslizar" };
+const ETIQUETAS_MODO: Record<ModoPad, string> = { teclas: "Keys", pads: "Pads", deslizar: "Slide" };
 /** Proporción del ELAN0712 (3520 × 1784). */
 const PROPORCION = 1784 / 3520;
 
@@ -76,16 +76,16 @@ export class PanelPad {
     this.dialogo.innerHTML = `
       <div class="dialogo-cabeza">
         <strong>Pad</strong>
-        <button class="icon" data-cerrar title="Cerrar">✕</button>
+        <button class="icon" data-cerrar title="Close">✕</button>
       </div>
       <div class="pad-mandos">
-        <label>Pista <select data-pista></select></label>
-        <label>Modo <select data-modo></select></label>
-        <span class="pad-octava">Octava <button data-oct="-1">−</button><span data-octava>4</span><button data-oct="1">+</button></span>
-        <button data-grabar class="pad-grabar">● Grabar</button>
+        <label>Track <select data-pista></select></label>
+        <label>Mode <select data-modo></select></label>
+        <span class="pad-octava">Octave <button data-oct="-1">−</button><span data-octava>4</span><button data-oct="1">+</button></span>
+        <button data-grabar class="pad-grabar">● Record</button>
       </div>
       <canvas class="pad-lienzo"></canvas>
-      <span class="pad-estado" data-estado>Arrancando la captura del touchpad…</span>`;
+      <span class="pad-estado" data-estado>Starting touchpad capture…</span>`;
     document.body.append(this.dialogo);
     const q = <T extends Element>(sel: string): T => this.dialogo.querySelector(sel) as T;
     this.lienzo = q("canvas");
@@ -128,7 +128,7 @@ export class PanelPad {
   abrir(): void {
     const project = this.deps.proyecto();
     if (!project) {
-      this.deps.avisar("Abre o crea un proyecto para tocar con el pad.");
+      this.deps.avisar("Open or create a project to play with the pad.");
       return;
     }
     this.rellenarPistas(project);
@@ -174,7 +174,7 @@ export class PanelPad {
     const anterior = this.selPista.value;
     this.selPista.replaceChildren();
     for (const track of this.pistasMidi(project)) this.selPista.add(new Option(track.name, track.id));
-    if (this.selPista.options.length === 0) this.selPista.add(new Option("(no hay pistas MIDI)", ""));
+    if (this.selPista.options.length === 0) this.selPista.add(new Option("(no MIDI tracks)", ""));
     if ([...this.selPista.options].some((o) => o.value === anterior)) this.selPista.value = anterior;
     this.alCambiarPista();
   }
@@ -214,12 +214,12 @@ export class PanelPad {
       });
       const datos = (await res.json()) as { error?: string; enMarcha?: boolean };
       if (!res.ok) {
-        this.estado(`No se puede usar el pad: ${datos.error ?? res.status}`);
+        this.estado(`The pad cannot be used: ${datos.error ?? res.status}`);
         return;
       }
-      if (datos.enMarcha) this.estado("Pulsa en el pad de aquí abajo para tocar · Esc suelta el ratón");
+      if (datos.enMarcha) this.estado("Tap the pad below to play · Esc releases the mouse");
     } catch (error) {
-      this.estado(`No se puede usar el pad: ${error instanceof Error ? error.message : String(error)}`);
+      this.estado(`The pad cannot be used: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -232,7 +232,7 @@ export class PanelPad {
     }
     if (datos.listo) {
       this.listo = true;
-      this.estado("Pulsa en el pad de aquí abajo para tocar · Esc suelta el ratón");
+      this.estado("Tap the pad below to play · Esc releases the mouse");
       return;
     }
     if (datos.error) {
@@ -243,13 +243,13 @@ export class PanelPad {
       this.listo = false;
       this.armado = false;
       this.soltarTodo();
-      if (this.dialogo.open && !datos.error) this.estado("La captura del pad se ha parado.");
+      if (this.dialogo.open && !datos.error) this.estado("The pad capture has stopped.");
       return;
     }
     if (datos.desarmado) {
       this.armado = false;
       this.soltarTodo();
-      this.estado("Pad suelto (Ctrl+Alt+T). Pulsa en el pad para volver a tocar.");
+      this.estado("Pad released (Ctrl+Alt+T). Tap the pad to play again.");
       return;
     }
     if (!datos.e || datos.id === undefined || !this.mapeo || !this.armado) return;
@@ -268,8 +268,8 @@ export class PanelPad {
     this.dialogo.classList.toggle("armado", activo);
     this.estado(
       activo
-        ? `Tocando ${this.pista()?.name ?? ""} · Esc suelta el ratón`
-        : "Pulsa en el pad de aquí abajo para tocar · Esc suelta el ratón",
+        ? `Playing ${this.pista()?.name ?? ""} · Esc releases the mouse`
+        : "Tap the pad below to play · Esc releases the mouse",
     );
     if (activo) void this.asegurarMotor();
     await fetch("/api/pad/orden", {
@@ -323,12 +323,12 @@ export class PanelPad {
     const project = this.deps.proyecto();
     const track = this.pista();
     if (!project || !track) {
-      this.estado("Elige una pista MIDI para grabar.");
+      this.estado("Pick a MIDI track to record into.");
       return;
     }
     const motor = await this.asegurarMotor();
     if (!motor) {
-      this.estado("No se pudo arrancar el motor de sonido.");
+      this.estado("Could not start the sound engine.");
       return;
     }
     const porCompas = beatsPerBar(project);
@@ -360,9 +360,9 @@ export class PanelPad {
       this.grabacion.marco = requestAnimationFrame(seguir);
     };
     this.grabacion.marco = requestAnimationFrame(seguir);
-    this.botonGrabar.textContent = "■ Parar";
+    this.botonGrabar.textContent = "■ Stop";
     this.botonGrabar.classList.add("grabando");
-    this.estado(`Grabando en ${track.name} desde el compás ${inicioBeat / porCompas + 1} (un compás de cuenta atrás)…`);
+    this.estado(`Recording into ${track.name} from bar ${inicioBeat / porCompas + 1} (one bar count-in)…`);
     if (!this.armado) void this.armar(true);
   }
 
@@ -402,11 +402,11 @@ export class PanelPad {
     const notas = g.grabador.terminar(fin);
     this.deps.parar();
     if (notas.length === 0) {
-      this.estado("No se ha grabado ninguna nota.");
+      this.estado("No notes were recorded.");
       return;
     }
     this.deps.guardarClip(g.trackId, g.inicioBeat, notas);
-    this.estado(`Grabadas ${notas.length} notas. Ctrl+Z las quita.`);
+    this.estado(`Recorded ${notas.length} notes. Ctrl+Z removes them.`);
   }
 
   // ----------------------------------------------------------------- dibujo
@@ -456,7 +456,7 @@ export class PanelPad {
     if (!this.armado) {
       ctx.fillStyle = "#d7dae3aa";
       ctx.font = `${14 * escala}px system-ui, sans-serif`;
-      ctx.fillText(this.listo ? "Pulsa aquí para tocar con el touchpad" : "…", w / 2, h / 2);
+      ctx.fillText(this.listo ? "Tap here to play with the touchpad" : "…", w / 2, h / 2);
     }
   }
 }

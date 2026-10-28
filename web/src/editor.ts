@@ -24,14 +24,14 @@ export function openPianoRoll(clip: Clip, onApply: (notes: Note[]) => void): voi
   overlay.innerHTML = `
     <div class="modal-card">
       <header>
-        <div><strong>${escape(clip.name)}</strong><span>${clip.notes.length} notas · ${clip.length} beats</span></div>
-        <button class="close" title="Cerrar">×</button>
+        <div><strong>${escape(clip.name)}</strong><span>${clip.notes.length} notes · ${clip.length} beats</span></div>
+        <button class="close" title="Close">×</button>
       </header>
       <div class="modal-scroll"><canvas class="pr-canvas" width="${width}" height="${height}"></canvas></div>
       <footer>
-        <span class="hint">Clic: añadir · arrastrar: mover · clic derecho: borrar</span>
-        <button class="cancel">Cancelar</button>
-        <button class="apply">Aplicar</button>
+        <span class="hint">Click: add · drag: move · right click: delete</span>
+        <button class="cancel">Cancel</button>
+        <button class="apply">Apply</button>
       </footer>
     </div>`;
   document.body.appendChild(overlay);
