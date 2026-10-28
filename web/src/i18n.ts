@@ -77,6 +77,16 @@ const ES: Diccionario = {
   cancelar: "Cancelar",
   "cancelar.title": "Corta el turno del agente (la GPU no se apaga sola)",
   "estado.inicial": "Doble clic en un clip = piano roll · Ctrl+rueda = zoom",
+  // Contador de la GPU (gpu-texto.ts).
+  "gpu.sesion": "sesión",
+  "gpu.arrancando": "arrancando",
+  "gpu.sinFacturar": "aún sin facturar",
+  "gpu.apagandose": "apagándose…",
+  "gpu.apagada": "GPU apagada",
+  "gpu.proveedor": "Proveedor",
+  "gpu.tarifa": "tarifa",
+  "gpu.hora": "hora",
+  "gpu.sesionNavegador": "Esta sesión del navegador",
 };
 
 const DICCIONARIOS: Partial<Record<Idioma, Diccionario>> = { es: ES };

@@ -12,6 +12,7 @@ import {
   transcurrido,
   type EstadoGpu,
 } from "./gpu-texto.ts";
+import { fijarIdioma, olvidarIdioma } from "./i18n.ts";
 
 const AHORA = Date.parse("2026-10-23T20:10:00Z");
 
@@ -35,11 +36,17 @@ test("el tipo se abrevia sin perder lo que distingue a las tarjetas", () => {
   assert.equal(tipoCorto(""), "GPU");
 });
 
-test("el dinero va con coma y dos decimales", () => {
-  assert.equal(dinero(1.29), "1,29");
-  assert.equal(dinero(0), "0,00");
-  assert.equal(dinero(0.0671), "0,07");
-  assert.equal(dinero(12), "12,00");
+test("el dinero va con dos decimales, en el formato del idioma", () => {
+  assert.equal(dinero(1.29), "1.29");
+  assert.equal(dinero(0), "0.00");
+  assert.equal(dinero(0.0671), "0.07");
+  assert.equal(dinero(12), "12.00");
+  fijarIdioma("es");
+  try {
+    assert.equal(dinero(1.29), "1,29");
+  } finally {
+    olvidarIdioma();
+  }
 });
 
 test("los relojes: hh:mm:ss facturado y minutos de arranque", () => {
@@ -51,12 +58,12 @@ test("los relojes: hh:mm:ss facturado y minutos de arranque", () => {
 });
 
 test("con la GPU activa se enseña la tarifa REAL y el gasto de la instancia", () => {
-  assert.equal(textoCoste(base, 0.05, AHORA), "A10 · 1,29 $/h · 00:01:00 · 0,02 $ (sesión 0,05 $)");
+  assert.equal(textoCoste(base, 0.05, AHORA), "A10 · 1.29 $/h · 00:01:00 · 0.02 $ (session 0.05 $)");
 });
 
 test("la tarifa cambia con el tipo: un A100 no cuesta lo mismo que un A10", () => {
   const a100 = { ...base, tipo: "gpu_1x_a100_sxm4", precioHora: 1.99 };
-  assert.match(textoCoste(a100, 0, AHORA), /^A100 SXM4 · 1,99 \$\/h/);
+  assert.match(textoCoste(a100, 0, AHORA), /^A100 SXM4 · 1\.99 \$\/h/);
 });
 
 test("arrancando: reloj de arranque y aviso de que aún no factura", () => {
@@ -68,23 +75,31 @@ test("arrancando: reloj de arranque y aviso de que aún no factura", () => {
     arranque: "2026-10-23T20:07:26Z",
     gastado: 0,
   };
-  assert.equal(textoCoste(estado, 0.05, AHORA), "A10 arrancando · 2 min 34 s · aún sin facturar");
+  assert.equal(textoCoste(estado, 0.05, AHORA), "A10 starting · 2 min 34 s · not billing yet");
 });
 
 test("apagándose: se dice que se apaga, sin inventar cifras", () => {
   const estado: EstadoGpu = { ...base, fase: "apagandose", activo: false };
-  assert.equal(textoCoste(estado, 0.05, AHORA), "A10 apagándose…");
+  assert.equal(textoCoste(estado, 0.05, AHORA), "A10 shutting down…");
 });
 
 test("apagada no enseña ninguna tarifa (ésa era la queja)", () => {
   const estado: EstadoGpu = { ...base, fase: "apagada", activo: false, desde: null, gastado: 0 };
-  assert.equal(textoCoste(estado, 0, AHORA), "GPU apagada");
-  assert.equal(textoCoste(estado, 0.07, AHORA), "GPU apagada · sesión 0,07 $");
+  assert.equal(textoCoste(estado, 0, AHORA), "GPU off");
+  assert.equal(textoCoste(estado, 0.07, AHORA), "GPU off · session 0.07 $");
+  // Con ?lang=es, en español.
+  fijarIdioma("es");
+  try {
+    assert.equal(textoCoste(estado, 0.07, AHORA), "GPU apagada · sesión 0,07 $");
+    assert.equal(textoCoste({ ...base, fase: "apagandose", activo: false }, 0, AHORA), "A10 apagándose…");
+  } finally {
+    olvidarIdioma();
+  }
 });
 
 test("antiguos estados sin fase se deducen de `activo`", () => {
   const sinFase = { ...base, fase: undefined };
-  assert.match(textoCoste(sinFase, 0, AHORA), /^A10 · 1,29 \$\/h/);
+  assert.match(textoCoste(sinFase, 0, AHORA), /^A10 · 1\.29 \$\/h/);
 });
 
 test("el detalle nombra cada instancia con su tarifa", () => {
@@ -96,11 +111,18 @@ test("el detalle nombra cada instancia con su tarifa", () => {
     ],
   };
   const detalle = detalleCoste(estado, 0.12);
-  assert.match(detalle, /tarifa 1,29 \$\/hora \(A10\)/);
-  assert.match(detalle, /Esta sesión del navegador: 0,12 \$/);
-  assert.match(detalle, /gpu_1x_a10 · active · 1,29 \$\/h · 0,07 \$/);
-  // es-ES no separa los millares de cuatro cifras (RAE): 7882,67, no 7.882,67.
-  assert.match(detalle, /gpu_1x_a100_sxm4 · terminating · 1,99 \$\/h · 7882,67 \$/);
+  assert.match(detalle, /rate 1\.29 \$\/hour \(A10\)/);
+  assert.match(detalle, /This browser session: 0\.12 \$/);
+  assert.match(detalle, /gpu_1x_a10 · active · 1\.29 \$\/h · 0\.07 \$/);
+  assert.match(detalle, /gpu_1x_a100_sxm4 · terminating · 1\.99 \$\/h · 7,882\.67 \$/);
+  fijarIdioma("es");
+  try {
+    // es-ES no separa los millares de cuatro cifras (RAE): 7882,67, no 7.882,67.
+    assert.match(detalleCoste(estado, 0.12), /gpu_1x_a100_sxm4 · terminating · 1,99 \$\/h · 7882,67 \$/);
+    assert.match(detalleCoste(estado, 0.12), /tarifa 1,29 \$\/hora \(A10\)/);
+  } finally {
+    olvidarIdioma();
+  }
 });
 
 test("el estado del endpoint (snake_case) se normaliza sin NaN", () => {
@@ -124,7 +146,7 @@ test("el estado del endpoint (snake_case) se normaliza sin NaN", () => {
   // Y sin datos no se inventa tarifa.
   const vacio = normalizarEstadoGpu({ configurado: false });
   assert.equal(vacio.precioHora, 0);
-  assert.equal(textoCoste(vacio, 0, AHORA), "GPU apagada");
+  assert.equal(textoCoste(vacio, 0, AHORA), "GPU off");
 });
 
 test("sin señales sólo avisa pasados los segundos del umbral", () => {

@@ -7,6 +7,8 @@
  * mostrar.
  */
 
+import { locale, t } from "./i18n.ts";
+
 export type FaseGpu = "apagada" | "arrancando" | "activa" | "apagandose";
 
 export interface InstanciaGpu {
@@ -47,10 +49,10 @@ export function tipoCorto(tipo: string): string {
   return cuantas > 1 ? `${cuantas}× ${resto}` : resto;
 }
 
-/** "1,29" con coma decimal, dos decimales y separador de miles ("7.882,67"). */
+/** Dos decimales en el formato del idioma de la interfaz: "1.29" en inglés, "1,29" en español. */
 export function dinero(valor: number): string {
   const redondeado = Math.round(valor * 100) / 100;
-  return redondeado.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return redondeado.toLocaleString(locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 /** hh:mm:ss desde el instante dado (vacío si no hay instante). */
@@ -87,33 +89,36 @@ export function textoCoste(estado: EstadoGpu, totalSesion: number, ahora = Date.
   if (fase === "activa") {
     return (
       `${tipo} · ${dinero(estado.precioHora)} ${signo}/h · ${transcurrido(estado.desde, ahora)} · ` +
-      `${dinero(estado.gastado)} ${signo} (sesión ${dinero(totalSesion)} ${signo})`
+      `${dinero(estado.gastado)} ${signo} (${t("gpu.sesion", "session")} ${dinero(totalSesion)} ${signo})`
     );
   }
   if (fase === "arrancando") {
     const rato = minutosYsegundos(estado.arranque, ahora);
-    return `${tipo} arrancando${rato ? ` · ${rato}` : ""} · aún sin facturar`;
+    return `${tipo} ${t("gpu.arrancando", "starting")}${rato ? ` · ${rato}` : ""} · ${t("gpu.sinFacturar", "not billing yet")}`;
   }
   if (fase === "apagandose") {
     // Lo facturado de esa tanda ya no se sabe con exactitud cuando el proveedor
     // deja de contarla: se dice que se apaga, sin inventar cifras.
-    return `${tipo} apagándose…`;
+    return `${tipo} ${t("gpu.apagandose", "shutting down…")}`;
   }
   // Apagada: no hay tarifa que enseñar, sólo lo que se gastó en la sesión.
-  return totalSesion > 0 ? `GPU apagada · sesión ${dinero(totalSesion)} ${signo}` : "GPU apagada";
+  const apagada = t("gpu.apagada", "GPU off");
+  return totalSesion > 0 ? `${apagada} · ${t("gpu.sesion", "session")} ${dinero(totalSesion)} ${signo}` : apagada;
 }
 
 /** Tooltip: de dónde sale cada número. */
 export function detalleCoste(estado: EstadoGpu, totalSesion: number): string {
   const signo = simbolo(estado.moneda);
   const lineas = [
-    `Proveedor: ${estado.proveedor ?? "?"} · tarifa ${dinero(estado.precioHora)} ${signo}/hora (${tipoCorto(
-      estado.tipo ?? "",
-    )})`,
-    `Esta sesión del navegador: ${dinero(totalSesion)} ${signo}`,
+    `${t("gpu.proveedor", "Provider")}: ${estado.proveedor ?? "?"} · ${t("gpu.tarifa", "rate")} ${dinero(estado.precioHora)} ${signo}/${t(
+      "gpu.hora",
+      "hour",
+    )} (${tipoCorto(estado.tipo ?? "")})`,
+    `${t("gpu.sesionNavegador", "This browser session")}: ${dinero(totalSesion)} ${signo}`,
   ];
   for (const instancia of estado.instancias ?? []) {
-    const tarifa = instancia.precioHora !== undefined ? `${dinero(instancia.precioHora)} ${signo}/h` : "tarifa ?";
+    const tarifa =
+      instancia.precioHora !== undefined ? `${dinero(instancia.precioHora)} ${signo}/h` : `${t("gpu.tarifa", "rate")} ?`;
     lineas.push(
       `${instancia.tipo || "?"} · ${instancia.status} · ${tarifa} · ` +
         `${dinero(instancia.gastado ?? 0)} ${signo}`,
