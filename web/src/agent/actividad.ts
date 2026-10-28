@@ -19,9 +19,9 @@ export interface HerramientaAgrupada {
   fallos: number;
 }
 
-/** "12,4 s": un decimal y coma decimal, sin depender del ICU del sistema. */
+/** "12.4 s": one decimal and a dot, so it does not depend on the system ICU. */
 export function segundos(ms: number): string {
-  return `${(Math.max(0, ms) / 1000).toFixed(1).replace(".", ",")} s`;
+  return `${(Math.max(0, ms) / 1000).toFixed(1)} s`;
 }
 
 /**
@@ -62,21 +62,21 @@ const MAX_LISTADAS = 4;
 /**
  * Linea discreta para el final del historial:
  *
- *     2 paso(s) · 4 herramienta(s) · 42,1 s — ejecutar_python 38,5 s ×2 · leer_fichero 0,3 s
+ *     2 step(s) · 4 tool(s) · 42.1 s — ejecutar_python 38.5 s ×2 · leer_fichero 0.3 s
  *
  * Sin herramientas (el modelo solo hablo) devuelve solo la cabecera, sin raya.
  */
 export function lineaResumen(turno: ResumenTurno): string {
-  const cabecera = `${turno.pasos} paso(s) · ${turno.llamadas} herramienta(s) · ${segundos(turno.ms)}`;
+  const cabecera = `${turno.pasos} step(s) · ${turno.llamadas} tool(s) · ${segundos(turno.ms)}`;
   const agrupadas = agrupar(turno.herramientas);
   if (agrupadas.length === 0) return cabecera;
   const listadas = agrupadas.slice(0, MAX_LISTADAS).map((h) => {
     const veces = h.veces > 1 ? ` ×${h.veces}` : "";
-    const fallos = h.fallos > 0 ? ` ⚠${h.fallos} fallo(s)` : "";
+    const fallos = h.fallos > 0 ? ` ⚠${h.fallos} fail(s)` : "";
     return `${h.nombre} ${segundos(h.ms)}${veces}${fallos}`;
   });
   const resto = agrupadas.length - listadas.length;
-  if (resto > 0) listadas.push(`+${resto} más`);
+  if (resto > 0) listadas.push(`+${resto} more`);
   return `${cabecera} — ${listadas.join(" · ")}`;
 }
 
@@ -89,7 +89,7 @@ export function fraseBarra(
   msPaso: number | null,
   msTurno: number,
 ): string {
-  const turno = `turno ${reloj(msTurno)}`;
+  const turno = `turn ${reloj(msTurno)}`;
   if (msPaso === null) return `${pasoActual} · ${turno}`;
   return `${pasoActual} · ${reloj(msPaso)} · ${turno}`;
 }

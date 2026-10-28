@@ -183,7 +183,8 @@ function lista(partes: readonly string[], idioma: Idioma): string {
 }
 
 /** El mensaje para el chat. Corto: sólo lo que la persona ha decidido. */
-export function textoDeEncargo(e: Encargo, idioma: Idioma = "es", proyectoAbierto = ""): string {
+// El inglés es el idioma base: sin idioma explícito, el encargo sale en inglés.
+export function textoDeEncargo(e: Encargo, idioma: Idioma = "en", proyectoAbierto = ""): string {
   const es = idioma === "es";
   const tx = (a: string, b: string): string => (es ? a : b);
   const lineas: string[] = [];

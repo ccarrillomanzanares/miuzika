@@ -3,8 +3,8 @@ import test from "node:test";
 import { ENCARGO_VACIO, textoDeEncargo } from "./encargo.ts";
 
 test("un encargo vacío deja todo al agente", () => {
-  assert.equal(textoDeEncargo(ENCARGO_VACIO), "Una canción nueva, en un proyecto nuevo: ponle tú el nombre.");
-  assert.equal(textoDeEncargo({ ...ENCARGO_VACIO, nombre: " Rebeldía " }), "Una canción nueva, en un proyecto nuevo llamado «Rebeldía».");
+  assert.equal(textoDeEncargo(ENCARGO_VACIO, "es"), "Una canción nueva, en un proyecto nuevo: ponle tú el nombre.");
+  assert.equal(textoDeEncargo({ ...ENCARGO_VACIO, nombre: " Rebeldía " }, "es"), "Una canción nueva, en un proyecto nuevo llamado «Rebeldía».");
 });
 
 test("versión: a dónde se lleva, qué conserva y tempo relativo", () => {
@@ -24,7 +24,7 @@ test("versión: a dónde se lleva, qué conserva y tempo relativo", () => {
     evitar: "nada de sintes",
     entregaMidi: true,
     entregaWav: true,
-  });
+  }, "es");
   assert.equal(
     texto,
     [
@@ -46,7 +46,7 @@ test("versión sin conservar nada es sólo inspiración", () => {
     tipo: "version",
     cancion: "Smells Like Teen Spirit",
     conservar: { melodia: false, acordes: false, riff: false, estructura: false },
-  });
+  }, "es");
   assert.match(texto, /Sólo inspirada en ella: no copies su melodía ni sus acordes\./);
 });
 
@@ -64,7 +64,7 @@ test("nueva: uso, imagen, referencias, gancho, groove", () => {
     tonalidad: "otra",
     tonica: "D",
     modo: "minor",
-  });
+  }, "es");
   assert.equal(
     texto,
     [
@@ -86,4 +86,12 @@ test("en inglés y arreglando el proyecto abierto", () => {
     "Stahl",
   );
   assert.equal(texto, "Work on the open project (“Stahl”): don't create a new one.\nWhat to change: darker chorus.\nF# dorian.");
+});
+
+test("sin idioma, el encargo sale en inglés", () => {
+  assert.equal(textoDeEncargo(ENCARGO_VACIO), "A new song, in a new project: you name it.");
+  assert.equal(
+    textoDeEncargo({ ...ENCARGO_VACIO, nombre: " Rebeldía " }),
+    "A new song, in a new project called “Rebeldía”.",
+  );
 });

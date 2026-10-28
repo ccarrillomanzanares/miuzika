@@ -12,15 +12,15 @@ import {
 
 const paso = (nombre: string, ms: number, ok = true): PasoHerramienta => ({ nombre, ms, ok });
 
-test("segundos usa coma decimal y un solo decimal", () => {
-  assert.equal(segundos(0), "0,0 s");
-  assert.equal(segundos(940), "0,9 s");
-  assert.equal(segundos(42_140), "42,1 s");
-  assert.equal(segundos(1_234), "1,2 s");
+test("segundos usa punto decimal y un solo decimal", () => {
+  assert.equal(segundos(0), "0.0 s");
+  assert.equal(segundos(940), "0.9 s");
+  assert.equal(segundos(42_140), "42.1 s");
+  assert.equal(segundos(1_234), "1.2 s");
 });
 
 test("segundos no imprime tiempos negativos", () => {
-  assert.equal(segundos(-5), "0,0 s");
+  assert.equal(segundos(-5), "0.0 s");
 });
 
 test("agrupar suma por nombre y ordena por tiempo descendente", () => {
@@ -73,7 +73,7 @@ test("lineaResumen lleva cabecera, desglose y marca de veces", () => {
   });
   assert.equal(
     linea,
-    "2 paso(s) · 4 herramienta(s) · 42,1 s — ejecutar_python 38,0 s ×2 · verificar_audio 2,0 s · leer_fichero 0,3 s",
+    "2 step(s) · 4 tool(s) · 42.1 s — ejecutar_python 38.0 s ×2 · verificar_audio 2.0 s · leer_fichero 0.3 s",
   );
 });
 
@@ -84,12 +84,12 @@ test("lineaResumen avisa de los fallos de una herramienta", () => {
     ms: 3_000,
     herramientas: [paso("ejecutar_python", 1_000, false), paso("ejecutar_python", 1_000)],
   });
-  assert.match(linea, /ejecutar_python 2,0 s ×2 ⚠1 fallo\(s\)/);
+  assert.match(linea, /ejecutar_python 2\.0 s ×2 ⚠1 fail\(s\)/);
 });
 
 test("lineaResumen sin herramientas no deja raya colgando", () => {
   const linea = lineaResumen({ pasos: 1, llamadas: 0, ms: 1_500, herramientas: [] });
-  assert.equal(linea, "1 paso(s) · 0 herramienta(s) · 1,5 s");
+  assert.equal(linea, "1 step(s) · 0 tool(s) · 1.5 s");
 });
 
 test("lineaResumen nombra 4 y resume el resto con +N mas", () => {
@@ -106,22 +106,22 @@ test("lineaResumen nombra 4 y resume el resto con +N mas", () => {
       paso("f", 6_000),
     ],
   });
-  assert.match(linea, /— f 6,0 s · e 5,0 s · d 4,0 s · c 3,0 s · \+2 más$/);
+  assert.match(linea, /— f 6\.0 s · e 5\.0 s · d 4\.0 s · c 3\.0 s · \+2 more$/);
 });
 
 test("fraseBarra muestra el paso en curso y el reloj del turno", () => {
-  assert.equal(fraseBarra("Agente: pensando", null, 12_400), "Agente: pensando · turno 12 s");
+  assert.equal(fraseBarra("Agent: thinking", null, 12_400), "Agent: thinking · turn 12 s");
   assert.equal(
     fraseBarra("ejecutar_python(a.py)", 8_600, 41_000),
-    "ejecutar_python(a.py) · 9 s · turno 41 s",
+    "ejecutar_python(a.py) · 9 s · turn 41 s",
   );
   assert.equal(
     fraseBarra("ejecutando hacer_audio.py", 80_400, 612_000),
-    "ejecutando hacer_audio.py · 1:20 · turno 10:12",
+    "ejecutando hacer_audio.py · 1:20 · turn 10:12",
   );
 });
 
 test("pasoTerminado marca el visto bueno para no confundirlo con uno en curso", () => {
-  assert.equal(pasoTerminado("leer_fichero", 40), "✓ leer_fichero 0,0 s");
-  assert.equal(pasoTerminado("ejecutar_python", 38_500), "✓ ejecutar_python 38,5 s");
+  assert.equal(pasoTerminado("leer_fichero", 40), "✓ leer_fichero 0.0 s");
+  assert.equal(pasoTerminado("ejecutar_python", 38_500), "✓ ejecutar_python 38.5 s");
 });
