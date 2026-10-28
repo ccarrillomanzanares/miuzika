@@ -1,10 +1,62 @@
-/** Ejecutar un script de Python en este equipo, con tope de tiempo y cancelación. */
+/** Ejecutar un script de Python en este equipo, con tope de tiempo y cancelación, dentro de la caja. */
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { delimiter, resolve } from "node:path";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
+
+/** El lanzador que vigila los scripts del agente (ver su cabecera). Fuera de workspace/: el agente no lo puede editar. */
+export const CAJA = resolve(process.cwd(), "server", "python", "caja.py");
+
+/**
+ * Variables que necesita Python para arrancar en Windows y en el resto; nada más.
+ * Antes el script heredaba todo `process.env` del servidor, con lo que hubiera en
+ * él (tokens, claves de proveedores…).
+ */
+const VARIABLES_DE_SISTEMA = [
+  "PATH",
+  "PATHEXT",
+  "SYSTEMROOT",
+  "SYSTEMDRIVE",
+  "WINDIR",
+  "COMSPEC",
+  "TEMP",
+  "TMP",
+  "TMPDIR",
+  "HOME",
+  "USERPROFILE",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "APPDATA",
+  "LOCALAPPDATA",
+  "NUMBER_OF_PROCESSORS",
+  "PROCESSOR_ARCHITECTURE",
+  "LANG",
+  "LC_ALL",
+];
+
+export function entornoDeCaja(
+  base: NodeJS.ProcessEnv,
+  rutas: { motor: string; proyecto: string; repo: string; workspace: string },
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const clave of Object.keys(base)) {
+    // En Windows las variables no distinguen mayúsculas («Path», «SystemRoot»).
+    if (VARIABLES_DE_SISTEMA.includes(clave.toUpperCase())) env[clave] = base[clave];
+  }
+  return {
+    ...env,
+    PYTHONIOENCODING: "utf-8",
+    PYTHONUNBUFFERED: "1",
+    // `delimiter` (";" en Windows, ":" en el resto), no `sep`: con un PYTHONPATH
+    // previo, unirlo con "\\" o "/" dejaba una sola ruta rota.
+    PYTHONPATH: [rutas.motor, base.PYTHONPATH].filter(Boolean).join(delimiter),
+    MIUZIKA_ESCRIBIR: rutas.proyecto,
+    MIUZIKA_REPO: rutas.repo,
+    MIUZIKA_WORKSPACE: rutas.workspace,
+  };
+}
 
 export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
   const { anotar, ficheroHerramientas, carpetaTrabajo, interprete, responderJson, leerCuerpo, slugProyecto, carpetaProyecto, resolverEnTrabajo, escritosDesde } = ctx;
@@ -48,16 +100,14 @@ export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
       const motor = resolve(carpetaTrabajo, "codigo");
 
       const t0 = Date.now();
-      const hijo = spawn(interprete, ["-u", script, ...argumentos], {
+      const hijo = spawn(interprete, ["-u", CAJA, script, ...argumentos], {
         cwd: cwdProyecto,
-        env: {
-          ...process.env,
-          PYTHONIOENCODING: "utf-8",
-          PYTHONUNBUFFERED: "1",
-          // `delimiter` (";" en Windows, ":" en el resto), no `sep`: con un PYTHONPATH
-          // previo, unirlo con "\\" o "/" dejaba una sola ruta rota.
-          PYTHONPATH: [motor, process.env.PYTHONPATH].filter(Boolean).join(delimiter),
-        },
+        env: entornoDeCaja(process.env, {
+          motor,
+          proyecto: cwdProyecto,
+          repo: process.cwd(),
+          workspace: carpetaTrabajo,
+        }),
         // Grupo propio fuera de Windows: así `kill(-pid)` mata también a los nietos.
         detached: process.platform !== "win32",
       });
