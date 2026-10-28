@@ -156,10 +156,16 @@ def tv_filter(x, env_func, n=1024, hop=256, chunk=1024):
 
 # ---------------------------------------------------------------- utilidades
 def pan(x, p):
+    """Mono -> estéreo con ley de potencia constante. Si ya es estéreo (N, 2),
+    hace de balance: atenúa el lado contrario sin volver a duplicar canales.
+    (Medido el 28-oct: con un bus estéreo devolvía (N, 2, 2) y la mezcla moría.)"""
     p = float(np.clip(p, -1.0, 1.0))
     l = np.cos((p + 1.0) * np.pi / 4.0)
     r = np.sin((p + 1.0) * np.pi / 4.0)
     x = np.asarray(x, float)
+    if x.ndim == 2:
+        k = np.sqrt(2.0)
+        return np.stack([x[:, 0] * min(1.0, l * k), x[:, 1] * min(1.0, r * k)], axis=1)
     return np.stack([x * l, x * r], axis=1)
 
 def soft_clip(x, drive=2.0):
@@ -200,10 +206,17 @@ def reverb_ir(dur=2.5, decay=0.55, seed=1, lp_hz=6000.0):
     return ir
 
 def reverb(x, ir):
-    return fftconvolve(np.asarray(x, float), ir)
+    """Convolución con la respuesta `ir`. Acepta mono o estéreo (N, 2): cada canal
+    por separado. (Con estéreo antes pedía una FFT de 64 GiB.)"""
+    x = np.asarray(x, float)
+    if x.ndim == 2:
+        return np.stack([fftconvolve(x[:, c], ir) for c in range(x.shape[1])], axis=1)
+    return fftconvolve(x, ir)
 
 def delay(x, time_s, fb=0.35, mix=0.3, taps=5, lp_hz=4000.0):
     x = np.asarray(x, float)
+    if x.ndim == 2:  # estéreo: cada canal por separado
+        return np.stack([delay(x[:, c], time_s, fb, mix, taps, lp_hz) for c in range(x.shape[1])], axis=1)
     d = int(time_s * SR)
     out = np.zeros(len(x) + d * taps)
     out[:len(x)] += x

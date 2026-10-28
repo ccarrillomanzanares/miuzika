@@ -1489,29 +1489,38 @@ function escrituraDe(args: Record<string, unknown>): PeticionEscritura {
 }
 
 /** Resumen de una llamada, para ensenarlo en el chat. */
+/**
+ * Lo que se ve en la barra mientras corre una herramienta, en palabras: «ejecutando
+ * hacer_audio.py». Medido el 28-oct: con «ejecutar_python(proyectos/stahl/…)» un
+ * render de 2,5 minutos parecía el modelo pensando.
+ */
 export function resumenLlamada(nombre: string, argumentosJson: string): string {
   try {
     const args = JSON.parse(argumentosJson === "" ? "{}" : argumentosJson) as Record<string, unknown>;
+    const fichero = String(args.path ?? "").split("/").pop() || String(args.path ?? "");
     if (nombre === "escribir_fichero") {
-      return `${nombre}(${String(args.path)}, ${String(args.contenido ?? "").length} chars)`;
+      return `escribiendo ${fichero} (${String(args.contenido ?? "").length} caracteres)`;
     }
     if (nombre === "ejecutar_python") {
-      const extra = args.argumentos ? ` ${JSON.stringify(args.argumentos)}` : "";
-      const gpu = args.destino === "lambda" ? "@lambda" : "";
-      return `${nombre}${gpu}(${String(args.path)}${extra})`;
+      const extra = Array.isArray(args.argumentos) && args.argumentos.length > 0 ? ` ${args.argumentos.join(" ")}` : "";
+      const gpu = args.destino === "lambda" ? " @lambda en la GPU" : "";
+      return `ejecutando ${fichero}${extra}${gpu}`;
     }
-    if (nombre === "leer_fichero") return `${nombre}(${String(args.path)})`;
-    if (nombre === "editar_fichero") return `${nombre}(${String(args.path)}, ${String(args.busca).length} chars)`;
-    if (nombre === "verificar_audio") return `${nombre}(${String(args.path)})`;
+    if (nombre === "leer_fichero") return `leyendo ${fichero}`;
+    if (nombre === "editar_fichero") return `editando ${fichero}`;
+    if (nombre === "verificar_audio") return `escuchando ${fichero}`;
     if (nombre === "ajustar_pistas") {
       const n = Array.isArray(args.pistas) ? (args.pistas as unknown[]).length : 0;
-      return `${nombre}(${n} pista(s))`;
+      return `ajustando ${n} pista(s)`;
     }
     if (nombre === "anadir_pistas") {
       const m = Array.isArray(args.midis) ? (args.midis as unknown[]).length : 0;
       const w = Array.isArray(args.wavs) ? (args.wavs as unknown[]).length : 0;
-      return `${nombre}(${m} midi, ${w} wav)`;
+      return `añadiendo pistas (${m} midi, ${w} wav)`;
     }
+    if (nombre === "usar_instrumento") return `cargando ${String(args.sfz ?? "el instrumento")}`;
+    if (nombre === "buscar_web") return `buscando en internet «${String(args.consulta ?? "").slice(0, 60)}»`;
+    if (nombre === "leer_web") return `leyendo ${String(args.url ?? "una página")}`;
     return nombre;
   } catch {
     return nombre;

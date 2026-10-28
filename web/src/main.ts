@@ -150,6 +150,9 @@ function avisoDeEspera(): string {
     return `GPU arrancando${rato ? ` ${rato}` : ""} · aún no factura`;
   }
   if (/@lambda/.test(pasoActual) && gpu?.fase === "activa") return "GPU ejecutando · sin salida todavía";
+  // Un script en este equipo no manda señales hasta que acaba: un render de 2,5 min
+  // salía como «⚠ sin señales» y parecía colgado. Su reloj ya dice cuánto lleva.
+  if (pasoDesde !== null && /^ejecutando /.test(pasoActual)) return "";
   const callado = sinSenales(ultimoEventoMs);
   return callado > 0 ? `⚠ sin señales hace ${callado} s` : "";
 }

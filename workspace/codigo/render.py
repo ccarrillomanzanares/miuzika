@@ -5,7 +5,11 @@ Aquí **no hay canción**: ni tempo, ni compases, ni estructura. Son las piezas 
 sirven para cualquier tema:
 
     log, pcm_bytes, riff_header, StemWriter, write_wav,
-    env_fn, place, reverb_st, actividad, midi_add
+    env_fn, place, reverb_st, actividad, midi_add,
+    a_nivel (pico a -6 dBFS), stem (renderiza un stem sólo si ha cambiado)
+
+Mono y estéreo: `place`, `dsp.pan`, `dsp.reverb`, `dsp.delay` y los filtros
+aceptan las dos formas, (N,) y (N, 2).
 
 La obra que las usa (sus datos, sus `gen_*` y su master) vive en
 `workspace/obras/<slug>/`, fuera del motor: el agente no debe ver una canción
@@ -14,6 +18,9 @@ concreta como si fuera API.
 Nota de tiempo: `reverb()` devuelve len(x) + len(ir) - 1, así que `reverb_st`
 recorta la cola; sin eso la mezcla no suma (smoke.py lo comprueba).
 """
+import hashlib
+import inspect
+import os
 import struct
 import time
 
@@ -75,10 +82,20 @@ class StemWriter:
         self.f.close()
 
 
-def write_wav(path, x, width=3):
+def write_wav(path, x, width=3, pico_db=-1.0):
+    """Escribe un WAV estéreo. Si la señal pasa de 0 dBFS, la baja a `pico_db`
+    y lo avisa: un WAV entero no guarda nada por encima de 0 dBFS y antes se
+    recortaba en silencio (medido el 28-oct: guitarras a +13 dBFS, ya rotas).
+    Los instrumentos del motor salen calientes (bombo +4, guitarra +5,6 dBFS):
+    el nivel se decide en la mezcla, con `a_nivel` o con ganancia."""
     x = np.asarray(x, np.float32)
     if x.ndim == 1:
         x = np.stack([x, x], axis=1)
+    pico = float(np.max(np.abs(x))) if x.size else 0.0
+    if pico > 1.0:
+        x = x * np.float32(10 ** (pico_db / 20.0) / pico)
+        print(f"write_wav: {os.path.basename(path)} llegaba a {20 * np.log10(pico):+.1f} dBFS; "
+              f"bajado a {pico_db:.0f} dBFS para no recortar", flush=True)
     data = pcm_bytes(x, width)
     with open(path, 'wb') as f:
         f.write(riff_header(SR, 2, width, len(data)))
@@ -86,6 +103,58 @@ def write_wav(path, x, width=3):
 
 
 # ------------------------------------------------------------------ utilidades
+def a_nivel(x, pico_db=-6.0):
+    """La señal con su pico en `pico_db` (por defecto -6 dBFS: margen para sumar)."""
+    x = np.asarray(x, np.float32)
+    pico = float(np.max(np.abs(x))) if x.size else 0.0
+    if pico <= 0.0:
+        return x
+    return x * np.float32(10 ** (pico_db / 20.0) / pico)
+
+
+def _huella(fn, claves):
+    """Huella de lo que decide un stem: el código de `fn` y los datos que use."""
+    try:
+        codigo = inspect.getsource(fn)
+    except (OSError, TypeError):
+        codigo = getattr(fn, "__qualname__", repr(fn))
+    h = hashlib.sha1(codigo.encode("utf-8"))
+    for clave in claves:
+        h.update(repr(clave).encode("utf-8"))
+    return h.hexdigest()[:16]
+
+
+def stem(ruta, fn, *claves, pico_db=None):
+    """Renderiza un stem SOLO si ha cambiado: si `ruta` existe y la huella del
+    código de `fn` y de `claves` (las notas, los parámetros…) es la misma que la
+    última vez, no se recalcula. Devuelve True si lo ha renderizado.
+
+        R.stem("salida/bajo.wav", p_bajo, P.BAJO, P.BPM)
+
+    Medido el 28-oct: cada arreglo de un script de 10 stems volvía a calcularlos
+    todos (2,5 min por intento); con esto sólo se rehace lo que se ha tocado.
+    Ojo: lo que `fn` lee de otros módulos (una partitura, un instrumento) tiene
+    que ir en `claves`, o un cambio ahí no se nota.
+    """
+    marca = ruta + ".huella"
+    huella = _huella(fn, claves)
+    if os.path.exists(ruta) and os.path.exists(marca):
+        with open(marca, encoding="utf-8") as f:
+            if f.read().strip() == huella:
+                print(f"stem: {os.path.basename(ruta)} sin cambios (no se recalcula)", flush=True)
+                return False
+    t0 = time.time()
+    y = fn()
+    if pico_db is not None:
+        y = a_nivel(y, pico_db)
+    os.makedirs(os.path.dirname(ruta) or ".", exist_ok=True)
+    write_wav(ruta, y)
+    with open(marca, "w", encoding="utf-8") as f:
+        f.write(huella)
+    print(f"stem: {os.path.basename(ruta)} renderizado en {time.time() - t0:.1f} s", flush=True)
+    return True
+
+
 def env_fn(pts):
     xs = np.array([p[0] for p in pts], float)
     ys = np.array([p[1] for p in pts], float)
@@ -93,8 +162,23 @@ def env_fn(pts):
 
 
 def place(dst, sig, t, gain=1.0, panp=0.0):
+    """Suma `sig` (mono o estéreo) en `dst` a partir de `t` segundos. `dst` puede
+    ser un bus estéreo (N, 2), donde lo mono se panea con `panp`, o mono (N,),
+    donde lo estéreo se reduce a mono. (Antes un bus mono reventaba.)"""
     s = int(round(t * SR))
     sig = np.asarray(sig, np.float32)
+    if dst.ndim == 1:
+        if s >= len(dst):
+            return
+        if sig.ndim == 2:
+            sig = sig.mean(axis=1)
+        if s < 0:
+            sig = sig[-s:]
+            s = 0
+        n = min(len(sig), len(dst) - s)
+        if n > 0:
+            dst[s:s + n] += sig[:n] * gain
+        return
     if s >= len(dst):
         return
     if s < 0:

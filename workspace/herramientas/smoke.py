@@ -54,6 +54,22 @@ def main() -> int:
         if not np.all(np.isfinite(mezcla)) or float(np.max(np.abs(mezcla))) < 0.01:
             print("FALLO: reverb_st devuelve señal vacia o con NaN/inf")
             return 1
+        # Mono y estéreo valen en todas partes (28-oct: un bus estéreo en pan,
+        # reverb o un bus mono en place tumbaron cuatro renders seguidos).
+        corto = estereo[:4000]
+        for nombre, salida, forma in (
+            ("dsp.pan(estéreo)", dsp.pan(corto, 0.5), (4000, 2)),
+            ("dsp.reverb(estéreo)", dsp.reverb(corto, ir)[:4000], (4000, 2)),
+            ("dsp.delay(estéreo)", dsp.delay(corto, 0.05), (4000, 2)),
+        ):
+            if np.asarray(salida).shape != forma:
+                print(f"FALLO: {nombre} devuelve {np.asarray(salida).shape}, se esperaba {forma}")
+                return 1
+        bus_mono = np.zeros(4000, np.float32)
+        render.place(bus_mono, corto, 0.0)
+        if float(np.max(np.abs(bus_mono))) < 0.01:
+            print("FALLO: render.place no suma en un bus mono")
+            return 1
         print(f"smoke OK: kick {len(x)} muestras, rms={rms:.4f}, pico={pico:.4f}, A3={hz:.2f}Hz")
         print("modulos importados: dsp, instruments, midi, render")
         return 0

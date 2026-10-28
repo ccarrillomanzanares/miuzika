@@ -89,10 +89,16 @@ export function fraseBarra(
   msPaso: number | null,
   msTurno: number,
 ): string {
-  const turno = `turno ${Math.round(Math.max(0, msTurno) / 1000)} s`;
+  const turno = `turno ${reloj(msTurno)}`;
   if (msPaso === null) return `${pasoActual} · ${turno}`;
-  const paso = `${Math.round(Math.max(0, msPaso) / 1000)} s`;
-  return `${pasoActual} · ${paso} · ${turno}`;
+  return `${pasoActual} · ${reloj(msPaso)} · ${turno}`;
+}
+
+/** «8 s» por debajo del minuto; «1:20» desde el minuto (un render largo se lee mejor). */
+export function reloj(ms: number): string {
+  const total = Math.round(Math.max(0, ms) / 1000);
+  if (total < 60) return `${total} s`;
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
 /**

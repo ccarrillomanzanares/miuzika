@@ -115,6 +115,10 @@ test("fraseBarra muestra el paso en curso y el reloj del turno", () => {
     fraseBarra("ejecutar_python(a.py)", 8_600, 41_000),
     "ejecutar_python(a.py) · 9 s · turno 41 s",
   );
+  assert.equal(
+    fraseBarra("ejecutando hacer_audio.py", 80_400, 612_000),
+    "ejecutando hacer_audio.py · 1:20 · turno 10:12",
+  );
 });
 
 test("pasoTerminado marca el visto bueno para no confundirlo con uno en curso", () => {
