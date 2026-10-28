@@ -22,7 +22,7 @@ No hay base de datos, ni servidor de producción, ni nube propia. Lo que hay:
 | API + ejecución de Python | **servidor de desarrollo de Vite** (plugin `server/api.ts`) | el mismo proceso |
 | motor numpy | tu portátil, un proceso por script | el servidor |
 | motor torch (GPU) | instancia Lambda Cloud (SSH/SCP) | el servidor, con tu clave |
-| LLM | Ollama Cloud, vía proxy del servidor | el navegador |
+| LLM | el proveedor elegido en «Modelos» (Ollama Cloud por defecto), vía proxy del servidor | el navegador |
 
 Consecuencia que hay que tener presente: **no hay nada desplegado**. Todo esto vive
 dentro de `npm run dev`. Si Vite no corre, no hay app.
@@ -60,7 +60,7 @@ dentro de `npm run dev`. Si Vite no corre, no hay app.
 │               lee cuerpos con tope, escribe logs                              │
 │  api/         ficheros · proyectos · audio · catalogo · voces · gpu · python │
 │  lambda.ts    encender, sincronizar por scp, ejecutar, traer, apagar         │
-│  (vite.config.ts sólo monta el plugin y el proxy /api/llm con la clave)      │
+│  (vite.config.ts sólo monta el plugin; /api/llm va por api/proveedores.ts)  │
 └──────────┬──────────────────────────────────────────────┬────────────────────┘
            │ spawn python -u                              │ ssh / scp
 ┌──────────▼───────────────────────────┐   ┌──────────────▼─────────────────────┐
@@ -239,7 +239,8 @@ Todos son middlewares del servidor de desarrollo, uno o varios por módulo de
 
 | ruta | método | qué hace | quién la llama |
 |---|---|---|---|
-| `/api/llm/*` | proxy | reescribe a Ollama y pone la clave | `llm.ts` |
+| `/api/llm/*` | proxy | `v1/…` al proveedor activo con su clave; `api/…` (búsqueda web) a Ollama Cloud | `llm.ts` |
+| `/api/proveedores` | GET, POST | proveedores, clave (nunca de vuelta), modelo; `/modelos`, `/probar` | `ajustes-modelos.ts` |
 | `/api/agent-log` | POST | una línea por petición en `tmp/llm.log` | `llm.ts` |
 | `/api/build` | GET | id del código servido (aviso de bundle viejo) | `build.ts` |
 | `/api/fs/write` | POST | escribe en workspace; 409 si duplica el motor o es `patch*.py` | `escribir_fichero` |

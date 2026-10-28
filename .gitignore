@@ -4,6 +4,8 @@ tmp/
 dist-web/
 *.log
 .env
+# Claves de los proveedores de modelos (menú «Modelos»)
+.miuzika/
 .dist/
 __pycache__/
 *.pyc

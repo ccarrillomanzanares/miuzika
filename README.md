@@ -31,7 +31,7 @@ npm run dev          # http://localhost:5173  (no 127.0.0.1: el origen importa)
 `.env` (sólo lo lee el servidor; el navegador nunca ve las claves):
 
 ```text
-OLLAMA_API_KEY=...            # el LLM, vía el proxy /api/llm
+OLLAMA_API_KEY=...            # Ollama Cloud (y la búsqueda web); otros proveedores y claves, en el menú «Modelos»
 OLLAMA_BASE_URL=https://ollama.com
 # Opcional, GPU en Lambda Cloud:
 LAMBDA_API_KEY=...  LAMBDA_SSH_KEY=...  LAMBDA_SSH_KEY_NAME=...  LAMBDA_SSH_USER=ubuntu

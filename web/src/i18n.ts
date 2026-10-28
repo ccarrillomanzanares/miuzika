@@ -36,6 +36,8 @@ const EN: Diccionario = {
   "sonidos.placeholder": "short kick, snare, dirty china…",
   "sonidos.ayuda": "Search in English or Spanish: «snare», «hi-hat», «crash cymbal» and character (short, dry, bright).",
   "strudel.title": "Write a Strudel pattern and render it to WAV",
+  modelos: "Models",
+  "modelos.title": "The agent's provider and model (keys included)",
   "pad.title": "Play the laptop touchpad (keys, pads or sliding) and record it to a track",
   chat: "Chat",
   "chat.title": "Show or hide the agent chat",

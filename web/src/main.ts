@@ -43,7 +43,8 @@ import { initChat } from "./chat.ts";
 import { initCosteGpu } from "./gpu-coste.ts";
 import { minutosYsegundos, sinSenales } from "./gpu-texto.ts";
 import { vigilarVersion } from "./build.ts";
-import { getModel, health, listModels, setModel } from "./llm.ts";
+import { cargarConfigLlm, getModel, health, listModels, setModel } from "./llm.ts";
+import { AjustesModelos } from "./ajustes-modelos.ts";
 import type { ChatMessage } from "./llm.ts";
 import { ejecutarAgente } from "./agent/agent.ts";
 import {
@@ -1136,6 +1137,13 @@ $("sel-solo").addEventListener("click", () => toggleTracksFlag(selectedTrackIds,
 $("sel-delete").addEventListener("click", deleteSelectedTracks);
 $("sel-all").addEventListener("click", () => timeline.selectAll());
 $("sel-clear").addEventListener("click", () => timeline.clearSelection());
+
+// Menú «Modelos»: proveedor, clave y modelo del agente (server/api/proveedores.ts).
+void cargarConfigLlm();
+const ajustesModelos = new AjustesModelos((proveedor, modelo) =>
+  addMessage("system", `El agente usará ${modelo} (${proveedor}) desde el próximo turno.`),
+);
+$<HTMLButtonElement>("ajustes-modelos").addEventListener("click", () => void ajustesModelos.abrir());
 
 // El botón «Encargo» del chat: un formulario que escribe el mensaje (no lo envía).
 const formularioEncargo = new FormularioEncargo({

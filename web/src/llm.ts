@@ -1,9 +1,9 @@
 /**
- * Acceso al LLM (Ollama Cloud) desde el navegador.
+ * Acceso al LLM desde el navegador.
  *
- * No maneja credenciales: todo pasa por `/api/llm`, el proxy del servidor de
- * Vite, que inyecta la clave leyéndola del `.env`. Así la clave nunca entra en
- * el bundle del cliente. El modelo es intercambiable en caliente.
+ * No maneja credenciales: todo pasa por `/api/llm`, el proxy del servidor
+ * (server/api/proveedores.ts), que lo reenvía al proveedor elegido en el menú
+ * «Modelos» con su clave. Así ninguna clave entra en el bundle del cliente.
  */
 
 export type ChatRole = "system" | "user" | "assistant" | "tool";
@@ -117,37 +117,53 @@ function registrarTurno(registro: Record<string, unknown>): void {
   }
 }
 
-const MODEL_KEY = "miuzika.llm.model";
-
-/** Modelo por defecto (el mismo que se usa en el escritorio de Hermes). */
+/** Modelo por defecto si el servidor todavía no ha dicho cuál (Ollama Cloud). */
 export const DEFAULT_MODEL = "deepseek-v4.1-flash:1017";
 
+/** Proveedor y modelo activos: los guarda el servidor (menú «Modelos»). */
+let activo: { proveedor: string; modelo: string } | null = null;
+
+/** Lee del servidor qué proveedor y qué modelo usa el agente. */
+export async function cargarConfigLlm(): Promise<{ proveedor: string; modelo: string }> {
+  try {
+    const datos = (await (await fetch("/api/proveedores")).json()) as { activo?: string; modelo?: string };
+    activo = { proveedor: datos.activo ?? "ollama-cloud", modelo: datos.modelo || DEFAULT_MODEL };
+  } catch {
+    activo ??= { proveedor: "ollama-cloud", modelo: DEFAULT_MODEL };
+  }
+  return activo;
+}
+
+/** El menú «Modelos» avisa aquí al cambiar de proveedor o de modelo. */
+export function fijarActivo(proveedor: string, modelo: string): void {
+  activo = { proveedor, modelo };
+}
+
+export function getProveedor(): string {
+  return activo?.proveedor ?? "ollama-cloud";
+}
+
 export function getModel(): string {
-  try {
-    return localStorage.getItem(MODEL_KEY) || DEFAULT_MODEL;
-  } catch {
-    return DEFAULT_MODEL;
-  }
+  return activo?.modelo || DEFAULT_MODEL;
 }
 
-/** Cambia el modelo del agente sin tocar código (se recuerda entre sesiones). */
+/** Cambia el modelo del proveedor activo (se guarda en el servidor). */
 export function setModel(model: string): void {
-  try {
-    localStorage.setItem(MODEL_KEY, model.trim() || DEFAULT_MODEL);
-  } catch {
-    /* sin persistencia */
-  }
+  const proveedor = getProveedor();
+  fijarActivo(proveedor, model.trim() || DEFAULT_MODEL);
+  void fetch("/api/proveedores", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accion: "activar", id: proveedor, modelo: getModel() }),
+  }).catch(() => undefined);
 }
 
-/** Modelos disponibles en la cuenta (endpoint nativo de Ollama). */
+/** Modelos que ofrece el proveedor activo. */
 export async function listModels(signal?: AbortSignal): Promise<string[]> {
-  const res = await fetch(`${LLM_BASE}/api/tags`, { signal });
-  if (!res.ok) throw new Error(`/api/llm/api/tags -> HTTP ${res.status}`);
-  const data = (await res.json()) as { models?: { name?: string; model?: string }[] };
-  return (data.models ?? [])
-    .map((m) => m.name ?? m.model ?? "")
-    .filter((n) => n !== "")
-    .sort();
+  const res = await fetch(`/api/proveedores/modelos?id=${encodeURIComponent(getProveedor())}`, { signal });
+  const datos = (await res.json()) as { ok?: boolean; modelos?: string[]; error?: string };
+  if (!datos.ok) throw new Error(datos.error ?? `HTTP ${res.status}`);
+  return datos.modelos ?? [];
 }
 
 export interface Health {

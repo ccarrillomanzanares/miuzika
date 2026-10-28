@@ -1176,3 +1176,108 @@ button.active {
   font-size: 12px;
   color: var(--muted);
 }
+
+/* ── Modelos (proveedor, clave y modelo del agente) ───────────────────────── */
+.dialogo-modelos {
+  width: min(760px, 94vw);
+}
+
+.modelos-actual {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.modelos {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  gap: 16px;
+}
+
+.modelos-lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modelos-lista button {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+}
+
+.modelos-lista button.activo {
+  border-color: var(--accent);
+}
+
+.modelos-lista small {
+  color: var(--muted);
+}
+
+.modelos-detalle h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.modelos-detalle label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.modelos-detalle input {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #0f1117;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.modelos-detalle .fila-modelo {
+  display: flex;
+  gap: 8px;
+}
+
+.modelos-detalle .fila-modelo input {
+  flex: 1;
+  min-width: 0;
+}
+
+.modelos-detalle .ayuda {
+  margin: 2px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.modelos-mensaje {
+  min-height: 1.2em;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.modelos-mensaje.error {
+  color: var(--accent);
+}
+
+.modelos-detalle .primario {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.nota-busqueda {
+  margin-top: 12px !important;
+}
+
+@media (max-width: 600px) {
+  .modelos {
+    grid-template-columns: 1fr;
+  }
+}
