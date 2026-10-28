@@ -49,32 +49,46 @@ anterior, humseed, está en la rama `humseed`). En el portátil, la carpeta sigu
 - `sfz2sf2.py` escribe SF2 válidos (antes TODOS los instrumentos VCSL sonaban en
   silencio: EOP/EOI y rangos mal escritos) y caben en el navegador (≤ 40 MB).
 
+**Hecho el 28-oct por la tarde** (un commit por punto, con su porqué):
+- La conversación del agente sin proyecto se guarda en `proyectos/sin-proyecto/agente.json`.
+- «Hard»: el Steinway ya estaba; quitados los 2 compases de silencio (todo empieza en
+  el compás 1, 46 compases). Copia de antes en `hard/versiones/…_antes-de-quitar-…`.
+- `escuchar_mezcla`: renderiza con openDAW la mezcla y cada pista sola y da el RMS por
+  tramos cruzado con las notas (MUDO = notas sin señal). `src/core/escucha.ts`.
+- Efectos en unidades reales (`cutoffHz`, `timeMs`, `thresholdDb`…; EQ con frecuencias).
+  Los proyectos viejos se migran al abrirse y suenan igual (las pruebas lo fijan).
+- Buses y envíos: `add_bus`, `set_bus`, `remove_bus`, `set_send`; los efectos de un bus
+  con `add_device` sobre su nombre. En openDAW: AudioBusBox + unidad «aux» + AuxSendBox.
+  La interfaz aún no dibuja los buses (sólo los ve el agente en `leer_proyecto`).
+- WAV largos: entran en openDAW mientras quepan en 400 MB decodificados
+  (`PRESUPUESTO_DECODIFICADO_MB`); sólo el resto va por `<audio>`.
+- El Python del agente corre en `server/python/caja.py`: escribe sólo en su proyecto,
+  no lee claves, sin procesos, red ni ctypes; entorno mínimo. Guardarraíl, no jaula.
+- Contador de la GPU en inglés (español con `?lang=es`).
+
 ## 2. Pendiente de comprobar en el navegador (Carlos)
 
-Nada de esto se ha podido oír desde la sesión anterior:
+Nada de esto se ha podido oír desde las sesiones anteriores:
 1. **El Steinway y la biblioteca VCSL suenan** (regenerados en «Hard» y «Stairway»).
 2. **Lo del compás 1 suena** con la espera de carga del Play.
 3. **`exportar` WAV** (OfflineEngineRenderer) y MIDI.
 4. **«Models» → Probar** con Ollama Cloud de verdad (el proxy sólo se probó contra un
    servidor simulado).
 5. **El pad** en el portátil: que arranque la captura, suene y grabe.
+6. **`escuchar_mezcla`** sobre «Hard»: que la tabla salga y cuadre con lo que se oye.
+7. **Un bus** con reverb y envíos: que la cola se oiga (el `.odw` carga, pero no se ha oído).
+8. **Un proyecto con stems largos** (p. ej. «hurt-instrumental»): que abra y la memoria
+   aguante con el presupuesto de 400 MB.
+9. **Hablar con el agente sin proyecto**, F5, y que la conversación siga ahí.
 
 ## 3. Pendiente de hacer
 
-1. La conversación del agente **se pierde si no hay proyecto abierto** (sólo se
-   guarda en `proyectos/<c>/agente.json`). Guardarla en `sin-proyecto` o similar.
-2. En «Hard»: volver a poner el Steinway en el piano y quitar los 2 compases de
-   silencio que añadió el agente como parche.
-3. **Unidades reales en los efectos** (Hz, dB, ms) y buses/envíos.
-4. **WAV largos** (> 30 s) fuera del mezclador de openDAW (van por `<audio>`).
-5. **Aislamiento** del Python del agente (corre con los permisos de Carlos).
-6. Textos de coste de la GPU (`gpu-texto.ts`) siguen en español; la GPU está apagada.
-7. El agente aún tiende a diagnosticar «de oído» con su propio render numpy, que no
-   es lo que suena en openDAW: valorar darle una herramienta que mida el WAV de
-   `exportar`.
+1. Dibujar los buses y los envíos en la interfaz (mezclador).
+2. Si la caja de Python se queda corta: otro usuario de Windows o un contenedor. Los
+   scripts de la GPU (Lambda) no pasan por la caja.
 
 ## 4. Cómo empezar
 
-1. `npm run typecheck` y `npm run test:unit` (160 pruebas en verde el 28-oct).
+1. `npm run typecheck` y `npm run test:unit` (186 pruebas en verde el 28-oct por la tarde; `npm test` añade el contrato con openDAW).
 2. `python workspace/herramientas/smoke.py`.
 3. `npm run dev` y repasar la lista de la sección 2 con Carlos.
