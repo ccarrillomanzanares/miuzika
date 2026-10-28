@@ -435,13 +435,42 @@ export async function renderizarMezcla(
 ): Promise<{ sampleRate: number; canales: Float32Array[] }> {
   const { project, core, Option } = await montarProyecto(source, audioAssets, soundfonts, gm);
   const { DefaultObservableValue } = await import("@opendaw/lib-std");
+  const { loopArea } = project.timelineBox;
+  const conBucle = loopArea.enabled.getValue();
   try {
-    const audio = await core.OfflineEngineRenderer.start(project, Option.None as never, new DefaultObservableValue(0));
+    // No `OfflineEngineRenderer.start`: deja de renderizar tras 10 s de silencio
+    // (por debajo de −72 dB) una vez ha sonado algo. Medido el 28-oct en «Hard»: el
+    // piano solo tenía 17 s sin notas (compases 17-24) y todo lo de después salía
+    // MUDO en `escuchar_mezcla`; el agente gastó ~40 pasos buscando clips rotos. Un
+    // parón largo en la canción cortaría igual el WAV exportado. Aquí se renderiza
+    // hasta el final del último clip, más una cola para reverbs y delays.
+    project.boxGraph.beginTransaction();
+    loopArea.enabled.setValue(false);
+    project.boxGraph.endTransaction();
+    const fin = project.lastRegionAction();
+    const segundos = project.tempoMap.intervalToSeconds(0, fin) + COLA_RENDER_SEG;
+    const renderer = await core.OfflineEngineRenderer.create(project, Option.None as never);
+    const audio = await renderer.render(
+      { maxDurationSeconds: segundos, silenceDurationSeconds: segundos },
+      0,
+      fin,
+      new DefaultObservableValue(0),
+    );
     return { sampleRate: audio.sampleRate, canales: [...audio.frames] as Float32Array[] };
   } finally {
+    project.boxGraph.beginTransaction();
+    loopArea.enabled.setValue(conBucle);
+    project.boxGraph.endTransaction();
     project.terminate();
   }
 }
+
+/**
+ * Segundos que se siguen renderizando tras el último clip: las colas de reverb y
+ * delay. El silencio del final se recorta igual (el motor deja 0,25 s), así que no
+ * alarga el WAV si no hay cola. `start` daba 30 s; con 10 caben las reverbs largas.
+ */
+const COLA_RENDER_SEG = 10;
 
 /**
  * Espera a que el motor haya cargado todo lo que ha pedido (samples y SoundFonts).
