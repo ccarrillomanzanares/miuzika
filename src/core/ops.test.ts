@@ -284,3 +284,27 @@ test("buses: una reverb compartida con envíos, efectos en el bus y borrado limp
   assert.throws(() => applyOps(project, [{ op: "set_send", trackId: "Voz", busId: "Delay", levelDb: -6 }]), /No encuentro el bus "Delay"/);
   assert.throws(() => applyOps(project, [{ op: "add_bus", name: "Voz" }]), /Ya hay una pista llamada "Voz"/);
 });
+
+test("los parámetros sueltos de un dispositivo se aplican, no se pierden (lo que pasó en «Hard» el 28-oct)", () => {
+  // Las ops tal cual las mandó el modelo: parámetros al lado de `type`, sin `params`.
+  const conPad = applyOps(baseProject(), [{ op: "add_track", id: "trk_pad", name: "Pad", instrument: { type: "pad" } }]).project;
+  const { project } = applyOps(conPad, [
+    { op: "add_device", trackId: "trk_pad", device: { type: "compressor", thresholdDb: -20, ratio: 3.5, attackMs: 8, releaseMs: 120 } },
+    { op: "add_device", trackId: "trk_pad", device: { type: "eq", low: -3, mid: 2, high: -2 } },
+    { op: "add_bus", id: "bus_verb", name: "Reverb", devices: [{ type: "reverb", wet: 1, decay: 0.62, preDelayMs: 40, damping: 0.45 }] },
+    { op: "add_device", trackId: "trk_pad", device: { type: "delay", timeMs: 300, params: { feedback: 0.4 } } },
+  ]);
+  const [compresor, eq, delay] = project.tracks[0]!.devices;
+  assert.deepEqual(compresor!.params, { thresholdDb: -20, ratio: 3.5, attackMs: 8, releaseMs: 120 });
+  assert.equal(eq!.params.low, -3);
+  assert.equal(eq!.params.mid, 2);
+  assert.equal(eq!.params.high, -2);
+  assert.equal(delay!.params.timeMs, 300, "sueltos y `params` juntos");
+  assert.equal(delay!.params.feedback, 0.4);
+  assert.deepEqual(project.buses![0]!.devices[0]!.params, { wet: 1, decay: 0.62, preDelayMs: 40, damping: 0.45 });
+  // Un nombre suelto que no existe da error, igual que dentro de `params`.
+  assert.throws(
+    () => applyOps(conPad, [{ op: "add_device", trackId: "trk_pad", device: { type: "compressor", threshold: -20 } }]),
+    /Ahora se llama "thresholdDb"/,
+  );
+});

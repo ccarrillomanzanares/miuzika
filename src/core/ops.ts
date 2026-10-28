@@ -123,19 +123,37 @@ const RemoveClipOp = z.object({
   clipId: IdSchema,
 });
 
+/**
+ * Un dispositivo: «"reverb"», «{type, params}» o con los parámetros sueltos
+ * («{type:"compressor", thresholdDb:-20}»).
+ * - «"reverb"» vale igual que «{type:"reverb"}»: el modelo lo escribe así a menudo
+ *   (medido el 27-oct: tres add_device seguidos rechazados por eso).
+ * - Los parámetros sueltos se pasan a `params`: antes zod los tiraba sin avisar y el
+ *   dispositivo se quedaba con los valores por defecto (medido el 28-oct en «Hard»:
+ *   dos compresores, un EQ y la reverb de un bus, todos sin lo que pidió el modelo).
+ *   Un nombre que no existe da error en `coerceParams`, no se pierde.
+ */
+const DeviceInput = z.preprocess(
+  (valor) => {
+    if (typeof valor === "string") return { type: valor.trim().toLowerCase() };
+    if (!valor || typeof valor !== "object" || Array.isArray(valor)) return valor;
+    // id y name son etiquetas, no parámetros: si el modelo las pone aquí, se ignoran.
+    const { type, params, id: _id, name: _name, ...sueltos } = valor as Record<string, unknown>;
+    if (Object.keys(sueltos).length === 0) return valor;
+    const juntos = params && typeof params === "object" && !Array.isArray(params) ? { ...sueltos, ...params } : sueltos;
+    return { type, params: juntos };
+  },
+  z.object({
+    type: z.enum(DEVICE_TYPES),
+    params: z.record(z.string(), ParamValueSchema).optional(),
+  }),
+);
+
 const AddDeviceOp = z.object({
   op: z.literal("add_device"),
   trackId: IdSchema.describe("Pista o bus (id o nombre)"),
   id: IdSchema.optional(),
-  // «"reverb"» vale igual que «{type:"reverb"}»: el modelo lo escribe así a menudo
-  // (medido el 27-oct: tres add_device seguidos rechazados por eso).
-  device: z.preprocess(
-    (valor) => (typeof valor === "string" ? { type: valor.trim().toLowerCase() } : valor),
-    z.object({
-      type: z.enum(DEVICE_TYPES),
-      params: z.record(z.string(), ParamValueSchema).optional(),
-    }),
-  ),
+  device: DeviceInput,
 });
 
 const SetDeviceOp = z.object({
@@ -150,14 +168,6 @@ const RemoveDeviceOp = z.object({
   trackId: IdSchema.describe("Pista o bus (id o nombre)"),
   deviceId: IdSchema,
 });
-
-const DeviceInput = z.preprocess(
-  (valor) => (typeof valor === "string" ? { type: valor.trim().toLowerCase() } : valor),
-  z.object({
-    type: z.enum(DEVICE_TYPES),
-    params: z.record(z.string(), ParamValueSchema).optional(),
-  }),
-);
 
 /** Bus auxiliar con sus efectos («reverb» o {type, params}); las pistas le mandan señal con set_send. */
 const AddBusOp = z.object({
