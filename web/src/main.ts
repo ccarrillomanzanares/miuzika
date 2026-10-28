@@ -61,6 +61,8 @@ import { CARPETA_VERSIONES, nombreDeVersion } from "../../src/core/versiones.ts"
 import { ejecutarHerramienta } from "./agent/tools.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 import { PanelPad } from "./pad.ts";
+import { audioBufferToWav } from "./wav.ts";
+import { midiDeProyecto } from "../../src/core/midi-export.ts";
 import { locale, traducirPagina } from "./i18n.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -152,7 +154,7 @@ function avisoDeEspera(): string {
   if (/@lambda/.test(pasoActual) && gpu?.fase === "activa") return "GPU ejecutando · sin salida todavía";
   // Un script en este equipo no manda señales hasta que acaba: un render de 2,5 min
   // salía como «⚠ sin señales» y parecía colgado. Su reloj ya dice cuánto lleva.
-  if (pasoDesde !== null && /^ejecutando /.test(pasoActual)) return "";
+  if (pasoDesde !== null && /^(ejecutando|exportando) /.test(pasoActual)) return "";
   const callado = sinSenales(ultimoEventoMs);
   return callado > 0 ? `⚠ sin señales hace ${callado} s` : "";
 }
@@ -1144,11 +1146,64 @@ setAbrirEncargo(() => void formularioEncargo.abrir());
 
 // Las herramientas del agente que tocan el proyecto (agent/acciones.ts) trabajan
 // sobre ESTA pestaña a través de un contrato pequeño.
+/**
+ * Exportación del encargo: el proyecto a MIDI y/o la mezcla a WAV, en
+ * `proyectos/<carpeta>/salida/`. El WAV lo renderiza el mismo motor que el Play.
+ */
+async function exportarProyecto(formatos: { midi: boolean; wav: boolean }): Promise<{ ok: boolean; texto: string }> {
+  const view = project;
+  if (!view) return { ok: false, texto: "No hay proyecto abierto." };
+  const slug = slugDeProyecto(view);
+  const hechos: string[] = [];
+  try {
+    if (formatos.midi) {
+      const bytes = midiDeProyecto(view);
+      const fichero = new File([bytes as unknown as BlobPart], `${slug}.mid`, { type: "audio/midi" });
+      const { path } = await subirAudio(fichero, slug, "salida");
+      const pistas = view.tracks.filter((t) => t.kind === "midi").length;
+      hechos.push(`MIDI: proyectos/${slug}/${path} (${pistas} pista(s), ${view.bpm} BPM).`);
+    }
+    if (formatos.wav) {
+      const { faltan } = await hidratarAssets(view, slug);
+      warnMissingAudio(faltan);
+      const paraEngine = new Map<string, { name: string; buffer: AudioBuffer }>();
+      for (const [id, asset] of audioAssets) {
+        if (asset.buffer) paraEngine.set(id, { name: asset.name, buffer: asset.buffer });
+      }
+      const soundfonts = await cargarSoundfontsDelProyecto(view);
+      const gm = await cargarGm(view);
+      const { renderizarMezcla } = await import("./opendaw-engine.ts");
+      const mezcla = await renderizarMezcla(view, paraEngine, soundfonts, gm);
+      const canales = mezcla.canales.slice(0, 2);
+      if (canales.length === 0 || canales[0]!.length === 0) throw new Error("el render salió vacío");
+      const buffer = new AudioBuffer({ length: canales[0]!.length, numberOfChannels: canales.length, sampleRate: mezcla.sampleRate });
+      canales.forEach((datos, i) => buffer.copyToChannel(datos as Float32Array<ArrayBuffer>, i));
+      let pico = 0;
+      for (const datos of canales) for (let i = 0; i < datos.length; i += 1) pico = Math.max(pico, Math.abs(datos[i]!));
+      const fichero = new File([audioBufferToWav(buffer)], `${slug}.wav`, { type: "audio/wav" });
+      const { path } = await subirAudio(fichero, slug, "salida");
+      const segundos = buffer.length / buffer.sampleRate;
+      const picoDb = pico > 0 ? 20 * Math.log10(pico) : -Infinity;
+      hechos.push(
+        `WAV: proyectos/${slug}/${path} (${Math.floor(segundos / 60)}:${String(Math.round(segundos % 60)).padStart(2, "0")}, ` +
+          `pico ${picoDb.toFixed(1)} dBFS${pico > 1 ? " — RECORTA: baja el master" : ""}).`,
+      );
+    }
+    return { ok: true, texto: hechos.join("\n") || "No se ha pedido ningún formato." };
+  } catch (error) {
+    return {
+      ok: false,
+      texto: `${hechos.join("\n")}${hechos.length ? "\n" : ""}No se pudo exportar: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
 const acciones = crearAcciones({
   proyecto: () => project,
   fijar: (siguiente) => setProject(siguiente),
   enVivo: (siguiente) => commitLive(siguiente),
   avisar: (texto) => addMessage("system", texto),
+  exportar: exportarProyecto,
 });
 registrarAcciones(acciones);
 

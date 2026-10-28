@@ -105,3 +105,21 @@ visto bueno del usuario:
   sólo si la persona la permite.
 
 Tamaño: 4.979 caracteres.
+
+## v4 (28-oct): termina la canción y no pregunta el formato
+
+Huella `e65881d8` → `0eaa1767` (5.010 caracteres). Con el visto bueno del usuario («adelante con las
+propuestas»). Medido en «Hard»: el agente escribía la intro y la primera estrofa
+(24 de 104 compases), paraba y preguntaba «¿MIDI, WAV o los dos?». Las dos cosas
+salían del propio prompt: «UNA sección por turno» y «ANTES DE ENTREGAR, PREGUNTA».
+
+- «construye ya la primera sección, o el tema entero si es corto. Después, UNA
+  sección por turno, diciendo qué queda» → «construye la canción ENTERA, sección a
+  sección. Termina la canción entera en el turno; no pares a preguntar a mitad.»
+  (El tope del turno son 80 pasos.)
+- «ANTES DE ENTREGAR, PREGUNTA: (a) MIDI, WAV o los dos…; (b) si un stem queda 12
+  dB por debajo…» → «El resultado queda en el proyecto: no preguntes por MIDI o WAV
+  si no te lo piden. Si el encargo los pide, al terminar usa exportar(midi, wav).
+  Si un stem queda 12 dB por debajo de la mediana, dilo.» El formato se elige en el
+  formulario del encargo (MIDI, WAV o los dos) y la herramienta nueva `exportar` lo
+  hace sin scripts.

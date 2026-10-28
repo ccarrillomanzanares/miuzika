@@ -98,12 +98,14 @@ export class PanelPad {
 
     q<HTMLButtonElement>("[data-cerrar]").addEventListener("click", () => this.cerrar());
     this.dialogo.addEventListener("close", () => this.alCerrar());
-    this.dialogo.addEventListener("cancel", (evento) => {
-      // Esc con el pad armado lo suelta; sin armar, cierra el panel.
-      if (this.armado) {
-        evento.preventDefault();
-        void this.armar(false);
-      }
+    // El panel no es modal (se sigue viendo la timeline), así que Esc no llega como
+    // «cancel» del diálogo: se escucha en la página. Con el pad armado lo suelta;
+    // sin armar, cierra el panel.
+    document.addEventListener("keydown", (evento) => {
+      if (evento.key !== "Escape" || !this.dialogo.open) return;
+      evento.preventDefault();
+      if (this.armado) void this.armar(false);
+      else this.cerrar();
     });
     this.lienzo.addEventListener("pointerdown", () => {
       if (!this.armado) void this.armar(true);

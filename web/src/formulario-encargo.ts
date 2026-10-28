@@ -219,6 +219,12 @@ export class FormularioEncargo {
 
         ${fila(tx("Evitar", "Avoid"), `<input name="evitar" placeholder="${tx("nada alegre, sin batería hasta el estribillo…", "nothing happy, no drums until the chorus…")}">`)}
         ${fila(tx("Más", "More"), `<textarea name="mas" rows="2" placeholder="${tx("cualquier otra cosa…", "anything else…")}"></textarea>`)}
+        ${fila(
+          tx("Entrega", "Delivery"),
+          `<span class="nota">${tx("en el proyecto, y además:", "in the project, and also:")}</span>
+           <label class="opcion"><input type="checkbox" name="e-midi"> MIDI</label>
+           <label class="opcion"><input type="checkbox" name="e-wav"> WAV</label>`,
+        )}
 
         <div class="dialogo-acciones">
           <button type="button" data-cerrar>${tx("Cancelar", "Cancel")}</button>
@@ -352,6 +358,8 @@ export class FormularioEncargo {
         forma: valor("forma"),
         evitar: valor("evitar"),
         mas: valor("mas"),
+        entregaMidi: valor("e-midi") !== "",
+        entregaWav: valor("e-wav") !== "",
       };
       this.deps.escribir(textoDeEncargo(encargo, idioma(), project?.name ?? ""));
       this.dialogo.close();

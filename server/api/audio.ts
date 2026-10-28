@@ -36,17 +36,20 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
         return;
       }
       try {
-        const carpeta = resolve(carpetaProyecto(slug), "entrada");
+        // `carpeta=salida`: una exportación del proyecto (MIDI o WAV del encargo),
+        // que se sobrescribe; lo demás es material que entra y nunca pisa nada.
+        const salida = url.searchParams.get("carpeta") === "salida";
+        const carpeta = resolve(carpetaProyecto(slug), salida ? "salida" : "entrada");
         mkdirSync(carpeta, { recursive: true });
         let destino = resolve(carpeta, base);
         let copia = 2;
-        while (existsSync(destino)) {
+        while (!salida && existsSync(destino)) {
           destino = resolve(carpeta, base.replace(/(\.[^.]+)$/, `_${copia++}$1`));
         }
         writeFileSync(destino, datos);
         responderJson(res, 200, {
           ok: true,
-          path: `entrada/${basename(destino)}`,
+          path: `${salida ? "salida" : "entrada"}/${basename(destino)}`,
           bytes: datos.length,
           slug,
         });

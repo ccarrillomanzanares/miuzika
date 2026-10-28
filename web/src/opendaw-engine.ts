@@ -51,7 +51,7 @@ async function bootEngine(): Promise<EngineBoot> {
   if (bootStore.__miuzikaOpenDawBoot) return bootStore.__miuzikaOpenDawBoot;
   const boot = (async (): Promise<EngineBoot> => {
     const [
-      { Project, AudioWorklets, Workers, GlobalSoundfontLoaderManager },
+      { Project, AudioWorklets, Workers, GlobalSoundfontLoaderManager, OfflineEngineRenderer },
       { WasmEngine },
       { AnimationFrame },
       { UUID, Option },
@@ -83,7 +83,7 @@ async function bootEngine(): Promise<EngineBoot> {
     }
     return {
       context,
-      core: { Project, AudioWorklets, Workers, GlobalSoundfontLoaderManager } as typeof import("@opendaw/studio-core"),
+      core: { Project, AudioWorklets, Workers, GlobalSoundfontLoaderManager, OfflineEngineRenderer } as typeof import("@opendaw/studio-core"),
       UUID,
       Option,
       AudioData,
@@ -253,14 +253,18 @@ async function prepareSamples(
  * Carga el IR en un Project de openDAW y lo reproduce.
  * `onTick` recibe el beat actual para mover el playhead.
  */
-export async function playWithOpenDaw(
+type SoundfontEntrada = { uuid: Uint8Array; name: string; bytes: ArrayBuffer };
+
+/**
+ * El proyecto de miuzika montado como Project de openDAW, con sus samples y
+ * SoundFonts. Lo comparten la reproducción y la exportación a WAV.
+ */
+async function montarProyecto(
   source: MiuzikaProject,
-  onTick: (beat: number) => void,
-  audioAssets: ReadonlyMap<string, OpenDawAudioInput> = new Map(),
-  soundfonts: ReadonlyMap<string, { uuid: Uint8Array; name: string; bytes: ArrayBuffer }> = new Map(),
-  gm: { uuid: Uint8Array; name: string; bytes: ArrayBuffer } | null = null,
-  opciones: OpcionesOpenDaw = {},
-): Promise<OpenDawPlaybackHandle> {
+  audioAssets: ReadonlyMap<string, OpenDawAudioInput>,
+  soundfonts: ReadonlyMap<string, SoundfontEntrada>,
+  gm: SoundfontEntrada | null,
+) {
   const { context, core, UUID, Option, AudioData } = await bootEngine();
   const hasDrums = source.tracks.some((track) => track.instrument.type === "drumkit");
   const prepared = await prepareSamples(
@@ -333,6 +337,18 @@ export async function playWithOpenDaw(
       },
     );
   }
+  return { project, context, core, Option };
+}
+
+export async function playWithOpenDaw(
+  source: MiuzikaProject,
+  onTick: (beat: number) => void,
+  audioAssets: ReadonlyMap<string, OpenDawAudioInput> = new Map(),
+  soundfonts: ReadonlyMap<string, { uuid: Uint8Array; name: string; bytes: ArrayBuffer }> = new Map(),
+  gm: { uuid: Uint8Array; name: string; bytes: ArrayBuffer } | null = null,
+  opciones: OpcionesOpenDaw = {},
+): Promise<OpenDawPlaybackHandle> {
+  const { project, context } = await montarProyecto(source, audioAssets, soundfonts, gm);
   const units = new Map(
     project.rootBoxAdapter.audioUnits.adapters().map((unit) => [unit.label, unit] as const),
   );
@@ -351,6 +367,11 @@ export async function playWithOpenDaw(
   const worklet = project.startAudioWorklet();
   await worklet.isReady();
   await context.resume();
+  // El motor pide los samples y los SoundFonts DESPUÉS de montar el proyecto, y
+  // tarda en tenerlos (un Steinway son 40 MB). Si se arranca antes, lo que suena
+  // al principio sale en silencio: medido el 28-oct, el primer acorde del pad y el
+  // piano de la intro no se oían y lo de más adelante sí.
+  await esperarCarga(project.engine);
   // Sin esto, un mute/solo/volumen puesto en parado se pierde: syncMix solo
   // corria cuando se cambiaba algo con el transporte ya sonando.
   syncMix(source);
@@ -400,6 +421,42 @@ export async function playWithOpenDaw(
   };
 }
 
+
+/**
+ * La mezcla entera renderizada con el motor de openDAW, sin reproducirla: es la
+ * exportación «WAV» del encargo, y suena igual que el Play (mismos instrumentos,
+ * efectos y mezcla). Los stems largos que van por streaming no entran.
+ */
+export async function renderizarMezcla(
+  source: MiuzikaProject,
+  audioAssets: ReadonlyMap<string, OpenDawAudioInput> = new Map(),
+  soundfonts: ReadonlyMap<string, SoundfontEntrada> = new Map(),
+  gm: SoundfontEntrada | null = null,
+): Promise<{ sampleRate: number; canales: Float32Array[] }> {
+  const { project, core, Option } = await montarProyecto(source, audioAssets, soundfonts, gm);
+  const { DefaultObservableValue } = await import("@opendaw/lib-std");
+  try {
+    const audio = await core.OfflineEngineRenderer.start(project, Option.None as never, new DefaultObservableValue(0));
+    return { sampleRate: audio.sampleRate, canales: [...audio.frames] as Float32Array[] };
+  } finally {
+    project.terminate();
+  }
+}
+
+/**
+ * Espera a que el motor haya cargado todo lo que ha pedido (samples y SoundFonts).
+ * `queryLoadingComplete` sólo ve lo ya pedido, y las peticiones salen cuando el
+ * worklet procesa el proyecto: por eso se pregunta varias veces, con un respiro.
+ * Con tope: si algo no carga nunca, se reproduce igual a los 20 s.
+ */
+async function esperarCarga(engine: { queryLoadingComplete(): Promise<boolean> }, topeMs = 20_000): Promise<void> {
+  const fin = Date.now() + topeMs;
+  const pausa = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+  for (let vuelta = 0; vuelta < 4 && Date.now() < fin; vuelta += 1) {
+    await pausa(vuelta === 0 ? 60 : 40);
+    await Promise.race([engine.queryLoadingComplete().catch(() => true), pausa(Math.max(0, fin - Date.now()))]);
+  }
+}
 
 /**
  * Gestor de SoundFonts propio, sin pasar por el almacén de openDAW.

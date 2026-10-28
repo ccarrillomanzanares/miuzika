@@ -6,6 +6,21 @@ import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 import { CARPETA_VERSIONES, versionesSobrantes } from "../../src/core/versiones.ts";
 
+/** Módulos que un script del proyecto no puede tapar: los de la biblioteca estándar
+ * que se usan de verdad, numpy/scipy y los del motor. */
+const MODULOS_PROTEGIDOS = new Set(
+  (
+    "abc argparse array ast asyncio base64 bisect builtins bz2 calendar cmath code codecs collections colorsys " +
+    "concurrent contextlib copy csv ctypes dataclasses datetime decimal difflib dis email enum fractions functools " +
+    "gc glob gzip hashlib heapq hmac html http importlib inspect io itertools json locale logging lzma math " +
+    "multiprocessing numbers operator os pathlib pickle platform pprint queue random re secrets select shutil " +
+    "signal socket sqlite3 ssl statistics string struct subprocess sys tempfile textwrap threading time timeit " +
+    "token tokenize traceback types typing unittest urllib uuid warnings wave weakref xml zipfile zlib " +
+    "numpy scipy " +
+    "dsp instruments render midi voces motor_gpu voces_gpu"
+  ).split(" "),
+);
+
 export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
   const { anotar, registrarTurno, ficheroHerramientas, carpetaTrabajo, responderJson, leerCuerpo, idDeBuild, arranqueServidor, slugProyecto, resolverEnTrabajo, MAX_LISTADO, listarTrabajo, correr, MOTOR, esDeCodigo, esDeGpu, smokeOTeReverto } = ctx;
 
@@ -57,6 +72,19 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
           responderJson(res, 409, {
             error:
               "No se permiten scripts de parche (patch*/parche*). Usa editar_fichero(path, busca, reemplaza): reemplazo exacto, atomico y verificado.",
+          });
+          return;
+        }
+
+        // (1c) un script con nombre de módulo tapa ese módulo para todo lo que se
+        // ejecute en su carpeta (Python pone la carpeta del script la primera en
+        // sys.path). Medido el 28-oct: un inspect.py de diagnóstico rompió numpy.
+        if (nuevo && nombre.endsWith(".py") && !esDeCodigo(datos.path) && MODULOS_PROTEGIDOS.has(nombre.slice(0, -3).toLowerCase())) {
+          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "nombre de módulo" }));
+          responderJson(res, 409, {
+            error:
+              `«${nombre}» se llama como un módulo de Python o del motor y lo taparía (numpy, el motor y tus ` +
+              `scripts dejarían de importarlo). Ponle otro nombre: p. ej. «mi_${nombre}».`,
           });
           return;
         }

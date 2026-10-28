@@ -52,8 +52,14 @@ export async function guardarProyectoEnDisco(ruta: string, contenido: string): P
  * Copia un audio del navegador a `proyectos/<slug>/entrada/`. Devuelve la ruta
  * relativa ("entrada/kick.wav") con la que el fichero maestro lo referencia.
  */
-export async function subirAudio(file: File, slug: string): Promise<{ path: string; bytes: number }> {
-  const url = `/api/audio/subir?slug=${encodeURIComponent(slug)}&nombre=${encodeURIComponent(file.name)}`;
+export async function subirAudio(
+  file: File,
+  slug: string,
+  carpeta: "entrada" | "salida" = "entrada",
+): Promise<{ path: string; bytes: number }> {
+  const url =
+    `/api/audio/subir?slug=${encodeURIComponent(slug)}&nombre=${encodeURIComponent(file.name)}` +
+    (carpeta === "salida" ? "&carpeta=salida" : "");
   const datos = await pedirJson(url, {
     method: "POST",
     headers: { "Content-Type": "application/octet-stream" },

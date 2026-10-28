@@ -70,6 +70,9 @@ export interface Encargo {
   forma: string;
   evitar: string;
   mas: string;
+  /** Además de dejarlo en el proyecto, exportarlo (se pueden pedir los dos). */
+  entregaMidi: boolean;
+  entregaWav: boolean;
 }
 
 export const ENCARGO_VACIO: Encargo = {
@@ -96,6 +99,8 @@ export const ENCARGO_VACIO: Encargo = {
   forma: "",
   evitar: "",
   mas: "",
+  entregaMidi: false,
+  entregaWav: false,
 };
 
 /** Tónicas que ofrece el formulario, con su nombre en cada idioma. */
@@ -325,6 +330,16 @@ export function textoDeEncargo(e: Encargo, idioma: Idioma = "es", proyectoAbiert
   if (evitar) lineas.push(tx(`Evita: ${frase(evitar)}`, `Avoid: ${frase(evitar)}`));
   const mas = e.mas.trim();
   if (mas) lineas.push(mas);
+
+  const formatos = [e.entregaMidi ? "MIDI" : "", e.entregaWav ? "WAV" : ""].filter(Boolean);
+  if (formatos.length > 0) {
+    lineas.push(
+      tx(
+        `Entrega: cuando esté terminada, expórtala en ${lista(formatos, "es")}.`,
+        `Delivery: when it's finished, export it as ${lista(formatos, "en")}.`,
+      ),
+    );
+  }
 
   return lineas.join("\n");
 }

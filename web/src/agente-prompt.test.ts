@@ -25,7 +25,8 @@ test("las reglas duras siguen en el texto", () => {
   const texto = promptDelSistema();
   for (const regla of [
     "compases=N",
-    "ANTES DE ENTREGAR, PREGUNTA",
+    "no preguntes por MIDI o WAV",
+    "exportar(midi, wav)",
     "medir_referencia",
     "usar_instrumento",
     "DINERO",
@@ -37,7 +38,8 @@ test("las reglas duras siguen en el texto", () => {
     // 27-oct: el agente compone en el proyecto, por secciones y en el idioma de cada uno.
     "leer_proyecto",
     "escribir_progresion",
-    "UNA sección por turno",
+    // 28-oct (v4): termina la canción en el turno y no pregunta el formato de entrega.
+    "Termina la canción entera en el turno",
     "IDIOMA",
     // 27-oct (v3): arranca construyendo, compone con sentido y en notación compacta.
     "HAZ, NO PREGUNTES",

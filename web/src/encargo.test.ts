@@ -22,6 +22,8 @@ test("versión: a dónde se lleva, qué conserva y tempo relativo", () => {
     voz: "melodia",
     energia: "crece",
     evitar: "nada de sintes",
+    entregaMidi: true,
+    entregaWav: true,
   });
   assert.equal(
     texto,
@@ -33,6 +35,7 @@ test("versión: a dónde se lleva, qué conserva y tempo relativo", () => {
       "Sin voz: la melodía la lleva el violonchelo.",
       "Energía: que crezca hasta el final.",
       "Evita: nada de sintes.",
+      "Entrega: cuando esté terminada, expórtala en MIDI y WAV.",
     ].join("\n"),
   );
 });

@@ -231,6 +231,7 @@ export interface PeticionNotas extends PeticionEscritura {
 export interface PeticionBateriaPista extends PeticionBateria, PeticionEscritura {}
 
 export interface AccionesEstudio {
+  exportar(peticion: { midi: boolean; wav: boolean }): Promise<ResultadoAccion>;
   versiones(peticion: { accion: string; version?: string; pistas?: string[] }): Promise<ResultadoAccion>;
   leerProyecto(peticion: { clipId?: string }): ResultadoAccion;
   editarProyecto(peticion: { ops: unknown[] }): ResultadoAccion;
@@ -265,6 +266,7 @@ function acciones(): AccionesEstudio | null {
 
 /** Herramientas que se resuelven en la pestaña, contra el proyecto abierto. */
 const HERRAMIENTAS_DEL_PROYECTO = new Set([
+  "exportar",
   "versiones",
   "leer_proyecto",
   "editar_proyecto",
@@ -317,6 +319,25 @@ export const HERRAMIENTAS: ToolSpec[] = [
         type: "object",
         properties: {
           clip: { type: "string", description: "Opcional: id de un clip (clp_3) para ver sus notas" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "exportar",
+      description:
+        "Exporta el proyecto a salida/: midi=true escribe un .mid con una pista por pista MIDI " +
+        "(tempo, compás, programas GM, batería en el canal 10); wav=true renderiza la mezcla con el " +
+        "mismo motor que el Play (instrumentos, efectos, volúmenes) a un .wav. Úsalo sólo si el " +
+        "encargo pide MIDI o WAV; si no, el resultado es el propio proyecto. No escribas scripts " +
+        "para exportar.",
+      parameters: {
+        type: "object",
+        properties: {
+          midi: { type: "boolean" },
+          wav: { type: "boolean" },
         },
       },
     },
@@ -569,7 +590,9 @@ export const HERRAMIENTAS: ToolSpec[] = [
         "Ejecuta con Python un script que ya este en workspace/ ('codigo/render.py') y " +
         "devuelve su salida, sus errores y el codigo de salida. El directorio de trabajo " +
         "del proceso es la carpeta del proyecto y hay numpy disponible. Para trabajos largos " +
-        "sube timeout_segundos (por defecto 300, maximo 1800). Con destino='lambda' el MISMO " +
+        "sube timeout_segundos (por defecto 300, maximo 1800). Si el script renderiza varios " +
+        "stems, escribe cada uno con render.stem(ruta, funcion, datos...): al corregir algo y " +
+        "volver a ejecutar, sólo se recalcula lo que ha cambiado. Con destino='lambda' el MISMO " +
         "script corre en una GPU de Lambda Cloud (la primera vez tarda ~3 min en arrancar la " +
         "maquina); los ficheros que escriba en salida/ vuelven solos al proyecto local.",
       parameters: {
@@ -1292,6 +1315,8 @@ async function ejecutarCrudo(
         });
         return local.ajustarPistas({ pistas });
       }
+      case "exportar":
+        return await local.exportar({ midi: args.midi === true, wav: args.wav === true });
       case "versiones":
         return await local.versiones({
           accion: String(args.accion ?? "listar"),
@@ -1521,6 +1546,7 @@ export function resumenLlamada(nombre: string, argumentosJson: string): string {
       return `añadiendo pistas (${m} midi, ${w} wav)`;
     }
     if (nombre === "usar_instrumento") return `cargando ${String(args.sfz ?? "el instrumento")}`;
+    if (nombre === "exportar") return `exportando ${[args.midi === true ? "MIDI" : "", args.wav === true ? "WAV" : ""].filter(Boolean).join(" y ")}`;
     if (nombre === "buscar_web") return `buscando en internet «${String(args.consulta ?? "").slice(0, 60)}»`;
     if (nombre === "leer_web") return `leyendo ${String(args.url ?? "una página")}`;
     return nombre;

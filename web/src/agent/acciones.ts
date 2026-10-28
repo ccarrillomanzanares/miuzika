@@ -61,6 +61,8 @@ export interface Estudio {
   enVivo(siguiente: Project): void;
   /** Aviso en el chat para la persona (no para el modelo). */
   avisar(texto: string): void;
+  /** Exporta el proyecto a MIDI y/o la mezcla a WAV en salida/. */
+  exportar?(formatos: { midi: boolean; wav: boolean }): Promise<ResultadoAccion>;
 }
 
 /** Nombre de proyecto a partir del fichero entregado (salida/sacramento_multitrack.mid -> sacramento). */
@@ -1109,7 +1111,14 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     }
   }
 
+  async function exportar(peticion: { midi: boolean; wav: boolean }): Promise<ResultadoAccion> {
+    if (!e.exportar) return { ok: false, texto: "Esta pestaña no sabe exportar." };
+    if (!peticion.midi && !peticion.wav) return { ok: false, texto: "Pide midi, wav o los dos." };
+    return e.exportar(peticion);
+  }
+
   return {
+    exportar,
     versiones,
     leerProyecto,
     editarProyecto,
