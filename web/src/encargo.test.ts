@@ -6,36 +6,80 @@ test("un encargo vacío deja todo al agente", () => {
   assert.equal(textoDeEncargo(ENCARGO_VACIO), "Una canción nueva, en un proyecto nuevo.");
 });
 
-test("una versión con todo rellenado sale corta y en orden", () => {
+test("versión: a dónde se lleva, qué conserva y tempo relativo", () => {
   const texto = textoDeEncargo({
     ...ENCARGO_VACIO,
     tipo: "version",
     cancion: "Hurt – Nine Inch Nails",
-    estilo: "dark synth pop, atmósfera fría",
-    bpm: 80,
-    tonica: "B",
-    modo: "minor",
-    minutos: 3,
-    instrumentos: ["Grand Piano, Steinway B", "Violonchelo"],
+    estilo: "música de cine, piano y cuerdas",
+    conservar: { melodia: true, acordes: true, riff: false, estructura: true },
+    tempo: "original",
+    tonalidad: "original",
+    minutos: 4,
+    instrumentos: ["Grand Piano, Steinway B", "Cuerdas", "Violonchelo"],
+    melodiaLaLleva: "el violonchelo",
     voz: "melodia",
-    evitar: "nada alegre",
-    mas: "Que el estribillo explote.",
+    energia: "crece",
+    evitar: "nada de sintes",
   });
   assert.equal(
     texto,
     [
-      "Versión de «Hurt – Nine Inch Nails», con su melodía.",
-      "Estilo: dark synth pop, atmósfera fría.",
-      "80 BPM · Si menor · unos 3 min.",
-      "Instrumentos: Grand Piano, Steinway B; Violonchelo.",
-      "Sin voz: la melodía la lleva un instrumento.",
-      "Evita: nada alegre.",
-      "Que el estribillo explote.",
+      "Versión de «Hurt – Nine Inch Nails», llevada a música de cine, piano y cuerdas.",
+      "Conserva la melodía, los acordes y la estructura; lo demás puedes cambiarlo.",
+      "Mismo tempo que el original · en su tonalidad original · unos 4 min.",
+      "Instrumentos: Grand Piano, Steinway B; Cuerdas; Violonchelo.",
+      "Sin voz: la melodía la lleva el violonchelo.",
+      "Energía: que crezca hasta el final.",
+      "Evita: nada de sintes.",
+    ].join("\n"),
+  );
+});
+
+test("versión sin conservar nada es sólo inspiración", () => {
+  const texto = textoDeEncargo({
+    ...ENCARGO_VACIO,
+    tipo: "version",
+    cancion: "Smells Like Teen Spirit",
+    conservar: { melodia: false, acordes: false, riff: false, estructura: false },
+  });
+  assert.match(texto, /Sólo inspirada en ella: no copies su melodía ni sus acordes\./);
+});
+
+test("nueva: uso, imagen, referencias, gancho, groove", () => {
+  const texto = textoDeEncargo({
+    ...ENCARGO_VACIO,
+    estilo: "synthwave oscuro",
+    uso: "loop",
+    imagen: "conducir de noche bajo la lluvia",
+    suenaComo: "Kavinsky, la banda sonora de Drive",
+    gancho: "un arpegio de sinte que vuelve en cada estribillo.",
+    tempo: "bpm",
+    bpm: 100,
+    groove: "recto",
+    tonalidad: "otra",
+    tonica: "D",
+    modo: "minor",
+  });
+  assert.equal(
+    texto,
+    [
+      "Una canción nueva, en un proyecto nuevo.",
+      "Estilo: synthwave oscuro.",
+      "Es un loop que tiene que cerrar sin costura: sin principio ni final marcados, que pueda sonar mucho rato sin cansar.",
+      "Imagen: conducir de noche bajo la lluvia.",
+      "Que suene como Kavinsky, la banda sonora de Drive.",
+      "El gancho: un arpegio de sinte que vuelve en cada estribillo.",
+      "100 BPM · groove recto · Re menor.",
     ].join("\n"),
   );
 });
 
 test("en inglés y arreglando el proyecto abierto", () => {
-  const texto = textoDeEncargo({ ...ENCARGO_VACIO, tipo: "arreglo", tonica: "F#", modo: "dorian" }, "en", "Stahl");
-  assert.equal(texto, "Work on the open project (“Stahl”): don't create a new one.\nF# dorian.");
+  const texto = textoDeEncargo(
+    { ...ENCARGO_VACIO, tipo: "arreglo", estilo: "darker chorus", tonalidad: "otra", tonica: "F#", modo: "dorian" },
+    "en",
+    "Stahl",
+  );
+  assert.equal(texto, "Work on the open project (“Stahl”): don't create a new one.\nWhat to change: darker chorus.\nF# dorian.");
 });

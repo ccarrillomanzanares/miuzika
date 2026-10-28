@@ -1101,3 +1101,37 @@ button.active {
     gap: 4px;
   }
 }
+
+.encargo .mas-detalles {
+  margin: 4px 0 12px;
+  padding: 8px 10px 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.encargo .mas-detalles summary {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.encargo .mas-detalles:not([open]) {
+  padding-bottom: 0;
+}
+
+.encargo .mas-detalles:not([open]) summary {
+  margin-bottom: 8px;
+}
+
+.encargo input[name="imagen"],
+.encargo input[name="suena"],
+.encargo input[name="gancho"],
+.encargo input[name="forma"],
+.encargo input[name="evitar"],
+.encargo input[name="lleva"],
+.encargo input[name="estilo"] {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
