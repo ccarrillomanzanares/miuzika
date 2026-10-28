@@ -8,6 +8,7 @@ import type { Clip, Device, DeviceType, Note, Project, Track } from "./types.ts"
 import {
   DEVICE_DEFAULTS,
   DEVICE_PARAMS,
+  migrarParametros,
   DEVICE_TYPES,
   INSTRUMENT_TYPES,
   beatsPerBar,
@@ -390,8 +391,15 @@ function coerceParams(
     const value = numericParam(raw);
     const range = allowed[name];
     if (!range) {
+      // Un nombre de antes del 28-oct (cutoff, time, threshold…): NO se convierte en
+      // silencio, porque el modelo puede mandar «cutoff: 2000» creyendo que son Hz.
+      // Se le dice el nombre nuevo y su unidad.
+      const nuevo = Object.keys(migrarParametros(type, { [name]: 0 }))[0];
+      const pista = nuevo && nuevo !== name && allowed[nuevo] ? ` Ahora se llama "${nuevo}" (${allowed[nuevo]![0]}..${allowed[nuevo]![1]}).` : "";
       throw new OpError(
-        `El parámetro "${name}" no existe en ${type}. Disponibles: ${Object.keys(allowed).join(", ")}`,
+        `El parámetro "${name}" no existe en ${type}.${pista} Disponibles: ${Object.entries(allowed)
+          .map(([clave, [min, max]]) => `${clave} ${min}..${max}`)
+          .join(", ")}`,
       );
     }
     if (!Number.isFinite(value)) throw new OpError(`El parámetro "${name}" no es un número válido`);

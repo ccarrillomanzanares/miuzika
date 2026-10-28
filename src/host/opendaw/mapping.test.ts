@@ -12,6 +12,20 @@ import {
   unitToVelocity,
   velocityToUnit,
 } from "./mapping.ts";
+import { migrarParametros } from "../../core/types.ts";
+import type { DeviceType } from "../../core/types.ts";
+
+/**
+ * Un dispositivo con los parámetros viejos (normalizados 0..1), migrado como se
+ * migra al abrir un proyecto. Las cifras esperadas de estas pruebas son las del
+ * mapeo anterior al 28-oct: si siguen saliendo, los proyectos guardados suenan igual.
+ */
+const viejo = (type: DeviceType, params: Record<string, number>) => ({
+  id: "d",
+  type,
+  enabled: true,
+  params: migrarParametros(type, params),
+});
 
 test("beats y pulsos usan 960 PPQN", () => {
   assert.equal(beatsToPulses(1), 960);
@@ -34,12 +48,7 @@ test("dB ↔ unitValue", () => {
 });
 
 test("reverb mapea wet/dry a dB y preDelay a segundos", () => {
-  const mapped = mapDevice({
-    id: "d1",
-    type: "reverb",
-    enabled: true,
-    params: { wet: 0.25, decay: 0.5, preDelay: 0.15, damping: 0.4 },
-  });
+  const mapped = mapDevice(viejo("reverb", { wet: 0.25, decay: 0.5, preDelay: 0.15, damping: 0.4 }));
   assert.equal(mapped.factory, "Reverb");
   const get = (name: string) => mapped.params.find((param) => param.name === name)?.value as number;
   assert.ok(Math.abs((get("wet") ?? 0) - -12.041) < 0.01);
@@ -49,12 +58,7 @@ test("reverb mapea wet/dry a dB y preDelay a segundos", () => {
 });
 
 test("delay usa milisegundos y feedback acotado", () => {
-  const mapped = mapDevice({
-    id: "d2",
-    type: "delay",
-    enabled: true,
-    params: { wet: 0.2, time: 0.5, feedback: 2, pingPong: 1 },
-  });
+  const mapped = mapDevice(viejo("delay", { wet: 0.2, time: 0.5, feedback: 2, pingPong: 1 }));
   assert.equal(mapped.factory, "Delay");
   const params = Object.fromEntries(mapped.params.map((param) => [param.name, param.value]));
   assert.equal(params.delayMillis, 510);
@@ -63,12 +67,7 @@ test("delay usa milisegundos y feedback acotado", () => {
 });
 
 test("compresor traduce umbral, ataque y release a unidades reales", () => {
-  const mapped = mapDevice({
-    id: "d3",
-    type: "compressor",
-    enabled: true,
-    params: { threshold: 0.5, ratio: 4, attack: 0.1, release: 0.5 },
-  });
+  const mapped = mapDevice(viejo("compressor", { threshold: 0.5, ratio: 4, attack: 0.1, release: 0.5 }));
   const params = Object.fromEntries(mapped.params.map((param) => [param.name, param.value]));
   assert.equal(params.threshold, -30);
   assert.equal(params.ratio, 4);
@@ -104,17 +103,28 @@ test("el EQ usa las bandas anidadas de Revamp", () => {
 });
 
 test("el filtro se aproxima con el low-pass de Revamp", () => {
-  const mapped = mapDevice({ id: "f", type: "filter", enabled: true, params: { cutoff: 0, resonance: 0 } });
+  const mapped = mapDevice(viejo("filter", { cutoff: 0, resonance: 0 }));
   assert.equal(mapped.factory, "Revamp");
   const params = Object.fromEntries(mapped.params.map((param) => [param.name, param.value]));
   assert.equal(params["lowPass.enabled"], true);
-  // Suelo audible: Vaporisateur no tiene los armónicos del motor WebAudio.
+  // Suelo del mapeo viejo, conservado al migrar.
   assert.equal(params["lowPass.frequency"], 1_200);
   assert.equal(params["lowShelf.enabled"], false);
+  // En Hz explícitos ya no hay suelo: 400 Hz es lo que se pidió.
+  const nuevo = mapDevice({ id: "f2", type: "filter", enabled: true, params: { cutoffHz: 400, q: 1 } });
+  const nuevos = Object.fromEntries(nuevo.params.map((param) => [param.name, param.value]));
+  assert.equal(nuevos["lowPass.frequency"], 400);
+  assert.equal(nuevos["lowPass.q"], 1);
+});
+
+test("la migración renombra lo viejo, tira tone y deja lo nuevo como está", () => {
+  assert.deepEqual(migrarParametros("distortion", { drive: 0.5, tone: 0.7, mix: 0.4 }), { driveDb: 12, mix: 0.4 });
+  assert.deepEqual(migrarParametros("delay", { timeMs: 250, wet: 0.3 }), { timeMs: 250, wet: 0.3 });
+  assert.deepEqual(migrarParametros("gate", { threshold: 0.5, release: 0 }), { thresholdDb: -40, releaseMs: 1 });
 });
 
 test("el chorus se aproxima con un delay corto modulado", () => {
-  const mapped = mapDevice({ id: "c", type: "chorus", enabled: true, params: { wet: 0.3, rate: 0.25, depth: 0.5 } });
+  const mapped = mapDevice({ id: "c", type: "chorus", enabled: true, params: { wet: 0.3, rateHz: 0.9, depth: 0.5 } });
   assert.equal(mapped.factory, "Delay");
   const params = Object.fromEntries(mapped.params.map((param) => [param.name, param.value]));
   assert.ok((params.delayMillis as number) < 40, "retardo corto de chorus");

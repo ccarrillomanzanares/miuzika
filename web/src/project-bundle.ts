@@ -7,6 +7,7 @@
 
 import { strFromU8, unzipSync } from "fflate";
 import type { Project } from "../../src/core/types.ts";
+import { migrarProyecto } from "../../src/core/project.ts";
 
 interface BundleAsset {
   id: string;
@@ -56,6 +57,7 @@ export async function importProjectBundle(file: Blob): Promise<BundleImportado> 
   if (!project || project.schemaVersion !== 1 || !Array.isArray(project.tracks)) {
     throw new Error("El proyecto del bundle no es válido.");
   }
+  migrarProyecto(project);
 
   const warnings: string[] = [];
   const manifest = entries["manifest.json"]

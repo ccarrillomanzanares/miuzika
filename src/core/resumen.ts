@@ -121,7 +121,7 @@ export function resumenParaAgente(project: Project, opciones: { clipId?: string;
 
   const usados = new Set(project.tracks.flatMap((track) => track.devices.map((device) => device.type)));
   if (usados.size > 0) {
-    lineas.push("Rangos de los fx usados (normalizados salvo indicación):");
+    lineas.push("Rangos de los fx usados (sufijo Ms/Hz/Db = esa unidad; sin sufijo, 0..1 o lo indicado):");
     for (const tipo of usados) {
       const rangos = Object.entries(DEVICE_PARAMS[tipo])
         .map(([clave, [min, max]]) => `${clave} ${min}..${max}`)

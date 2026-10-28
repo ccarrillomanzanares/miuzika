@@ -18,7 +18,7 @@ function countNotes(project: ReturnType<typeof createProject>): number {
 
 const source = applyOps(createProject({ name: "openDAW check", lengthBars: 4 }), [
   { op: "add_track", id: "trk_drums", name: "Drums", instrument: { type: "drumkit" }, gainDb: -2 },
-  { op: "add_device", trackId: "trk_drums", device: { type: "compressor", params: { threshold: 0.6, ratio: 4 } } },
+  { op: "add_device", trackId: "trk_drums", device: { type: "compressor", params: { thresholdDb: -24, ratio: 4 } } },
   { op: "add_notes", trackId: "trk_drums", startBar: 0, notes: [
     { pitch: 36, start: 0, duration: 0.25, velocity: 110 },
     { pitch: 38, start: 1, duration: 0.25, velocity: 100 },

@@ -12,7 +12,7 @@
  */
 
 import type { AudioAsset, Project } from "../../src/core/types.ts";
-import { carpetaDeNombre, idsDeAssets } from "../../src/core/project.ts";
+import { carpetaDeNombre, idsDeAssets, migrarProyecto } from "../../src/core/project.ts";
 
 export const FORMATO = "miuzika-proyecto";
 export const VERSION = 1;
@@ -132,7 +132,7 @@ export function interpretarProyectoEnDisco(texto: string): ProyectoEnDisco {
 
   // Proyecto suelto: lo que se importaba antes desde «Abrir».
   if (datos.schemaVersion === 1) {
-    return { formato: FORMATO, version: VERSION, guardadoEn: "", proyecto: datos as Project };
+    return { formato: FORMATO, version: VERSION, guardadoEn: "", proyecto: migrarProyecto(datos as Project) };
   }
 
   if (datos.formato !== FORMATO) {
@@ -162,7 +162,7 @@ export function interpretarProyectoEnDisco(texto: string): ProyectoEnDisco {
     formato: FORMATO,
     version: Number(datos.version) || VERSION,
     guardadoEn: typeof datos.guardadoEn === "string" ? datos.guardadoEn : "",
-    proyecto,
+    proyecto: migrarProyecto(proyecto),
   };
 }
 

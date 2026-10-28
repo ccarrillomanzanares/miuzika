@@ -395,7 +395,8 @@ export const HERRAMIENTAS: ToolSpec[] = [
         "(efectos) y mezclar (ganancia, paneo, master) sin escribir Python. trackId acepta id, nombre " +
         "exacto o número de pista. Notas: {pitch 0-127 (60 = C4), start y duration en negras desde " +
         "el inicio del clip, velocity 1-127}. startBar empieza en 0. Tipos de efecto: " +
-        `${DEVICE_TYPES.join(", ")}; sus parámetros (y rangos): ${parametrosDeEfectos()}. ` +
+        `${DEVICE_TYPES.join(", ")}; sus parámetros en unidades reales (sufijo Ms = milisegundos, Hz, Db = decibelios; sin sufijo, ` +
+        `proporción 0..1 o lo que diga el rango): ${parametrosDeEfectos()}. ` +
         `Instrumentos: ${INSTRUMENT_TYPES.join(", ")} (con program 0-127 suenan con General MIDI). ` +
         "Operaciones:\n" +
         firmasDeOps(),

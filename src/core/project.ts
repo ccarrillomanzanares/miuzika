@@ -1,11 +1,26 @@
 /** Creación y validación de proyectos. */
 
 import type { Note, Project, Track } from "./types.ts";
-import { DEVICE_PARAMS, beatsPerBar } from "./types.ts";
+import { DEVICE_PARAMS, beatsPerBar, migrarParametros } from "./types.ts";
 import type { Mode } from "./types.ts";
 import { MODES } from "./theory.ts";
 import { hashString } from "./rng.ts";
 import { slugDe } from "./nombres.ts";
+
+/**
+ * Pone al día un proyecto leído de disco: hoy, los parámetros de los efectos con
+ * los nombres de antes del 28-oct (0..1) pasan a unidades reales. Muta y devuelve
+ * el mismo objeto. Sin esto, cualquier edición de un proyecto viejo fallaba la
+ * validación con «Parámetro desconocido».
+ */
+export function migrarProyecto(project: Project): Project {
+  for (const track of project.tracks ?? []) {
+    for (const device of track.devices ?? []) {
+      if (device && DEVICE_PARAMS[device.type]) device.params = migrarParametros(device.type, device.params ?? {});
+    }
+  }
+  return project;
+}
 
 /** Slug de carpeta a partir de un nombre de proyecto (en cualquier alfabeto). */
 export function carpetaDeNombre(nombre: string): string {

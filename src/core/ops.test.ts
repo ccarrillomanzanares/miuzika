@@ -35,7 +35,12 @@ test("set_device valida parámetros y enumera los válidos", () => {
   ]).project;
   assert.throws(
     () => applyOps(project, [{ op: "set_device", trackId: "trk_pad", deviceId: "reverb", params: { brillo: 1 } }]),
-    /Disponibles: wet, decay, preDelay, damping/,
+    /Disponibles: wet 0..1, decay 0..1, preDelayMs 1..500, damping 0..1/,
+  );
+  // Un nombre de antes del 28-oct no se convierte a ciegas: se dice cuál es el nuevo.
+  assert.throws(
+    () => applyOps(project, [{ op: "set_device", trackId: "trk_pad", deviceId: "reverb", params: { preDelay: 0.2 } }]),
+    /Ahora se llama "preDelayMs" \(1\.\.500\)/,
   );
   const changed = applyOps(project, [
     { op: "set_device", trackId: "trk_pad", deviceId: "reverb", params: { wet: 9 } },

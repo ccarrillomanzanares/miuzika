@@ -162,3 +162,23 @@ test("el nombre del proyecto nuevo sale de la carpeta, no de «salida»", () => 
   assert.equal(nombreDeProyectoDesdeFicheros([{ name: "midi_vitrina_multitrack.mid" }]), "vitrina");
   assert.equal(nombreDeProyectoDesdeFicheros([]), "proyecto");
 });
+
+test("un proyecto guardado con efectos 0..1 se abre con unidades reales", () => {
+  const viejo = createProject({ name: "Viejo" });
+  viejo.tracks.push({
+    id: "trk_a",
+    name: "A",
+    kind: "midi",
+    instrument: { type: "synth" },
+    gainDb: 0,
+    pan: 0,
+    muted: false,
+    solo: false,
+    clips: [],
+    devices: [{ id: "dev_filter_1", type: "filter", enabled: true, params: { cutoff: 0.62, resonance: 0 } }],
+  });
+  const texto = JSON.stringify({ formato: FORMATO, version: 1, guardadoEn: "", proyecto: viejo });
+  const { proyecto } = interpretarProyectoEnDisco(texto);
+  // 20·1000^0.62 = 1.449 Hz: lo mismo que sonaba con el mapeo viejo.
+  assert.deepEqual(proyecto.tracks[0]!.devices[0]!.params, { cutoffHz: 1449, q: 0.5 });
+});

@@ -46,9 +46,11 @@ export function dbToUnit(db: number): number {
 }
 
 /**
- * Nuestros parámetros son normalizados 0..1. openDAW usa unidades reales
- * (dB, ms, segundos, índices). Aquí se hace la conversión explícita.
- */export function mapDevice(device: Device): MappedDevice {
+ * Los parámetros ya vienen en unidades reales (ver DEVICE_PARAMS); aquí sólo se
+ * adaptan a lo que pide cada efecto de openDAW (segundos en vez de ms, wet/dry en
+ * dB, width centrado en 0).
+ */
+export function mapDevice(device: Device): MappedDevice {
   const params = device.params;
   switch (device.type) {
     case "reverb": {
@@ -58,7 +60,7 @@ export function dbToUnit(db: number): number {
         params: [
           { name: "decay", value: unit(params.decay, 0.5) },
           { name: "damp", value: unit(params.damping, 0.4) },
-          { name: "preDelay", value: 0.001 + unit(params.preDelay, 0.15) * 0.499 },
+          { name: "preDelay", value: clamp(params.preDelayMs ?? 75, 1, 500) / 1000 },
           { name: "wet", value: unitToDb(wet) },
           { name: "dry", value: unitToDb(1 - wet) },
         ],
@@ -69,7 +71,7 @@ export function dbToUnit(db: number): number {
       return {
         factory: "Delay",
         params: [
-          { name: "delayMillis", value: 20 + unit(params.time, 0.35) * 980 },
+          { name: "delayMillis", value: clamp(params.timeMs ?? 363, 20, 1000) },
           { name: "feedback", value: clamp(params.feedback ?? 0.35, 0, 0.95) },
           { name: "cross", value: unit(params.pingPong, 1) },
           { name: "wet", value: unitToDb(wet) },
@@ -81,7 +83,7 @@ export function dbToUnit(db: number): number {
       return {
         factory: "Waveshaper",
         params: [
-          { name: "inputGain", value: unit(params.drive, 0.4) * 24 },
+          { name: "inputGain", value: clamp(params.driveDb ?? 9.6, 0, 40) },
           { name: "mix", value: unit(params.mix, 0.6) },
         ],
       };
@@ -89,10 +91,10 @@ export function dbToUnit(db: number): number {
       return {
         factory: "Compressor",
         params: [
-          { name: "threshold", value: -60 + unit(params.threshold, 0.6) * 60 },
+          { name: "threshold", value: clamp(params.thresholdDb ?? -24, -60, 0) },
           { name: "ratio", value: clamp(params.ratio ?? 4, 1, 24) },
-          { name: "attack", value: unit(params.attack, 0.3) * 100 },
-          { name: "release", value: 5 + unit(params.release, 0.4) * 1495 },
+          { name: "attack", value: clamp(params.attackMs ?? 30, 0, 100) },
+          { name: "release", value: clamp(params.releaseMs ?? 600, 5, 1500) },
           { name: "mix", value: 1 },
         ],
       };
@@ -100,8 +102,8 @@ export function dbToUnit(db: number): number {
       return {
         factory: "Gate",
         params: [
-          { name: "threshold", value: -80 + unit(params.threshold, 0.4) * 80 },
-          { name: "release", value: 1 + unit(params.release, 0.3) * 1999 },
+          { name: "threshold", value: clamp(params.thresholdDb ?? -48, -80, 0) },
+          { name: "release", value: clamp(params.releaseMs ?? 600, 1, 2000) },
         ],
       };
     case "bitcrusher":
@@ -125,7 +127,7 @@ export function dbToUnit(db: number): number {
         factory: "Delay",
         params: [
           { name: "delayMillis", value: 16 + unit(params.depth, 0.5) * 12 },
-          { name: "lfoSpeed", value: 0.2 + unit(params.rate, 0.25) * 2.8 },
+          { name: "lfoSpeed", value: clamp(params.rateHz ?? 0.9, 0.1, 5) },
           { name: "lfoDepth", value: 1 + unit(params.depth, 0.5) * 7 },
           { name: "feedback", value: 0.15 },
           { name: "cross", value: 0.5 },
@@ -145,10 +147,10 @@ export function dbToUnit(db: number): number {
           { name: "highBell.enabled", value: false },
           { name: "highShelf.enabled", value: false },
           { name: "lowPass.enabled", value: true },
-          // Vaporisateur tiene menos armónicos que nuestro motor WebAudio; con el
-          // mapeo literal, un cutoff de 0.2-0.35 dejaba pistas enteras inaudibles.
-          { name: "lowPass.frequency", value: Math.max(1_200, 20 * 1000 ** unit(params.cutoff, 0.7)) },
-          { name: "lowPass.q", value: 0.5 + unit(params.resonance, 0.2) * 9.5 },
+          // Sin suelo: con Hz explícitos, 400 Hz es lo que se pidió. El suelo de
+          // 1.200 Hz del mapeo viejo se conserva en los proyectos migrados.
+          { name: "lowPass.frequency", value: clamp(params.cutoffHz ?? 2500, 20, 20000) },
+          { name: "lowPass.q", value: clamp(params.q ?? 2.4, 0.5, 10) },
           { name: "lowPass.order", value: 1 },
         ],
       };
@@ -161,13 +163,13 @@ export function dbToUnit(db: number): number {
           { name: "lowBell.enabled", value: false },
           { name: "highBell.enabled", value: false },
           { name: "lowShelf.enabled", value: true },
-          { name: "lowShelf.frequency", value: 100 },
+          { name: "lowShelf.frequency", value: clamp(params.lowHz ?? 100, 20, 1000) },
           { name: "lowShelf.gain", value: clamp(params.low ?? 0, -24, 24) },
           { name: "midBell.enabled", value: true },
-          { name: "midBell.frequency", value: 1000 },
+          { name: "midBell.frequency", value: clamp(params.midHz ?? 1000, 100, 10000) },
           { name: "midBell.gain", value: clamp(params.mid ?? 0, -24, 24) },
           { name: "highShelf.enabled", value: true },
-          { name: "highShelf.frequency", value: 8000 },
+          { name: "highShelf.frequency", value: clamp(params.highHz ?? 8000, 1000, 20000) },
           { name: "highShelf.gain", value: clamp(params.high ?? 0, -24, 24) },
         ],
       };

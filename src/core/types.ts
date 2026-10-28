@@ -170,33 +170,106 @@ export interface Project {
   };
 }
 
-/** Rangos por parámetro de dispositivo. Los que no figuran aquí son 0..1. */
+/**
+ * Rangos por parámetro de dispositivo, en unidades reales: el sufijo dice cuál
+ * (Ms, Hz, Db). Sin sufijo son proporciones 0..1 (wet, mix, decay…) o lo que diga
+ * el rango (ratio, bits). Los rangos son los de openDAW (ValueMapping de cada
+ * efecto, leídos el 28-oct).
+ *
+ * Antes todo era 0..1 y la conversión vivía escondida en mapping.ts: el agente
+ * escribía «cutoff 0.34» sin saber que eran 2.000 Hz, ni «time 0.35» que eran
+ * 363 ms (ESTADO 28-oct, pendiente 3). Los proyectos guardados con los nombres
+ * viejos se convierten al leerse (`migrarParametros`) y suenan igual.
+ */
 export const DEVICE_PARAMS: Record<DeviceType, Record<string, [number, number]>> = {
-  reverb: { wet: [0, 1], decay: [0, 1], preDelay: [0, 1], damping: [0, 1] },
-  delay: { wet: [0, 1], time: [0, 1], feedback: [0, 0.95], pingPong: [0, 1] },
-  chorus: { wet: [0, 1], rate: [0, 1], depth: [0, 1] },
-  distortion: { drive: [0, 1], tone: [0, 1], mix: [0, 1] },
-  filter: { cutoff: [0, 1], resonance: [0, 1] },
-  eq: { low: [-24, 24], mid: [-24, 24], high: [-24, 24] },
-  compressor: { threshold: [0, 1], ratio: [1, 20], attack: [0, 1], release: [0, 1] },
+  reverb: { wet: [0, 1], decay: [0, 1], preDelayMs: [1, 500], damping: [0, 1] },
+  delay: { wet: [0, 1], timeMs: [20, 1000], feedback: [0, 0.95], pingPong: [0, 1] },
+  chorus: { wet: [0, 1], rateHz: [0.1, 5], depth: [0, 1] },
+  distortion: { driveDb: [0, 40], mix: [0, 1] },
+  filter: { cutoffHz: [20, 20000], q: [0.5, 10] },
+  eq: {
+    low: [-24, 24],
+    mid: [-24, 24],
+    high: [-24, 24],
+    lowHz: [20, 1000],
+    midHz: [100, 10000],
+    highHz: [1000, 20000],
+  },
+  compressor: { thresholdDb: [-60, 0], ratio: [1, 20], attackMs: [0, 100], releaseMs: [5, 1500] },
   bitcrusher: { bits: [1, 16], mix: [0, 1] },
-  gate: { threshold: [0, 1], release: [0, 1] },
+  gate: { thresholdDb: [-80, 0], releaseMs: [1, 2000] },
   width: { width: [0, 2] },
 };
 
-/** Valores iniciales razonables al añadir un dispositivo. */
+/** Valores iniciales razonables al añadir un dispositivo (los de antes, pasados a unidades). */
 export const DEVICE_DEFAULTS: Record<DeviceType, Record<string, number>> = {
-  reverb: { wet: 0.25, decay: 0.5, preDelay: 0.15, damping: 0.4 },
-  delay: { wet: 0.2, time: 0.35, feedback: 0.35, pingPong: 1 },
-  chorus: { wet: 0.3, rate: 0.25, depth: 0.5 },
-  distortion: { drive: 0.4, tone: 0.5, mix: 0.6 },
-  filter: { cutoff: 0.7, resonance: 0.2 },
-  eq: { low: 0, mid: 0, high: 0 },
-  compressor: { threshold: 0.6, ratio: 4, attack: 0.3, release: 0.4 },
+  reverb: { wet: 0.25, decay: 0.5, preDelayMs: 75, damping: 0.4 },
+  delay: { wet: 0.2, timeMs: 363, feedback: 0.35, pingPong: 1 },
+  chorus: { wet: 0.3, rateHz: 0.9, depth: 0.5 },
+  distortion: { driveDb: 9.6, mix: 0.6 },
+  filter: { cutoffHz: 2500, q: 2.4 },
+  eq: { low: 0, mid: 0, high: 0, lowHz: 100, midHz: 1000, highHz: 8000 },
+  compressor: { thresholdDb: -24, ratio: 4, attackMs: 30, releaseMs: 600 },
   bitcrusher: { bits: 8, mix: 0.3 },
-  gate: { threshold: 0.4, release: 0.3 },
+  gate: { thresholdDb: -48, releaseMs: 600 },
   width: { width: 1.2 },
 };
+
+/**
+ * Parámetros con los nombres de antes (normalizados 0..1) → unidades reales, con
+ * la MISMA fórmula que usaba mapping.ts, para que un proyecto guardado suene igual.
+ * Lo que ya está en el formato nuevo pasa tal cual. `tone` de la distorsión se
+ * tira: openDAW no tenía dónde ponerlo y nunca sonó.
+ */
+export function migrarParametros(tipo: DeviceType, params: Record<string, number>): Record<string, number> {
+  const salida: Record<string, number> = {};
+  const r = (v: number, d = 1): number => Number(v.toFixed(d));
+  for (const [clave, valor] of Object.entries(params)) {
+    const v = Number(valor);
+    switch (`${tipo}.${clave}`) {
+      case "reverb.preDelay":
+        salida.preDelayMs = r(1 + v * 499);
+        break;
+      case "delay.time":
+        salida.timeMs = r(20 + v * 980);
+        break;
+      case "chorus.rate":
+        salida.rateHz = r(0.2 + v * 2.8, 2);
+        break;
+      case "distortion.drive":
+        salida.driveDb = r(v * 24);
+        break;
+      case "distortion.tone":
+        break;
+      case "filter.cutoff":
+        // El suelo de 1.200 Hz era un parche del mapeo viejo (Vaporisateur sonaba
+        // inaudible con cutoff 0.2-0.35); se conserva al migrar para no cambiar el sonido.
+        salida.cutoffHz = Math.round(Math.max(1200, 20 * 1000 ** v));
+        break;
+      case "filter.resonance":
+        salida.q = r(0.5 + v * 9.5, 2);
+        break;
+      case "compressor.threshold":
+        salida.thresholdDb = r(-60 + v * 60);
+        break;
+      case "compressor.attack":
+        salida.attackMs = r(v * 100);
+        break;
+      case "compressor.release":
+        salida.releaseMs = r(5 + v * 1495);
+        break;
+      case "gate.threshold":
+        salida.thresholdDb = r(-80 + v * 80);
+        break;
+      case "gate.release":
+        salida.releaseMs = r(1 + v * 1999);
+        break;
+      default:
+        salida[clave] = v;
+    }
+  }
+  return salida;
+}
 
 export function beatsPerBar(project: Project): number {
   const { numerator, denominator } = project.timeSignature;
