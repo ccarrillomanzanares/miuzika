@@ -64,6 +64,7 @@ import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 import { PanelPad } from "./pad.ts";
 import { audioBufferToWav } from "./wav.ts";
 import { midiDeProyecto } from "../../src/core/midi-export.ts";
+import { informeEscucha, nivelesPorTramo, notasPorTramo, type PistaEscuchada } from "../../src/core/escucha.ts";
 import { locale, traducirPagina } from "./i18n.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -1181,16 +1182,8 @@ async function exportarProyecto(formatos: { midi: boolean; wav: boolean }): Prom
       hechos.push(`MIDI: proyectos/${slug}/${path} (${pistas} track(s), ${view.bpm} BPM).`);
     }
     if (formatos.wav) {
-      const { faltan } = await hidratarAssets(view, slug);
-      warnMissingAudio(faltan);
-      const paraEngine = new Map<string, { name: string; buffer: AudioBuffer }>();
-      for (const [id, asset] of audioAssets) {
-        if (asset.buffer) paraEngine.set(id, { name: asset.name, buffer: asset.buffer });
-      }
-      const soundfonts = await cargarSoundfontsDelProyecto(view);
-      const gm = await cargarGm(view);
-      const { renderizarMezcla } = await import("./opendaw-engine.ts");
-      const mezcla = await renderizarMezcla(view, paraEngine, soundfonts, gm);
+      const render = await prepararRender(view, slug);
+      const mezcla = await render.renderizar(view);
       const canales = mezcla.canales.slice(0, 2);
       if (canales.length === 0 || canales[0]!.length === 0) throw new Error("the render came out empty");
       const buffer = new AudioBuffer({ length: canales[0]!.length, numberOfChannels: canales.length, sampleRate: mezcla.sampleRate });
@@ -1215,12 +1208,80 @@ async function exportarProyecto(formatos: { midi: boolean; wav: boolean }): Prom
   }
 }
 
+/**
+ * Lo que necesita el motor para renderizar el proyecto sin reproducirlo: WAV,
+ * SoundFonts del proyecto y el GM. Se carga una vez y sirve para varios renders
+ * (la mezcla y cada pista sola en `escuchar_mezcla`).
+ */
+async function prepararRender(view: Project, slug: string) {
+  const { faltan } = await hidratarAssets(view, slug);
+  warnMissingAudio(faltan);
+  const paraEngine = new Map<string, { name: string; buffer: AudioBuffer }>();
+  for (const [id, asset] of audioAssets) {
+    if (asset.buffer) paraEngine.set(id, { name: asset.name, buffer: asset.buffer });
+  }
+  const soundfonts = await cargarSoundfontsDelProyecto(view);
+  const gm = await cargarGm(view);
+  // `cargarSoundfontsDelProyecto` salta en silencio los .sf2 que no llegan: aquí se
+  // apuntan, porque una pista sin su instrumento es justo lo que hay que diagnosticar.
+  const sinCargar = [
+    ...new Set(
+      view.tracks.flatMap((t) => (t.instrument.type === "soundfont" && t.instrument.archivo && !soundfonts.has(t.instrument.archivo) ? [t.instrument.archivo] : [])),
+    ),
+  ];
+  const { renderizarMezcla } = await import("./opendaw-engine.ts");
+  return { sinCargar, renderizar: (vista: Project) => renderizarMezcla(vista, paraEngine, soundfonts, gm) };
+}
+
+/**
+ * `escuchar_mezcla`: el nivel de la mezcla y de cada pista sola, por tramos de
+ * compases, renderizado con openDAW. Es lo que suena de verdad, no el render numpy
+ * del agente (ESTADO 28-oct, pendiente 7).
+ */
+async function escucharMezcla(opciones: { pistas?: string[]; compasesPorTramo?: number }): Promise<{ ok: boolean; texto: string }> {
+  const view = project;
+  if (!view) return { ok: false, texto: "There is no open project." };
+  try {
+    const compasesPorTramo = Math.max(1, Math.min(16, Math.trunc(opciones.compasesPorTramo ?? 4)));
+    const tiemposTramo = compasesPorTramo * beatsPerBar(view);
+    const tramos = Math.max(1, Math.ceil(view.lengthBars / compasesPorTramo));
+    const pedidas = (opciones.pistas ?? []).map((p) => p.trim().toLowerCase()).filter(Boolean);
+    const elegidas = view.tracks.filter(
+      (t) => pedidas.length === 0 || pedidas.includes(t.id.toLowerCase()) || pedidas.includes(t.name.toLowerCase()),
+    );
+    if (pedidas.length > 0 && elegidas.length === 0) {
+      return { ok: false, texto: `No hay pistas llamadas ${pedidas.join(", ")}. Pistas: ${view.tracks.map((t) => t.name).join(", ")}.` };
+    }
+    const render = await prepararRender(view, slugDeProyecto(view));
+    const medir = (r: { sampleRate: number; canales: Float32Array[] }) =>
+      nivelesPorTramo(r.canales.slice(0, 2), r.sampleRate, view.bpm, tiemposTramo, tramos);
+    setStatus("Listening: rendering the mix…");
+    const mezcla = medir(await render.renderizar(view));
+    const pistas: PistaEscuchada[] = [];
+    for (const [i, pista] of elegidas.entries()) {
+      setStatus(`Listening: track ${i + 1}/${elegidas.length} (${pista.name})…`);
+      // La pista sola, sin mute ni solo: se mide si su instrumento produce señal.
+      const sola: Project = { ...view, tracks: [{ ...pista, muted: false, solo: false }] };
+      pistas.push({
+        nombre: pista.name,
+        muted: pista.muted,
+        notas: notasPorTramo(pista, tiemposTramo, tramos),
+        niveles: medir(await render.renderizar(sola)),
+      });
+    }
+    return { ok: true, texto: informeEscucha({ compasesPorTramo, mezcla, pistas, sinCargar: render.sinCargar }) };
+  } catch (error) {
+    return { ok: false, texto: `Could not listen to the mix: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
 const acciones = crearAcciones({
   proyecto: () => project,
   fijar: (siguiente) => setProject(siguiente),
   enVivo: (siguiente) => commitLive(siguiente),
   avisar: (texto) => addMessage("system", texto),
   exportar: exportarProyecto,
+  escuchar: escucharMezcla,
 });
 registrarAcciones(acciones);
 

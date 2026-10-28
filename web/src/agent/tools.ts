@@ -232,6 +232,7 @@ export interface PeticionBateriaPista extends PeticionBateria, PeticionEscritura
 
 export interface AccionesEstudio {
   exportar(peticion: { midi: boolean; wav: boolean }): Promise<ResultadoAccion>;
+  escuchar(peticion: { pistas?: string[]; compasesPorTramo?: number }): Promise<ResultadoAccion>;
   versiones(peticion: { accion: string; version?: string; pistas?: string[] }): Promise<ResultadoAccion>;
   leerProyecto(peticion: { clipId?: string }): ResultadoAccion;
   editarProyecto(peticion: { ops: unknown[] }): ResultadoAccion;
@@ -267,6 +268,7 @@ function acciones(): AccionesEstudio | null {
 /** Herramientas que se resuelven en la pestaña, contra el proyecto abierto. */
 const HERRAMIENTAS_DEL_PROYECTO = new Set([
   "exportar",
+  "escuchar_mezcla",
   "versiones",
   "leer_proyecto",
   "editar_proyecto",
@@ -338,6 +340,26 @@ export const HERRAMIENTAS: ToolSpec[] = [
         properties: {
           midi: { type: "boolean" },
           wav: { type: "boolean" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "escuchar_mezcla",
+      description:
+        "Renderiza el proyecto con el MISMO motor que el Play (openDAW) y mide el nivel (RMS dBFS) " +
+        "por tramos de compases: la mezcla y cada pista sola, cruzado con dónde hay notas. Marca MUDO " +
+        "donde una pista tiene notas y no sale sonido, la mezcla que recorta y los instrumentos que no " +
+        "cargan. Úsala cuando la persona diga que algo no se oye o suena raro, y antes de cambiar " +
+        "instrumentos o volúmenes: tu render de Python no es lo que suena en la app. Tarda (un render " +
+        "por pista): con `pistas` mides sólo las que importan.",
+      parameters: {
+        type: "object",
+        properties: {
+          pistas: { type: "array", items: { type: "string" }, description: "Id o nombre de las pistas a medir solas; vacío = todas" },
+          compases_por_tramo: { type: "number", description: "Compases por columna (por defecto 4)" },
         },
       },
     },
@@ -1317,6 +1339,11 @@ async function ejecutarCrudo(
       }
       case "exportar":
         return await local.exportar({ midi: args.midi === true, wav: args.wav === true });
+      case "escuchar_mezcla":
+        return await local.escuchar({
+          pistas: Array.isArray(args.pistas) ? args.pistas.map(String) : undefined,
+          compasesPorTramo: Number(args.compases_por_tramo) > 0 ? Number(args.compases_por_tramo) : undefined,
+        });
       case "versiones":
         return await local.versiones({
           accion: String(args.accion ?? "listar"),
@@ -1548,6 +1575,7 @@ export function resumenLlamada(nombre: string, argumentosJson: string): string {
     }
     if (nombre === "usar_instrumento") return `loading ${String(args.sfz ?? "the instrument")}`;
     if (nombre === "exportar") return `exporting ${[args.midi === true ? "MIDI" : "", args.wav === true ? "WAV" : ""].filter(Boolean).join(" and ")}`;
+    if (nombre === "escuchar_mezcla") return "listening to the mix with the engine";
     if (nombre === "buscar_web") return `searching the web “${String(args.consulta ?? "").slice(0, 60)}”`;
     if (nombre === "leer_web") return `reading ${String(args.url ?? "a page")}`;
     return nombre;

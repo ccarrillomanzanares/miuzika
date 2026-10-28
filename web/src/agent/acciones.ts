@@ -63,6 +63,8 @@ export interface Estudio {
   avisar(texto: string): void;
   /** Exporta el proyecto a MIDI y/o la mezcla a WAV en salida/. */
   exportar?(formatos: { midi: boolean; wav: boolean }): Promise<ResultadoAccion>;
+  /** Renderiza con openDAW y mide el nivel por tramos de la mezcla y de cada pista sola. */
+  escuchar?(opciones: { pistas?: string[]; compasesPorTramo?: number }): Promise<ResultadoAccion>;
 }
 
 /** Nombre de proyecto a partir del fichero entregado (salida/sacramento_multitrack.mid -> sacramento). */
@@ -1117,8 +1119,14 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     return e.exportar(peticion);
   }
 
+  async function escuchar(opciones: { pistas?: string[]; compasesPorTramo?: number }): Promise<ResultadoAccion> {
+    if (!e.escuchar) return { ok: false, texto: "Esta pestaña no sabe escuchar la mezcla." };
+    return e.escuchar(opciones);
+  }
+
   return {
     exportar,
+    escuchar,
     versiones,
     leerProyecto,
     editarProyecto,
