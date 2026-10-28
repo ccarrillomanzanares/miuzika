@@ -10,7 +10,7 @@
  * ops de `editar_proyecto` (trackId, clipId, gainDb…), sin traducción intermedia.
  */
 
-import type { Clip, Project, Track } from "./types.ts";
+import type { Clip, Device, Project, Track } from "./types.ts";
 import { DEVICE_PARAMS, beatsPerBar } from "./types.ts";
 import { projectStats } from "./project.ts";
 import { aNotacion } from "./notacion.ts";
@@ -53,14 +53,21 @@ function lineaPista(track: Track, indice: number, barBeats: number): string[] {
     : (track.instrument.preset ? `${track.instrument.type}:${track.instrument.preset}` : track.instrument.type) +
       (track.instrument.program !== undefined ? ` GM ${track.instrument.program}` : "");
   const lineas = [`${indice + 1}. ${track.id} «${track.name}» [${track.kind}, ${instrumento}] ${estado.join(" · ")}`];
-  for (const device of track.devices) {
-    const params = Object.entries(device.params)
-      .map(([clave, valor]) => `${clave}=${redondear(valor, 3)}`)
-      .join(" ");
-    lineas.push(`    fx ${device.id} ${device.type}${device.enabled ? "" : " (apagado)"}: ${params}`);
+  lineas.push(...lineasEfectos(track.devices));
+  if (track.sends?.length) {
+    lineas.push(`    envíos: ${track.sends.map((send) => `${send.busId} ${redondear(send.levelDb, 1)} dB`).join(", ")}`);
   }
   for (const clip of track.clips) lineas.push(lineaClip(clip, barBeats));
   return lineas;
+}
+
+function lineasEfectos(devices: Device[]): string[] {
+  return devices.map((device) => {
+    const params = Object.entries(device.params)
+      .map(([clave, valor]) => `${clave}=${redondear(valor, 3)}`)
+      .join(" ");
+    return `    fx ${device.id} ${device.type}${device.enabled ? "" : " (apagado)"}: ${params}`;
+  });
 }
 
 /**
@@ -118,8 +125,19 @@ export function resumenParaAgente(project: Project, opciones: { clipId?: string;
   ];
   project.tracks.forEach((track, indice) => lineas.push(...lineaPista(track, indice, barBeats)));
   if (project.tracks.length === 0) lineas.push("(sin pistas)");
+  const buses = project.buses ?? [];
+  if (buses.length > 0) {
+    lineas.push(`Buses (${buses.length}): retornos de efecto que suenan en el master; las pistas les mandan señal con set_send.`);
+    for (const bus of buses) {
+      const fuentes = project.tracks.filter((track) => track.sends?.some((send) => send.busId === bus.id)).map((track) => track.name);
+      lineas.push(`  ${bus.id} «${bus.name}» ${redondear(bus.gainDb, 1)} dB · le mandan: ${fuentes.join(", ") || "nadie"}`);
+      lineas.push(...lineasEfectos(bus.devices));
+    }
+  }
 
-  const usados = new Set(project.tracks.flatMap((track) => track.devices.map((device) => device.type)));
+  const usados = new Set(
+    [...project.tracks, ...buses].flatMap((cadena) => cadena.devices.map((device) => device.type)),
+  );
   if (usados.size > 0) {
     lineas.push("Rangos de los fx usados (sufijo Ms/Hz/Db = esa unidad; sin sufijo, 0..1 o lo indicado):");
     for (const tipo of usados) {

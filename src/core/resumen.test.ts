@@ -40,3 +40,15 @@ test("la chuleta de ops sale del esquema y cubre todas", () => {
   for (const nombre of NOMBRES_OPS) assert.match(firmas, new RegExp(`^${nombre}\\(`, "m"));
   assert.match(firmas, /add_notes\(trackId, clipId\?, startBar\?, name\?, notes\)/);
 });
+
+test("el resumen enseña los buses, quién les manda y sus efectos", () => {
+  const project = applyOps(createProject({ name: "Buses" }), [
+    { op: "add_track", id: "trk_voz", name: "Voz", instrument: { type: "lead" } },
+    { op: "add_bus", name: "Sala", devices: ["reverb"] },
+    { op: "set_send", trackId: "Voz", busId: "Sala", levelDb: -8 },
+  ]).project;
+  const texto = resumenParaAgente(project);
+  assert.match(texto, /envíos: bus_sala -8 dB/);
+  assert.match(texto, /bus_sala «Sala» 0 dB · le mandan: Voz/);
+  assert.match(texto, /fx dev_reverb_1 reverb: wet=0\.25 decay=0\.5 preDelayMs=75/);
+});

@@ -255,3 +255,32 @@ test("set_clip_length iguala un clip MIDI con el de audio de la misma toma", () 
   assert.equal(project.lengthBars, 85);
 });
 
+
+test("buses: una reverb compartida con envíos, efectos en el bus y borrado limpio", () => {
+  const { project } = applyOps(baseProject(), [
+    { op: "add_track", id: "trk_voz", name: "Voz", instrument: { type: "lead" } },
+    { op: "add_track", id: "trk_gtr", name: "Guitarra", instrument: { type: "synth" } },
+    { op: "add_bus", name: "Sala", devices: ["reverb"] },
+    { op: "set_send", trackId: "Voz", busId: "Sala", levelDb: -8 },
+    { op: "set_send", trackId: "trk_gtr", busId: "bus_sala", levelDb: -14 },
+    { op: "set_send", trackId: "Voz", busId: "Sala", levelDb: -6 }, // cambia, no duplica
+    { op: "add_device", trackId: "Sala", device: { type: "eq", params: { lowHz: 300, low: -6 } } },
+    { op: "set_device", trackId: "bus_sala", deviceId: "reverb", params: { preDelayMs: 40 } },
+  ]);
+  const bus = project.buses![0]!;
+  assert.equal(bus.id, "bus_sala");
+  assert.deepEqual(bus.devices.map((d) => d.type), ["reverb", "eq"]);
+  assert.equal(bus.devices[0]!.params.preDelayMs, 40);
+  assert.deepEqual(project.tracks[0]!.sends, [{ busId: "bus_sala", levelDb: -6 }]);
+  assert.equal(project.tracks[0]!.devices.length, 0, "el eq va al bus, no a la pista");
+
+  const sinBus = applyOps(project, [{ op: "remove_bus", busId: "Sala" }]).project;
+  assert.deepEqual(sinBus.buses, []);
+  assert.equal(sinBus.tracks[0]!.sends, undefined, "los envíos al bus borrado se van con él");
+
+  const sinEnvio = applyOps(project, [{ op: "set_send", trackId: "Voz", busId: "Sala", remove: true }]).project;
+  assert.equal(sinEnvio.tracks[0]!.sends, undefined);
+  assert.throws(() => applyOps(project, [{ op: "set_send", trackId: "Voz", busId: "Sala" }]), /necesita levelDb/);
+  assert.throws(() => applyOps(project, [{ op: "set_send", trackId: "Voz", busId: "Delay", levelDb: -6 }]), /No encuentro el bus "Delay"/);
+  assert.throws(() => applyOps(project, [{ op: "add_bus", name: "Voz" }]), /Ya hay una pista llamada "Voz"/);
+});

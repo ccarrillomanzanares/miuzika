@@ -100,4 +100,23 @@ assert.equal(exportadoGm.stats.devices, 1, "las pistas GM llevan sus efectos");
 const reimportadoGm = await openDawToProject(exportadoGm.bytes);
 assert.equal(reimportadoGm.stats.notes, 3, "las notas GM sobreviven al .odw");
 
+// --- Buses: una reverb compartida en un bus aux, con envíos de dos pistas. El .odw
+// tiene que volver a cargarse (Project.load valida los punteros del grafo).
+const conBus = applyOps(createProject({ name: "openDAW buses", lengthBars: 2 }), [
+  { op: "add_track", id: "trk_a", name: "A", instrument: { type: "pad" } },
+  { op: "add_notes", trackId: "trk_a", startBar: 0, notes: [{ pitch: 60, start: 0, duration: 4, velocity: 90 }] },
+  { op: "add_track", id: "trk_b", name: "B", instrument: { type: "lead" } },
+  { op: "add_notes", trackId: "trk_b", startBar: 0, notes: [{ pitch: 67, start: 0, duration: 1, velocity: 90 }] },
+  { op: "add_bus", name: "Sala", devices: [{ type: "reverb", params: { wet: 1, preDelayMs: 20 } }] },
+  { op: "set_send", trackId: "trk_a", busId: "Sala", levelDb: -6 },
+  { op: "set_send", trackId: "trk_b", busId: "bus_sala", levelDb: -12 },
+]).project;
+const exportadoBus = await projectToOpenDaw(conBus);
+console.log(`buses: ${exportadoBus.stats.buses} bus · ${exportadoBus.stats.sends} envíos · ${exportadoBus.stats.devices} FX`);
+assert.equal(exportadoBus.stats.buses, 1);
+assert.equal(exportadoBus.stats.sends, 2);
+assert.equal(exportadoBus.stats.devices, 1, "la reverb del bus");
+const reimportadoBus = await openDawToProject(exportadoBus.bytes);
+assert.equal(reimportadoBus.project.tracks.length, 2, "el bus no se cuela como pista al reimportar");
+
 console.log("OPENDAW OK");

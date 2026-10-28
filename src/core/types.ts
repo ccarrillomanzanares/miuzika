@@ -123,6 +123,26 @@ export interface Track {
   solo: boolean;
   devices: Device[];
   clips: Clip[];
+  /** Envíos a buses (post-fader). Sin envíos, la pista va sólo al master. */
+  sends?: Send[];
+}
+
+/** Envío de una pista a un bus: cuánta señal le manda, en dB. */
+export interface Send {
+  busId: string;
+  levelDb: number;
+}
+
+/**
+ * Bus auxiliar (retorno de efectos): una reverb o un delay que comparten varias
+ * pistas por envío, en vez de una reverb por pista. Suena en el master. En
+ * openDAW es un AudioBusBox con su AudioUnit de tipo «aux».
+ */
+export interface Bus {
+  id: string;
+  name: string;
+  gainDb: number;
+  devices: Device[];
 }
 
 export interface CodeSource {
@@ -156,6 +176,8 @@ export interface Project {
   audioAssets?: AudioAsset[];
   /** Fuentes de código que generaron pistas; las notas viven en tracks. */
   codeSources?: CodeSource[];
+  /** Buses auxiliares; las pistas les mandan señal con `sends`. */
+  buses?: Bus[];
   master: { gainDb: number };
   meta: {
     /**

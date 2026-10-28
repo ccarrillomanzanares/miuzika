@@ -398,6 +398,9 @@ export const HERRAMIENTAS: ToolSpec[] = [
         `${DEVICE_TYPES.join(", ")}; sus parámetros en unidades reales (sufijo Ms = milisegundos, Hz, Db = decibelios; sin sufijo, ` +
         `proporción 0..1 o lo que diga el rango): ${parametrosDeEfectos()}. ` +
         `Instrumentos: ${INSTRUMENT_TYPES.join(", ")} (con program 0-127 suenan con General MIDI). ` +
+        "Buses: una reverb o un delay que comparten varias pistas va en un bus (add_bus con sus efectos, " +
+        "set_send desde cada pista, wet 1 en el bus) en vez de uno por pista; add_device/set_device " +
+        "aceptan el bus en trackId. " +
         "Operaciones:\n" +
         firmasDeOps(),
       parameters: {

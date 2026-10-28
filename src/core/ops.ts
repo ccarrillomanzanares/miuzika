@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import type { Clip, Device, DeviceType, Note, Project, Track } from "./types.ts";
+import type { Bus, Clip, Device, DeviceType, Note, Project, Track } from "./types.ts";
 import {
   DEVICE_DEFAULTS,
   DEVICE_PARAMS,
@@ -125,7 +125,7 @@ const RemoveClipOp = z.object({
 
 const AddDeviceOp = z.object({
   op: z.literal("add_device"),
-  trackId: IdSchema,
+  trackId: IdSchema.describe("Pista o bus (id o nombre)"),
   id: IdSchema.optional(),
   // «"reverb"» vale igual que «{type:"reverb"}»: el modelo lo escribe así a menudo
   // (medido el 27-oct: tres add_device seguidos rechazados por eso).
@@ -140,15 +140,53 @@ const AddDeviceOp = z.object({
 
 const SetDeviceOp = z.object({
   op: z.literal("set_device"),
-  trackId: IdSchema,
+  trackId: IdSchema.describe("Pista o bus (id o nombre)"),
   deviceId: IdSchema.describe("Id o tipo del dispositivo (p. ej. 'reverb')"),
   params: z.record(z.string(), ParamValueSchema).describe("Solo los parámetros a cambiar"),
 });
 
 const RemoveDeviceOp = z.object({
   op: z.literal("remove_device"),
-  trackId: IdSchema,
+  trackId: IdSchema.describe("Pista o bus (id o nombre)"),
   deviceId: IdSchema,
+});
+
+const DeviceInput = z.preprocess(
+  (valor) => (typeof valor === "string" ? { type: valor.trim().toLowerCase() } : valor),
+  z.object({
+    type: z.enum(DEVICE_TYPES),
+    params: z.record(z.string(), ParamValueSchema).optional(),
+  }),
+);
+
+/** Bus auxiliar con sus efectos («reverb» o {type, params}); las pistas le mandan señal con set_send. */
+const AddBusOp = z.object({
+  op: z.literal("add_bus"),
+  id: IdSchema.optional(),
+  name: z.string().min(1).max(60),
+  gainDb: GainSchema.optional(),
+  devices: z.array(DeviceInput).max(8).optional(),
+});
+
+const SetBusOp = z.object({
+  op: z.literal("set_bus"),
+  busId: IdSchema,
+  name: z.string().min(1).max(60).optional(),
+  gainDb: GainSchema.optional(),
+});
+
+const RemoveBusOp = z.object({
+  op: z.literal("remove_bus"),
+  busId: IdSchema,
+});
+
+/** Cuánto manda una pista a un bus (dB, post-fader). remove=true quita el envío. */
+const SetSendOp = z.object({
+  op: z.literal("set_send"),
+  trackId: IdSchema,
+  busId: IdSchema,
+  levelDb: GainSchema.optional(),
+  remove: z.boolean().optional(),
 });
 
 const RegisterAudioAssetOp = z.object({
@@ -240,6 +278,10 @@ const OpSchema = z.discriminatedUnion("op", [
   MoveClipOp,
   DuplicateClipOp,
   SetMasterOp,
+  AddBusOp,
+  SetBusOp,
+  RemoveBusOp,
+  SetSendOp,
 ]);
 
 const OpsSchema = z.array(OpSchema).min(1).max(200);
@@ -326,7 +368,42 @@ function resolveClip(track: Track, ref: string) {
   );
 }
 
-function resolveDevice(track: Track, ref: string): Device {
+function resolveBus(project: Project, ref: string): Bus {
+  const buses = project.buses ?? [];
+  const cleaned = ref.trim();
+  const lower = cleaned.toLowerCase();
+  const porNombre = buses.filter((bus) => bus.name.toLowerCase() === lower);
+  const encontrado = buses.find((bus) => bus.id === cleaned) ?? (porNombre.length === 1 ? porNombre[0] : undefined);
+  if (encontrado) return encontrado;
+  const available = buses.map((bus) => `${bus.id}(${bus.name})`).join(", ");
+  throw new OpError(`No encuentro el bus "${ref}". Disponibles: ${available || "ninguno (créalo con add_bus)"}`);
+}
+
+/**
+ * Dónde van los efectos de add_device/set_device/remove_device: una pista o, si
+ * no hay pista con ese nombre, un bus. Así el agente no aprende otra op para lo
+ * mismo.
+ */
+function resolveCadena(project: Project, ref: string): { name: string; devices: Device[]; poner(devices: Device[]): void } {
+  let track: Track;
+  try {
+    track = resolveTrack(project, ref);
+  } catch (errorPista) {
+    const buses = project.buses ?? [];
+    if (buses.length === 0) throw errorPista;
+    let bus: Bus;
+    try {
+      bus = resolveBus(project, ref);
+    } catch {
+      const lista = buses.map((b) => `${b.id}(${b.name})`).join(", ");
+      throw new OpError(`${(errorPista as Error).message}. Buses: ${lista}`);
+    }
+    return { name: `bus ${bus.name}`, devices: bus.devices, poner: (devices) => (bus.devices = devices) };
+  }
+  return { name: track.name, devices: track.devices, poner: (devices) => (track.devices = devices) };
+}
+
+function resolveDevice(track: { name: string; devices: Device[] }, ref: string): Device {
   const cleaned = ref.trim().toLowerCase();
   const byId = track.devices.find((device) => device.id.toLowerCase() === cleaned);
   if (byId) return byId;
@@ -408,7 +485,7 @@ function coerceParams(
   return result;
 }
 
-function defaultDeviceId(track: Track, type: DeviceType): string {
+function defaultDeviceId(track: { devices: Device[] }, type: DeviceType): string {
   const base = `dev_${type}`;
   let index = 1;
   while (track.devices.some((device) => device.id === `${base}_${index}`)) index++;
@@ -648,7 +725,7 @@ function applyOne(project: Project, op: ParsedOp): string {
     }
 
     case "add_device": {
-      const track = resolveTrack(project, op.trackId);
+      const track = resolveCadena(project, op.trackId);
       const device: Device = {
         id: op.id ?? defaultDeviceId(track, op.device.type),
         type: op.device.type,
@@ -663,7 +740,7 @@ function applyOne(project: Project, op: ParsedOp): string {
     }
 
     case "set_device": {
-      const track = resolveTrack(project, op.trackId);
+      const track = resolveCadena(project, op.trackId);
       if (Object.keys(op.params).length === 0) throw new OpError("set_device necesita al menos un parámetro");
       const device = resolveDevice(track, op.deviceId);
       device.params = coerceParams(device.type, op.params, device.params);
@@ -671,15 +748,75 @@ function applyOne(project: Project, op: ParsedOp): string {
     }
 
     case "remove_device": {
-      const track = resolveTrack(project, op.trackId);
+      const track = resolveCadena(project, op.trackId);
       const device = resolveDevice(track, op.deviceId);
-      track.devices = track.devices.filter((existing) => existing !== device);
+      track.poner(track.devices.filter((existing) => existing !== device));
       return `Dispositivo eliminado de ${track.name}: ${device.type}`;
     }
 
     case "set_master": {
       project.master.gainDb = op.gainDb;
       return `Master: ${op.gainDb} dB`;
+    }
+
+    case "add_bus": {
+      const buses = (project.buses ??= []);
+      const id = op.id ?? uniqueId("bus_", slugify(op.name), buses.map((bus) => bus.id));
+      if (buses.some((bus) => bus.id === id)) throw new OpError(`Ya existe un bus con id "${id}"`);
+      if (project.tracks.some((track) => track.id === id || track.name.toLowerCase() === op.name.toLowerCase())) {
+        throw new OpError(`Ya hay una pista llamada "${op.name}": dale al bus otro nombre`);
+      }
+      const bus: Bus = { id, name: op.name, gainDb: op.gainDb ?? 0, devices: [] };
+      for (const entrada of op.devices ?? []) {
+        bus.devices.push({
+          id: defaultDeviceId(bus, entrada.type),
+          type: entrada.type,
+          enabled: true,
+          params: coerceParams(entrada.type, entrada.params),
+        });
+      }
+      buses.push(bus);
+      const efectos = bus.devices.map((device) => device.type).join(", ") || "ningún efecto";
+      return `Bus creado: ${bus.name} (${bus.id}) con ${efectos}. Mándale señal con set_send.`;
+    }
+
+    case "set_bus": {
+      const bus = resolveBus(project, op.busId);
+      if (op.name !== undefined) bus.name = op.name;
+      if (op.gainDb !== undefined) bus.gainDb = op.gainDb;
+      return `Bus actualizado: ${bus.name} (${bus.id}) · ${bus.gainDb} dB`;
+    }
+
+    case "remove_bus": {
+      const bus = resolveBus(project, op.busId);
+      project.buses = (project.buses ?? []).filter((existing) => existing !== bus);
+      let quitados = 0;
+      for (const track of project.tracks) {
+        if (!track.sends) continue;
+        const quedan = track.sends.filter((send) => send.busId !== bus.id);
+        quitados += track.sends.length - quedan.length;
+        if (quedan.length > 0) track.sends = quedan;
+        else delete track.sends;
+      }
+      return `Bus eliminado: ${bus.name}${quitados ? ` (y ${quitados} envío(s) a él)` : ""}`;
+    }
+
+    case "set_send": {
+      const track = resolveTrack(project, op.trackId);
+      const bus = resolveBus(project, op.busId);
+      const sends = track.sends ?? [];
+      const existente = sends.find((send) => send.busId === bus.id);
+      if (op.remove) {
+        const quedan = sends.filter((send) => send !== existente);
+        if (quedan.length > 0) track.sends = quedan;
+        else delete track.sends;
+        return existente ? `Envío quitado: ${track.name} → ${bus.name}` : `${track.name} no mandaba nada a ${bus.name}`;
+      }
+      if (op.levelDb === undefined) throw new OpError("set_send necesita levelDb (dB que la pista manda al bus) o remove=true");
+      if (existente) existente.levelDb = op.levelDb;
+      else sends.push({ busId: bus.id, levelDb: op.levelDb });
+      track.sends = sends;
+      return `Envío: ${track.name} → ${bus.name} a ${op.levelDb} dB`;
     }
 
     default: {

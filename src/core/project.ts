@@ -1,6 +1,6 @@
 /** Creación y validación de proyectos. */
 
-import type { Note, Project, Track } from "./types.ts";
+import type { Device, Note, Project, Track } from "./types.ts";
 import { DEVICE_PARAMS, beatsPerBar, migrarParametros } from "./types.ts";
 import type { Mode } from "./types.ts";
 import { MODES } from "./theory.ts";
@@ -14,8 +14,8 @@ import { slugDe } from "./nombres.ts";
  * validación con «Parámetro desconocido».
  */
 export function migrarProyecto(project: Project): Project {
-  for (const track of project.tracks ?? []) {
-    for (const device of track.devices ?? []) {
+  for (const cadena of [...(project.tracks ?? []), ...(project.buses ?? [])]) {
+    for (const device of cadena.devices ?? []) {
       if (device && DEVICE_PARAMS[device.type]) device.params = migrarParametros(device.type, device.params ?? {});
     }
   }
@@ -104,6 +104,18 @@ export function validateProject(project: Project): Issue[] {
     if (!(asset.durationBeats > 0)) error(`${path}.durationBeats`, "Debe ser > 0");
   });
 
+  const busIds = new Set<string>();
+  (project.buses ?? []).forEach((bus, index) => {
+    const path = `buses[${index}]`;
+    if (!bus.id) error(`${path}.id`, "Falta el id");
+    if (busIds.has(bus.id)) error(`${path}.id`, `Id duplicado: ${bus.id}`);
+    busIds.add(bus.id);
+    if (!bus.name?.trim()) error(`${path}.name`, "Nombre vacío");
+    if (!Number.isFinite(bus.gainDb) || bus.gainDb < -60 || bus.gainDb > 12) error(`${path}.gainDb`, "Debe estar entre -60 y 12 dB");
+    validateDevices(bus.devices, path, error);
+  });
+  if (busIds.size > 16) error("buses", "Máximo 16 buses");
+
   const trackIds = new Set<string>();
   const barBeats = beatsPerBar(project);
   let totalNotes = 0;
@@ -122,20 +134,15 @@ export function validateProject(project: Project): Issue[] {
     }
     if (track.clips.length === 0) warn(`${path}.clips`, "Pista sin clips");
 
-    const deviceIds = new Set<string>();
-    track.devices.forEach((device, deviceIndex) => {
-      const devicePath = `${path}.devices[${deviceIndex}]`;
-      if (deviceIds.has(device.id)) error(`${devicePath}.id`, `Id duplicado: ${device.id}`);
-      deviceIds.add(device.id);
-      for (const [name, value] of Object.entries(device.params)) {
-        const range = DEVICE_PARAMS[device.type]?.[name];
-        if (!range) {
-          error(`${devicePath}.params.${name}`, `Parámetro desconocido para ${device.type}`);
-          continue;
-        }
-        if (!Number.isFinite(value) || value < range[0] || value > range[1]) {
-          error(`${devicePath}.params.${name}`, `Fuera de rango [${range[0]}, ${range[1]}]: ${value}`);
-        }
+    validateDevices(track.devices, path, error);
+
+    (track.sends ?? []).forEach((send, sendIndex) => {
+      const sendPath = `${path}.sends[${sendIndex}]`;
+      // Aviso y no error: restaurar una pista de una versión vieja puede traer un
+      // envío a un bus que ya no está, y eso no debe bloquear el resto. Sin bus, no suena.
+      if (!busIds.has(send.busId)) warn(`${sendPath}.busId`, `El bus "${send.busId}" no existe: el envío no suena`);
+      if (!Number.isFinite(send.levelDb) || send.levelDb < -60 || send.levelDb > 12) {
+        error(`${sendPath}.levelDb`, "Debe estar entre -60 y 12 dB");
       }
     });
 
@@ -190,6 +197,26 @@ export function validateProject(project: Project): Issue[] {
   if (totalNotes > 200000) error("notes", "El proyecto supera las 200.000 notas");
 
   return issues;
+}
+
+/** Efectos de una pista o de un bus: ids únicos y parámetros conocidos y en rango. */
+function validateDevices(devices: Device[], path: string, error: (path: string, message: string) => void): void {
+  const deviceIds = new Set<string>();
+  devices.forEach((device, deviceIndex) => {
+    const devicePath = `${path}.devices[${deviceIndex}]`;
+    if (deviceIds.has(device.id)) error(`${devicePath}.id`, `Id duplicado: ${device.id}`);
+    deviceIds.add(device.id);
+    for (const [name, value] of Object.entries(device.params)) {
+      const range = DEVICE_PARAMS[device.type]?.[name];
+      if (!range) {
+        error(`${devicePath}.params.${name}`, `Parámetro desconocido para ${device.type}`);
+        continue;
+      }
+      if (!Number.isFinite(value) || value < range[0] || value > range[1]) {
+        error(`${devicePath}.params.${name}`, `Fuera de rango [${range[0]}, ${range[1]}]: ${value}`);
+      }
+    }
+  });
 }
 
 function validateNote(note: Note, path: string, error: (path: string, message: string) => void): void {

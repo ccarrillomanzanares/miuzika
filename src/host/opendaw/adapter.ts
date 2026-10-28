@@ -12,7 +12,7 @@
  *    proporcionan al engine en playback; el .odw solo guarda referencias)
  */
 
-import type { Project as MiuzikaProject, Track } from "../../core/types.ts";
+import type { Device, Project as MiuzikaProject, Track } from "../../core/types.ts";
 import { createProject, emptyTrack } from "../../core/project.ts";
 import { beatsPerBar } from "../../core/types.ts";
 import {
@@ -25,7 +25,7 @@ import {
   velocityToUnit,
 } from "./mapping.ts";
 import { installNodeShims } from "./shims.ts";
-import { Option } from "@opendaw/lib-std";
+import { Option, UUID } from "@opendaw/lib-std";
 
 interface OpenDawExport {
   bytes: ArrayBuffer;
@@ -36,6 +36,8 @@ interface OpenDawExport {
     notes: number;
     devices: number;
     skippedDevices: number;
+    buses: number;
+    sends: number;
   };
 }
 
@@ -195,7 +197,7 @@ export async function projectToOpenDaw(
   const env = createHeadlessEnv();
   const project = core.Project.new(env as never);
   const warnings: string[] = [];
-  const stats = { tracks: 0, regions: 0, notes: 0, devices: 0, skippedDevices: 0 };
+  const stats = { tracks: 0, regions: 0, notes: 0, devices: 0, skippedDevices: 0, buses: 0, sends: 0 };
   const audioFileByAsset = new Map<string, unknown>();
 
   try {
@@ -221,7 +223,7 @@ export async function projectToOpenDaw(
 
       // Los efectos van en todas las pistas: MIDI, SoundFont y audio. Antes sólo las
       // de sintetizador los llevaban; en las de audio se avisaba y se descartaban.
-      const aplicarEfectos = (audioUnitBox: { audioEffects: unknown }, track: Track): void => {
+      const aplicarEfectos = (audioUnitBox: { audioEffects: unknown }, track: { name: string; devices: Device[] }): void => {
         track.devices.forEach((device, index) => {
           const mapped = mapDevice(device);
           if (!mapped.factory) {
@@ -254,6 +256,51 @@ export async function projectToOpenDaw(
           ficherosSoundfont.set(clave, fichero);
         }
         return fichero;
+      };
+
+      // Buses auxiliares: un AudioBusBox cuya salida entra en una AudioUnit «aux», que
+      // suena en el master; lleva sus efectos y su volumen como una pista. Es como lo
+      // monta el importador de DAWproject de openDAW (DawProjectImporter, canales EFFECT).
+      const entradaDeBus = new Map<string, unknown>();
+      for (const bus of source.buses ?? []) {
+        const unitBox = adapters.AudioUnitFactory.create(
+          project.skeleton as never,
+          "aux" as never, // AudioUnitType.Aux
+          Option.None as never,
+        ) as unknown as { input: unknown; audioEffects: unknown };
+        const busBox = boxes.AudioBusBox.create(project.boxGraph, UUID.generate(), (box) => {
+          box.collection.refer(project.rootBox.audioBusses);
+          box.label.setValue(bus.name);
+          box.icon.setValue("Effects");
+          box.color.setValue(adapters.ColorCodes.forAudioType("aux" as never).toString());
+          box.enabled.setValue(true);
+          box.output.refer(unitBox.input as never);
+        });
+        const unit = project.boxAdapters.adapterFor(unitBox as never, adapters.AudioUnitBoxAdapter);
+        unit.namedParameter.volume.setValue(bus.gainDb);
+        aplicarEfectos(unitBox, bus);
+        entradaDeBus.set(bus.id, busBox.input);
+        stats.buses++;
+      }
+
+      // Envíos post-fader de una pista a sus buses.
+      const aplicarEnvios = (audioUnitBox: { auxSends: unknown }, track: Track): void => {
+        (track.sends ?? []).forEach((send, index) => {
+          const entrada = entradaDeBus.get(send.busId);
+          if (!entrada) {
+            warnings.push(`"${track.name}": manda a un bus que no existe (${send.busId})`);
+            return;
+          }
+          boxes.AuxSendBox.create(project.boxGraph, UUID.generate(), (box) => {
+            box.routing.setValue(1); // AudioSendRouting.Post
+            box.sendGain.setValue(send.levelDb);
+            box.sendPan.setValue(0);
+            box.audioUnit.refer(audioUnitBox.auxSends as never);
+            box.targetBus.refer(entrada as never);
+            box.index.setValue(index);
+          });
+          stats.sends++;
+        });
       };
 
       for (const track of source.tracks) {
@@ -327,6 +374,7 @@ export async function projectToOpenDaw(
           }
 
           aplicarEfectos(product.audioUnitBox, track);
+          aplicarEnvios(product.audioUnitBox, track);
           stats.tracks++;
           continue;
         }
@@ -371,6 +419,7 @@ export async function projectToOpenDaw(
 
         aplicarMezcla(product.audioUnitBox, track);
         aplicarEfectos(product.audioUnitBox, track);
+        aplicarEnvios(product.audioUnitBox, track);
 
         for (const clip of track.clips) {
           const region = project.api.createNoteRegion({
