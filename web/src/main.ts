@@ -313,28 +313,37 @@ let turnosAgente: TurnoAgente[] = [];
 /** Slug cuya conversación está cargada en memoria (para no recargarla sin motivo). */
 let slugAgente = "";
 
+/**
+ * Sin proyecto abierto la conversación va a `proyectos/sin-proyecto/agente.json`
+ * (la misma carpeta que usa el servidor para lo que no tiene proyecto). Antes no se
+ * guardaba en ningún sitio y un F5 tiraba lo hablado (ESTADO 28-oct, pendiente 1).
+ * No sale en la lista de proyectos: allí sólo cuentan carpetas con proyecto.json.
+ */
+const SLUG_SIN_PROYECTO = "sin-proyecto";
+
 async function cargarAgenteDelProyecto(vista: Project | null): Promise<void> {
-  const slug = vista ? slugDeProyecto(vista) : "";
+  const slug = vista ? slugDeProyecto(vista) : SLUG_SIN_PROYECTO;
   if (slug === slugAgente) return;
   slugAgente = slug;
   resumenAgente = "";
   turnosAgente = [];
-  if (slug !== "") {
-    try {
-      const res = await fetch(`/api/fs/read`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: `proyectos/${slug}/agente.json` }),
-      });
-      if (res.ok) {
-        const datos = (await res.json()) as { contenido?: string };
-        const leido = interpretarAgente(String(datos.contenido ?? ""));
-        resumenAgente = leido.resumen;
-        turnosAgente = leido.turnos;
-      }
-    } catch {
-      /* sin historial: se empieza limpio */
+  try {
+    const res = await fetch(`/api/fs/read`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: `proyectos/${slug}/agente.json` }),
+    });
+    if (res.ok) {
+      const datos = (await res.json()) as { contenido?: string };
+      // Al arrancar se pide «sin-proyecto» y enseguida el proyecto que se restaura:
+      // si esta lectura llega tarde, no puede pisar la del proyecto ya abierto.
+      if (slugAgente !== slug) return;
+      const leido = interpretarAgente(String(datos.contenido ?? ""));
+      resumenAgente = leido.resumen;
+      turnosAgente = leido.turnos;
     }
+  } catch {
+    /* sin historial: se empieza limpio */
   }
   // A MITAD de turno (el agente acaba de llamar a crear_proyecto) la conversación NO
   // se toca: es la del encargo en curso. Antes se vaciaba aquí y la siguiente llamada
@@ -1877,10 +1886,10 @@ window.addEventListener("keydown", (event) => {
  */
 async function boot(): Promise<void> {
   setProject(null, false);
-  // `cargarAgenteDelProyecto` sale antes cuando el slug no cambia ("" -> ""), así que
-  // el prompt de sistema se quedaba con el texto pelado: sin manifiesto y sin la
-  // línea del proyecto. El turno lo refresca igual antes de enviar, pero el estado en
-  // reposo mentía a quien lo mirase (y a `__miuzika.conversacion`).
+  // El prompt de sistema tiene que llevar el manifiesto y la línea del proyecto desde
+  // el arranque (antes se quedaba pelado y el estado en reposo mentía a quien mirase
+  // `__miuzika.conversacion`). `cargarAgenteDelProyecto` también lo refresca, pero
+  // no se le espera aquí.
   await refrescarManifiesto();
   setPlaying(false);
   ready = true;
