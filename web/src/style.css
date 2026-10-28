@@ -1006,3 +1006,98 @@ button.active {
   font-size: 12px;
   color: var(--muted);
 }
+
+/* ── Encargo (formulario que escribe el mensaje del chat) ─────────────────── */
+.dialogo-encargo {
+  width: min(640px, 94vw);
+}
+
+.encargo .encargo-ayuda {
+  margin: 0 0 12px;
+  font-size: 12px;
+}
+
+.encargo .fila {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  align-items: start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.encargo .fila[hidden] {
+  display: none;
+}
+
+.encargo .etiqueta {
+  padding-top: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.encargo .opciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  font-size: 13px;
+}
+
+.encargo .opciones.columna {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.encargo .opcion {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.encargo input:not([type]),
+.encargo input[name="cancion"],
+.encargo input[name="instrumento"],
+.encargo textarea {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
+.encargo input.corto {
+  width: 90px;
+}
+
+.encargo small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.encargo .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.encargo .chips:empty {
+  display: none;
+}
+
+.encargo .chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.encargo .primario {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+@media (max-width: 520px) {
+  .encargo .fila {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

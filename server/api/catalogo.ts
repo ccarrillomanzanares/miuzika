@@ -291,6 +291,7 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
         ruta: null,
         aviso: "no hay ningún .sf2 en workspace/catalogo/gm/",
         biblioteca: textoDeBiblioteca(biblioteca()),
+        bibliotecaNombres: biblioteca().map((i) => i.nombre),
       });
       return;
     }
@@ -312,6 +313,7 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
       bytes: estado.size,
       instrumentos: presetsGm.texto,
       biblioteca: textoDeBiblioteca(biblioteca()),
+      bibliotecaNombres: biblioteca().map((i) => i.nombre),
     });
   });
 }

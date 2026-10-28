@@ -1,7 +1,7 @@
 import type { CodeSource, Project } from "../../src/core/types.ts";
 import { promptDelSistema } from "./agente-prompt.ts";
-import { plantillaEncargo } from "./plantilla.ts";
-import { setGeneradorPlantilla } from "./chat.ts";
+import { FormularioEncargo } from "./formulario-encargo.ts";
+import { escribirEnCompositor, setAbrirEncargo } from "./chat.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
 import { carpetaDeProyecto, createProject, projectStats } from "../../src/core/project.ts";
 import { compasesDeAudio } from "../../src/core/tiempo.ts";
@@ -1135,32 +1135,12 @@ $("sel-delete").addEventListener("click", deleteSelectedTracks);
 $("sel-all").addEventListener("click", () => timeline.selectAll());
 $("sel-clear").addEventListener("click", () => timeline.clearSelection());
 
-/**
- * Contexto del proyecto para la plantilla: lo que ya existe, medido. Así el encargo
- * lleva BPM, compás, compases, tonalidad y pistas sin que el usuario los copie.
- */
-setGeneradorPlantilla(() => {
-  if (!project) return plantillaEncargo(null);
-  const compas = `${project.timeSignature.numerator}/${project.timeSignature.denominator}`;
-  const material = [...project.tracks]
-    .filter((t) => t.kind === "audio")
-    .map((t) => t.name)
-    .slice(0, 8);
-  return plantillaEncargo({
-    nombre: project.name,
-    bpm: project.bpm,
-    compas,
-    compases: project.lengthBars,
-    tonalidad: `${project.key.tonic} ${project.key.mode}`,
-    pistas: project.tracks.map((t) => ({
-      nombre: t.name,
-      tipo: t.instrument.type,
-      notas: t.clips.reduce((suma, clip) => suma + clip.notes.length, 0),
-      silenciada: t.muted,
-    })),
-    material,
-  });
+// El botón «Encargo» del chat: un formulario que escribe el mensaje (no lo envía).
+const formularioEncargo = new FormularioEncargo({
+  proyecto: () => project,
+  escribir: (texto) => escribirEnCompositor(texto),
 });
+setAbrirEncargo(() => void formularioEncargo.abrir());
 
 // Las herramientas del agente que tocan el proyecto (agent/acciones.ts) trabajan
 // sobre ESTA pestaña a través de un contrato pequeño.

@@ -9,7 +9,6 @@
  * plegado y dónde ejecuta Python (cpu o GPU). `onSend` es el enganche del agente.
  */
 
-import { CURSOR_PLANTILLA } from "./plantilla.ts";
 import { escapeHtml } from "./timeline.ts";
 import { setDestino, type Destino } from "./agent/tools.ts";
 
@@ -51,13 +50,23 @@ const DESTINO_KEY = "miuzika.destino";
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 /**
- * Quién sabe generar la plantilla (main.ts, que conoce el proyecto abierto). Se
- * registra al arrancar; sin registro, el botón no hace nada en vez de mentir.
+ * Qué hace el botón «Encargo» (main.ts abre el formulario). Sin registro, el
+ * botón no hace nada en vez de mentir.
  */
-let generadorPlantilla: (() => string) | null = null;
+let abrirEncargo: (() => void) | null = null;
 
-export function setGeneradorPlantilla(fn: (() => string) | null): void {
-  generadorPlantilla = fn;
+export function setAbrirEncargo(fn: (() => void) | null): void {
+  abrirEncargo = fn;
+}
+
+/** Escribe `texto` en el compositor del chat, sin enviarlo (detrás de lo que hubiera). */
+export function escribirEnCompositor(texto: string): void {
+  const input = document.getElementById("chat-input") as HTMLTextAreaElement | null;
+  if (!input || texto.trim() === "") return;
+  input.value = input.value.trim() === "" ? texto : `${input.value.replace(/\s+$/, "")}\n${texto}`;
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 export function initChat(): ChatApi {
@@ -163,18 +172,8 @@ export function initChat(): ChatApi {
     }
   });
 
-  // Plantilla de encargo: el esqueleto + el contexto medido del proyecto abierto.
-  // El texto lo genera main.ts, que es quien conoce el proyecto.
-  const botonPlantilla = document.getElementById("chat-plantilla");
-  botonPlantilla?.addEventListener("click", () => {
-    const plantilla = generadorPlantilla ? generadorPlantilla() : "";
-    if (!plantilla) return;
-    const vacio = input.value.trim() === "";
-    input.value = vacio ? plantilla : `${input.value.replace(/\s+$/, "")}\n${plantilla}`;
-    input.focus();
-    if (vacio) input.setSelectionRange(CURSOR_PLANTILLA, CURSOR_PLANTILLA);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  // Encargo: un formulario que escribe el mensaje en el chat (formulario-encargo.ts).
+  document.getElementById("chat-plantilla")?.addEventListener("click", () => abrirEncargo?.());
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
