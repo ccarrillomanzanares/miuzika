@@ -8,7 +8,8 @@ import { compasesDeAudio } from "../../src/core/tiempo.ts";
 import { applyOps } from "../../src/core/ops.ts";
 import type { Op } from "../../src/core/ops.ts";
 import {
-  SEGUNDOS_STREAMING,
+  assetsPorStreaming,
+  reservarDecodificado,
   audioAssets,
   computePeaks,
   hidratarAssets,
@@ -1199,6 +1200,10 @@ async function exportarProyecto(formatos: { midi: boolean; wav: boolean }): Prom
           `peak ${picoDb.toFixed(1)} dBFS${pico > 1 ? " — CLIPPING: lower the master" : ""}).`,
       );
     }
+    const fuera = formatos.wav ? assetsPorStreaming(view) : [];
+    if (fuera.length > 0) {
+      hechos.push(`Not in the WAV (long, played by streaming, outside openDAW): ${fuera.join(", ")}.`);
+    }
     return { ok: true, texto: hechos.join("\n") || "No format was requested." };
   } catch (error) {
     return {
@@ -1262,14 +1267,18 @@ async function escucharMezcla(opciones: { pistas?: string[]; compasesPorTramo?: 
       setStatus(`Listening: track ${i + 1}/${elegidas.length} (${pista.name})…`);
       // La pista sola, sin mute ni solo: se mide si su instrumento produce señal.
       const sola: Project = { ...view, tracks: [{ ...pista, muted: false, solo: false }] };
+      // Los clips de WAV por streaming no pasan por openDAW: contarlos daría un MUDO falso.
+      const enMotor = pista.clips.filter((clip) => !(clip.audio && audioAssets.get(clip.audio.assetId)?.streaming));
       pistas.push({
         nombre: pista.name,
         muted: pista.muted,
-        notas: notasPorTramo(pista, tiemposTramo, tramos),
+        notas: notasPorTramo({ clips: enMotor }, tiemposTramo, tramos),
         niveles: medir(await render.renderizar(sola)),
       });
     }
-    return { ok: true, texto: informeEscucha({ compasesPorTramo, mezcla, pistas, sinCargar: render.sinCargar }) };
+    const fuera = assetsPorStreaming(view);
+    const nota = fuera.length > 0 ? `\nNO medidos (WAV largos por streaming, fuera de openDAW; suenan en el Play): ${fuera.join(", ")}.` : "";
+    return { ok: true, texto: informeEscucha({ compasesPorTramo, mezcla, pistas, sinCargar: render.sinCargar }) + nota };
   } catch (error) {
     return { ok: false, texto: `Could not listen to the mix: ${error instanceof Error ? error.message : String(error)}` };
   }
@@ -1421,8 +1430,9 @@ async function importarAudio(files: File[], destino: "anadir" | "nuevo" = "anadi
       let nombre = file.name.replace(/\.[^.]+$/, "").slice(0, 60) || "Audio";
       let durationBeats = Math.max(0.25, (segundos * current.bpm) / 60);
 
-      if (segundos >= SEGUNDOS_STREAMING) {
-        // Largo: nunca se decodifica (así caben stems de 6 minutos).
+      const soltar = reservarDecodificado(segundos);
+      if (!soltar) {
+        // Largo y sin memoria para él: no se decodifica (así caben stems de 6 minutos).
         assetId = idDeAsset(nombre);
         registrarAssetStreaming({
           id: assetId,
@@ -1432,8 +1442,8 @@ async function importarAudio(files: File[], destino: "anadir" | "nuevo" = "anadi
           peaks: Float32Array.from(meta.picos),
         });
       } else {
-        // Corto: decodificado para que openDAW lo pueda reproducir.
-        const asset = await loadAudioFile(file, current.bpm, ruta);
+        // Cabe: decodificado para que openDAW lo pueda reproducir.
+        const asset = await loadAudioFile(file, current.bpm, ruta).finally(soltar);
         assetId = asset.id;
         nombre = asset.name;
         durationBeats = asset.durationBeats;

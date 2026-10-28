@@ -6,8 +6,10 @@
  * IndexedDB: el proyecto es el fichero maestro (`proyecto.json`) más sus WAV,
  * así que lo que suena es exactamente lo que hay en la carpeta.
  *
- * Los ficheros largos (> SEGUNDOS_STREAMING) no se decodifican nunca: se
- * reproducen con `<audio>` por streaming y la onda la calcula el servidor.
+ * Los cortos (≤ SEGUNDOS_STREAMING) se decodifican siempre. Los largos, mientras
+ * quepan en PRESUPUESTO_DECODIFICADO_MB: así pasan por openDAW (efectos, envíos,
+ * exportar). Los que no caben se reproducen con `<audio>` por streaming, con la
+ * onda calculada en el servidor, y no entran en el mezclador.
  */
 
 import type { Project } from "../../src/core/types.ts";
@@ -15,8 +17,60 @@ import { idsDeAssets } from "../../src/core/project.ts";
 import { rutaEnWorkspace } from "../../src/core/rutas.ts";
 import { slugDe } from "../../src/core/nombres.ts";
 
-/** Por encima de estos segundos el WAV no se decodifica: se reproduce por streaming. */
+/** Hasta estos segundos el WAV se decodifica siempre. */
 export const SEGUNDOS_STREAMING = 30;
+
+/**
+ * Memoria para WAV largos decodificados (Float32, estéreo, 48 kHz ≈ 0,37 MB/s).
+ * Medido el 23-oct: diez stems de 6 min (1,3 GB) no cabían en el portátil, y por
+ * eso todo lo de más de 30 s iba por streaming, fuera de openDAW. 400 MB son unos
+ * 18 min de audio estéreo: tres stems de 6 min, o un proyecto entero de pocas pistas.
+ * Si el navegador se queda sin memoria, bájalo.
+ */
+export const PRESUPUESTO_DECODIFICADO_MB = 400;
+const BYTES_POR_SEGUNDO = 48_000 * 2 * 4;
+
+/** Bytes que reservan las decodificaciones en curso (hidratarAssets va de cuatro en cuatro). */
+let reservado = 0;
+
+function bytesDecodificados(): number {
+  let total = 0;
+  for (const asset of audioAssets.values()) {
+    if (asset.buffer) total += asset.buffer.length * asset.buffer.numberOfChannels * 4;
+  }
+  return total;
+}
+
+/** ¿Se decodifica un WAV de esta duración con estos bytes ya en uso? Pura, con pruebas. */
+export function decidirDecodificar(duracionSeg: number, bytesEnUso: number, presupuestoMb = PRESUPUESTO_DECODIFICADO_MB): boolean {
+  if (duracionSeg <= SEGUNDOS_STREAMING) return true;
+  return bytesEnUso + duracionSeg * BYTES_POR_SEGUNDO <= presupuestoMb * 1024 * 1024;
+}
+
+/**
+ * Reserva memoria para decodificar un WAV. Devuelve con qué soltar la reserva una
+ * vez decodificado (o fallido), o null si no cabe y debe ir por streaming.
+ */
+export function reservarDecodificado(duracionSeg: number): (() => void) | null {
+  if (!decidirDecodificar(duracionSeg, bytesDecodificados() + reservado)) return null;
+  const bytes = duracionSeg <= SEGUNDOS_STREAMING ? 0 : duracionSeg * BYTES_POR_SEGUNDO;
+  reservado += bytes;
+  let suelta = false;
+  return () => {
+    if (suelta) return;
+    suelta = true;
+    reservado -= bytes;
+  };
+}
+
+/** Nombres de los assets del proyecto que van por streaming: no suenan en openDAW ni en el WAV exportado. */
+export function assetsPorStreaming(project: Project | null): string[] {
+  if (!project) return [];
+  return idsDeAssets(project).flatMap((id) => {
+    const asset = audioAssets.get(id);
+    return asset?.streaming ? [asset.name] : [];
+  });
+}
 
 interface LoadedAsset {
   id: string;
@@ -169,7 +223,8 @@ export async function hidratarAssets(
       const { picos, duracionSeg } = await metadatosWav(completa);
       const durationBeats =
         meta.durationBeats > 0 ? meta.durationBeats : (duracionSeg * project.bpm) / 60;
-      if (duracionSeg > SEGUNDOS_STREAMING) {
+      const soltar = reservarDecodificado(duracionSeg);
+      if (!soltar) {
         registrarAssetStreaming({
           id,
           name: meta.name,
@@ -178,15 +233,19 @@ export async function hidratarAssets(
           peaks: Float32Array.from(picos),
         });
       } else {
-        await decodificarDeDisco({
-          id,
-          name: meta.name,
-          ruta: meta.ruta,
-          completa,
-          bpm: project.bpm,
-          durationBeats,
-          peaks: Float32Array.from(picos),
-        });
+        try {
+          await decodificarDeDisco({
+            id,
+            name: meta.name,
+            ruta: meta.ruta,
+            completa,
+            bpm: project.bpm,
+            durationBeats,
+            peaks: Float32Array.from(picos),
+          });
+        } finally {
+          soltar();
+        }
       }
       cargados++;
     } catch {
