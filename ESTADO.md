@@ -66,6 +66,17 @@ anterior, humseed, está en la rama `humseed`). En el portátil, la carpeta sigu
   no lee claves, sin procesos, red ni ctypes; entorno mínimo. Guardarraíl, no jaula.
 - Contador de la GPU en inglés (español con `?lang=es`).
 
+**28-oct, noche: sesión con el agente sobre «Hard»** (vigilando `tmp/llm.log`):
+- Arreglado: los parámetros sueltos de un efecto (`{type:"compressor", thresholdDb:-20}`) se
+  perdían sin avisar (`6da2f44`); el render de openDAW se cortaba tras 10 s de silencio y daba
+  MUDO falsos en `escuchar_mezcla` (`2fc97ab`); openDAW tira la zona global de los SF2 y 113 de
+  128 presets GM perdían el bucle (`f3a734d`, `web/src/soundfont-zonas.ts`). Ninguno se ha oído.
+- «Hard»: 112 compases (4:04), final nuevo. Grand Piano silenciado (y a −60 dB). La pista
+  «Piano oscuro» (GM 5) tiene OTRA VEZ las notas copiadas del piano: el agente restauró la
+  versión de antes y borró la melodía nueva. Está guardada en
+  `proyectos/hard/melodia-nueva-lead-oscuro.json` (10 llamadas a `escribir_notas`); falta
+  volver a escribirla. Los efectos de batería, bajo y bus siguen con valores por defecto.
+
 ## 2. Pendiente de comprobar en el navegador (Carlos)
 
 Nada de esto se ha podido oír desde las sesiones anteriores:
@@ -84,11 +95,23 @@ Nada de esto se ha podido oír desde las sesiones anteriores:
 ## 3. Pendiente de hacer
 
 1. Dibujar los buses y los envíos en la interfaz (mezclador).
+1. Visto el 28-oct con el agente:
+   - `escribir_notas`/`escribir_bateria` sin `pista` crean una pista nueva («trk_pista_…»);
+     deben dar error (es obligatorio en el esquema y el código no lo comprueba).
+   - Los nombres de clip repiten el compás («Pre - batería 33 33»).
+   - `escuchar_mezcla`: la fila «(muted)» se mide sola y sin mute a propósito, pero no lo dice;
+     el agente concluyó dos veces que el mute no funcionaba. Decirlo en el informe.
+   - Cancel no corta `escuchar_mezcla`/`exportar` a medias: espera a que acaben los renders.
+     Comprobar la señal entre render y render.
+   - Los instrumentos VCSL suenan ~12 dB por debajo de los GM (medido por el agente): mirar
+     el nivel en `sfz2sf2.py`.
+   - `llm.log` corta los resultados de las herramientas y `agente.json` no los guarda: para
+     revisar una escucha hace falta la tabla entera.
 2. Si la caja de Python se queda corta: otro usuario de Windows o un contenedor. Los
    scripts de la GPU (Lambda) no pasan por la caja.
 
 ## 4. Cómo empezar
 
-1. `npm run typecheck` y `npm run test:unit` (186 pruebas en verde el 28-oct por la tarde; `npm test` añade el contrato con openDAW).
+1. `npm run typecheck` y `npm run test:unit` (189 pruebas en verde el 28-oct por la noche; `npm test` añade el contrato con openDAW).
 2. `python workspace/herramientas/smoke.py`.
 3. `npm run dev` y repasar la lista de la sección 2 con Carlos.
