@@ -79,7 +79,7 @@ async function bootEngine(): Promise<EngineBoot> {
       wasmUrl: `${import.meta.env.BASE_URL}opendaw-wasm`,
     });
     if (!(await WasmEngine.ensureReady(context))) {
-      throw new Error("El engine WASM de openDAW no está disponible");
+      throw new Error("The openDAW WASM engine is not available");
     }
     return {
       context,

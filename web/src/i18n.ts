@@ -84,24 +84,29 @@ const DICCIONARIOS: Partial<Record<Idioma, Diccionario>> = { es: ES };
 /** Clave de localStorage con el idioma forzado a mano. */
 export const CLAVE_IDIOMA = "miuzika.idioma";
 
-/** Idioma pedido explícitamente en la URL (`?lang=es`), si lo hay. */
+/**
+ * Idioma pedido en la URL (`?lang=es`). Vale para esta carga y NO se guarda: un
+ * parámetro de URL que se queda pegado deja la app en español para siempre, sin
+ * forma de volver salvo borrar el localStorage a mano.
+ */
 function idiomaDeUrl(): Idioma | null {
   try {
     const pedido = new URLSearchParams(location.search).get("lang");
-    if (pedido === "es" || pedido === "en") {
-      fijarIdioma(pedido);
-      return pedido;
-    }
+    if (pedido === "es" || pedido === "en") return pedido;
   } catch {
     /* sin location (pruebas) */
   }
   return null;
 }
 
-/** Idioma forzado a mano (URL o localStorage); null si manda el navegador. */
+/** Idioma forzado en esta sesión con `fijarIdioma` (gana a todo lo demás). */
+let forzado: Idioma | null = null;
+
+/** Idioma forzado a mano (URL, memoria o localStorage); null si no hay ninguno. */
 function idiomaForzado(): Idioma | null {
   const deUrl = idiomaDeUrl();
   if (deUrl) return deUrl;
+  if (forzado) return forzado;
   try {
     const guardado = localStorage.getItem(CLAVE_IDIOMA);
     if (guardado === "es" || guardado === "en") return guardado;
@@ -113,6 +118,7 @@ function idiomaForzado(): Idioma | null {
 
 /** Fuerza el idioma de la interfaz y lo recuerda. */
 export function fijarIdioma(nuevo: Idioma): void {
+  forzado = nuevo;
   try {
     localStorage.setItem(CLAVE_IDIOMA, nuevo);
   } catch {
@@ -121,20 +127,25 @@ export function fijarIdioma(nuevo: Idioma): void {
   actual = nuevo;
 }
 
-/**
- * Idioma de la interfaz. El inglés es el de partida: sólo se cambia si la persona
- * lo fuerza o si su navegador pide español.
- */
-export function idiomaDe(preferidos: readonly string[]): Idioma {
-  const forzado = idiomaForzado();
-  if (forzado) return forzado;
-  for (const etiqueta of preferidos) {
-    const base = etiqueta.toLowerCase().split("-")[0];
-    // El orden del navegador manda: si pide inglés antes que español, inglés.
-    if (base === "es") return "es";
-    if (base === "en") return "en";
+/** Vuelve al idioma de partida (inglés). Para los tests y para «automático». */
+export function olvidarIdioma(): void {
+  forzado = null;
+  actual = "en";
+  try {
+    localStorage.removeItem(CLAVE_IDIOMA);
+  } catch {
+    /* sin localStorage */
   }
-  return "en";
+}
+
+/**
+ * Idioma de la interfaz: **inglés para todo el mundo**. El navegador ya no decide
+ * nada; sólo se cambia si alguien lo fuerza (`?lang=es` o `fijarIdioma`). El
+ * argumento se acepta para no romper las llamadas, pero no se usa: que el sistema
+ * esté en español no debe hacer que la app hable español a quien no lo ha pedido.
+ */
+export function idiomaDe(_preferidos: readonly string[] = []): Idioma {
+  return idiomaForzado() ?? "en";
 }
 
 let actual: Idioma = "en";

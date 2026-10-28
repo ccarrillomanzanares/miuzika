@@ -134,12 +134,12 @@ test("un fichero del formato anterior (assets[] aparte) conserva las rutas", () 
 });
 
 test("interpretarProyectoEnDisco rechaza lo que no es un proyecto, con motivo", () => {
-  assert.throws(() => interpretarProyectoEnDisco("{roto"), /no es JSON válido/);
-  assert.throws(() => interpretarProyectoEnDisco("null"), /vacío o no es un objeto/);
+  assert.throws(() => interpretarProyectoEnDisco("{roto"), /is not valid JSON/);
+  assert.throws(() => interpretarProyectoEnDisco("null"), /empty or is not an object/);
   assert.throws(() => interpretarProyectoEnDisco('{"hola":1}'), /no es un proyecto de miuzika/);
   assert.throws(
     () => interpretarProyectoEnDisco(`{"formato":"${FORMATO}","version":1,"proyecto":{"schemaVersion":2}}`),
-    /el proyecto del fichero no es válido/,
+    /the project in the file is not valid/,
   );
 });
 

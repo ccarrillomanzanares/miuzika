@@ -1,16 +1,22 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { fijarIdioma, idioma, idiomaDe, t } from "./i18n.ts";
+import { fijarIdioma, idioma, idiomaDe, olvidarIdioma, t } from "./i18n.ts";
 
-test("el idioma sale de las preferencias del navegador, en orden", () => {
-  assert.equal(idiomaDe(["es-ES", "en"]), "es");
-  assert.equal(idiomaDe(["es-MX"]), "es");
-  assert.equal(idiomaDe(["en-GB", "es"]), "en");
-  assert.equal(idiomaDe(["fr-FR", "es-ES"]), "es");
-  // Sin ninguno de los dos, inglés: es el idioma base.
-  assert.equal(idiomaDe(["ja-JP"]), "en");
+test("inglés para todo el mundo, diga lo que diga el navegador", () => {
+  olvidarIdioma();
+  // El navegador en español ya no cambia nada: es el fallo que se corrigió.
+  assert.equal(idiomaDe(["es-ES", "en"]), "en");
+  assert.equal(idiomaDe(["es-MX"]), "en");
+  assert.equal(idiomaDe(["fr-FR"]), "en");
   assert.equal(idiomaDe([]), "en");
+});
+
+test("sólo cambia si se fuerza", () => {
+  fijarIdioma("es");
+  assert.equal(idiomaDe(["en-GB"]), "es");
+  olvidarIdioma();
+  assert.equal(idiomaDe(["es-ES"]), "en");
 });
 
 test("sin traducción se usa el texto de reserva", () => {

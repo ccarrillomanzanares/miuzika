@@ -123,10 +123,10 @@ export function interpretarProyectoEnDisco(texto: string): ProyectoEnDisco {
   try {
     crudo = JSON.parse(texto);
   } catch {
-    throw new Error("proyecto.json no es JSON válido.");
+    throw new Error("proyecto.json is not valid JSON.");
   }
   if (!crudo || typeof crudo !== "object") {
-    throw new Error("proyecto.json está vacío o no es un objeto.");
+    throw new Error("proyecto.json is empty or is not an object.");
   }
   const datos = crudo as Partial<ProyectoEnDisco> & Partial<Project> & { assets?: AssetsAntiguos[] };
 
@@ -140,7 +140,7 @@ export function interpretarProyectoEnDisco(texto: string): ProyectoEnDisco {
   }
   const proyecto = datos.proyecto;
   if (!proyecto || proyecto.schemaVersion !== 1 || !Array.isArray(proyecto.tracks)) {
-    throw new Error("el proyecto del fichero no es válido (schemaVersion 1 y tracks son obligatorios).");
+    throw new Error("the project in the file is not valid (schemaVersion 1 and tracks are required).");
   }
 
   // Ruta escrita donde toque: primero la del formato nuevo, si no la lista vieja.
