@@ -319,56 +319,57 @@ def escribir(salida, pcm, shdr, zonas, nombre_preset):
 
     # ── pdta
     # Estructura: preset → bolsas → instrumento → bolsas por zona → generadores.
-    # Cada bolsa apunta al primer generador/modulador que le toca, y cada lista
-    # termina con un registro de ceros. Si falta un terminador por zona, el lector
-    # funde todas las zonas en una (pasó: el arpa salía con 1 zona y sin notas).
+    # Las zonas las delimitan los ÍNDICES: las bolsas del preset i van de
+    # phdr[i].bagIndex a phdr[i+1].bagIndex (el registro final EOP/EOI cuenta), y
+    # los generadores de la bolsa j, de bag[j] a bag[j+1]. Sólo cada LISTA termina
+    # en un registro de ceros; dentro de una zona no hay terminador, y el generador
+    # de instrumento (41) o de sample (53) va el último.
+    # Medido el 28-oct: con EOP/EOI apuntando a 0 y un (0,0) cerrando cada zona,
+    # el lector de openDAW veía el preset con 0 zonas y el instrumento sin regiones:
+    # TODOS los instrumentos de la biblioteca sonaban en silencio.
     phdr = [
         struct.pack(
             "<20sHHHiii",
             nombre_preset[:19].encode("latin-1", "replace").ljust(20, b"\x00"),
-            0,
-            0,
-            0,  # bagIndex del preset
+            0,  # preset (programa)
+            0,  # banco
+            0,  # primera bolsa del preset
             0,
             0,
             0,
         ),
-        struct.pack("<20sHHHiii", b"EOP".ljust(20, b"\x00"), 0, 0, 0, 0, 0, 0),
+        struct.pack("<20sHHHiii", b"EOP".ljust(20, b"\x00"), 0, 0, 1, 0, 0, 0),
     ]
 
-    # Preset: una bolsa con el generador 41 (instrumento) y su terminador.
+    # Preset: una bolsa con el generador 41 (instrumento 0); luego los terminadores.
     pgen = [struct.pack("<HH", 41, 0), struct.pack("<HH", 0, 0)]
-    pbag = [struct.pack("<HH", 0, 0), struct.pack("<HH", 2, 0)]
-    pmod = [struct.pack("<HHHHH", 0, 0, 0, 0, 0), struct.pack("<HHHHH", 0, 0, 0, 0, 0)]
+    pbag = [struct.pack("<HH", 0, 0), struct.pack("<HH", 1, 0)]
+    pmod = [struct.pack("<HHhHH", 0, 0, 0, 0, 0)]
 
     pinst = [
         struct.pack("<20sH", nombre_preset[:19].encode("latin-1", "replace").ljust(20, b"\x00"), 0),
-        struct.pack("<20sH", b"EOI".ljust(20, b"\x00"), 0),
+        struct.pack("<20sH", b"EOI".ljust(20, b"\x00"), len(zonas)),
     ]
 
-    # Una bolsa por zona: (primer generador, primer modulador).
+    # Una bolsa por zona: (primer generador, primer modulador). Sin moduladores.
     ibag = []
-    imod = []
     igen = []
-    gen_index = 0
-    for indice, zona in enumerate(zonas):
-        ibag.append(struct.pack("<HH", gen_index, indice))
-        generadores = [
-            struct.pack("<HH", GEN_KEY_RANGE, (zona["lokey"] << 8) | zona["hikey"]),
-            struct.pack("<HH", GEN_VEL_RANGE, (zona["lovey"] << 8) | zona["hivey"]),
+    for zona in zonas:
+        ibag.append(struct.pack("<HH", len(igen), 0))
+        igen.extend([
+            # keyRange primero y velRange después: lo exige la especificación.
+            struct.pack("<HH", GEN_KEY_RANGE, zona["lokey"] | (zona["hikey"] << 8)),
+            struct.pack("<HH", GEN_VEL_RANGE, zona["lovey"] | (zona["hivey"] << 8)),
             struct.pack("<HH", GEN_ROOT_KEY, zona["root"]),
-            struct.pack("<hH", GEN_COARSE_TUNE, zona["coarse"] & 0xFFFF),
-            struct.pack("<hH", GEN_FINE_TUNE, zona["fine"] & 0xFFFF),
+            struct.pack("<Hh", GEN_COARSE_TUNE, zona["coarse"]),
+            struct.pack("<Hh", GEN_FINE_TUNE, zona["fine"]),
             struct.pack("<HH", GEN_INITIAL_ATTENUATION, min(1440, zona["atenuacion"])),
             struct.pack("<HH", GEN_SAMPLE_MODES, 0),
-            struct.pack("<HH", GEN_SAMPLE_ID, zona["sample_id"]),
-            struct.pack("<HH", 0, 0),  # terminador de la zona
-        ]
-        igen.extend(generadores)
-        gen_index += len(generadores)
-        imod.append(struct.pack("<HHHHH", 0, 0, 0, 0, 0))
-    ibag.append(struct.pack("<HH", gen_index, len(zonas)))  # sentinel
-    imod.append(struct.pack("<HHHHH", 0, 0, 0, 0, 0))
+            struct.pack("<HH", GEN_SAMPLE_ID, zona["sample_id"]),  # el último
+        ])
+    ibag.append(struct.pack("<HH", len(igen), 0))  # bolsa terminal
+    igen.append(struct.pack("<HH", 0, 0))  # generador terminal
+    imod = [struct.pack("<HHhHH", 0, 0, 0, 0, 0)]  # modulador terminal
 
     # shdr: un registro por sample (46 bytes) y el terminador EOS.
     registros_shdr = b""
