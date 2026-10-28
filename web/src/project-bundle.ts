@@ -71,7 +71,7 @@ export async function importProjectBundle(file: Blob): Promise<BundleImportado> 
   for (const asset of manifest?.assets ?? []) {
     const data = entries[asset.file];
     if (!data || data.length === 0) {
-      warnings.push(`Falta el WAV "${asset.name}" dentro del bundle.`);
+      warnings.push(`The WAV "${asset.name}" is missing from the bundle.`);
       continue;
     }
     wavs.push({ assetId: asset.id, nombre: nombreDeFichero(asset.file), data });

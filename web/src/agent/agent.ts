@@ -94,8 +94,8 @@ export async function ejecutarAgente(
   /** Respuesta de cierre cuando el usuario cancela. */
   const cancelado = (): ResultadoAgente => ({
     texto:
-      "Turno cancelado por ti. Lo que ya se escribió en disco se queda; si había una GPU arrancada, apágala " +
-      "con el interruptor de la cabecera (sigue facturando hasta que se apague).",
+      "Turn cancelled. Whatever was already written to disk stays; if a GPU was running, switch it off " +
+      "with the header toggle (it keeps billing until it shuts down).",
     pasos,
     llamadas,
     ms: Date.now() - t0,
@@ -118,7 +118,7 @@ export async function ejecutarAgente(
         ultimoAviso = ms;
         alEvento?.({
           tipo: "progreso",
-          texto: `pensando · ${(ms / 1000).toFixed(1)} s · ${tokens} tokens`,
+          texto: `thinking · ${(ms / 1000).toFixed(1)} s · ${tokens} tokens`,
         });
       },
     });
@@ -257,10 +257,10 @@ export async function ejecutarAgente(
         const veces = (fallosIguales.get(clave) ?? 0) + 1;
         fallosIguales.set(clave, veces);
         if (veces >= 3) {
-          alEvento?.({ tipo: "aviso", texto: `Corto: «${nombre}» falla igual 3 veces.` });
+          alEvento?.({ tipo: "aviso", texto: `Stopping: “${nombre}” failed the same way 3 times.` });
           return {
             texto:
-              `He parado: «${nombre}» da el mismo error tres veces seguidas y reintentarlo no lo arregla.\n\n` +
+              `I stopped: “${nombre}” gave the same error three times in a row and retrying won't fix it.\n\n` +
               `> ${resultado.texto.split("\n")[0].slice(0, 300)}\n\n` +
               "Dime cómo seguir (si es un fallo de la app, recarga la página y repite).",
             pasos,
@@ -299,12 +299,12 @@ export async function ejecutarAgente(
       if (ciclosFallidos >= MAX_CICLOS_FALLIDOS || escriturasSinEjecutar >= 8) {
         alEvento?.({
           tipo: "aviso",
-          texto: `${MAX_CICLOS_FALLIDOS} arreglos seguidos sin que el script funcione: corto para no entrar en bucle.`,
+          texto: `${MAX_CICLOS_FALLIDOS} fixes in a row and the script still fails: stopping to avoid a loop.`,
         });
         return {
           texto:
-            `He parado: llevo ${MAX_CICLOS_FALLIDOS} arreglos seguidos y el script sigue fallando. ` +
-            "Mira el error de la última ejecución y dime cómo seguir.",
+            `I stopped: ${MAX_CICLOS_FALLIDOS} fixes in a row and the script still fails. ` +
+            "Look at the last run's error and tell me how to continue.",
           pasos,
           llamadas,
           ms: Date.now() - t0,
@@ -315,7 +315,7 @@ export async function ejecutarAgente(
   }
 
   if (pasos >= maxPasos && texto === "") {
-    alEvento?.({ tipo: "aviso", texto: `Corte de seguridad: ${maxPasos} pasos; pido un resumen.` });
+    alEvento?.({ tipo: "aviso", texto: `Safety stop: ${maxPasos} steps; asking for a summary.` });
     // Se acabaron los pasos con trabajo a medias: una última llamada SIN herramientas
     // para que el modelo diga qué ha hecho y qué falta. Antes el turno acababa en
     // «(sin respuesta final)» y la persona no sabía en qué punto estaba.

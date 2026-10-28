@@ -126,7 +126,7 @@ let trabajando = false;
 
 // ── Barra de actividad: frase de lo que hace + reloj, sin llenar el chat.
 let latido: number | null = null;
-let pasoActual = "pensando";
+let pasoActual = "thinking";
 /** Cuando empezo la herramienta en curso (null = el modelo esta pensando). */
 let pasoDesde: number | null = null;
 /** Ultima senal del turno: evento del agente o resultado de una herramienta. */
@@ -155,7 +155,7 @@ function avisoDeEspera(): string {
   if (/@lambda/.test(pasoActual) && gpu?.fase === "activa") return "GPU running · no output yet";
   // Un script en este equipo no manda señales hasta que acaba: un render de 2,5 min
   // salía como «⚠ sin señales» y parecía colgado. Su reloj ya dice cuánto lleva.
-  if (pasoDesde !== null && /^(ejecutando|exportando) /.test(pasoActual)) return "";
+  if (pasoDesde !== null && /^(running|exporting) /.test(pasoActual)) return "";
   const callado = sinSenales(ultimoEventoMs);
   return callado > 0 ? `⚠ no signal for ${callado}s` : "";
 }

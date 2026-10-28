@@ -70,7 +70,7 @@ export async function renderStrudelAudio(
       soundfontsLoaded = true;
     } catch (error) {
       warnings.push(
-        `No se cargaron los soundfonts GM: ${error instanceof Error ? error.message : String(error)}`,
+        `Could not load the GM soundfonts: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -87,7 +87,7 @@ export async function renderStrudelAudio(
       await webaudio.samples(url);
     } catch (error) {
       warnings.push(
-        `No se pudo cargar el sample pack "${url}": ${error instanceof Error ? error.message : String(error)}`,
+        `Could not load the sample pack "${url}": ${error instanceof Error ? error.message : String(error)}`,
       );
     }
     renderSource = renderSource.replace(match[0]!, "");

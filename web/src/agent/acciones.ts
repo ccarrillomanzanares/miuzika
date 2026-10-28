@@ -412,7 +412,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
 
     if (hechas.length > 0) {
       e.fijar(current);
-      e.avisar(`Pistas anadidas al proyecto: ${hechas.length}.`);
+      e.avisar(`Tracks added to the project: ${hechas.length}.`);
     }
     const texto = [
       hechas.length > 0 ? `Anadidas ${hechas.length} pistas:` : "No se anadio ninguna pista.",
@@ -703,8 +703,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       }
     }
     e.fijar(proyecto);
-    if (previo) e.avisar(`Cerrado «${previo}» (sigue guardado en disco) y abierto «${nombre}».`);
-    e.avisar(`Proyecto «${nombre}» creado (carpeta proyectos/${carpeta}/).`);
+    if (previo) e.avisar(`Closed “${previo}” (still saved on disk) and opened “${nombre}”.`);
+    e.avisar(`Project “${nombre}” created (folder proyectos/${carpeta}/).`);
     return {
       ok: true,
       texto:
