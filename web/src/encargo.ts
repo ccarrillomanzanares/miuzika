@@ -35,6 +35,8 @@ export interface Conservar {
 
 export interface Encargo {
   tipo: TipoEncargo;
+  /** Nueva: nombre del proyecto. Vacío = que lo ponga el agente (sin preguntar). */
+  nombre: string;
   /** Versión: canción y artista («Hurt – Nine Inch Nails»). */
   cancion: string;
   /** Versión: qué se mantiene del original. */
@@ -72,6 +74,7 @@ export interface Encargo {
 
 export const ENCARGO_VACIO: Encargo = {
   tipo: "nueva",
+  nombre: "",
   cancion: "",
   conservar: { melodia: true, acordes: true, riff: false, estructura: true },
   estilo: "",
@@ -211,7 +214,14 @@ export function textoDeEncargo(e: Encargo, idioma: Idioma = "es", proyectoAbiert
     );
     if (estilo) lineas.push(tx(`Qué cambiar: ${frase(estilo)}`, `What to change: ${frase(estilo)}`));
   } else {
-    lineas.push(tx("Una canción nueva, en un proyecto nuevo.", "A new song, in a new project."));
+    // Sin nombre, el agente paraba a preguntarlo (28-oct, con el plan ya hecho):
+    // se le dice que lo ponga él.
+    const nombre = limpio(e.nombre);
+    lineas.push(
+      nombre
+        ? tx(`Una canción nueva, en un proyecto nuevo llamado «${nombre}».`, `A new song, in a new project called “${nombre}”.`)
+        : tx("Una canción nueva, en un proyecto nuevo: ponle tú el nombre.", "A new song, in a new project: you name it."),
+    );
     if (estilo) lineas.push(tx(`Estilo: ${frase(estilo)}`, `Style: ${frase(estilo)}`));
     if (e.uso === "loop") {
       lineas.push(

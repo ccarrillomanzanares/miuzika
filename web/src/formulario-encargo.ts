@@ -107,6 +107,7 @@ export class FormularioEncargo {
             (project ? radio("tipo", "arreglo", tx(`Arreglar «${escapar(project.name)}»`, `Rework “${escapar(project.name)}”`)) : ""),
         )}
 
+        ${fila(tx("Nombre", "Name"), `<input name="nombre" placeholder="${tx("(si lo dejas en blanco, lo pone el agente)", "(leave blank and the agent names it)")}">`, "nueva")}
         ${fila(tx("Canción", "Song"), `<input name="cancion" placeholder="Hurt – Nine Inch Nails">`, "version")}
         ${fila(
           tx("Conservar", "Keep"),
@@ -324,6 +325,7 @@ export class FormularioEncargo {
       const encargo: Encargo = {
         ...ENCARGO_VACIO,
         tipo,
+        nombre: tipo === "nueva" ? valor("nombre") : "",
         cancion: version ? valor("cancion") : "",
         conservar: {
           melodia: version && valor("c-melodia") !== "",

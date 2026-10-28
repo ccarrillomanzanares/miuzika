@@ -291,7 +291,9 @@ function parametrosDeEfectos(): string {
 }
 
 /** Herramientas que devuelven texto por páginas y no pasan por el recorte. */
-const PAGINADAS = new Set(["leer_fichero", "leer_web", "leer_proyecto"]);
+// listar_instrumentos: la lista GM más la biblioteca pasa de 4000 caracteres; cortada,
+// el agente gastaba otro paso en leer el resto desde _salidas (28-oct).
+const PAGINADAS = new Set(["leer_fichero", "leer_web", "leer_proyecto", "listar_instrumentos"]);
 
 /** Tope de un solo escribir_fichero (≈200 líneas). Ver el porqué en el case. */
 const MAX_FICHERO = 8000;

@@ -1130,6 +1130,7 @@ button.active {
 .encargo input[name="forma"],
 .encargo input[name="evitar"],
 .encargo input[name="lleva"],
+.encargo input[name="nombre"],
 .encargo input[name="estilo"] {
   flex: 1;
   min-width: 0;

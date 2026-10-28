@@ -3,7 +3,8 @@ import test from "node:test";
 import { ENCARGO_VACIO, textoDeEncargo } from "./encargo.ts";
 
 test("un encargo vacío deja todo al agente", () => {
-  assert.equal(textoDeEncargo(ENCARGO_VACIO), "Una canción nueva, en un proyecto nuevo.");
+  assert.equal(textoDeEncargo(ENCARGO_VACIO), "Una canción nueva, en un proyecto nuevo: ponle tú el nombre.");
+  assert.equal(textoDeEncargo({ ...ENCARGO_VACIO, nombre: " Rebeldía " }), "Una canción nueva, en un proyecto nuevo llamado «Rebeldía».");
 });
 
 test("versión: a dónde se lleva, qué conserva y tempo relativo", () => {
@@ -64,7 +65,7 @@ test("nueva: uso, imagen, referencias, gancho, groove", () => {
   assert.equal(
     texto,
     [
-      "Una canción nueva, en un proyecto nuevo.",
+      "Una canción nueva, en un proyecto nuevo: ponle tú el nombre.",
       "Estilo: synthwave oscuro.",
       "Es un loop que tiene que cerrar sin costura: sin principio ni final marcados, que pueda sonar mucho rato sin cansar.",
       "Imagen: conducir de noche bajo la lluvia.",
