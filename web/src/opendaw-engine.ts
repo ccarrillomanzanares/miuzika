@@ -6,6 +6,7 @@
 import type { Project as MiuzikaProject } from "../../src/core/types.ts";
 import type { OpenDawAudioAsset, OpenDawDrumSample } from "../../src/host/opendaw/adapter.ts";
 import { projectToOpenDaw } from "../../src/host/opendaw/adapter.ts";
+import { repartirZonasGlobales } from "./soundfont-zonas.ts";
 import workletsUrl from "@opendaw/studio-core/processors.js?url";
 import workersUrl from "@opendaw/studio-core/workers-main.js?worker&url";
 import wasmProcessorUrl from "@opendaw/studio-core-wasm/wasm-processor.js?url";
@@ -286,7 +287,11 @@ async function montarProyecto(
     };
     for (const sf of [...soundfonts.values(), ...(gm ? [gm] : [])]) {
       const clave = claveDeUuid(sf.uuid);
-      if (!parseados.has(clave)) parseados.set(clave, new SoundFont2(new Uint8Array(sf.bytes)));
+      if (parseados.has(clave)) continue;
+      const parseado = new SoundFont2(new Uint8Array(sf.bytes));
+      // openDAW tira las zonas globales: sin esto, 113 de los 128 presets GM pierden el bucle.
+      repartirZonasGlobales(parseado as Parameters<typeof repartirZonasGlobales>[0]);
+      parseados.set(clave, parseado);
     }
   }
   const gmParseado = gm
