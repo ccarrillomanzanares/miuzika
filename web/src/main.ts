@@ -150,14 +150,14 @@ function avisoDeEspera(): string {
   const gpu = costeGpu.estado();
   if (gpu?.fase === "arrancando") {
     const rato = minutosYsegundos(gpu.arranque);
-    return `GPU arrancando${rato ? ` ${rato}` : ""} · aún no factura`;
+    return `GPU starting${rato ? ` ${rato}` : ""} · not billing yet`;
   }
-  if (/@lambda/.test(pasoActual) && gpu?.fase === "activa") return "GPU ejecutando · sin salida todavía";
+  if (/@lambda/.test(pasoActual) && gpu?.fase === "activa") return "GPU running · no output yet";
   // Un script en este equipo no manda señales hasta que acaba: un render de 2,5 min
   // salía como «⚠ sin señales» y parecía colgado. Su reloj ya dice cuánto lleva.
   if (pasoDesde !== null && /^(ejecutando|exportando) /.test(pasoActual)) return "";
   const callado = sinSenales(ultimoEventoMs);
-  return callado > 0 ? `⚠ sin señales hace ${callado} s` : "";
+  return callado > 0 ? `⚠ no signal for ${callado}s` : "";
 }
 
 /**
@@ -181,7 +181,7 @@ function arrancarLatido(desde: number): void {
 
 async function responderAlUsuario(texto: string): Promise<void> {
   if (trabajando) {
-    chat.add("system", "Sigo trabajando en el turno anterior: espera a que termine.");
+    chat.add("system", "Still working on the previous turn: wait for it to finish.");
     return;
   }
   trabajando = true;
@@ -194,7 +194,7 @@ async function responderAlUsuario(texto: string): Promise<void> {
   const burbuja = chat.add("assistant", "…");
   const t0 = Date.now();
   ultimoEventoMs = t0;
-  pasoActual = `Agente ${getModel()}: pensando`;
+  pasoActual = `Agent ${getModel()}: thinking`;
   pasoDesde = null;
   arrancarLatido(t0);
   try {
@@ -228,7 +228,7 @@ async function responderAlUsuario(texto: string): Promise<void> {
       },
     });
     chat.ocultarProgreso();
-    chat.update(burbuja, resultado.texto || "(sin respuesta final)");
+    chat.update(burbuja, resultado.texto || "(no final answer)");
     pararLatido();
     // Una linea discreta al final del historial: en que se fue el tiempo del turno.
     chat.add("meta", `✓ ${lineaResumen(resultado)} · ${getModel()}`);
@@ -240,13 +240,13 @@ async function responderAlUsuario(texto: string): Promise<void> {
       asistente:
         (resultado.texto ?? "").trim() !== ""
           ? resultado.texto
-          : `(turno sin respuesta final: ${lineaResumen(resultado)})`,
+          : `(turn without a final answer: ${lineaResumen(resultado)})`,
     });
     resumenAgente = estado.resumen;
     turnosAgente = estado.turnos;
     void guardarAgente();
     setStatus(
-      `✓ listo · ${resultado.pasos} paso(s) · ${resultado.llamadas} herramienta(s) · ` +
+      `✓ done · ${resultado.pasos} step(s) · ${resultado.llamadas} tool(s) · ` +
         `${segundos(resultado.ms)} · ${getModel()}`,
     );
   } catch (error) {
@@ -255,13 +255,13 @@ async function responderAlUsuario(texto: string): Promise<void> {
     if (cancelador?.signal.aborted) {
       chat.update(
         burbuja,
-        "Turno cancelado por ti. Lo que ya estaba escrito en el disco se queda; si hay una GPU arrancada, " +
-          "apágala con el contador de la cabecera (sigue facturando hasta que se apague).",
+        "Turn cancelled by you. Whatever was already written to disk stays; if a GPU is running, " +
+          "stop it from the counter in the header (it keeps billing until it stops).",
       );
-      setStatus("✓ turno cancelado");
+      setStatus("✓ turn cancelled");
       void costeGpu.refrescar();
     } else {
-      chat.update(burbuja, `No he podido completar el turno: ${mensaje}`);
+      chat.update(burbuja, `I could not finish the turn: ${mensaje}`);
       setStatus(`✗ error: ${mensaje.slice(0, 140)}`);
     }
   } finally {
@@ -285,7 +285,7 @@ chat.onSend((texto) => {
 $("cancelar").addEventListener("click", () => {
   if (!cancelador) return;
   cancelador.abort();
-  setStatus("cancelando… (la GPU, si está encendida, se apaga aparte)");
+  setStatus("cancelling… (a running GPU is stopped separately)");
 });
 
 // El servidor publica un id de su código: si cambia, esta pestaña está vieja.
@@ -295,9 +295,9 @@ vigilarVersion(() => {
   boton.classList.add("activo");
   addMessage(
     "system",
-    "El servidor tiene código más nuevo que esta pestaña. Pulsa «↻ versión nueva» para cargarlo: " +
-      "hasta entonces la app va con el bundle viejo y el agente puede encontrarse funciones que ya no existen " +
-      "(pasó con crear_proyecto).",
+    "The server has newer code than this tab. Click “↻ new version” to load it: " +
+      "until then the app runs the old bundle and the agent may hit functions that no longer exist " +
+      "(it happened with crear_proyecto).",
   );
 });
 
@@ -353,7 +353,7 @@ async function cargarAgenteDelProyecto(vista: Project | null): Promise<void> {
   if (turnosAgente.length > 0) {
     chat.add(
       "meta",
-      `Conversación guardada de este proyecto: ${turnosAgente.length} turno(s). Es lo que recuerdo al empezar.`,
+      `Conversation saved in this project: ${turnosAgente.length} turn(s). This is what I remember when I start.`,
     );
     for (const turno of turnosAgente.slice(-4)) {
       if (turno.usuario) chat.add("user", turno.usuario);
@@ -503,7 +503,7 @@ timeline.onClipsDrop = (movimientos, copiar) => {
     startBeat: mov.startBeat,
     ...(mov.trackDestinoId ? { trackDestinoId: mov.trackDestinoId } : {}),
   }));
-  aplicarOpsClips(ops, `${copiar ? "Copiado" : "Movido"}(s) ${ops.length} clip(s).`, copiar);
+  aplicarOpsClips(ops, `${copiar ? "Copied" : "Moved"} ${ops.length} clip(s).`, copiar);
 };
 
 timeline.onEditClip = (trackId, clipId) => {
@@ -518,9 +518,9 @@ timeline.onEditClip = (trackId, clipId) => {
         { op: "replace_clip_notes", trackId, clipId, notes },
       ]);
       setProject(next);
-      addMessage("assistant", `Editado a mano: ${notes.length} notas en “${clip.name}”.`);
+      addMessage("assistant", `Edited by hand: ${notes.length} notes in “${clip.name}”.`);
     } catch (error) {
-      addMessage("system", `No se pudo guardar la edición: ${error instanceof Error ? error.message : String(error)}`);
+      addMessage("system", `Could not save the edit: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 };
@@ -578,7 +578,7 @@ function stopOpenDaw(): void {
 async function startOpenDawPlayback(view: Project, reproducir = true): Promise<void> {
   if (openDawHandle) stopOpenDaw();
   const generation = ++openDawGeneration;
-  setBusy(true, reproducir ? "Cargando WAVs y arrancando openDAW…" : "Preparando los instrumentos…");
+  setBusy(true, reproducir ? "Loading WAVs and starting openDAW…" : "Getting the instruments ready…");
   try {
     const { faltan } = await hidratarAssets(view, slugDeProyecto(view));
     warnMissingAudio(faltan);
@@ -615,15 +615,15 @@ async function startOpenDawPlayback(view: Project, reproducir = true): Promise<v
     addMessage(
       "assistant",
       cuantos > 0
-        ? `Reproduciendo con openDAW (MIDI) y ${cuantos} stem(s) por streaming.`
-        : "Reproduciendo con el engine de openDAW.",
+        ? `Playing with openDAW (MIDI) and ${cuantos} streamed stem(s).`
+        : "Playing with the openDAW engine.",
     );
   } catch (error) {
     if (generation !== openDawGeneration) return;
     setPlaying(false);
     addMessage(
       "system",
-      `No se pudo arrancar el engine de openDAW: ${error instanceof Error ? error.message : String(error)}`,
+      `Could not start the openDAW engine: ${error instanceof Error ? error.message : String(error)}`,
     );
   } finally {
     setBusy(false);
@@ -637,11 +637,11 @@ function addMessage(role: "assistant" | "system", text: string): void {
 function warnMissingAudio(missing: string[]): void {
   if (missing.length === 0) return;
   const shown = missing.slice(0, 3).join(", ");
-  const rest = missing.length > 3 ? ` y ${missing.length - 3} más` : "";
+  const rest = missing.length > 3 ? ` and ${missing.length - 3} more` : "";
   addMessage(
     "system",
-    `Faltan ${missing.length} WAV (${shown}${rest}). El proyecto los referencia, pero no están en la carpeta del proyecto: ` +
-      "esas pistas sonarán vacías hasta que los WAV vuelvan a su sitio.",
+    `Missing ${missing.length} WAV (${shown}${rest}). The project references them but they are not in the project folder: ` +
+      "those tracks will play silence until the WAVs are back in place.",
   );
 }
 
@@ -664,7 +664,7 @@ function persist(): void {
     if (project) localStorage.setItem(CLAVE_ABIERTO, slugDeProyecto(project));
     else localStorage.removeItem(CLAVE_ABIERTO);
   } catch {
-    warnPersistence("No se pudo apuntar el proyecto abierto en localStorage.");
+    warnPersistence("Could not record the open project in localStorage.");
   }
   programarGuardado();
 }
@@ -698,7 +698,7 @@ function horaActual(): string {
 async function guardarEnDisco(silencioso: boolean): Promise<void> {
   const vista = project;
   if (!vista) {
-    if (!silencioso) addMessage("system", "No hay proyecto abierto que guardar.");
+    if (!silencioso) addMessage("system", "There is no open project to save.");
     return;
   }
   if (!ready) return;
@@ -712,25 +712,25 @@ async function guardarEnDisco(silencioso: boolean): Promise<void> {
   try {
     const { datos, sinRuta } = serializarProyecto(vista, audioAssets);
     await guardarProyectoEnDisco(ruta, JSON.stringify(datos, null, 2));
-    setStatus(`✓ guardado ${ruta} · ${horaActual()} · ${datos.proyecto.tracks.length} pistas`);
+    setStatus(`✓ saved ${ruta} · ${horaActual()} · ${datos.proyecto.tracks.length} tracks`);
     if (!silencioso) {
       const conRuta = datos.proyecto.audioAssets?.filter((asset) => asset.ruta).length ?? 0;
       addMessage(
         "assistant",
-        `Guardado en ${ruta}: ${datos.proyecto.tracks.length} pista(s), ${datos.proyecto.bpm} BPM, ` +
-          `${datos.proyecto.lengthBars} compases, ${conRuta} WAV de la carpeta` +
+        `Saved to ${ruta}: ${datos.proyecto.tracks.length} track(s), ${datos.proyecto.bpm} BPM, ` +
+          `${datos.proyecto.lengthBars} bars, ${conRuta} WAV from the folder` +
           (sinRuta.length > 0
-            ? `. ${sinRuta.length} sin fichero en disco (${sinRuta.slice(0, 3).join(", ")}): ésos no viajan con el proyecto.`
+            ? `. ${sinRuta.length} without a file on disk (${sinRuta.slice(0, 3).join(", ")}): those do not travel with the project.`
             : "."),
       );
     }
   } catch (error) {
     addMessage(
       "system",
-      `No se pudo guardar en disco: ${error instanceof Error ? error.message : String(error)}. ` +
-        "Los cambios están en pantalla, pero no en el fichero maestro.",
+      `Could not save to disk: ${error instanceof Error ? error.message : String(error)}. ` +
+        "The changes are on screen, but not in the project file.",
     );
-    setStatus("✗ no se pudo guardar en disco");
+    setStatus("✗ could not save to disk");
   } finally {
     guardando = false;
     if (guardadoPendiente) {
@@ -759,7 +759,7 @@ async function undo(): Promise<void> {
   if (!previous) return;
   if (project) future.push(project);
   restoring = true;
-  setBusy(true, "Cargando audio…");
+  setBusy(true, "Loading audio…");
   try {
     const { faltan } = await hidratarAssets(previous, slugDeProyecto(previous));
     applyProject(previous);
@@ -780,7 +780,7 @@ async function redo(): Promise<void> {
     if (history.length > HISTORY_LIMIT) history.shift();
   }
   restoring = true;
-  setBusy(true, "Cargando audio…");
+  setBusy(true, "Loading audio…");
   try {
     const { faltan } = await hidratarAssets(next, slugDeProyecto(next));
     applyProject(next);
@@ -833,7 +833,7 @@ function toggleTracksFlag(ids: string[], flag: "muted" | "solo"): void {
   try {
     commitLive(applyOps(project, ops).project);
   } catch (error) {
-    addMessage("system", `No se pudo cambiar ${flag}: ${error instanceof Error ? error.message : String(error)}`);
+    addMessage("system", `Could not change ${flag}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -853,7 +853,7 @@ function applyProject(next: Project | null): void {
     timeline.setProject({
       schemaVersion: 1,
       id: "empty",
-      name: "Sin título",
+      name: "Untitled",
       bpm: 100,
       key: { tonic: "D", mode: "minor" },
       timeSignature: { numerator: 4, denominator: 4 },
@@ -878,9 +878,9 @@ function applyProject(next: Project | null): void {
   const seconds = String(Math.round(stats.seconds % 60)).padStart(2, "0");
   songInfo.innerHTML =
     `<strong>${escapeHtml(view.name)}</strong>` +
-    `<span>${view.bpm} BPM · ${view.key.tonic} ${view.key.mode} · ${view.lengthBars} compases · ` +
-    `${stats.tracks} pistas · ${stats.notes} notas · ${minutes}:${seconds}</span>` +
-    `<span class="carpeta" title="Carpeta del proyecto en el servidor">proyectos/${escapeHtml(slugDeProyecto(view))}/</span>`;
+    `<span>${view.bpm} BPM · ${view.key.tonic} ${view.key.mode} · ${view.lengthBars} bars · ` +
+    `${stats.tracks} tracks · ${stats.notes} notes · ${minutes}:${seconds}</span>` +
+    `<span class="carpeta" title="Project folder on the server">proyectos/${escapeHtml(slugDeProyecto(view))}/</span>`;
 }
 
 function updateSelectionBar(): void {
@@ -889,7 +889,7 @@ function updateSelectionBar(): void {
   const bar = $<HTMLElement>("selection-bar");
   bar.hidden = selected.length === 0 && clips === 0;
   const partes: string[] = [];
-  if (selected.length > 0) partes.push(selected.length === 1 ? "1 pista" : `${selected.length} pistas`);
+  if (selected.length > 0) partes.push(selected.length === 1 ? "1 track" : `${selected.length} tracks`);
   if (clips > 0) partes.push(clips === 1 ? "1 clip" : `${clips} clips`);
   $("selection-count").textContent = partes.join(" · ") || "0";
   const enabled = ready && !busy;
@@ -932,7 +932,7 @@ function aplicarOpsClips(ops: Op[], mensaje: string, seleccionarNuevas: boolean)
     }
     addMessage("system", mensaje);
   } catch (error) {
-    addMessage("system", `No se pudo: ${error instanceof Error ? error.message : String(error)}`);
+    addMessage("system", `Could not: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -940,7 +940,7 @@ function copiarClips(): void {
   const clips = clipsSeleccionados();
   if (clips.length === 0) return;
   portapapeles = clips.map(({ trackId, clipId, start }) => ({ trackId, clipId, start }));
-  addMessage("system", `Copiado(s) ${clips.length} clip(s). Ctrl+V para pegar en el cursor.`);
+  addMessage("system", `Copied ${clips.length} clip(s). Ctrl+V pastes at the cursor.`);
   updateSelectionBar();
 }
 
@@ -955,7 +955,7 @@ function pegarClips(): void {
     clipId: item.clipId,
     startBeat: Math.max(0, destino + (item.start - base)),
   }));
-  aplicarOpsClips(ops, `Pegado(s) ${ops.length} clip(s) en el compás ${Math.floor(destino / 4) + 1}.`, true);
+  aplicarOpsClips(ops, `Pasted ${ops.length} clip(s) at bar ${Math.floor(destino / 4) + 1}.`, true);
 }
 
 function duplicarClips(): void {
@@ -967,7 +967,7 @@ function duplicarClips(): void {
     clipId: item.clipId,
     startBeat: item.start + item.length,
   }));
-  aplicarOpsClips(ops, `Duplicado(s) ${ops.length} clip(s) a continuación.`, true);
+  aplicarOpsClips(ops, `Duplicated ${ops.length} clip(s) right after.`, true);
 }
 
 function borrarClips(): void {
@@ -978,31 +978,31 @@ function borrarClips(): void {
     trackId: item.trackId,
     clipId: item.clipId,
   }));
-  aplicarOpsClips(ops, `Borrado(s) ${ops.length} clip(s).`, false);
+  aplicarOpsClips(ops, `Deleted ${ops.length} clip(s).`, false);
 }
 
 function deleteSelectedTracks(): void {
   if (!project || busy) return;
   const tracks = project.tracks.filter((track) => selectedTrackIds.includes(track.id));
   if (tracks.length === 0) return;
-  const label = tracks.length === 1 ? `“${tracks[0]!.name}”` : `${tracks.length} pistas`;
-  if (!confirm(`¿Borrar ${label}?`)) return;
+  const label = tracks.length === 1 ? `“${tracks[0]!.name}”` : `${tracks.length} tracks`;
+  if (!confirm(`Delete ${label}?`)) return;
   const ops: Op[] = tracks.map((track) => ({ op: "remove_track", trackId: track.id }));
   try {
     setProject(applyOps(project, ops).project);
     addMessage(
       "assistant",
-      `Borradas ${tracks.length} pista(s): ${tracks.map((track) => `“${track.name}”`).join(", ")}.`,
+      `Deleted ${tracks.length} track(s): ${tracks.map((track) => `“${track.name}”`).join(", ")}.`,
     );
   } catch (error) {
-    addMessage("system", `No se pudieron borrar: ${error instanceof Error ? error.message : String(error)}`);
+    addMessage("system", `Could not delete: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 /** Renderiza con el motor real de Strudel y lo inserta como pista de audio. */
 async function renderStrudelAudioSource(request: CodeAudioRequest): Promise<void> {
   const base = project;
-  if (!base) throw new Error("No hay proyecto abierto.");
+  if (!base) throw new Error("There is no open project.");
   const barBeats = beatsPerBar(base);
   const rendered = await renderStrudelAudio(request.code, request.bars, base.bpm, barBeats);
   const assetId = `aud_strudel_${request.sourceId}_${Date.now().toString(36)}`;
@@ -1019,9 +1019,9 @@ async function renderStrudelAudioSource(request: CodeAudioRequest): Promise<void
   } catch (error) {
     addMessage(
       "system",
-      `El audio de Strudel no se pudo escribir en la carpeta del proyecto (${
+      `Strudel audio could not be written to the project folder (${
         error instanceof Error ? error.message : String(error)
-      }): sonará en esta sesión, pero el proyecto no lo referenciará.`,
+      }): it will play in this session, but the project will not reference it.`,
     );
   }
   audioAssets.set(assetId, {
@@ -1082,7 +1082,7 @@ async function renderStrudelAudioSource(request: CodeAudioRequest): Promise<void
   setProject(next);
   addMessage(
     "assistant",
-    `Strudel audio “${request.name}”: ${rendered.durationSeconds.toFixed(1)} s renderizados con el motor real y añadidos como pista de audio.`,
+    `Strudel audio “${request.name}”: ${rendered.durationSeconds.toFixed(1)} s rendered with the real engine and added as an audio track.`,
   );
   for (const warning of rendered.warnings) addMessage("system", `Strudel audio: ${warning}`);
 }
@@ -1122,7 +1122,7 @@ redoButton.addEventListener("click", () => void redo());
 
 $("new-song").addEventListener("click", () => {
   if (!ready) return;
-  if (project && project.tracks.length > 0 && !confirm("¿Cerrar este proyecto y empezar otro? El actual queda guardado en disco.")) return;
+  if (project && project.tracks.length > 0 && !confirm("Close this project and start another one? The current one stays saved on disk.")) return;
   setProject(null);
   chat.clear();
 });
@@ -1141,7 +1141,7 @@ $("sel-clear").addEventListener("click", () => timeline.clearSelection());
 // Menú «Modelos»: proveedor, clave y modelo del agente (server/api/proveedores.ts).
 void cargarConfigLlm();
 const ajustesModelos = new AjustesModelos((proveedor, modelo) =>
-  addMessage("system", `El agente usará ${modelo} (${proveedor}) desde el próximo turno.`),
+  addMessage("system", `The agent will use ${modelo} (${proveedor}) from the next turn on.`),
 );
 $<HTMLButtonElement>("ajustes-modelos").addEventListener("click", () => void ajustesModelos.abrir());
 
@@ -1160,7 +1160,7 @@ setAbrirEncargo(() => void formularioEncargo.abrir());
  */
 async function exportarProyecto(formatos: { midi: boolean; wav: boolean }): Promise<{ ok: boolean; texto: string }> {
   const view = project;
-  if (!view) return { ok: false, texto: "No hay proyecto abierto." };
+  if (!view) return { ok: false, texto: "There is no open project." };
   const slug = slugDeProyecto(view);
   const hechos: string[] = [];
   try {
@@ -1169,7 +1169,7 @@ async function exportarProyecto(formatos: { midi: boolean; wav: boolean }): Prom
       const fichero = new File([bytes as unknown as BlobPart], `${slug}.mid`, { type: "audio/midi" });
       const { path } = await subirAudio(fichero, slug, "salida");
       const pistas = view.tracks.filter((t) => t.kind === "midi").length;
-      hechos.push(`MIDI: proyectos/${slug}/${path} (${pistas} pista(s), ${view.bpm} BPM).`);
+      hechos.push(`MIDI: proyectos/${slug}/${path} (${pistas} track(s), ${view.bpm} BPM).`);
     }
     if (formatos.wav) {
       const { faltan } = await hidratarAssets(view, slug);
@@ -1183,7 +1183,7 @@ async function exportarProyecto(formatos: { midi: boolean; wav: boolean }): Prom
       const { renderizarMezcla } = await import("./opendaw-engine.ts");
       const mezcla = await renderizarMezcla(view, paraEngine, soundfonts, gm);
       const canales = mezcla.canales.slice(0, 2);
-      if (canales.length === 0 || canales[0]!.length === 0) throw new Error("el render salió vacío");
+      if (canales.length === 0 || canales[0]!.length === 0) throw new Error("the render came out empty");
       const buffer = new AudioBuffer({ length: canales[0]!.length, numberOfChannels: canales.length, sampleRate: mezcla.sampleRate });
       canales.forEach((datos, i) => buffer.copyToChannel(datos as Float32Array<ArrayBuffer>, i));
       let pico = 0;
@@ -1194,14 +1194,14 @@ async function exportarProyecto(formatos: { midi: boolean; wav: boolean }): Prom
       const picoDb = pico > 0 ? 20 * Math.log10(pico) : -Infinity;
       hechos.push(
         `WAV: proyectos/${slug}/${path} (${Math.floor(segundos / 60)}:${String(Math.round(segundos % 60)).padStart(2, "0")}, ` +
-          `pico ${picoDb.toFixed(1)} dBFS${pico > 1 ? " — RECORTA: baja el master" : ""}).`,
+          `peak ${picoDb.toFixed(1)} dBFS${pico > 1 ? " — CLIPPING: lower the master" : ""}).`,
       );
     }
-    return { ok: true, texto: hechos.join("\n") || "No se ha pedido ningún formato." };
+    return { ok: true, texto: hechos.join("\n") || "No format was requested." };
   } catch (error) {
     return {
       ok: false,
-      texto: `${hechos.join("\n")}${hechos.length ? "\n" : ""}No se pudo exportar: ${error instanceof Error ? error.message : String(error)}`,
+      texto: `${hechos.join("\n")}${hechos.length ? "\n" : ""}Could not export: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
@@ -1242,7 +1242,7 @@ panelPad = new PanelPad({
       ]);
       setProject(siguiente);
     } catch (error) {
-      addMessage("system", `No se pudo guardar lo grabado: ${error instanceof Error ? error.message : String(error)}`);
+      addMessage("system", `Could not save the recording: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
   avisar: (texto) => addMessage("system", texto),
@@ -1265,7 +1265,7 @@ function esMidi(file: File): boolean {
  */
 async function importarMidiDesdeDisco(file: File): Promise<void> {
   if (!ready) return;
-  setBusy(true, `Leyendo ${file.name}…`);
+  setBusy(true, `Reading ${file.name}…`);
   try {
     if (!project) {
       const nombre = nombreDeProyectoDesdeFicheros([file]).slice(0, 40) || "MIDI";
@@ -1275,12 +1275,12 @@ async function importarMidiDesdeDisco(file: File): Promise<void> {
     const slug = slugDeProyecto(project);
     const { path } = await subirAudio(file, slug);
     const puesto = await acciones.anadirPistas({ midis: [path], wavs: [], inicioCompas: 0 });
-    addMessage("system", puesto.ok ? `MIDI «${file.name}» importado.` : puesto.texto);
+    addMessage("system", puesto.ok ? `MIDI “${file.name}” imported.` : puesto.texto);
   } catch (error) {
     addMessage(
       "system",
-      `No se pudo leer «${file.name}»: ${error instanceof Error ? error.message : String(error)}. ` +
-        "Tiene que ser un MIDI estándar (.mid); si es un .midi de algún programa raro, expórtalo de nuevo.",
+      `Could not read “${file.name}”: ${error instanceof Error ? error.message : String(error)}. ` +
+        "It has to be a standard MIDI file (.mid); if it is a .midi from some odd program, export it again.",
     );
   } finally {
     setBusy(false);
@@ -1318,7 +1318,7 @@ async function importarAudio(files: File[], destino: "anadir" | "nuevo" = "anadi
   const nuevo = destino === "nuevo" || !project;
   const LIMITE_RAM = 900 * 1024 * 1024; // ~900 MB: por encima el navegador se cae
   const nombreNuevo = nombreDeProyectoDesdeFicheros(files);
-  setBusy(true, nuevo ? `Creando “${nombreNuevo}”…` : "Importando audio…");
+  setBusy(true, nuevo ? `Creating “${nombreNuevo}”…` : "Importing audio…");
   try {
     let current =
       nuevo
@@ -1394,21 +1394,21 @@ async function importarAudio(files: File[], destino: "anadir" | "nuevo" = "anadi
     addMessage(
       "assistant",
       nuevo
-        ? `Proyecto nuevo “${current.name}” a ${current.bpm} BPM con ${metidos} audio(s) copiados a ` +
-            `proyectos/${slug}/entrada/, cada uno en su pista. Si los stems son de otro tempo, cámbialo antes de darle al play.`
-        : `${metidos} audio(s) copiados a proyectos/${slug}/entrada/ y añadidos en el compás ${bar + 1}, cada uno en su pista.`,
+        ? `New project “${current.name}” at ${current.bpm} BPM with ${metidos} audio file(s) copied to ` +
+            `proyectos/${slug}/entrada/, one per track. If the stems are at another tempo, change it before pressing play.`
+        : `${metidos} audio file(s) copied to proyectos/${slug}/entrada/ and added at bar ${bar + 1}, one per track.`,
     );
     if (cortado) {
       addMessage(
         "system",
-        `Paré en ${Math.round(ramAudioBytes() / 1048576)} MB de audio en memoria (límite ~900 MB): ` +
-          "el navegador se quedaría sin aire. Importa los stems restantes en otra tanda (los largos no se decodifican, así que caben).",
+        `Stopped at ${Math.round(ramAudioBytes() / 1048576)} MB of audio in memory (~900 MB limit): ` +
+          "the browser would run out of room. Import the remaining stems in another batch (long ones are not decoded, so they fit).",
       );
     }
-    for (const fallo of sinDisco.slice(0, 4)) addMessage("system", `No se pudo copiar al disco: ${fallo}`);
-    if (sinDisco.length > 4) addMessage("system", `…y ${sinDisco.length - 4} más sin copiar.`);
+    for (const fallo of sinDisco.slice(0, 4)) addMessage("system", `Could not copy to disk: ${fallo}`);
+    if (sinDisco.length > 4) addMessage("system", `…and ${sinDisco.length - 4} more not copied.`);
   } catch (error) {
-    addMessage("system", `No se pudo importar: ${error instanceof Error ? error.message : String(error)}`);
+    addMessage("system", `Could not import: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
     setBusy(false);
   }
@@ -1423,11 +1423,11 @@ type DestinoAudio = "anadir" | "nuevo" | "cancelar";
 function preguntarDestinoAudio(files: File[]): Promise<DestinoAudio> {
   const dialogo = $<HTMLDialogElement>("dialogo-audio");
   const nombre = nombreDeProyectoDesdeFicheros(files);
-  $("audio-anadir").textContent = `Añadir a “${project?.name ?? "—"}”`;
-  $("audio-nuevo").textContent = `Proyecto nuevo “${nombre}”`;
+  $("audio-anadir").textContent = `Add to “${project?.name ?? "—"}”`;
+  $("audio-nuevo").textContent = `New project “${nombre}”`;
   $("dialogo-audio-detalle").textContent =
-    `${files.length} fichero(s). «Añadir» los mete en el proyecto abierto, en el compás del cursor; ` +
-    `«Proyecto nuevo» empieza de cero con el nombre de la carpeta (${nombre}).`;
+    `${files.length} file(s). “Add” puts them in the open project, at the cursor bar; ` +
+    `“New project” starts from scratch with the folder name (${nombre}).`;
 
   return new Promise((resolver) => {
     let contestado = false;
@@ -1465,9 +1465,9 @@ async function importarAudioDesdeSelector(files: File[]): Promise<void> {
 
 /** Fecha corta para la lista de proyectos ("23 oct, 21:04"). */
 function fechaCorta(iso: string): string {
-  if (!iso) return "sin fecha";
+  if (!iso) return "no date";
   const fecha = new Date(iso);
-  if (Number.isNaN(fecha.getTime())) return "sin fecha";
+  if (Number.isNaN(fecha.getTime())) return "no date";
   return fecha.toLocaleString(locale(), { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
@@ -1482,10 +1482,10 @@ async function pintarSonidos(consulta: string): Promise<void> {
   const lista = $("lista-sonidos");
   const texto = consulta.trim();
   if (texto === "") {
-    lista.innerHTML = `<p class="vacio">4.231 samples CC0 (VCSL). Escribe lo que buscas.</p>`;
+    lista.innerHTML = `<p class="vacio">4,231 CC0 samples (VCSL). Type what you are looking for.</p>`;
     return;
   }
-  lista.innerHTML = `<p class="vacio">Buscando «${escapeHtml(texto)}»…</p>`;
+  lista.innerHTML = `<p class="vacio">Searching “${escapeHtml(texto)}”…</p>`;
   try {
     const res = await fetch("/api/catalogo/buscar", {
       method: "POST",
@@ -1514,7 +1514,7 @@ async function pintarSonidos(consulta: string): Promise<void> {
     }
     const filas = [...porInstrumento.values()].map((x) => ({ ...x.fila, cuantos: x.cuantos }));
     if (filas.length === 0) {
-      lista.innerHTML = `<p class="vacio">Nada parecido a «${escapeHtml(texto)}» en los ${datos.total ?? 0} samples.</p>`;
+      lista.innerHTML = `<p class="vacio">Nothing like “${escapeHtml(texto)}” among the ${datos.total ?? 0} samples.</p>`;
       return;
     }
     lista.innerHTML = filas
@@ -1528,20 +1528,20 @@ async function pintarSonidos(consulta: string): Promise<void> {
           .join(" · ");
         return (
           `<div class="sonido-fila">` +
-          `<button class="icon" data-oir="${escapeHtml(r.rutaAudio)}" title="Escuchar">▶</button>` +
+          `<button class="icon" data-oir="${escapeHtml(r.rutaAudio)}" title="Listen">▶</button>` +
           `<span class="sonido-nombre"><strong>${escapeHtml(r.instrumento)}</strong>` +
           `<em>${escapeHtml(r.familia)}${medidas ? " · " + escapeHtml(medidas) : ""}` +
-          `${(r as { cuantos?: number }).cuantos && (r as { cuantos?: number }).cuantos! > 1 ? ` · ${(r as { cuantos?: number }).cuantos} variantes` : ""}` +
+          `${(r as { cuantos?: number }).cuantos && (r as { cuantos?: number }).cuantos! > 1 ? ` · ${(r as { cuantos?: number }).cuantos} variants` : ""}` +
           `${r.strudel ? ` · Strudel: s("${escapeHtml(r.strudel)}")` : ""}</em></span>` +
           `<button data-traer="${escapeHtml(r.archivo)}" data-nombre="${escapeHtml(
             r.instrumento.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-          )}">Añadir</button>` +
+          )}">Add</button>` +
           `</div>`
         );
       })
       .join("");
   } catch (error) {
-    lista.innerHTML = `<p class="vacio">No pude buscar: ${escapeHtml(
+    lista.innerHTML = `<p class="vacio">Could not search: ${escapeHtml(
       error instanceof Error ? error.message : String(error),
     )}</p>`;
   }
@@ -1559,21 +1559,21 @@ function abrirSonidos(): void {
 async function abrirListaDeProyectos(): Promise<void> {
   const dialogo = $<HTMLDialogElement>("dialogo-proyectos");
   const lista = $("lista-proyectos");
-  lista.innerHTML = `<p class="vacio">Leyendo workspace/proyectos/…</p>`;
+  lista.innerHTML = `<p class="vacio">Reading workspace/proyectos/…</p>`;
   if (!dialogo.open) dialogo.showModal();
   try {
     const proyectos = await listarProyectos();
     if (proyectos.length === 0) {
       lista.innerHTML =
-        `<p class="vacio">Todavía no hay ningún <code>proyecto.json</code> en <code>workspace/proyectos/</code>. ` +
-        "Se crea con el botón «Guardar» o solo, 1,5 s después de cualquier cambio.</p>";
+        `<p class="vacio">There is no <code>proyecto.json</code> in <code>workspace/proyectos/</code> yet. ` +
+        "It is created with the “Save” button, or on its own 1.5 s after any change.</p>";
       return;
     }
     lista.innerHTML = proyectos
       .map((proyecto) => {
         const detalle = proyecto.error
-          ? `ilegible: ${proyecto.error}`
-          : `${proyecto.bpm} BPM · ${proyecto.compases} compases · ${proyecto.pistas} pista(s)`;
+          ? `unreadable: ${proyecto.error}`
+          : `${proyecto.bpm} BPM · ${proyecto.compases} bars · ${proyecto.pistas} track(s)`;
         return (
           `<button class="proyecto-fila" data-ruta="${escapeHtml(proyecto.ruta)}"` +
           `${proyecto.error ? ' data-error="1"' : ""}>` +
@@ -1586,7 +1586,7 @@ async function abrirListaDeProyectos(): Promise<void> {
       })
       .join("");
   } catch (error) {
-    lista.innerHTML = `<p class="vacio">No se pudo leer la lista: ${escapeHtml(
+    lista.innerHTML = `<p class="vacio">Could not read the list: ${escapeHtml(
       error instanceof Error ? error.message : String(error),
     )}</p>`;
   }
@@ -1597,7 +1597,7 @@ async function abrirListaDeProyectos(): Promise<void> {
  * carpeta (`/api/audio`), decodificados si son cortos y por streaming si son largos.
  */
 async function abrirProyectoDeDisco(ruta: string): Promise<void> {
-  setBusy(true, "Abriendo proyecto de disco…");
+  setBusy(true, "Opening project from disk…");
   restoring = true;
   try {
     const texto = await leerProyectoDeDisco(ruta);
@@ -1613,16 +1613,16 @@ async function abrirProyectoDeDisco(ruta: string): Promise<void> {
     setProject(disco.proyecto);
     addMessage(
       "assistant",
-      `Abierto del disco “${disco.proyecto.name}” (proyectos/${carpeta}/): ` +
-        `${disco.proyecto.tracks.length} pista(s), ${disco.proyecto.bpm} BPM, ${disco.proyecto.lengthBars} compases` +
-        (cargados > 0 ? `, ${cargados} WAV cargado(s) de la carpeta.` : "."),
+      `Opened from disk “${disco.proyecto.name}” (proyectos/${carpeta}/): ` +
+        `${disco.proyecto.tracks.length} track(s), ${disco.proyecto.bpm} BPM, ${disco.proyecto.lengthBars} bars` +
+        (cargados > 0 ? `, ${cargados} WAV loaded from the folder.` : "."),
     );
     if (faltan.length > 0) warnMissingAudio(faltan);
   } catch (error) {
     restoring = false;
     addMessage(
       "system",
-      `No se pudo abrir ${ruta}: ${error instanceof Error ? error.message : String(error)}`,
+      `Could not open ${ruta}: ${error instanceof Error ? error.message : String(error)}`,
     );
   } finally {
     restoring = false;
@@ -1657,7 +1657,7 @@ $("lista-sonidos").addEventListener("click", (event) => {
       (r) => {
         objetivo.disabled = false;
         objetivo.textContent = r.ok ? "✓" : "error";
-        addMessage("system", r.ok ? `Sample añadido al proyecto desde la biblioteca.` : r.texto);
+        addMessage("system", r.ok ? `Sample added to the project from the library.` : r.texto);
       },
     );
   }
@@ -1667,7 +1667,7 @@ $("lista-proyectos").addEventListener("click", (event) => {
   const boton = (event.target as HTMLElement).closest<HTMLElement>("[data-ruta]");
   if (!boton) return;
   if (boton.dataset.error === "1") {
-    addMessage("system", "Ese proyecto.json está ilegible: no se puede abrir.");
+    addMessage("system", "That proyecto.json is unreadable: it cannot be opened.");
     return;
   }
   const ruta = boton.dataset.ruta ?? "";
@@ -1710,12 +1710,12 @@ async function abrirArchivos(todos: File[]): Promise<void> {
   const proyectos = todos.filter((file) => !esAudio(file) && !esMidi(file));
 
   if (proyectos.length > 1) {
-    addMessage("system", `Solo se abre un proyecto a la vez: uso «${proyectos[0].name}».`);
+    addMessage("system", `Only one project can be opened at a time: using “${proyectos[0].name}”.`);
   }
 
   if (proyectos.length > 0) {
     const file = proyectos[0];
-    setBusy(true, "Cargando proyecto…");
+    setBusy(true, "Loading project…");
     restoring = true;
     try {
       let parsed: Project;
@@ -1738,7 +1738,7 @@ async function abrirArchivos(todos: File[]): Promise<void> {
             else parsed.audioAssets.push({ id: wav.assetId, name: wav.nombre, durationBeats: 1, ruta: path });
           } catch (error) {
             avisos.push(
-              `No se pudo copiar ${wav.nombre} al proyecto: ${error instanceof Error ? error.message : String(error)}`,
+              `Could not copy ${wav.nombre} to the project: ${error instanceof Error ? error.message : String(error)}`,
             );
           }
         }
@@ -1751,12 +1751,12 @@ async function abrirArchivos(todos: File[]): Promise<void> {
       setProject(parsed);
       addMessage(
         "assistant",
-        `Abierto “${parsed.name}”. Sus WAV se buscan en proyectos/${slugDeProyecto(parsed)}/ por la ruta de cada asset.`,
+        `Opened “${parsed.name}”. Its WAVs are looked up in proyectos/${slugDeProyecto(parsed)}/ using each asset's path.`,
       );
       for (const aviso of avisos) addMessage("system", aviso);
       warnMissingAudio(faltan);
     } catch (error) {
-      addMessage("system", `No se pudo abrir: ${error instanceof Error ? error.message : String(error)}`);
+      addMessage("system", `Could not open: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       restoring = false;
       setBusy(false);
@@ -1967,12 +1967,12 @@ async function cargarGm(view: Project): Promise<{ uuid: Uint8Array; name: string
     const info = (await (await fetch("/api/gm")).json()) as { ruta?: string | null; nombre?: string };
     if (!info.ruta) {
       warnPersistence(
-        "Hay pistas con instrumento General MIDI pero no hay SoundFont GM en workspace/catalogo/gm/: suenan con los sintetizadores de openDAW.",
+        "Some tracks use a General MIDI instrument but there is no GM SoundFont in workspace/catalogo/gm/: they play with openDAW's synths.",
       );
       return null;
     }
     if (gmEnMemoria?.ruta === info.ruta) return gmEnMemoria.sf;
-    setStatus(`Cargando el SoundFont General MIDI (${info.nombre ?? info.ruta})…`);
+    setStatus(`Loading the General MIDI SoundFont (${info.nombre ?? info.ruta})…`);
     const respuesta = await fetch(`/api/audio?path=${encodeURIComponent(info.ruta)}`);
     if (!respuesta.ok) return null;
     gmEnMemoria = {

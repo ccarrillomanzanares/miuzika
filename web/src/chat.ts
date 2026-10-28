@@ -187,7 +187,7 @@ export function initChat(): ChatApi {
     } else {
       add(
         "system",
-        "La caja funciona, pero todavía no hay agente detrás: queda conectar el LLM.",
+        "The box works, but there is no agent behind it yet: the LLM still has to be connected.",
       );
     }
   });
