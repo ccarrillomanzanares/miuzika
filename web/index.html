@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -20,35 +20,35 @@
         <div class="brand">miuzika</div>
         <div id="song-info" class="song-info"></div>
         <div class="actions">
-          <button id="play" class="icon" data-i18n-title="play" title="Reproducir con el engine de openDAW">▶</button>
-          <button id="stop" class="icon" data-i18n-title="stop" title="Detener">■</button>
-          <button id="undo" class="icon" data-i18n-title="undo" title="Deshacer (Ctrl+Z)" disabled>↶</button>
-          <button id="redo" class="icon" data-i18n-title="redo" title="Rehacer (Ctrl+Shift+Z)" disabled>↷</button>
-          <label class="file" data-i18n-title="abrir.title" title="Abrir proyecto (.json/.zip), audio o MIDI"><span data-i18n="abrir">Abrir</span><input id="open" type="file" multiple accept=".json,.zip,.miuzika.zip,application/json,application/zip,audio/*,.wav,.mid,.midi,audio/midi" /></label>
+          <button id="play" class="icon" data-i18n-title="play" title="Play with the openDAW engine">▶</button>
+          <button id="stop" class="icon" data-i18n-title="stop" title="Stop">■</button>
+          <button id="undo" class="icon" data-i18n-title="undo" title="Undo (Ctrl+Z)" disabled>↶</button>
+          <button id="redo" class="icon" data-i18n-title="redo" title="Redo (Ctrl+Shift+Z)" disabled>↷</button>
+          <label class="file" data-i18n-title="abrir.title" title="Open a project (.json/.zip), audio or MIDI"><span data-i18n="abrir">Open</span><input id="open" type="file" multiple accept=".json,.zip,.miuzika.zip,application/json,application/zip,audio/*,.wav,.mid,.midi,audio/midi" /></label>
           <label class="file"><span data-i18n="audio">Audio</span><input id="audio-file" type="file" accept="audio/*" multiple /></label>
-          <button id="guardar" data-i18n="guardar" data-i18n-title="guardar.title" title="Escribir el fichero maestro en workspace/proyectos/&lt;slug&gt;/proyecto.json (Ctrl+S)">Guardar</button>
-          <button id="proyectos" data-i18n="proyectos" data-i18n-title="proyectos.title" title="Abrir un proyecto guardado en workspace/proyectos/">Proyectos</button>
-          <button id="sonidos" data-i18n="sonidos" data-i18n-title="sonidos.title" title="Buscar en la biblioteca de samples (CC0) y traerlos al proyecto">Sonidos</button>
-          <button id="code-lab" data-i18n-title="strudel.title" title="Escribir un patrón Strudel y renderizarlo a WAV">Strudel</button>
-          <button id="pad" data-i18n-title="pad.title" title="Tocar con el touchpad del portátil (teclas, pads o deslizando) y grabarlo en una pista">Pad</button>
-          <button id="ajustes-modelos" data-i18n="modelos" data-i18n-title="modelos.title" title="Proveedor y modelo del agente (claves incluidas)">Modelos</button>
-          <button id="chat-toggle" class="active" data-i18n="chat" data-i18n-title="chat.title" title="Mostrar u ocultar el chat del agente">Chat</button>
-          <button id="recargar" class="recargar" data-i18n="recargar" data-i18n-title="recargar.title" title="El servidor tiene código más nuevo que esta pestaña; cárgalo (se pierde el turno en curso)" hidden>↻ versión nueva</button>
-          <button id="new-song" data-i18n="nueva" data-i18n-title="nueva.title" title="Cerrar este proyecto y empezar otro">Nueva</button>
+          <button id="guardar" data-i18n="guardar" data-i18n-title="guardar.title" title="Write the project file to workspace/proyectos/&lt;slug&gt;/proyecto.json (Ctrl+S)">Save</button>
+          <button id="proyectos" data-i18n="proyectos" data-i18n-title="proyectos.title" title="Open a project saved in workspace/proyectos/">Projects</button>
+          <button id="sonidos" data-i18n="sonidos" data-i18n-title="sonidos.title" title="Search the CC0 sample library and bring sounds into the project">Sounds</button>
+          <button id="code-lab" data-i18n-title="strudel.title" title="Write a Strudel pattern and render it to WAV">Strudel</button>
+          <button id="pad" data-i18n-title="pad.title" title="Play with the laptop touchpad (keys, pads or sliding) and record it to a track">Pad</button>
+          <button id="ajustes-modelos" data-i18n="modelos" data-i18n-title="modelos.title" title="The agent's provider and model (keys included)">Models</button>
+          <button id="chat-toggle" class="active" data-i18n="chat" data-i18n-title="chat.title" title="Show or hide the agent chat">Chat</button>
+          <button id="recargar" class="recargar" data-i18n="recargar" data-i18n-title="recargar.title" title="The server has newer code than this tab; load it (the running turn is lost)" hidden>↻ new version</button>
+          <button id="new-song" data-i18n="nueva" data-i18n-title="nueva.title" title="Close this project and start another one">New</button>
         </div>
       </header>
 
       <div id="selection-bar" class="selection-bar" hidden>
-        <strong id="selection-count">0 pistas</strong>
+        <strong id="selection-count">0 tracks</strong>
         <button id="sel-mute" data-i18n="mute">Mute</button>
         <button id="sel-solo" data-i18n="solo">Solo</button>
-        <button id="sel-delete" data-i18n="borrar">Borrar</button>
+        <button id="sel-delete" data-i18n="borrar">Delete</button>
         <span class="spacer"></span>
-        <button id="clip-copy" data-i18n="copiar" data-i18n-title="copiar.title" title="Copiar el clip seleccionado (Ctrl+C)">Copiar</button>
-        <button id="clip-paste" data-i18n="pegar" data-i18n-title="pegar.title" title="Pegar en el cursor (Ctrl+V)">Pegar</button>
-        <button id="clip-dup" data-i18n="duplicar" data-i18n-title="duplicar.title" title="Duplicar a continuación (Ctrl+D)">Duplicar</button>
-        <button id="sel-all" data-i18n="todas">Todas</button>
-        <button id="sel-clear" data-i18n="limpiar">Limpiar</button>
+        <button id="clip-copy" data-i18n="copiar" data-i18n-title="copiar.title" title="Copy the selected clip (Ctrl+C)">Copy</button>
+        <button id="clip-paste" data-i18n="pegar" data-i18n-title="pegar.title" title="Paste at the cursor (Ctrl+V)">Paste</button>
+        <button id="clip-dup" data-i18n="duplicar" data-i18n-title="duplicar.title" title="Duplicate right after (Ctrl+D)">Duplicate</button>
+        <button id="sel-all" data-i18n="todas">All</button>
+        <button id="sel-clear" data-i18n="limpiar">Clear</button>
       </div>
 
       <main>
@@ -61,8 +61,8 @@
 
         <aside class="chat">
           <div class="chat-head">
-            <strong data-i18n="agente">Agente</strong>
-            <label class="destino" data-i18n-title="destino.title" title="Dónde ejecuta Python el agente: este portátil o una GPU de Lambda">
+            <strong data-i18n="agente">Agent</strong>
+            <label class="destino" data-i18n-title="destino.title" title="Where the agent runs Python: this machine or a Lambda GPU">
               <select id="chat-destino">
                 <option value="cpu">CPU</option>
                 <option value="lambda">GPU (Lambda)</option>
@@ -76,51 +76,51 @@
               id="chat-input"
               rows="1"
               data-i18n-placeholder="chat.placeholder"
-              placeholder="Pídele algo al agente, en tu idioma… (Enter envía, Shift+Enter salto de línea)"
+              placeholder="Ask the agent anything, in your own language… (Enter sends, Shift+Enter for a new line)"
             ></textarea>
             <button
               id="chat-plantilla"
               type="button"
               data-i18n="plantilla"
               data-i18n-title="plantilla.title"
-              title="Rellenar el encargo con un formulario"
-            >Encargo</button>
-            <button id="chat-send" type="submit" data-i18n-title="enviar" title="Enviar">➤</button>
+              title="Fill in the brief with a form"
+            >Brief</button>
+            <button id="chat-send" type="submit" data-i18n-title="enviar" title="Send">➤</button>
           </form>
         </aside>
       </main>
 
       <dialog id="dialogo-proyectos" class="dialogo">
         <div class="dialogo-cabeza">
-          <strong data-i18n="proyectos.dialogo">Proyectos en disco</strong>
-          <button id="proyectos-cerrar" class="icon" data-i18n-title="cerrar" title="Cerrar">✕</button>
+          <strong data-i18n="proyectos.dialogo">Projects on disk</strong>
+          <button id="proyectos-cerrar" class="icon" data-i18n-title="cerrar" title="Close">✕</button>
         </div>
         <div id="lista-proyectos" class="lista-proyectos"></div>
       </dialog>
 
       <dialog id="dialogo-sonidos" class="dialogo dialogo-ancho">
         <div class="dialogo-cabeza">
-          <strong data-i18n="sonidos">Sonidos</strong>
-          <button id="sonidos-cerrar" class="icon" data-i18n-title="cerrar" title="Cerrar">✕</button>
+          <strong data-i18n="sonidos">Sounds</strong>
+          <button id="sonidos-cerrar" class="icon" data-i18n-title="cerrar" title="Close">✕</button>
         </div>
-        <input id="sonidos-buscar" type="search" data-i18n-placeholder="sonidos.placeholder" placeholder="bombo corto, tarola, china sucio…" autocomplete="off">
-        <p class="sonidos-ayuda" data-i18n="sonidos.ayuda">Escribe cómo lo pedirías: entiende «tarola», «hi-hat», «platillo crash» y el carácter (corto, seco, brillante).</p>
+        <input id="sonidos-buscar" type="search" data-i18n-placeholder="sonidos.placeholder" placeholder="short kick, snare, dirty china…" autocomplete="off">
+        <p class="sonidos-ayuda" data-i18n="sonidos.ayuda">Type it the way you would ask for it: it understands «snare», «hi-hat», «crash cymbal» and character (short, dry, bright).</p>
         <div id="lista-sonidos" class="lista-sonidos"></div>
       </dialog>
 
       <dialog id="dialogo-audio" class="dialogo">
-        <strong data-i18n="audio.dialogo">¿Qué hago con estos audios?</strong>
+        <strong data-i18n="audio.dialogo">What should I do with these audio files?</strong>
         <p id="dialogo-audio-detalle"></p>
         <div class="dialogo-acciones">
           <button id="audio-anadir"></button>
           <button id="audio-nuevo"></button>
-          <button id="audio-cancelar" data-i18n="cancelar">Cancelar</button>
+          <button id="audio-cancelar" data-i18n="cancelar">Cancel</button>
         </div>
       </dialog>
 
       <footer class="status">
-        <span id="status" data-i18n="estado.inicial">Doble clic en un clip = piano roll · Ctrl+rueda = zoom</span>
-        <button id="cancelar" class="cancelar" data-i18n="cancelar" data-i18n-title="cancelar.title" title="Corta el turno del agente (la GPU no se apaga sola)" hidden>Cancelar</button>
+        <span id="status" data-i18n="estado.inicial">Double-click a clip = piano roll · Ctrl+wheel = zoom</span>
+        <button id="cancelar" class="cancelar" data-i18n="cancelar" data-i18n-title="cancelar.title" title="Stop the agent's turn (a running GPU does not switch off by itself)" hidden>Cancel</button>
       </footer>
     </div>
     <script type="module" src="/src/main.ts"></script>

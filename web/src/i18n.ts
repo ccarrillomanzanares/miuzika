@@ -6,98 +6,149 @@
  * canónico de las herramientas (palabras de sonido, tipos de efecto, modos). Esto
  * sólo traduce los textos fijos de la página.
  *
- * Cómo funciona: `web/index.html` lleva el texto en español (el idioma de origen)
- * y una clave en `data-i18n` (texto), `data-i18n-title` o `data-i18n-placeholder`.
- * Si el navegador no está en español se sustituye por el diccionario que toque.
- * Añadir un idioma es añadir un diccionario: lo que falte en él se queda en español.
+ * El idioma BASE es el inglés: los textos que se escriben en el código y en
+ * `web/index.html` van en inglés, y cada idioma es un diccionario que traduce desde
+ * ahí. Lo que falte en un diccionario se queda en inglés, nunca en blanco.
  *
- * PENDIENTE: los avisos que escribe main.ts en el chat siguen en español.
+ * Cómo funciona la página: `index.html` lleva el texto en inglés y una clave en
+ * `data-i18n` (texto), `data-i18n-title` o `data-i18n-placeholder`; si el idioma
+ * elegido no es inglés, `traducirPagina` sustituye por el diccionario.
+ *
+ * Cómo funciona el código: `t("clave", "English text")`, con el inglés de reserva.
+ * Los textos con partes variables van en plantillas: `t("x", "Added ${n} tracks")`
+ * no sirve, así que se traduce el trozo fijo y se concatena el número.
+ *
+ * Para forzar un idioma: `?lang=es` en la URL o `localStorage.miuzika.idioma = "es"`
+ * (`fijarIdioma`). Sin nada de eso manda el navegador, y gana el inglés.
  */
 
 export type Idioma = "es" | "en";
 
 type Diccionario = Record<string, string>;
 
-const EN: Diccionario = {
-  play: "Play (openDAW engine)",
-  stop: "Stop",
-  undo: "Undo (Ctrl+Z)",
-  redo: "Redo (Ctrl+Shift+Z)",
-  abrir: "Open",
-  "abrir.title": "Open a project (.json/.zip), audio or MIDI",
+/** Traducciones al español. Las claves son las mismas que en index.html. */
+const ES: Diccionario = {
+  play: "Reproducir con el engine de openDAW",
+  stop: "Detener",
+  undo: "Deshacer (Ctrl+Z)",
+  redo: "Rehacer (Ctrl+Shift+Z)",
+  abrir: "Abrir",
+  "abrir.title": "Abrir proyecto (.json/.zip), audio o MIDI",
   audio: "Audio",
-  guardar: "Save",
-  "guardar.title": "Write the project file workspace/proyectos/<folder>/proyecto.json (Ctrl+S)",
-  proyectos: "Projects",
-  "proyectos.title": "Open a project saved in workspace/proyectos/",
-  "proyectos.dialogo": "Projects on disk",
-  sonidos: "Sounds",
-  "sonidos.title": "Search the CC0 sample library and bring sounds into the project",
-  "sonidos.placeholder": "short kick, snare, dirty china…",
-  "sonidos.ayuda": "Search in English or Spanish: «snare», «hi-hat», «crash cymbal» and character (short, dry, bright).",
-  "strudel.title": "Write a Strudel pattern and render it to WAV",
-  modelos: "Models",
-  "modelos.title": "The agent's provider and model (keys included)",
-  "pad.title": "Play the laptop touchpad (keys, pads or sliding) and record it to a track",
+  guardar: "Guardar",
+  "guardar.title": "Escribir el fichero maestro en workspace/proyectos/<slug>/proyecto.json (Ctrl+S)",
+  proyectos: "Proyectos",
+  "proyectos.title": "Abrir un proyecto guardado en workspace/proyectos/",
+  "proyectos.dialogo": "Proyectos en disco",
+  sonidos: "Sonidos",
+  "sonidos.title": "Buscar en la biblioteca de samples (CC0) y traerlos al proyecto",
+  "sonidos.placeholder": "bombo corto, tarola, china sucio…",
+  "sonidos.ayuda":
+    "Escribe cómo lo pedirías: entiende «tarola», «hi-hat», «platillo crash» y el carácter (corto, seco, brillante).",
+  "strudel.title": "Escribir un patrón Strudel y renderizarlo a WAV",
+  modelos: "Modelos",
+  "modelos.title": "Proveedor y modelo del agente (claves incluidas)",
+  "pad.title": "Tocar con el touchpad del portátil (teclas, pads o deslizando) y grabarlo en una pista",
   chat: "Chat",
-  "chat.title": "Show or hide the agent chat",
-  "chat.placeholder": "Ask the agent anything, in your own language… (Enter sends, Shift+Enter new line)",
-  recargar: "↻ new version",
-  "recargar.title": "The server has newer code than this tab; reload it (the running turn is lost)",
-  nueva: "New",
-  "nueva.title": "Close this project and start another one",
+  "chat.title": "Mostrar u ocultar el chat del agente",
+  "chat.placeholder": "Pídele algo al agente, en tu idioma… (Enter envía, Shift+Enter salto de línea)",
+  recargar: "↻ versión nueva",
+  "recargar.title": "El servidor tiene código más nuevo que esta pestaña; cárgalo (se pierde el turno en curso)",
+  nueva: "Nueva",
+  "nueva.title": "Cerrar este proyecto y empezar otro",
   mute: "Mute",
   solo: "Solo",
-  borrar: "Delete",
-  copiar: "Copy",
-  "copiar.title": "Copy the selected clip (Ctrl+C)",
-  pegar: "Paste",
-  "pegar.title": "Paste at the cursor (Ctrl+V)",
-  duplicar: "Duplicate",
-  "duplicar.title": "Duplicate right after (Ctrl+D)",
-  todas: "All",
-  limpiar: "Clear",
-  agente: "Agent",
-  "destino.title": "Where the agent runs Python: this computer or a Lambda GPU",
-  plantilla: "Brief",
-  "plantilla.title": "Fill in the brief with a form",
-  enviar: "Send",
-  cerrar: "Close",
-  "audio.dialogo": "What should I do with these audio files?",
-  cancelar: "Cancel",
-  "cancelar.title": "Stop the agent's turn (a running GPU does not switch off by itself)",
-  "estado.inicial": "Double-click a clip = piano roll · Ctrl+wheel = zoom",
+  borrar: "Borrar",
+  copiar: "Copiar",
+  "copiar.title": "Copiar el clip seleccionado (Ctrl+C)",
+  pegar: "Pegar",
+  "pegar.title": "Pegar en el cursor (Ctrl+V)",
+  duplicar: "Duplicar",
+  "duplicar.title": "Duplicar a continuación (Ctrl+D)",
+  todas: "Todas",
+  limpiar: "Limpiar",
+  agente: "Agente",
+  "destino.title": "Dónde ejecuta Python el agente: este portátil o una GPU de Lambda",
+  plantilla: "Encargo",
+  "plantilla.title": "Rellenar el encargo con un formulario",
+  enviar: "Enviar",
+  cerrar: "Cerrar",
+  "audio.dialogo": "¿Qué hago con estos audios?",
+  cancelar: "Cancelar",
+  "cancelar.title": "Corta el turno del agente (la GPU no se apaga sola)",
+  "estado.inicial": "Doble clic en un clip = piano roll · Ctrl+rueda = zoom",
 };
 
-const DICCIONARIOS: Partial<Record<Idioma, Diccionario>> = { en: EN };
+const DICCIONARIOS: Partial<Record<Idioma, Diccionario>> = { es: ES };
 
-/** Idioma de la interfaz a partir de las preferencias del navegador. */
+/** Clave de localStorage con el idioma forzado a mano. */
+export const CLAVE_IDIOMA = "miuzika.idioma";
+
+/** Idioma pedido explícitamente en la URL (`?lang=es`), si lo hay. */
+function idiomaDeUrl(): Idioma | null {
+  try {
+    const pedido = new URLSearchParams(location.search).get("lang");
+    if (pedido === "es" || pedido === "en") {
+      fijarIdioma(pedido);
+      return pedido;
+    }
+  } catch {
+    /* sin location (pruebas) */
+  }
+  return null;
+}
+
+/** Idioma forzado a mano (URL o localStorage); null si manda el navegador. */
+function idiomaForzado(): Idioma | null {
+  const deUrl = idiomaDeUrl();
+  if (deUrl) return deUrl;
+  try {
+    const guardado = localStorage.getItem(CLAVE_IDIOMA);
+    if (guardado === "es" || guardado === "en") return guardado;
+  } catch {
+    /* sin localStorage */
+  }
+  return null;
+}
+
+/** Fuerza el idioma de la interfaz y lo recuerda. */
+export function fijarIdioma(nuevo: Idioma): void {
+  try {
+    localStorage.setItem(CLAVE_IDIOMA, nuevo);
+  } catch {
+    /* sin localStorage: se queda para esta sesión */
+  }
+  actual = nuevo;
+}
+
+/**
+ * Idioma de la interfaz. El inglés es el de partida: sólo se cambia si la persona
+ * lo fuerza o si su navegador pide español.
+ */
 export function idiomaDe(preferidos: readonly string[]): Idioma {
+  const forzado = idiomaForzado();
+  if (forzado) return forzado;
   for (const etiqueta of preferidos) {
     const base = etiqueta.toLowerCase().split("-")[0];
+    // El orden del navegador manda: si pide inglés antes que español, inglés.
     if (base === "es") return "es";
     if (base === "en") return "en";
   }
-  // Sin español ni inglés entre los preferidos, inglés: es el que más gente lee.
   return "en";
 }
 
-let actual: Idioma = "es";
+let actual: Idioma = "en";
 
 export function idioma(): Idioma {
   return actual;
 }
 
-/** Locale para formatear números y fechas: el del navegador, no uno fijo. */
+/** Locale para formatear números y fechas: el del idioma de la interfaz. */
 export function locale(): string {
-  try {
-    return navigator.language || "es-ES";
-  } catch {
-    return "es-ES";
-  }
+  return actual === "es" ? "es-ES" : "en-GB";
 }
 
-/** Texto de una clave en el idioma actual; si no hay traducción, el de reserva. */
+/** Texto de una clave en el idioma actual; si no hay traducción, el inglés. */
 export function t(clave: string, reserva: string): string {
   return DICCIONARIOS[actual]?.[clave] ?? reserva;
 }
@@ -107,10 +158,11 @@ export function traducirPagina(raiz: Document = document): void {
   try {
     actual = idiomaDe(navigator.languages?.length ? navigator.languages : [navigator.language]);
   } catch {
-    actual = "es";
+    actual = "en";
   }
   raiz.documentElement.lang = actual;
-  if (actual === "es") return;
+  // El HTML ya está en inglés: sólo hay que tocarlo si el idioma no es inglés.
+  if (actual === "en") return;
   for (const el of raiz.querySelectorAll<HTMLElement>("[data-i18n]")) {
     el.textContent = t(el.dataset.i18n ?? "", el.textContent ?? "");
   }
