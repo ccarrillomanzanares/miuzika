@@ -121,6 +121,14 @@
   .step:nth-child(4)::before { border-color: var(--a4); }
   .step h3 { margin: 0 0 6px; font-size: 18px; }
   .step p { margin: 0; color: var(--muted); font-size: 15px; }
+  .step { min-width: 0; }
+  .keynote { margin: 0 0 40px; border-color: color-mix(in srgb, var(--a2) 45%, var(--line)); }
+  .keynote h3 { margin-top: 0; color: var(--a2); }
+  .cmd {
+    margin: 12px 0 0; padding: 10px 12px; border-radius: 8px; overflow-x: auto;
+    background: var(--bg-2); border: 1px solid var(--line); color: var(--a4);
+    font: 12.5px/1.6 "JetBrains Mono", ui-monospace, monospace;
+  }
 
   .stack { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
   .stack .row { display: grid; grid-template-columns: 220px 1fr; gap: 16px; padding: 16px 22px; border-top: 1px solid var(--line); }
@@ -149,6 +157,9 @@
     .status { grid-template-columns: 1fr; }
     .stack .row { grid-template-columns: 1fr; gap: 2px; }
   }
+  @media (max-width: 760px) {
+    nav a:nth-child(-n+2) { display: none; }
+  }
   @media (max-width: 520px) {
     nav a:not(:last-child) { display: none; }
     .hero { padding-top: 56px; }
@@ -167,6 +178,7 @@
     <nav>
       <a href="#que">Features</a>
       <a href="#como">How it works</a>
+      <a href="#empezar">Get started</a>
       <a href="#estado">Status</a>
       <a href="https://github.com/ccarrillomanzanares/miuzika">GitHub</a>
     </nav>
@@ -180,7 +192,7 @@
       <p class="lead">miuzika is a DAW in your browser with an agent that composes, arranges and produces with you. Talk to it in your own language and it writes straight into the project: notes, chords, drums, effects and mix.</p>
       <div class="cta">
         <a class="btn primary" href="https://github.com/ccarrillomanzanares/miuzika">View the code</a>
-        <a class="btn" href="#como">How it works</a>
+        <a class="btn" href="#empezar">Get started</a>
       </div>
 
       <div class="roll" aria-hidden="true">
@@ -270,6 +282,26 @@
         <div class="row"><b>Strudel → WAV</b><span>generative patterns rendered to an audio track</span></div>
         <div class="row"><b>Disk</b><span>each project is a folder: <code>proyecto.json</code> plus its WAVs</span></div>
       </div>
+    </div>
+  </section>
+
+  <section id="empezar">
+    <div class="wrap">
+      <h2>Getting started</h2>
+      <p class="sub">miuzika runs on your own computer. You need <b>Node 24</b>, <b>Python 3 with numpy</b> and an <b>API key from a model provider</b>.</p>
+      <div class="card keynote">
+        <h3>The agent needs an API key</h3>
+        <p>miuzika doesn't include a model: the agent talks to the provider you choose, with your own key and on your own account. Supported: <b>Anthropic (Claude)</b>, <b>OpenAI</b>, <b>Google Gemini</b>, <b>Ollama Cloud</b>, <b>OpenRouter</b>, <b>DeepSeek</b>, <b>Mistral</b>, <b>Groq</b> and any OpenAI-compatible endpoint. Without a key, you can only use a model running locally with Ollama or LM Studio.</p>
+      </div>
+      <div class="flow">
+        <div class="step"><h3>Install</h3><p>Clone the repository and install its dependencies.</p><pre class="cmd">git clone https://github.com/ccarrillomanzanares/miuzika.git
+cd miuzika
+npm install</pre></div>
+        <div class="step"><h3>Start it</h3><p>Then open <code>http://localhost:5173</code>. Use <code>localhost</code>, not <code>127.0.0.1</code>.</p><pre class="cmd">npm run dev</pre></div>
+        <div class="step"><h3>Add your API key</h3><p>Click <b>Models</b> in the header, choose a provider, paste your API key and press <b>Use this one</b>. Keys stay on the server; the browser never sees them.</p></div>
+        <div class="step"><h3>Make music</h3><p>Click <b>New</b>, describe what you want in the chat on the right, and press play. Ask for changes the same way.</p></div>
+      </div>
+      <p class="sub" style="margin:36px 0 0">Projects are saved to <code>workspace/proyectos/</code> and autosave as you work. More detail in the <a href="https://github.com/ccarrillomanzanares/miuzika#readme">README</a>.</p>
     </div>
   </section>
 
