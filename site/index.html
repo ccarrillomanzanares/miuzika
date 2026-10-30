@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>miuzika</title>
+<meta name="description" content="miuzika: a DAW in your browser with an agent that composes, arranges and produces with you.">
+<meta property="og:title" content="miuzika">
+<meta property="og:description" content="A DAW in your browser with an agent that composes, arranges and produces with you.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314121c'/%3E%3Crect x='6' y='18' width='4' height='8' rx='1' fill='%23ff8a5c'/%3E%3Crect x='12' y='10' width='4' height='16' rx='1' fill='%23ffc15c'/%3E%3Crect x='18' y='14' width='4' height='12' rx='1' fill='%23a98bff'/%3E%3Crect x='24' y='6' width='4' height='20' rx='1' fill='%235ce1c6'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0e15;
+    --bg-2: #17151f;
+    --panel: #1d1a27;
+    --line: #2c2839;
+    --text: #ece9f3;
+    --muted: #9b95ad;
+    --a1: #ff8a5c;
+    --a2: #ffc15c;
+    --a3: #a98bff;
+    --a4: #5ce1c6;
+    --radius: 14px;
+    --max: 1080px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.6 "Space Grotesk", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--a4); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .88em; }
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 16px; }
+
+  header.top {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; color: var(--text); letter-spacing: -.02em; }
+  .logo:hover { text-decoration: none; }
+  .logo svg { width: 28px; height: 28px; }
+  nav a { color: var(--muted); margin-left: 22px; font-size: 15px; }
+  nav a:hover { color: var(--text); text-decoration: none; }
+
+  .hero { padding: 88px 0 56px; position: relative; overflow: hidden; }
+  .hero h1 {
+    font-size: clamp(40px, 7vw, 76px); line-height: 1.02; letter-spacing: -.035em;
+    margin: 0 0 22px; max-width: 14ch;
+  }
+  .hero h1 em {
+    font-style: normal;
+    background: linear-gradient(90deg, var(--a1), var(--a2) 35%, var(--a3) 70%, var(--a4));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero p.lead { font-size: clamp(18px, 2.2vw, 21px); color: var(--muted); max-width: 58ch; margin: 0 0 32px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 20px; border-radius: 999px; font-weight: 500; font-size: 15px;
+    border: 1px solid var(--line); color: var(--text); background: var(--panel);
+  }
+  .btn:hover { text-decoration: none; border-color: var(--muted); }
+  .btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .btn.primary:hover { background: #fff; }
+
+  .roll {
+    margin-top: 56px; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--bg-2); overflow: hidden;
+  }
+  .roll .bar {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted);
+  }
+  .roll .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+  .roll .grid { display: grid; grid-template-columns: 1fr 300px; }
+  .roll svg.notes { display: block; width: 100%; height: auto; }
+  .chat { border-left: 1px solid var(--line); padding: 14px; font-size: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { padding: 10px 12px; border-radius: 10px; max-width: 92%; }
+  .msg.you { background: var(--panel); align-self: flex-end; }
+  .msg.bot { background: color-mix(in srgb, var(--a3) 14%, var(--bg-2)); border: 1px solid color-mix(in srgb, var(--a3) 30%, transparent); }
+  .msg .who { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 2px; }
+  .ops { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--a4); }
+  .playhead { animation: play 8s linear infinite; }
+  @keyframes play { from { transform: translateX(0); } to { transform: translateX(760px); } }
+  @media (prefers-reduced-motion: reduce) { .playhead { animation: none; } html { scroll-behavior: auto; } }
+
+  section { padding: 72px 0; border-top: 1px solid var(--line); }
+  section h2 { font-size: clamp(28px, 4vw, 40px); letter-spacing: -.025em; margin: 0 0 12px; line-height: 1.1; }
+  section .sub { color: var(--muted); max-width: 60ch; margin: 0 0 40px; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .card {
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 22px;
+  }
+  .card h3 { margin: 12px 0 6px; font-size: 19px; letter-spacing: -.01em; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .chip { display: inline-block; width: 34px; height: 6px; border-radius: 3px; }
+
+  .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; counter-reset: paso; }
+  .step { padding: 0 20px 0 0; position: relative; }
+  .step::before {
+    counter-increment: paso; content: counter(paso, decimal-leading-zero);
+    display: block; font-family: "JetBrains Mono", monospace; font-size: 13px; color: var(--muted);
+    border-top: 2px solid var(--line); padding-top: 14px; margin-bottom: 8px;
+  }
+  .step:nth-child(1)::before { border-color: var(--a1); }
+  .step:nth-child(2)::before { border-color: var(--a2); }
+  .step:nth-child(3)::before { border-color: var(--a3); }
+  .step:nth-child(4)::before { border-color: var(--a4); }
+  .step h3 { margin: 0 0 6px; font-size: 18px; }
+  .step p { margin: 0; color: var(--muted); font-size: 15px; }
+
+  .stack { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .stack .row { display: grid; grid-template-columns: 220px 1fr; gap: 16px; padding: 16px 22px; border-top: 1px solid var(--line); }
+  .stack .row:first-child { border-top: 0; }
+  .stack .row b { font-weight: 500; }
+  .stack .row span { color: var(--muted); font-size: 15px; }
+
+  .status { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .status ul { margin: 0; padding-left: 20px; color: var(--muted); font-size: 15px; }
+  .status li { margin: 6px 0; }
+  .status h3 { margin: 0 0 10px; font-size: 18px; }
+  .pill {
+    display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--a2) 50%, transparent); color: var(--a2);
+    margin-bottom: 16px; font-family: "JetBrains Mono", monospace;
+  }
+
+  footer { border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 14px; }
+  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+
+  @media (max-width: 860px) {
+    .roll .grid { grid-template-columns: 1fr; }
+    .chat { border-left: 0; border-top: 1px solid var(--line); }
+    .cards { grid-template-columns: 1fr; }
+    .flow { grid-template-columns: 1fr 1fr; row-gap: 28px; }
+    .status { grid-template-columns: 1fr; }
+    .stack .row { grid-template-columns: 1fr; gap: 2px; }
+  }
+  @media (max-width: 520px) {
+    nav a:not(:last-child) { display: none; }
+    .hero { padding-top: 56px; }
+    .flow { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="#">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#1d1a27"/><rect x="6" y="18" width="4" height="8" rx="1" fill="#ff8a5c"/><rect x="12" y="10" width="4" height="16" rx="1" fill="#ffc15c"/><rect x="18" y="14" width="4" height="12" rx="1" fill="#a98bff"/><rect x="24" y="6" width="4" height="20" rx="1" fill="#5ce1c6"/></svg>
+      miuzika
+    </a>
+    <nav>
+      <a href="#que">Features</a>
+      <a href="#como">How it works</a>
+      <a href="#estado">Status</a>
+      <a href="https://github.com/ccarrillomanzanares/miuzika">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="wrap">
+      <h1>A studio that <em>listens</em>.</h1>
+      <p class="lead">miuzika is a DAW in your browser with an agent that composes, arranges and produces with you. Talk to it in your own language and it writes straight into the project: notes, chords, drums, effects and mix.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/ccarrillomanzanares/miuzika">View the code</a>
+        <a class="btn" href="#como">How it works</a>
+      </div>
+
+      <div class="roll" aria-hidden="true">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="margin-left:8px">ballad-in-d.miuzika · 92 bpm · 4/4</span></div>
+        <div class="grid">
+          <svg class="notes" viewBox="0 0 780 300" preserveAspectRatio="none">
+            <defs>
+              <pattern id="cols" width="48.75" height="300" patternUnits="userSpaceOnUse">
+                <line x1="0" y1="0" x2="0" y2="300" stroke="#2c2839" stroke-width="1"/>
+              </pattern>
+            </defs>
+            <rect width="780" height="300" fill="#17151f"/>
+            <rect width="780" height="300" fill="url(#cols)"/>
+            <g stroke="#221f2e"><line x1="0" y1="60" x2="780" y2="60"/><line x1="0" y1="120" x2="780" y2="120"/><line x1="0" y1="180" x2="780" y2="180"/><line x1="0" y1="240" x2="780" y2="240"/></g>
+            <!-- acordes -->
+            <g fill="#a98bff" opacity=".85">
+              <rect x="4" y="150" width="190" height="12" rx="3"/><rect x="4" y="130" width="190" height="12" rx="3"/><rect x="4" y="110" width="190" height="12" rx="3"/>
+              <rect x="199" y="170" width="190" height="12" rx="3"/><rect x="199" y="150" width="190" height="12" rx="3"/><rect x="199" y="120" width="190" height="12" rx="3"/>
+              <rect x="394" y="160" width="190" height="12" rx="3"/><rect x="394" y="140" width="190" height="12" rx="3"/><rect x="394" y="110" width="190" height="12" rx="3"/>
+              <rect x="589" y="150" width="187" height="12" rx="3"/><rect x="589" y="130" width="187" height="12" rx="3"/><rect x="589" y="100" width="187" height="12" rx="3"/>
+            </g>
+            <!-- melodía -->
+            <g fill="#ffc15c">
+              <rect x="4" y="50" width="70" height="12" rx="3"/><rect x="78" y="40" width="44" height="12" rx="3"/><rect x="126" y="30" width="68" height="12" rx="3"/>
+              <rect x="199" y="44" width="92" height="12" rx="3"/><rect x="296" y="56" width="44" height="12" rx="3"/><rect x="344" y="66" width="44" height="12" rx="3"/>
+              <rect x="394" y="40" width="44" height="12" rx="3"/><rect x="442" y="30" width="44" height="12" rx="3"/><rect x="491" y="20" width="92" height="12" rx="3"/>
+              <rect x="589" y="30" width="44" height="12" rx="3"/><rect x="637" y="44" width="139" height="12" rx="3"/>
+            </g>
+            <!-- bajo -->
+            <g fill="#ff8a5c">
+              <rect x="4" y="262" width="92" height="12" rx="3"/><rect x="101" y="262" width="92" height="12" rx="3"/>
+              <rect x="199" y="276" width="190" height="12" rx="3"/>
+              <rect x="394" y="252" width="92" height="12" rx="3"/><rect x="491" y="266" width="92" height="12" rx="3"/>
+              <rect x="589" y="270" width="187" height="12" rx="3"/>
+            </g>
+            <!-- batería -->
+            <g fill="#5ce1c6">
+              <rect x="4" y="218" width="10" height="10" rx="2"/><rect x="101" y="218" width="10" height="10" rx="2"/><rect x="199" y="218" width="10" height="10" rx="2"/><rect x="296" y="218" width="10" height="10" rx="2"/>
+              <rect x="394" y="218" width="10" height="10" rx="2"/><rect x="491" y="218" width="10" height="10" rx="2"/><rect x="589" y="218" width="10" height="10" rx="2"/><rect x="686" y="218" width="10" height="10" rx="2"/>
+              <rect x="52" y="200" width="10" height="10" rx="2"/><rect x="150" y="200" width="10" height="10" rx="2"/><rect x="247" y="200" width="10" height="10" rx="2"/><rect x="345" y="200" width="10" height="10" rx="2"/>
+              <rect x="442" y="200" width="10" height="10" rx="2"/><rect x="540" y="200" width="10" height="10" rx="2"/><rect x="637" y="200" width="10" height="10" rx="2"/><rect x="735" y="200" width="10" height="10" rx="2"/>
+            </g>
+            <g class="playhead"><line x1="10" y1="0" x2="10" y2="300" stroke="#ece9f3" stroke-width="1.5" opacity=".7"/></g>
+          </svg>
+          <div class="chat">
+            <div class="msg you"><span class="who">You</span>A ballad in D major, with a bass that breathes and very soft drums.</div>
+            <div class="msg bot"><span class="who">Agent</span>Done: I–vi–IV–V in D, a melody over the pentatonic, half-note bass and medium-intensity drums.
+              <div class="ops" style="margin-top:6px">+ progression · + 4 tracks · mix</div>
+            </div>
+            <div class="msg you"><span class="who">You</span>Raise the chorus by a third.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section id="que">
+    <div class="wrap">
+      <h2>What it does</h2>
+      <p class="sub">A full studio in a browser tab, plus a partner who understands music and can work on every part of the project.</p>
+      <div class="cards">
+        <div class="card"><span class="chip" style="background:var(--a1)"></span><h3>Composes and arranges</h3><p>Progressions, melodies, bass lines and drums built on real music theory. Ask for a change in words and it applies it to what is already there.</p></div>
+        <div class="card"><span class="chip" style="background:var(--a2)"></span><h3>A real DAW</h3><p>Timeline, piano roll, drum grid, SoundFonts and effects, running on openDAW's audio engine compiled to WebAssembly.</p></div>
+        <div class="card"><span class="chip" style="background:var(--a3)"></span><h3>Produces and mixes</h3><p>Sets levels, panning and effects on every track and the master, and exports to WAV or MIDI.</p></div>
+        <div class="card"><span class="chip" style="background:var(--a4)"></span><h3>Sounds from words</h3><p>Searches a CC0 library of more than 4,000 samples (VCSL), or creates sounds from a description.</p></div>
+        <div class="card"><span class="chip" style="background:var(--a1)"></span><h3>Generative patterns</h3><p>Write a Strudel pattern and it lands in the project as an audio track, bar by bar.</p></div>
+        <div class="card"><span class="chip" style="background:var(--a3)"></span><h3>Synthesis in Python</h3><p>When synthesized audio is needed, the agent runs numpy code on your machine, or torch on a cloud GPU.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="como">
+    <div class="wrap">
+      <h2>How it works</h2>
+      <p class="sub">The agent doesn't generate a finished audio file: it edits the project the way you would, with operations you can see, undo and tweak.</p>
+      <div class="flow">
+        <div class="step"><h3>You talk to it</h3><p>In any language, from the panel on the right. It answers in yours.</p></div>
+        <div class="step"><h3>It reads the project</h3><p>Tracks, key, bars, mix: it has the full context before touching anything.</p></div>
+        <div class="step"><h3>It writes with ops</h3><p>Transactional, validated changes. If something doesn't fit, nothing is half-applied.</p></div>
+        <div class="step"><h3>You hear it</h3><p>openDAW plays it right away. Anything you don't like can be undone or asked for differently.</p></div>
+      </div>
+
+      <div class="stack" style="margin-top:48px">
+        <div class="row"><b>Interface + openDAW</b><span>timeline, piano roll, playback, drums, SoundFonts (WASM)</span></div>
+        <div class="row"><b>Agent (LLM)</b><span>reads and edits the project with ops; composes with music theory; choose your model provider</span></div>
+        <div class="row"><b>numpy / torch engine</b><span>synthesis, rendering and analysis, locally or on a GPU</span></div>
+        <div class="row"><b>Strudel → WAV</b><span>generative patterns rendered to an audio track</span></div>
+        <div class="row"><b>Disk</b><span>each project is a folder: <code>proyecto.json</code> plus its WAVs</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="estado">
+    <div class="wrap">
+      <span class="pill">in development</span>
+      <h2>Where it stands</h2>
+      <p class="sub">Today miuzika runs locally, on the user's own computer. There is no online version or user accounts yet.</p>
+      <div class="status">
+        <div class="card">
+          <h3>Working now</h3>
+          <ul>
+            <li>Projects with autosave; open audio, MIDI and projects by dragging them in</li>
+            <li>Agent with per-project memory and several model providers</li>
+            <li>VCSL library and SFZ-to-SoundFont instrument conversion</li>
+            <li>Export to WAV and MIDI</li>
+            <li>Interface in English and Spanish</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Not yet</h3>
+          <ul>
+            <li>A hosted version: it starts with <code>npm run dev</code></li>
+            <li>Buses and automation</li>
+            <li>Time signatures other than 4/4 in the pattern engine</li>
+            <li>Track effects on audio longer than 30 s</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>miuzika · AGPL-3.0-or-later · built on <a href="https://opendaw.org">openDAW</a> and <a href="https://strudel.cc">Strudel</a></span>
+    <span><a href="https://ccmai.org">ccmai.org</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
