@@ -17,13 +17,13 @@ Reutiliza estos simbolos; NO los redefinas.
     - `stft(x, n=1024, hop=256)`
     - `istft(X, w, pad, length, n=1024, hop=256)`
     - `tv_filter(x, env_func, n=1024, hop=256, chunk=1024)`  -- Filtro variante en el tiempo: env_func(times, freqs) -> (nframes, nbins).
-    - `pan(x, p)`
+    - `pan(x, p)`  -- Mono -> estéreo con ley de potencia constante. Si ya es estéreo (N, 2),
     - `soft_clip(x, drive=2.0)`
     - `moving_avg(x, ms=50.0)`
     - `moving_rms(x, ms=50.0)`
     - `compress(x, thresh_db=-18.0, ratio=2.0, win_ms=40.0, makeup_db=0.0)`
     - `reverb_ir(dur=2.5, decay=0.55, seed=1, lp_hz=6000.0)`
-    - `reverb(x, ir)`
+    - `reverb(x, ir)`  -- Convolución con la respuesta `ir`. Acepta mono o estéreo (N, 2): cada canal
     - `delay(x, time_s, fb=0.35, mix=0.3, taps=5, lp_hz=4000.0)`
     - `vinyl_noise(n, seed=0, hiss=0.02, crackle=0.6)`
     - `tape_hiss(n, seed=0, level=0.01)`
@@ -56,9 +56,11 @@ Reutiliza estos simbolos; NO los redefinas.
     - `pcm_bytes(x, width=3)`
     - `riff_header(sr, ch, width, data_size)`
     - clase `StemWriter`: write_at(self, start, x), close(self)
-    - `write_wav(path, x, width=3)`
+    - `write_wav(path, x, width=3, pico_db=-1.0)`  -- Escribe un WAV estéreo. Si la señal pasa de 0 dBFS, la baja a `pico_db`
+    - `a_nivel(x, pico_db=-6.0)`  -- La señal con su pico en `pico_db` (por defecto -6 dBFS: margen para sumar).
+    - `stem(ruta, fn, *claves, pico_db=None)`  -- Renderiza un stem SOLO si ha cambiado: si `ruta` existe y la huella del
     - `env_fn(pts)`
-    - `place(dst, sig, t, gain=1.0, panp=0.0)`
+    - `place(dst, sig, t, gain=1.0, panp=0.0)`  -- Suma `sig` (mono o estéreo) en `dst` a partir de `t` segundos. `dst` puede
     - `reverb_st(x, ir_l, ir_r, mix=0.2)`
     - `actividad(sil, n)`
     - `midi_add(track, start_beat, dur_beat, pitch, vel)`

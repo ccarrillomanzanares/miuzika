@@ -1,5 +1,5 @@
 {
- "generado": "2026-10-26T20:29:56",
+ "generado": "2026-10-28T19:53:20",
  "raiz": "workspace/",
  "regla": "Estos simbolos YA existen. Reutilizalos con 'from <modulo> import <simbolo>'. Escribir un fichero nuevo que los redefina sera rechazado (409).",
  "modulos": {
@@ -80,7 +80,7 @@
     "pan": {
      "tipo": "funcion",
      "firma": "(x, p)",
-     "doc": ""
+     "doc": "Mono -> estéreo con ley de potencia constante. Si ya es estéreo (N, 2),"
     },
     "soft_clip": {
      "tipo": "funcion",
@@ -110,7 +110,7 @@
     "reverb": {
      "tipo": "funcion",
      "firma": "(x, ir)",
-     "doc": ""
+     "doc": "Convolución con la respuesta `ir`. Acepta mono o estéreo (N, 2): cada canal"
     },
     "delay": {
      "tipo": "funcion",
@@ -287,8 +287,18 @@
     },
     "write_wav": {
      "tipo": "funcion",
-     "firma": "(path, x, width=3)",
-     "doc": ""
+     "firma": "(path, x, width=3, pico_db=-1.0)",
+     "doc": "Escribe un WAV estéreo. Si la señal pasa de 0 dBFS, la baja a `pico_db`"
+    },
+    "a_nivel": {
+     "tipo": "funcion",
+     "firma": "(x, pico_db=-6.0)",
+     "doc": "La señal con su pico en `pico_db` (por defecto -6 dBFS: margen para sumar)."
+    },
+    "stem": {
+     "tipo": "funcion",
+     "firma": "(ruta, fn, *claves, pico_db=None)",
+     "doc": "Renderiza un stem SOLO si ha cambiado: si `ruta` existe y la huella del"
     },
     "env_fn": {
      "tipo": "funcion",
@@ -298,7 +308,7 @@
     "place": {
      "tipo": "funcion",
      "firma": "(dst, sig, t, gain=1.0, panp=0.0)",
-     "doc": ""
+     "doc": "Suma `sig` (mono o estéreo) en `dst` a partir de `t` segundos. `dst` puede"
     },
     "reverb_st": {
      "tipo": "funcion",
