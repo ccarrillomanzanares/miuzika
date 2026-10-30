@@ -1,18 +1,18 @@
-"""Mete un sample del catálogo en un proyecto: convierte, normaliza y lo deja listo.
+"""Puts a catalogue sample into a project: converts it, normalizes it and leaves it ready.
 
-    python codigo/importar_sample.py <origen> <slug> <nombre>
+    python codigo/importar_sample.py <source> <slug> <name>
 
-`origen` es la ruta dentro de `workspace/` (p.ej. catalogo/VCSL-.../Bass Drum 1/x.wav).
-Escribe `proyectos/<slug>/samples/<nombre>.wav` en 44,1 kHz, 16 bits, estéreo y
-normalizado a −1 dBFS, y devuelve un JSON con lo que ha hecho.
+`source` is the path inside `workspace/` (e.g. catalogo/VCSL-.../Bass Drum 1/x.wav).
+It writes `proyectos/<slug>/samples/<name>.wav` at 44.1 kHz, 16 bits, stereo and
+normalized to −1 dBFS, and returns a JSON with what it has done.
 
-Tres decisiones que no son obvias:
-  - Se convierte TODO a 44,1k/16b: la biblioteca trae 5 combinaciones distintas y el
-    motor espera una. Convertir al entrar, no al usar.
-  - Se normaliza a −1 dBFS de pico (la biblioteca viene de −85 a 0 dBFS), pero se
-    guarda el pico original en el JSON: el fader necesita saber de dónde venía.
-  - Mono se duplica a estéreo: un sample mono en una pista estéreo suena descentrado
-    si el motor lo interpreta como canal izquierdo.
+Three decisions that are not obvious:
+  - EVERYTHING is converted to 44.1k/16b: the library brings 5 different combinations and the
+    engine expects one. Convert on entry, not on use.
+  - It is normalized to a −1 dBFS peak (the library ranges from −85 to 0 dBFS), but the
+    original peak is kept in the JSON: the fader needs to know where it came from.
+  - Mono is duplicated to stereo: a mono sample on a stereo track sounds off-centre
+    if the engine interprets it as the left channel.
 """
 
 import json
@@ -53,8 +53,8 @@ def leer_wav(ruta):
 
 
 def remuestrear(datos, sr_origen):
-    """Remuestreo lineal por canal. Suficiente para entrar a 44,1k y no arrastrar
-    dependencias; la alternativa (scipy) no está en el portátil."""
+    """Linear resampling per channel. Good enough to get to 44.1k without dragging in
+    dependencies; the alternative (scipy) is not on the laptop."""
     if sr_origen == SR_DESTINO:
         return datos
     n_destino = int(round(datos.shape[0] * SR_DESTINO / sr_origen))
@@ -68,12 +68,12 @@ def remuestrear(datos, sr_origen):
 
 def main(argv):
     if len(argv) < 3:
-        print(json.dumps({"ok": False, "error": "uso: importar_sample.py <origen> <slug> <nombre>"}))
+        print(json.dumps({"ok": False, "error": "usage: importar_sample.py <source> <slug> <name>"}))
         return 1
     origen, slug, nombre = argv[0], argv[1], argv[2]
     ruta_origen = origen if os.path.isabs(origen) else os.path.join(RAIZ, origen)
     if not os.path.exists(ruta_origen):
-        print(json.dumps({"ok": False, "error": f"no existe {origen}"}))
+        print(json.dumps({"ok": False, "error": f"does not exist {origen}"}))
         return 1
 
     datos, sr = leer_wav(ruta_origen)

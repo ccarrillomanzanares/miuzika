@@ -1,20 +1,20 @@
 /**
- * Formulario de encargo → el mensaje que recibe el agente.
+ * Commission form → the message the agent receives.
  *
- * Sustituye a la plantilla de texto (plantilla.ts, 27-oct). Aquella empujaba al
- * flujo viejo: «Entrega: MIDI» por defecto y «duración real del render» llevaron a
- * Stahl a scripts de Python de 2,5 min por intento. El formulario no decide nada
- * del cómo: deja el trabajo en el proyecto, que es lo normal ahora.
+ * Replaces the text template (plantilla.ts, Oct 27). That one pushed towards the old
+ * flow: "Delivery: MIDI" by default and "real render duration" led Stahl to 2.5-min
+ * Python scripts per attempt. The form does not decide anything about the how: it
+ * leaves the work in the project, which is the normal thing now.
  *
- * Qué pide (28-oct, comparando con encargos escritos a mano): en una VERSIÓN, a
- * dónde se lleva y qué se conserva del original; en una canción NUEVA, para qué es,
- * qué imagen o emoción tiene y cuál es el gancho; en las dos, quién lleva la
- * melodía y el arco de energía.
+ * What it asks for (Oct 28, comparing with hand-written commissions): in a COVER, where
+ * it is taken and what is kept from the original; in a NEW song, what it is for, what
+ * image or emotion it has and what the hook is; in both, who carries the melody and the
+ * energy arc.
  *
- * Ningún campo es obligatorio: lo que queda en blanco (o en «elige tú») no se
- * escribe y lo decide el agente. El mensaje sale en el idioma de la interfaz.
+ * No field is required: whatever is left blank (or set to "you choose") is not written
+ * and the agent decides. The message comes out in the interface language.
  *
- * Sin DOM: se prueba con `node --test`.
+ * No DOM: tested with `node --test`.
  */
 
 export type TipoEncargo = "nueva" | "version" | "arreglo";
@@ -35,42 +35,42 @@ export interface Conservar {
 
 export interface Encargo {
   tipo: TipoEncargo;
-  /** Nueva: nombre del proyecto. Vacío = que lo ponga el agente (sin preguntar). */
+  /** New: project name. Empty = the agent sets it (without asking). */
   nombre: string;
-  /** Versión: canción y artista («Hurt – Nine Inch Nails»). */
+  /** Cover: song and artist ("Hurt – Nine Inch Nails"). */
   cancion: string;
-  /** Versión: qué se mantiene del original. */
+  /** Cover: what is kept from the original. */
   conservar: Conservar;
-  /** Nueva: el estilo. Versión: a dónde se lleva. Arreglo: qué cambiar. */
+  /** New: the style. Cover: where it is taken. Arrangement: what to change. */
   estilo: string;
-  /** Imagen o emoción («conducir de noche bajo la lluvia»). */
+  /** Image or emotion ("driving at night in the rain"). */
   imagen: string;
-  /** Nueva: para qué es. */
+  /** New: what it is for. */
   uso: UsoEncargo;
-  /** Minutos aproximados; null = elige tú. */
+  /** Approximate minutes; null = you choose. */
   minutos: number | null;
-  /** Vacío = elige tú. */
+  /** Empty = you choose. */
   instrumentos: string[];
-  /** Qué instrumento lleva la melodía; vacío = elige tú. */
+  /** Which instrument carries the melody; empty = you choose. */
   melodiaLaLleva: string;
   voz: VozEncargo;
-  /** Referencias de sonido («Kavinsky, la banda sonora de Drive»). */
+  /** Sound references ("Kavinsky, the Drive soundtrack"). */
   suenaComo: string;
   gancho: string;
   tempo: TempoEncargo;
-  /** Sólo con tempo = "bpm". */
+  /** Only with tempo = "bpm". */
   bpm: number | null;
   groove: GrooveEncargo;
   tonalidad: TonalidadEncargo;
-  /** Sólo con tonalidad = "otra". Cifrado americano (C, F#, Bb). */
+  /** Only with tonalidad = "otra". American notation (C, F#, Bb). */
   tonica: string;
-  /** Modo canónico (minor, major, dorian…). */
+  /** Canonical mode (minor, major, dorian…). */
   modo: string;
   energia: EnergiaEncargo;
   forma: string;
   evitar: string;
   mas: string;
-  /** Además de dejarlo en el proyecto, exportarlo (se pueden pedir los dos). */
+  /** Besides leaving it in the project, exporting it (both can be requested). */
   entregaMidi: boolean;
   entregaWav: boolean;
 }
@@ -103,7 +103,7 @@ export const ENCARGO_VACIO: Encargo = {
   entregaWav: false,
 };
 
-/** Tónicas que ofrece el formulario, con su nombre en cada idioma. */
+/** Tonics offered by the form, with their name in each language. */
 export const TONICAS: readonly { valor: string; es: string; en: string }[] = [
   { valor: "C", es: "Do", en: "C" },
   { valor: "C#", es: "Do#", en: "C#" },
@@ -119,7 +119,7 @@ export const TONICAS: readonly { valor: string; es: string; en: string }[] = [
   { valor: "B", es: "Si", en: "B" },
 ];
 
-/** Modos que ofrece el formulario (los mismos nombres que usa el proyecto). */
+/** Modes offered by the form (the same names the project uses). */
 export const MODOS_ENCARGO: readonly { valor: string; es: string; en: string }[] = [
   { valor: "minor", es: "menor", en: "minor" },
   { valor: "major", es: "mayor", en: "major" },
@@ -131,8 +131,8 @@ export const MODOS_ENCARGO: readonly { valor: string; es: string; en: string }[]
 ];
 
 /**
- * Instrumentos General MIDI que se ofrecen como sugerencia (el agente los traduce
- * a programa con listar_instrumentos). Los de la biblioteca llegan del servidor.
+ * General MIDI instruments offered as suggestions (the agent translates them to a
+ * program with listar_instrumentos). Library ones come from the server.
  */
 export const SUGERENCIAS_GM: readonly { es: string; en: string }[] = [
   { es: "Piano eléctrico", en: "Electric piano" },
@@ -169,28 +169,28 @@ function limpio(texto: string): string {
   return texto.replace(/\s+/g, " ").trim();
 }
 
-/** Sin el punto final que ya traiga: se añade uno. */
+/** Without the trailing period it may already have: one is added. */
 function frase(texto: string): string {
   const t = limpio(texto).replace(/[.;,:]+$/, "");
   return t === "" ? "" : /[!?…]$/.test(t) ? t : `${t}.`;
 }
 
-/** «a, b y c» / «a, b and c». */
+/** "a, b and c" / "a, b y c". */
 function lista(partes: readonly string[], idioma: Idioma): string {
   if (partes.length <= 1) return partes.join("");
   const y = idioma === "es" ? " y " : " and ";
   return `${partes.slice(0, -1).join(", ")}${y}${partes.at(-1)}`;
 }
 
-/** El mensaje para el chat. Corto: sólo lo que la persona ha decidido. */
-// El inglés es el idioma base: sin idioma explícito, el encargo sale en inglés.
+/** The message for the chat. Short: only what the person has decided. */
+// English is the base language: without an explicit language, the commission comes out in English.
 export function textoDeEncargo(e: Encargo, idioma: Idioma = "en", proyectoAbierto = ""): string {
   const es = idioma === "es";
   const tx = (a: string, b: string): string => (es ? a : b);
   const lineas: string[] = [];
   const estilo = limpio(e.estilo).replace(/[.;,:]+$/, "");
 
-  // 1. Qué es.
+  // 1. What it is.
   if (e.tipo === "version") {
     const cancion = limpio(e.cancion);
     const titulo = cancion ? tx(`«${cancion}»`, `“${cancion}”`) : tx("la canción que te diga", "the song I tell you");
@@ -220,8 +220,8 @@ export function textoDeEncargo(e: Encargo, idioma: Idioma = "en", proyectoAbiert
     );
     if (estilo) lineas.push(tx(`Qué cambiar: ${frase(estilo)}`, `What to change: ${frase(estilo)}`));
   } else {
-    // Sin nombre, el agente paraba a preguntarlo (28-oct, con el plan ya hecho):
-    // se le dice que lo ponga él.
+    // Without a name, the agent stopped to ask for it (Oct 28, with the plan already
+    // made): it is told to set it itself.
     const nombre = limpio(e.nombre);
     lineas.push(
       nombre
@@ -248,7 +248,7 @@ export function textoDeEncargo(e: Encargo, idioma: Idioma = "en", proyectoAbiert
     }
   }
 
-  // 2. Lo que orienta el carácter.
+  // 2. What guides the character.
   const imagen = limpio(e.imagen);
   if (imagen) lineas.push(tx(`Imagen: ${frase(imagen)}`, `Picture: ${frase(imagen)}`));
   const suena = limpio(e.suenaComo);
@@ -256,7 +256,7 @@ export function textoDeEncargo(e: Encargo, idioma: Idioma = "en", proyectoAbiert
   const gancho = limpio(e.gancho);
   if (gancho) lineas.push(tx(`El gancho: ${frase(gancho)}`, `The hook: ${frase(gancho)}`));
 
-  // 3. Medidas.
+  // 3. Measurements.
   const medidas: string[] = [];
   const bpm = e.bpm !== null && Number.isFinite(e.bpm) && e.bpm > 0 ? `${Math.round(e.bpm)} BPM` : "";
   switch (e.tempo) {
@@ -301,7 +301,7 @@ export function textoDeEncargo(e: Encargo, idioma: Idioma = "en", proyectoAbiert
   const forma = limpio(e.forma);
   if (forma) lineas.push(tx(`Forma: ${frase(forma)}`, `Form: ${frase(forma)}`));
 
-  // 4. Quién toca qué.
+  // 4. Who plays what.
   const instrumentos = e.instrumentos.map(limpio).filter(Boolean);
   if (instrumentos.length > 0) lineas.push(`${tx("Instrumentos", "Instruments")}: ${instrumentos.join("; ")}.`);
   const lleva = limpio(e.melodiaLaLleva);
@@ -317,7 +317,7 @@ export function textoDeEncargo(e: Encargo, idioma: Idioma = "en", proyectoAbiert
     lineas.push(tx("Sin voz: la melodía la lleva un instrumento.", "No vocals: an instrument carries the melody."));
   }
 
-  // 5. Arco.
+  // 5. Arc.
   const energias: Record<Exclude<EnergiaEncargo, "">, [string, string]> = {
     original: ["la del original", "as in the original"],
     crece: ["que crezca hasta el final", "building up to the end"],

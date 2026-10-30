@@ -1,4 +1,4 @@
-/** Editor Strudel: convierte un patrón en un WAV con el motor real. */
+/** Strudel editor: turns a pattern into a WAV with the real engine. */
 
 import { slugDe } from "../../src/core/nombres.ts";
 import type { CodeSource, Project } from "../../src/core/types.ts";

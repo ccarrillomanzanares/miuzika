@@ -1,14 +1,14 @@
 /**
- * El touchpad como instrumento: el servidor arranca la captura nativa
- * (workspace/herramientas/touchpad/principal.py) y reenvía los dedos a la página.
+ * The touchpad as an instrument: the server starts the native capture
+ * (workspace/herramientas/touchpad/principal.py) and forwards the fingers to the page.
  *
  *   POST /api/pad/orden   {orden: "arrancar" | "parar" | "armar" | "desarmar"}
- *   GET  /api/pad/eventos SSE: una línea JSON por evento de la captura
+ *   GET  /api/pad/eventos SSE: one JSON line per capture event
  *   GET  /api/pad/estado  {enMarcha, armado}
  *
- * Hay UNA captura por servidor (el touchpad es uno). Si la página se cierra, la
- * captura se para sola al quedarse sin oyentes: con el pad armado congela el
- * cursor, y no puede quedarse así sin nadie mirando.
+ * There is ONE capture per server (the touchpad is one). If the page closes, the
+ * capture stops by itself when it runs out of listeners: with the pad armed it freezes the
+ * cursor, and it cannot stay like that with nobody watching.
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
@@ -18,7 +18,7 @@ import { resolve } from "node:path";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 
-/** Segundos sin ninguna página escuchando antes de parar la captura. */
+/** Seconds without any page listening before stopping the capture. */
 const SIN_OYENTES_S = 5;
 
 export function rutasPad(server: ViteDevServer, ctx: Contexto): void {
@@ -45,7 +45,7 @@ export function rutasPad(server: ViteDevServer, ctx: Contexto): void {
     const viejo = hijo;
     hijo = null;
     armado = false;
-    // Si no sale por las buenas en 2 s, se mata: no puede quedar enganchado al ratón.
+    // If it does not exit cleanly within 2 s, it is killed: it cannot stay hooked to the mouse.
     setTimeout(() => {
       if (viejo.exitCode === null) viejo.kill();
     }, 2000);
@@ -53,8 +53,8 @@ export function rutasPad(server: ViteDevServer, ctx: Contexto): void {
 
   const arrancar = (): string | null => {
     if (hijo) return null;
-    if (process.platform !== "win32") return "el touchpad como instrumento sólo funciona en Windows";
-    if (!existsSync(script)) return `falta ${script}`;
+    if (process.platform !== "win32") return "the touchpad as an instrument only works on Windows";
+    if (!existsSync(script)) return `missing ${script}`;
     ultimoError = "";
     const proceso = spawn(interprete, ["-u", script], {
       cwd: carpetaTrabajo,
@@ -76,7 +76,7 @@ export function rutasPad(server: ViteDevServer, ctx: Contexto): void {
           try {
             ultimoError = String((JSON.parse(limpia) as { error?: string }).error ?? "");
           } catch {
-            /* línea rota: se reenvía igual */
+            /* broken line: forwarded anyway */
           }
         }
         if (limpia.includes('"desarmado"')) armado = false;
@@ -97,7 +97,7 @@ export function rutasPad(server: ViteDevServer, ctx: Contexto): void {
       enviar(JSON.stringify({ fin: codigo, ...(motivo ? { error: motivo } : {}) }));
     });
     proceso.on("error", (error) => {
-      ultimoError = `no se pudo arrancar Python (${interprete}): ${error.message}`;
+      ultimoError = `could not start Python (${interprete}): ${error.message}`;
     });
     return null;
   };
@@ -106,7 +106,7 @@ export function rutasPad(server: ViteDevServer, ctx: Contexto): void {
 
   server.middlewares.use("/api/pad/orden", (req, res) => {
     if (req.method !== "POST") {
-      responderJson(res, 405, { error: "usa POST" });
+      responderJson(res, 405, { error: "use POST" });
       return;
     }
     leerCuerpo(req, res, (cuerpo) => {
@@ -114,7 +114,7 @@ export function rutasPad(server: ViteDevServer, ctx: Contexto): void {
       try {
         orden = String((JSON.parse(cuerpo) as { orden?: string }).orden ?? "");
       } catch {
-        responderJson(res, 400, { error: "JSON inválido" });
+        responderJson(res, 400, { error: "invalid JSON" });
         return;
       }
       if (orden === "arrancar") {
@@ -127,13 +127,13 @@ export function rutasPad(server: ViteDevServer, ctx: Contexto): void {
         parar();
       } else if (orden === "armar" || orden === "desarmar") {
         if (!hijo) {
-          responderJson(res, 409, { error: "la captura del pad no está en marcha" });
+          responderJson(res, 409, { error: "the pad capture is not running" });
           return;
         }
         armado = orden === "armar";
         ordenar(orden);
       } else {
-        responderJson(res, 400, { error: `orden desconocida: ${orden}` });
+        responderJson(res, 400, { error: `unknown order: ${orden}` });
         return;
       }
       responderJson(res, 200, { ok: true, enMarcha: hijo !== null, armado });

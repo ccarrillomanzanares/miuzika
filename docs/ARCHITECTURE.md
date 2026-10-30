@@ -1,170 +1,172 @@
-# Arquitectura de miuzika
+# miuzika architecture
 
-**Estado: 27-oct-2026** (revisión de arquitectura: ver `docs/REVISION-2026-10-27.md`).
-Todo lo que sigue está comprobado contra el código de este commit: si algo no cuadra,
-manda el código y este fichero se corrige.
+**Status: 27-Oct-2026** (architecture review: see `docs/REVISION-2026-10-27.md`).
+Everything that follows is checked against this commit's code: if something does not match,
+the code wins and this file is corrected.
 
 ---
 
-## 1. Qué es, en una frase
+## 1. What it is, in one sentence
 
-Un DAW en el navegador (openDAW WASM para reproducir, Strudel para patrones) con un
-agente que **compone, arregla y mezcla escribiendo directamente en el proyecto**
-(ops transaccionales: notas, acordes, efectos, faders) y que, para el audio
-sintetizado, **escribe y ejecuta Python** en tu disco o en una GPU. Se le habla en
-cualquier idioma. El navegador pinta y manda.
+A DAW in the browser (openDAW WASM for playback, Strudel for patterns) with an
+agent that **composes, arranges and mixes by writing directly into the project**
+(transactional ops: notes, chords, effects, faders) and that, for synthesized audio,
+**writes and runs Python** on your disk or on a GPU. You speak to it in
+any language. The browser renders and drives.
 
-No hay base de datos, ni servidor de producción, ni nube propia. Lo que hay:
+There is no database, no production server, no cloud of our own. What there is:
 
-| pieza | dónde corre | quién la arranca |
+| piece | where it runs | who starts it |
 |---|---|---|
-| GUI + agente | navegador (Chrome, `localhost:5173`) | `npm run dev` |
-| API + ejecución de Python | **servidor de desarrollo de Vite** (plugin `server/api.ts`) | el mismo proceso |
-| motor numpy | tu portátil, un proceso por script | el servidor |
-| motor torch (GPU) | instancia Lambda Cloud (SSH/SCP) | el servidor, con tu clave |
-| LLM | el proveedor elegido en «Modelos» (Ollama Cloud por defecto), vía proxy del servidor | el navegador |
+| GUI + agent | browser (Chrome, `localhost:5173`) | `npm run dev` |
+| API + Python execution | **Vite dev server** (plugin `server/api.ts`) | the same process |
+| numpy engine | your laptop, one process per script | the server |
+| torch engine (GPU) | Lambda Cloud instance (SSH/SCP) | the server, with your key |
+| LLM | the provider chosen in "Models" (Ollama Cloud by default), via the server proxy | the browser |
 
-Consecuencia que hay que tener presente: **no hay nada desplegado**. Todo esto vive
-dentro de `npm run dev`. Si Vite no corre, no hay app.
+A consequence to keep in mind: **nothing is deployed**. All of this lives
+inside `npm run dev`. If Vite is not running, there is no app.
 
 ---
 
-## 2. Las capas y sus fronteras
+## 2. The layers and their boundaries
 
 ```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│  NAVEGADOR  (web/src/)                                                       │
-│                                                                              │
-│  main.ts  ── estado de la app, historial, autoguardado, diálogos, arranque   │
-│    ├─ timeline.ts · editor.ts (piano roll) · code-lab.ts (Strudel)          │
-│    ├─ opendaw-engine.ts (WASM) + stem-player.ts (<audio>)  mismo transporte │
-│    ├─ chat.ts (panel, no guarda nada) · i18n.ts (textos fijos es/en)        │
-│    └─ agent/                                                                 │
-│        agent.ts     bucle: piensa → herramienta → observa (12 pasos máx.)    │
-│        tools.ts     20 herramientas: el contrato con el LLM                  │
-│        acciones.ts  las que leen/cambian el proyecto (contrato «Estudio»)    │
-│        contexto.ts  recortes, agente.json, recorte seguro de la conversación │
-│                                                                              │
-│  llm.ts  ── SSE contra /api/llm (la clave NUNCA llega aquí)                  │
-│                                                                              │
-│  src/core/ (dominio puro, compartido con el servidor y los tests)            │
-│    types · ops (17, transaccionales) · project · theory · composicion ·      │
-│    resumen · sonidos · palabras · taxonomia · buscar · nombres · rutas       │
-└───────────────────────────────────────┬──────────────────────────────────────┘
-                                        │ fetch /api/*   (25 endpoints)
-┌───────────────────────────────────────▼──────────────────────────────────────┐
-│  SERVIDOR DE DESARROLLO  (server/)                                           │
-│                                                                              │
-│  api.ts       monta las rutas en Vite (orden importa: casan por prefijo)     │
-│  contexto.ts  confina todo a workspace/, resuelve rutas, lanza Python,       │
-│               lee cuerpos con tope, escribe logs                              │
-│  api/         ficheros · proyectos · audio · catalogo · voces · gpu · python │
-│  lambda.ts    encender, sincronizar por scp, ejecutar, traer, apagar         │
-│  (vite.config.ts sólo monta el plugin; /api/llm va por api/proveedores.ts)  │
-└──────────┬──────────────────────────────────────────────┬────────────────────┘
-           │ spawn python -u                              │ ssh / scp
-┌──────────▼───────────────────────────┐   ┌──────────────▼─────────────────────┐
-│  MOTOR numpy  workspace/codigo/      │   │  MOTOR torch  workspace/gpu/       │
-│  dsp · instruments · midi · render   │   │  motor_gpu · voces_gpu             │
-│  voces · gate_voz · sfz2sf2 …        │   │  (sólo en Lambda)                  │
-│                                      │   │                                    │
-│  OBRAS  workspace/obras/<slug>/      │   │                                    │
-└──────────────────────────────────────┘   └────────────────────────────────────┘
++----------------------------------------------------------------------------------+
+| BROWSER  (web/src/)                                                               |
+|                                                                                  |
+| main.ts      app state, history, autosave, dialogs, startup                       |
+|   |- timeline.ts / editor.ts (piano roll) / code-lab.ts (Strudel)                 |
+|   |- opendaw-engine.ts (WASM) + stem-player.ts (<audio>)  same transport         |
+|   |- chat.ts (panel, stores nothing) / i18n.ts (fixed es/en texts)                |
+|   \- agent/                                                                       |
+|       agent.ts     loop: think -> tool -> observe (12 steps max.)                 |
+|       tools.ts     tools: the contract with the LLM                               |
+|       acciones.ts  read/change the project ("Studio" contract)                   |
+|       contexto.ts  trimming, agente.json, safe conversation trimming             |
+|                                                                                  |
+| llm.ts       SSE against /api/llm (the key NEVER arrives here)                     |
+|                                                                                  |
+| src/core/ (pure domain, shared with the server and the tests)                     |
+|   types / ops (transactional) / project / theory / composicion /                 |
+|   resumen / sonidos / palabras / taxonomia / buscar / nombres / rutas             |
++----------------------------------------------------------------------------------+
+                                  | fetch /api/* (25 endpoints)
++----------------------------------------------------------------------------------+
+| DEV SERVER  (server/)                                                            |
+|                                                                                  |
+| api.ts       mounts the routes in Vite (order matters: prefix match)              |
+| contexto.ts  confines everything to workspace/, resolves paths, runs Python,     |
+|              reads bodies with a limit, writes logs                               |
+| api/         files / projects / audio / catalogo / voces / gpu / python           |
+| lambda.ts    start, sync over scp, run, fetch, shut down                          |
+| (vite.config.ts mounts the plugin; /api/llm uses api/proveedores.ts)              |
++----------------------------------------------------------------------------------+
+             | spawn python -u                         | ssh / scp
++-----------------------------+          +-----------------------------+
+| numpy ENGINE                |          | torch ENGINE                |
+| workspace/codigo/           |          | workspace/gpu/              |
+| dsp / instruments / midi /  |          | motor_gpu / voces_gpu       |
+| render / voces / gate_voz / |          | (only on Lambda)            |
+| sfz2sf2 / ...               |          |                             |
+|                             |          |                             |
+| WORKS workspace/obras/      |          |                             |
++-----------------------------+          +-----------------------------+
 ```
 
-### Fronteras que hay que respetar
+### Boundaries that must be respected
 
-- **El navegador no toca el disco.** No hay IndexedDB (se quitó a propósito). Todo va
-  por `/api/*`. En `localStorage` sólo queda: qué proyecto está abierto, si el chat
-  está plegado, el modelo del LLM, el destino cpu/GPU y el gasto de GPU de la sesión.
-- **La clave de Ollama y la de Lambda viven en `.env`.** Sólo las usa el servidor.
-  El bundle del cliente no las contiene: `/api/llm` es un proxy.
-- **El agente escribe con herramientas, no con `fs`.** Sus 20 herramientas son la
-  única puerta; todo pasa por `ejecutarHerramienta()` en `tools.ts`.
-- **Las herramientas hablan un vocabulario canónico; el modelo traduce.** Palabras de
-  sonido, tipos de efecto e instrumento, modos y patrones son `enum` en el esquema;
-  los acordes, cifrado americano; la búsqueda de sonidos, español o inglés. La
-  persona escribe en su idioma y el LLM hace de capa de traducción.
+- **The browser does not touch the disk.** There is no IndexedDB (it was removed on purpose). Everything goes
+  through `/api/*`. In `localStorage` only this remains: which project is open, whether the chat
+  is collapsed, the LLM model, the cpu/GPU destination and the session's GPU spend.
+- **The Ollama key and the Lambda key live in `.env`.** Only the server uses them.
+  The client bundle does not contain them: `/api/llm` is a proxy.
+- **The agent writes with tools, not with `fs`.** Its 20 tools are the
+  only door; everything goes through `ejecutarHerramienta()` in `tools.ts`.
+- **The tools speak a canonical vocabulary; the model translates.** Sound words,
+  effect and instrument types, modes and patterns are `enum`s in the schema;
+  chords, chord symbols; sound search, Spanish or English. The
+  person writes in their language and the LLM acts as the translation layer.
 
 ---
 
-## 3. Quién es la fuente de verdad
+## 3. Who is the source of truth
 
-Tres verdades distintas, y no se sustituyen entre sí:
+Three different truths, and they do not replace each other:
 
-| pregunta | dueño | dónde |
+| question | owner | where |
 |---|---|---|
-| ¿qué hay en la canción? | **`proyectos/<slug>/proyecto.json`** | disco; lo escribe el navegador con autoguardado (1,5 s tras un cambio) |
-| ¿cómo suena un sonido? | **el render** (duración, pico, crest, centroide) | se mide, no se declara |
-| ¿qué recuerda el agente de este proyecto? | **`proyectos/<slug>/agente.json`** | disco; 8 turnos + resumen rodante |
+| what is in the song? | **`proyectos/<slug>/proyecto.json`** | disk; the browser writes it with autosave (1.5 s after a change) |
+| how does a sound sound? | **the render** (duration, peak, crest, centroid) | it is measured, not declared |
+| what does the agent remember about this project? | **`proyectos/<slug>/agente.json`** | disk; 8 turns + rolling summary |
 
-Reglas que se deducen de esto:
+Rules derived from this:
 
-1. **El navegador es el único que escribe `proyecto.json`.** Si lo editas desde
-   fuera, la pestaña que lo tiene abierto lo pisa al siguiente cambio. Para que un
-   arreglo sobreviva tiene que ser una **op** ejecutada en la pestaña.
-2. **El agente no tiene memoria propia.** Si no está en `agente.json` (o en su
-   resumen), no existe para él. Al abrir un proyecto se le inyecta ese bloque en el
-   prompt de sistema, junto al manifiesto del motor.
-3. **La carpeta es del proyecto, no de su nombre.** `meta.carpeta` se fija al crearlo
-   (o al abrirlo de disco) y no cambia al renombrarlo. Los nombres admiten cualquier
-   alfabeto (`slugDe` en `src/core/nombres.ts`, la única función de slug).
-4. **Ningún WAV se guarda dentro del JSON.** Cada asset lleva su `ruta` relativa a la
-   carpeta del proyecto; los bytes viven en disco. Por eso el proyecto es portable y
-   por eso el máster de 6 stems no son 760 MB de base64.
+1. **The browser is the only one that writes `proyecto.json`.** If you edit it from
+   outside, the tab that has it open overwrites it on the next change. For a
+   fix to survive, it has to be an **op** executed in the tab.
+2. **The agent has no memory of its own.** If it is not in `agente.json` (or in its
+   summary), it does not exist for it. When a project is opened, that block is injected into the
+   system prompt, next to the engine manifest.
+3. **The folder belongs to the project, not to its name.** `meta.carpeta` is set when it is created
+   (or when opened from disk) and does not change when it is renamed. Names allow any
+   alphabet (`slugDe` in `src/core/nombres.ts`, the only slug function).
+4. **No WAV is stored inside the JSON.** Each asset carries its `ruta` relative to the
+   project folder; the bytes live on disk. That is why the project is portable and
+   why the 6-stem master is not 760 MB of base64.
 
 ---
 
-> Los mismos dos recorridos, dibujados: `docs/esquema-arquitectura.html` (capas) y
-> `docs/flujo-aplicacion.html` (abrir/tocar y un turno del agente).
+> The same two flows, drawn: `docs/esquema-arquitectura.html` (layers) and
+> `docs/flujo-aplicacion.html` (open/play and one agent turn).
 
-## 4. El ciclo de un turno, paso a paso
+## 4. The lifecycle of a turn, step by step
 
-Esto es lo que ocurre cuando escribes en el chat:
+This is what happens when you write in the chat:
 
 ```text
 1. chat.ts          submit → onSend(texto) → main.responderAlUsuario(texto)
-2. main.ts          refrescarManifiesto(): pide /api/manifiesto (regenera con ast)
-                    y rehace el prompt de sistema:
-                       AGENTE_SISTEMA (literal, con huella)
-                     + carpeta del proyecto
-                     + manifiesto del motor (firmas)
-                     + bloqueContexto(agente.json)   ← memoria del proyecto
-3. main.ts          arranca el latido (1 s) y la burbuja «pensando · N s · N tokens»
+2. main.ts          refrescarManifiesto(): requests /api/manifiesto (regenerates with ast)
+                    and rebuilds the system prompt:
+                       AGENTE_SISTEMA (literal, with fingerprint)
+                     + project folder
+                     + engine manifest (signatures)
+                     + bloqueContexto(agente.json)   ← project memory
+3. main.ts          starts the heartbeat (1 s) and the "thinking · N s · N tokens" bubble
 4. agent.ts         while (pasos < 12):
                      chat() → llm.ts → POST /api/llm/v1/chat/completions (SSE)
-                     si finish_reason == "load"      → espera con una petición de 1 token
-                     si finish_reason == "sin_salida" → repite con reasoning_effort:none
-                     si hay tool_calls → ejecutarHerramienta() una por una
-5. tools.ts         cada herramienta: fetch al servidor (o al navegador, si toca el
-                    proyecto) y devuelve texto para el modelo
-6. servidor         confina la ruta a workspace/, escribe/ejecuta y devuelve
+                     if finish_reason == "load"      → wait with a 1-token request
+                     if finish_reason == "sin_salida" → retry with reasoning_effort:none
+                     if there are tool_calls → ejecutarHerramienta() one by one
+5. tools.ts         each tool: fetch to the server (or to the browser, if it touches the
+                    project) and returns text for the model
+6. server           confines the path to workspace/, writes/runs and returns
                     {ok, codigo, salida, errores, escritos}
-7. tools.ts         si la salida pasa de 4.000 caracteres: cabeza + cola al modelo y
-                    el texto entero a _salidas/<herramienta>_<id>.txt
-8. main.ts          al terminar: burbuja final, línea «✓ N pasos · N herramientas» y
+7. tools.ts         if the output is over 4,000 characters: head + tail to the model and
+                    the whole text to _salidas/<herramienta>_<id>.txt
+8. main.ts          at the end: final bubble, line "✓ N steps · N tools" and
                     agregarTurno() → POST agente.json
 ```
 
-### Los topes que evitan que un turno se coma la sesión
+### The limits that keep a turn from eating the session
 
-| tope | valor | dónde | por qué |
+| limit | value | where | why |
 |---|---|---|---|
-| pasos por turno | 12 | `agent.ts` | un bucle no puede ser infinito |
-| salida por petición | 32.768 tokens | `agent.ts` | el modelo **razona** y eso gasta del mismo presupuesto |
-| un fichero escrito | 8.000 caracteres | `tools.ts` | un `escribir_fichero` de 9.700 tokens provoca `load` en la llamada siguiente |
-| espera por petición | 180 s | `llm.ts` | sin timeout, una petición colgada no contesta nunca |
-| salida de herramienta | 4.000 caracteres | `contexto.ts` | un render imprime cientos de líneas |
+| steps per turn | 12 | `agent.ts` | a loop cannot be infinite |
+| output per request | 32,768 tokens | `agent.ts` | the model **reasons** and that spends from the same budget |
+| a file written | 8,000 characters | `tools.ts` | an `escribir_fichero` of 9,700 tokens causes `load` on the next call |
+| wait per request | 180 s | `llm.ts` | without a timeout, a hung request never answers |
+| tool output | 4,000 characters | `contexto.ts` | a render prints hundreds of lines |
 
-Y tres cortes automáticos, cada uno porque ya pasó: **3 fallos idénticos** seguidos
-cortan el turno; **3 escrituras** sin ejecutar nada cortan el turno; un vacío se
-reintenta hasta **5** veces (1-2-4-8-16 s) y luego **una** reanudación automática.
+And three automatic cutoffs, each one because it already happened: **3 identical failures** in a row
+cut the turn; **3 writes** without running anything cut the turn; an empty response is
+retried up to **5** times (1-2-4-8-16 s) and then **one** automatic resumption.
 
 ---
 
-## 5. El modelo de datos
+## 5. The data model
 
-`src/core/types.ts` (198 líneas). Es independiente del motor: openDAW es una vista.
+`src/core/types.ts` (198 lines). It is independent of the engine: openDAW is a view.
 
 ```text
 Project { schemaVersion: 1, id, name, bpm, key{tonic,mode}, timeSignature,
@@ -177,219 +179,218 @@ Track   { id, name, kind: midi|audio, instrument{type,preset?,program?,archivo?}
 Clip    { id, name, start (beats), length (beats), notes[], audio?{assetId,offset,gainDb} }
 
 Note    { pitch 0..127, start, duration, velocity 1..127 }
-Device  { id, type, enabled, params }   ← 10 tipos, rangos en DEVICE_PARAMS
+Device  { id, type, enabled, params }   ← 10 types, ranges in DEVICE_PARAMS
 ```
 
-Detalles que importan:
+Details that matter:
 
-- **El tiempo se cuenta en negras (beats)**, no en segundos ni píxeles. Se pasa a
-  pulsos (960 por negra) sólo al hablar con openDAW, y a PPQN sólo al exportar MIDI.
-- **Un clip con audio de más de dos compases dura un número entero de compases**
-  (`src/core/tiempo.ts`): el MIDI acaba en su última nota y el WAV lleva cola de
-  reverb; si no se igualan, la timeline enseña dos rejillas.
-- **La duración de un clip nunca supera el fichero**: si el agente pide 90 compases
-  de un WAV que dura 84,17, el clip se queda en 84,17 y el resultado lo dice.
+- **Time is counted in beats**, not in seconds or pixels. It is converted to
+  pulses (960 per beat) only when talking to openDAW, and to PPQN only when exporting MIDI.
+- **A clip with audio longer than two bars lasts a whole number of bars**
+  (`src/core/tiempo.ts`): the MIDI ends on its last note and the WAV carries a reverb tail;
+  if they are not matched, the timeline shows two grids.
+- **A clip's duration never exceeds the file**: if the agent asks for 90 bars
+  of a WAV that lasts 84.17, the clip stays at 84.17 and the result says so.
 
-### Las 17 operaciones (`src/core/ops.ts`)
+### The 17 operations (`src/core/ops.ts`)
 
 `set_song · add_track · set_track · remove_track · add_notes · replace_clip_notes ·
 remove_clip · add_device · set_device · remove_device · register_audio_asset ·
 add_audio_clip · set_audio_clip · set_clip_length · move_clip · duplicate_clip ·
 set_master`
 
-Cada una valida con zod, se aplica sobre un `structuredClone` y **o entra entera o no
-entra nada**: si el proyecto quedaría inválido (`validateProject`), se descarta el
-lote completo y el original queda intacto. Eso es lo que permite que el agente
-cambie el proyecto sin poder romperlo: `editar_proyecto` le da estas ops tal cual, y
-la chuleta que ve el modelo sale del propio esquema (`firmasDeOps`).
+Each one validates with zod, is applied on a `structuredClone` and **either goes in whole or
+does not go in at all**: if the project would become invalid (`validateProject`), the whole
+batch is discarded and the original stays intact. That is what allows the agent to
+change the project without being able to break it: `editar_proyecto` gives it these ops as is, and
+the cheat sheet that the model sees comes from the schema itself (`firmasDeOps`).
 
-### En disco
+### On disk
 
 ```text
 workspace/
 ├── proyectos/<slug>/
-│   ├── proyecto.json      ← el maestro (formato miuzika-proyecto, version 1)
-│   ├── agente.json        ← memoria del agente para ESE proyecto
-│   ├── entrada/           ← WAV importados por el usuario
-│   ├── salida/            ← WAV y MIDI que generan el agente y el motor
-│   ├── sonidos/           ← receta .json + su .wav
-│   ├── samples/           ← samples traídos del catálogo (ya convertidos)
-│   └── instrumentos/      ← .sf2 del proyecto (gitignored)
-├── codigo/                ← MOTOR numpy (compartido por todos los proyectos)
-├── gpu/                   ← MOTOR torch (sólo se ejecuta en Lambda)
-├── herramientas/          ← manifiesto, picos, verificar_audio, midi_lector, smoke
-├── plantillas/            ← one_shot.py y demás
-├── catalogo/              ← 4.231 samples CC0 de VCSL (9,6 GB, gitignored)
-├── obras/<slug>/          ← cancion.py (datos) + tema.py (arreglo): UNA canción, no API
-├── _salidas/              ← salidas largas de herramientas (fuera del proyecto a propósito)
+│   ├── proyecto.json      ← the master (format miuzika-proyecto, version 1)
+│   ├── agente.json        ← the agent's memory for THAT project
+│   ├── entrada/           ← WAVs imported by the user
+│   ├── salida/            ← WAV and MIDI generated by the agent and the engine
+│   ├── sonidos/           ← .json recipe + its .wav
+│   ├── samples/           ← samples brought in from the catalog (already converted)
+│   └── instrumentos/      ← the project's .sf2 (gitignored)
+├── codigo/                ← numpy ENGINE (shared by all projects)
+├── gpu/                   ← torch ENGINE (only runs on Lambda)
+├── herramientas/          ← manifest, peaks, verificar_audio, midi_lector, smoke
+├── plantillas/            ← one_shot.py and others
+├── catalogo/              ← 4,231 CC0 samples from VCSL (9.6 GB, gitignored)
+├── obras/<slug>/          ← cancion.py (data) + tema.py (arrangement): ONE song, not an API
+├── _salidas/              ← long tool outputs (outside the project on purpose)
 ├── _referencias/, _archivo/
 ```
 
-**`_salidas/` está fuera del proyecto y es compartida** por un motivo concreto: el
-agente puede llamar a `crear_proyecto` a mitad de turno, y una ruta relativa que le
-dimos antes dejaría de apuntar al mismo sitio. Las carpetas compartidas se declaran
-en **un solo sitio**: `src/core/rutas.ts` (lo leen el servidor y el navegador).
+**`_salidas/` is outside the project and is shared** for a specific reason: the
+agent can call `crear_proyecto` in the middle of a turn, and a relative path that we
+gave it earlier would stop pointing to the same place. Shared folders are declared
+in **a single place**: `src/core/rutas.ts` (read by the server and the browser).
 
 ---
 
-## 6. Los 25 endpoints
+## 6. The 25 endpoints
 
-Todos son middlewares del servidor de desarrollo, uno o varios por módulo de
-`server/api/`; ninguno existe en producción porque no hay producción.
+All of them are dev-server middlewares, one or more per module in
+`server/api/`; none exist in production because there is no production.
 
-| ruta | método | qué hace | quién la llama |
+| route | method | what it does | who calls it |
 |---|---|---|---|
-| `/api/llm/*` | proxy | `v1/…` al proveedor activo con su clave; `api/…` (búsqueda web) a Ollama Cloud | `llm.ts` |
-| `/api/proveedores` | GET, POST | proveedores, clave (nunca de vuelta), modelo; `/modelos`, `/probar` | `ajustes-modelos.ts` |
-| `/api/agent-log` | POST | una línea por petición en `tmp/llm.log` | `llm.ts` |
-| `/api/build` | GET | id del código servido (aviso de bundle viejo) | `build.ts` |
-| `/api/fs/write` | POST | escribe en workspace; 409 si duplica el motor o es `patch*.py` | `escribir_fichero` |
-| `/api/fs/read` | POST | lee hasta 20.000 caracteres | `leer_fichero` |
-| `/api/fs/edit` | POST | busca/reemplaza exacto; smoke si es el motor | `editar_fichero` |
-| `/api/fs/list` | GET | inventario; `?carpeta=` (por defecto, el proyecto) | `listar_ficheros` |
-| `/api/proyectos` | GET/POST | lista maestros / lee entero / escribe validando el formato | `proyecto-disco.ts` |
-| `/api/manifiesto` | GET | regenera `MANIFEST.md` con `ast` y lo devuelve | `main.ts` |
-| `/api/audio` | GET | WAV con Range (streaming) | `<audio>`, `audio-store.ts` |
-| `/api/audio/subir` | POST | WAV del navegador → `entrada/` (tope 512 MB) | `proyecto-disco.ts` |
-| `/api/picos` | GET | picos para dibujar la onda, **con caché por mtime** | `audio-store.ts` |
-| `/api/midi` | GET | notas de un `.mid` normalizadas a beats | `anadir_pistas` |
-| `/api/verificar` | POST | medidas de un WAV (`verificar_audio.py`) | `verificar_audio` |
-| `/api/referencia/medir` | POST | tempo, tono y forma de un audio o de YouTube | `medir_referencia` |
-| `/api/instrumentos/crear` | POST | `.sfz` → `.sf2` dentro del proyecto | `usar_instrumento` |
-| `/api/catalogo/buscar` | POST | búsqueda en lenguaje natural sobre 4.231 samples | `buscar_sonido`, diálogo |
-| `/api/catalogo/audio` | GET | escuchar un sample sin traerlo | diálogo «Sonidos» |
-| `/api/catalogo/importar` | POST | traer un sample convertido al proyecto | `usar_sample` |
-| `/api/voces` | GET | catálogo de voces leído del motor (`?medir=1` renderiza) | `listar_voces` |
-| `/api/voces/nueva` | POST | puerta: renderiza, mide y cuece la voz en `instruments.py` | `crear_voz` |
-| `/api/run/python` | POST | ejecuta un script en el portátil | `ejecutar_python` |
-| `/api/run/lambda` | POST | el mismo contrato en la GPU (409 si el script es numpy puro) | `ejecutar_python` |
-| `/api/gpu/estado` | GET | fase, tarifa real y gasto | `gpu-coste.ts` |
-| `/api/gpu/encender` · `/apagar` | POST | ciclo de vida de la instancia | botón de la cabecera |
+| `/api/llm/*` | proxy | `v1/…` to the active provider with its key; `api/…` (web search) to Ollama Cloud | `llm.ts` |
+| `/api/proveedores` | GET, POST | providers, key (never returned), model; `/modelos`, `/probar` | `ajustes-modelos.ts` |
+| `/api/agent-log` | POST | one line per request in `tmp/llm.log` | `llm.ts` |
+| `/api/build` | GET | id of the served code (stale bundle warning) | `build.ts` |
+| `/api/fs/write` | POST | writes to workspace; 409 if it duplicates the engine or is `patch*.py` | `escribir_fichero` |
+| `/api/fs/read` | POST | reads up to 20,000 characters | `leer_fichero` |
+| `/api/fs/edit` | POST | exact search/replace; smoke if it is the engine | `editar_fichero` |
+| `/api/fs/list` | GET | inventory; `?carpeta=` (by default, the project) | `listar_ficheros` |
+| `/api/proyectos` | GET/POST | lists masters / reads whole / writes validating the format | `proyecto-disco.ts` |
+| `/api/manifiesto` | GET | regenerates `MANIFEST.md` with `ast` and returns it | `main.ts` |
+| `/api/audio` | GET | WAV with Range (streaming) | `<audio>`, `audio-store.ts` |
+| `/api/audio/subir` | POST | browser WAV → `entrada/` (512 MB limit) | `proyecto-disco.ts` |
+| `/api/picos` | GET | peaks for drawing the waveform, **with cache by mtime** | `audio-store.ts` |
+| `/api/midi` | GET | notes from a `.mid` normalized to beats | `anadir_pistas` |
+| `/api/verificar` | POST | measurements of a WAV (`verificar_audio.py`) | `verificar_audio` |
+| `/api/referencia/medir` | POST | tempo, key and form of an audio file or YouTube | `medir_referencia` |
+| `/api/instrumentos/crear` | POST | `.sfz` → `.sf2` inside the project | `usar_instrumento` |
+| `/api/catalogo/buscar` | POST | natural-language search over 4,231 samples | `buscar_sonido`, dialog |
+| `/api/catalogo/audio` | GET | listen to a sample without bringing it in | "Sounds" dialog |
+| `/api/catalogo/importar` | POST | bring a converted sample into the project | `usar_sample` |
+| `/api/voces` | GET | voice catalog read from the engine (`?medir=1` renders) | `listar_voces` |
+| `/api/voces/nueva` | POST | gate: renders, measures and bakes the voice into `instruments.py` | `crear_voz` |
+| `/api/run/python` | POST | runs a script on the laptop | `ejecutar_python` |
+| `/api/run/lambda` | POST | the same contract on the GPU (409 if the script is pure numpy) | `ejecutar_python` |
+| `/api/gpu/estado` | GET | phase, real rate and spend | `gpu-coste.ts` |
+| `/api/gpu/encender` · `/apagar` | POST | instance lifecycle | header button |
 
 ---
 
-## 7. Las 20 herramientas del agente
+## 7. The agent's 20 tools
 
-`web/src/agent/tools.ts` es el contrato con el modelo (esquemas y despacho);
-`web/src/agent/acciones.ts`, la implementación de las que tocan el proyecto.
+`web/src/agent/tools.ts` is the contract with the model (schemas and dispatch);
+`web/src/agent/acciones.ts`, the implementation of those that touch the project.
 
-**Componer y producir en el proyecto (se ejecutan en la pestaña):**
+**Composing and producing in the project (they run in the tab):**
 `leer_proyecto` · `editar_proyecto` · `escribir_progresion` · `crear_proyecto` ·
 `anadir_pistas` · `ajustar_pistas` · `igualar_clips` · `usar_sample` ·
 `usar_instrumento` · `crear_sonido`
 
-**Las que hablan con el servidor:**
+**Those that talk to the server:**
 `escribir_fichero` · `leer_fichero` · `listar_ficheros` · `editar_fichero` ·
 `ejecutar_python` · `verificar_audio` · `buscar_sonido` · `listar_voces` ·
 `crear_voz` · `medir_referencia`
 
-Por qué esa división: el proyecto **sólo lo puede cambiar la pestaña** (es la dueña
-del fichero maestro). La pestaña registra sus acciones una vez con
-`registrarAcciones()` y `acciones.ts` sólo depende de un contrato de cuatro métodos
+Why that division: the project **can only be changed by the tab** (it owns
+the master file). The tab registers its actions once with
+`registrarAcciones()` and `acciones.ts` only depends on a four-method contract
 (`Estudio`: proyecto, fijar, enVivo, avisar).
 
-Todas comparten el mismo envoltorio: timeout propio, cancelación con `AbortSignal`
-(que en `/api/run/python` mata también el proceso), y si la respuesta pasa de 4.000
-caracteres se recorta y se guarda entera en `_salidas/`.
+All of them share the same wrapper: their own timeout, cancellation with `AbortSignal`
+(which in `/api/run/python` also kills the process), and if the response is over 4,000
+characters it is trimmed and the whole thing is saved to `_salidas/`.
 
 ---
 
-## 8. Los dos motores Python, y el problema de fondo
+## 8. The two Python engines, and the underlying problem
 
 | | `workspace/codigo/` | `workspace/gpu/` |
 |---|---|---|
-| tecnología | numpy puro (sin scipy) | torch + CUDA |
-| dónde | tu portátil | Lambda (`gpu_1x_a10`, 1,29 $/h) |
-| coste | 0 | ~3 min de arranque + por hora |
-| qué hace | timbres, MIDI, mezcla, análisis, catálogo | saturación ×4, IR estéreo, reverb FFT, shimmer, granular, compresor multibanda, voces pesadas |
-| qué **no** hace | nada de GPU | **no escribe `.mid`** |
+| technology | pure numpy (no scipy) | torch + CUDA |
+| where | your laptop | Lambda (`gpu_1x_a10`, $1.29/h) |
+| cost | 0 | ~3 min startup + per hour |
+| what it does | timbres, MIDI, mixing, analysis, catalog | ×4 saturation, stereo IR, FFT reverb, shimmer, granular, multiband compressor, heavy voices |
+| what it does **not** do | anything GPU | **does not write `.mid`** |
 
-### Biblioteca y obra: separadas el 26-oct
+### Library and work: separated on 26-Oct
 
-`codigo/` mezclaba dos cosas con el mismo estatus en el manifiesto, y el agente
-importaba la segunda creyendo que era la primera:
+`codigo/` mixed two things with the same status in the manifest, and the agent
+imported the second believing it was the first:
 
-- **la biblioteca** — `dsp.py` (filtros, STFT, reverb, LUFS, crest), `instruments.py`
-  (24 timbres), `midi.py` (escritor MIDI), `render.py` (utilidades de mezcla:
+- **the library** — `dsp.py` (filters, STFT, reverb, LUFS, crest), `instruments.py`
+  (24 timbres), `midi.py` (MIDI writer), `render.py` (mixing utilities:
   `place`, `reverb_st`, `StemWriter`, `write_wav`), `voces.py`, `gate_voz.py`,
   `sfz2sf2.py`, `catalogo.py`, `importar_sample.py`;
-- **una obra** — `cancion.py` (140 compases a 90 BPM, secciones, armonía, letra) y el
-  `render.py` de antes, que era el arreglo de **esa** canción.
+- **a work** — `cancion.py` (140 bars at 90 BPM, sections, harmony, lyrics) and the
+  earlier `render.py`, which was the arrangement of **that** song.
 
-Lo que estaba mal, en concreto:
+What was wrong, specifically:
 
-1. `cancion.py` se llamaba como si fuera infraestructura: el agente lo importaba y
-   heredaba el tempo y la forma de otra canción.
-2. **`dsp.py` llevaba el tempo dentro** (`BPM = 90.0`, `SPB`, `BAR`) y el smoke test
-   *obligaba* a que siguiera casando con `cancion.BPM`: un candado que impedía
-   arreglarlo sin tocar dos ficheros.
-3. `render.py` era mitad biblioteca (lo que usan `proyectos/stahl` y
-   `proyectos/ghosts-again`) y mitad obra.
+1. `cancion.py` was named as if it were infrastructure: the agent imported it and
+   inherited another song's tempo and form.
+2. **`dsp.py` carried the tempo inside** (`BPM = 90.0`, `SPB`, `BAR`) and the smoke test
+   *forced* it to keep matching `cancion.BPM`: a lock that prevented fixing it without touching two files.
+3. `render.py` was half library (what `proyectos/stahl` and
+   `proyectos/ghosts-again` use) and half work.
 
-Ahora:
+Now:
 
 ```text
-workspace/codigo/render.py            150 líneas · biblioteca (place, reverb_st, StemWriter…)
-workspace/codigo/dsp.py               302 líneas · sin BPM, sin SPB, sin BAR
-workspace/herramientas/smoke.py                  · sin cancion, sin tempo
+workspace/codigo/render.py            150 lines · library (place, reverb_st, StemWriter…)
+workspace/codigo/dsp.py               302 lines · no BPM, no SPB, no BAR
+workspace/herramientas/smoke.py                  · no cancion, no tempo
 workspace/obras/quereme-despacio/
-    cancion.py                        250 líneas · datos de la obra
-    tema.py                           476 líneas · sus gen_* y su master
-workspace/_archivo/experimental-26oct/           · 21 scripts del agente, archivados
+    cancion.py                        250 lines · the work's data
+    tema.py                           476 lines · its gen_* and its master
+workspace/_archivo/experimental-26oct/           · 21 agent scripts, archived
 ```
 
-El manifiesto ya no lista `cancion` (7 módulos, 8,9 KB de firmas). `render` sigue
-apareciendo: es biblioteca de verdad y la usan dos proyectos.
+The manifest no longer lists `cancion` (7 modules, 8.9 KB of signatures). `render` still
+appears: it is a real library and two projects use it.
 
-`obras/` no está en las carpetas compartidas a propósito: se llega a ella con una ruta
-explícita (`obras/<slug>/...`) desde el proyecto, no por el atajo de `COMPARTIDO`.
+`obras/` is not in the shared folders on purpose: it is reached with an explicit
+path (`obras/<slug>/...`) from the project, not through the `COMPARTIDO` shortcut.
 
-### El reparto, en la práctica
+### The split, in practice
 
-- Audio del tema → GPU (`saturar(veces=4)`, `ir_estereo(dur>=3)`, `reverb`, `shimmer`,
+- Track audio → GPU (`saturar(veces=4)`, `ir_estereo(dur>=3)`, `reverb`, `shimmer`,
   `congelar`, `granular`, `compresor_multibanda`, 24 bits).
-- MIDI y muestras rápidas → numpy local, gratis.
-- **Un script numpy en Lambda es CPU a precio de GPU**, y el servidor lo rechaza
-  (409) *antes* de encender la máquina: lee el fuente y, si importa
-  `dsp`/`instruments`/`render`/`midi`/`cancion`/`tema` sin `motor_gpu`, corta.
+- MIDI and quick samples → local numpy, free.
+- **A numpy script on Lambda is CPU at GPU prices**, and the server rejects it
+  (409) *before* starting the machine: it reads the source and, if it imports
+  `dsp`/`instruments`/`render`/`midi`/`cancion`/`tema` without `motor_gpu`, it stops.
 
 ---
 
-## 9. Acoplamientos peligrosos (leer antes de tocar)
+## 9. Dangerous couplings (read before touching)
 
-1. **Editar `vite.config.ts` o `server/` reinicia el servidor** y mata el turno en
-   vuelo; la pestaña abierta se queda con el JavaScript viejo (el HMR se desconecta
-   en silencio). La app lo detecta (`/api/build`) y ofrece «↻ versión nueva».
-2. **Añadir una dependencia exige reiniciar el servidor a mano**: Vite reoptimiza y
-   el navegador falla con «Failed to fetch dynamically imported module».
-3. **El prompt de sistema es un literal con huella** (`agente-prompt.ts` +
-   `HUELLA_PROMPT` + prueba que falla si cambia). Cambiarlo es un acto deliberado.
-4. **Los `.sf2` no se cargan con el gestor de openDAW**: se queda en `progress` para
-   siempre porque lee de su OPFS. Hay un gestor propio en `opendaw-engine.ts`.
-5. **`middlewares.use("/api/x", …)` casa por prefijo**: un handler de `/api/voces` se
-   come `/api/voces/nueva` si no hace `next()`.
-6. **Play con `element.click()` no arranca openDAW**: no es gesto de usuario y el
-   `AudioContext` queda suspendido. En pruebas, clic real por coordenadas.
-7. **`confirm()` bloquea el renderer en pruebas headless**: hay que aceptarlo por CDP
-   (`Page.handleJavaScriptDialog`) en una llamada aparte.
+1. **Editing `vite.config.ts` or `server/` restarts the server** and kills the turn in
+   flight; the open tab is left with the old JavaScript (HMR disconnects
+   silently). The app detects it (`/api/build`) and offers "↻ new version".
+2. **Adding a dependency requires restarting the server by hand**: Vite reoptimizes and
+   the browser fails with "Failed to fetch dynamically imported module".
+3. **The system prompt is a literal with a fingerprint** (`agente-prompt.ts` +
+   `HUELLA_PROMPT` + a test that fails if it changes). Changing it is a deliberate act.
+4. **`.sf2` files do not load with openDAW's manager**: it stays in `progress` forever
+   because it reads from its OPFS. There is a custom manager in `opendaw-engine.ts`.
+5. **`middlewares.use("/api/x", …)` matches by prefix**: a handler for `/api/voces`
+   swallows `/api/voces/nueva` if it does not call `next()`.
+6. **Play with `element.click()` does not start openDAW**: it is not a user gesture and the
+   `AudioContext` stays suspended. In tests, click for real by coordinates.
+7. **`confirm()` blocks the renderer in headless tests**: it must be accepted via CDP
+   (`Page.handleJavaScriptDialog`) in a separate call.
 
 ---
 
-## 10. Cómo se verifica (las puertas)
+## 10. How it is verified (the gates)
 
 ```bash
 cd /c/Users/carlos/proyectos/miuzika
-npx tsc --noEmit        # 0 errores
-npm run test:unit       # 121 tests (dominio puro: ops, proyecto, sonidos, palabras…)
-npm test                # + contrato con openDAW (exportar/importar un .odw)
-npm run build:web       # bundle de producción
+npx tsc --noEmit        # 0 errors
+npm run test:unit       # 121 tests (pure domain: ops, project, sounds, words…)
+npm test                # + contract with openDAW (export/import an .odw)
+npm run build:web       # production bundle
 ```
 
-Y a mano, porque ningún test lo cubre: abrir `localhost:5173`, abrir un proyecto con
-pistas, darle a play y **oír** que suena; guardar y comprobar que `proyecto.json`
-tiene el `guardadoEn` de ahora.
+And by hand, because no test covers it: open `localhost:5173`, open a project with
+tracks, press play and **hear** that it sounds; save and check that `proyecto.json`
+has the current `guardadoEn`.
 
-Para probar herramientas sin pasar por el modelo, la app expone en desarrollo:
+To test tools without going through the model, the app exposes in development:
 
 ```js
 await __miuzika.herramienta('anadir_pistas', JSON.stringify({ wavs:['salida/x.wav'], compases:16 }))
@@ -397,97 +398,97 @@ await __miuzika.herramienta('anadir_pistas', JSON.stringify({ wavs:['salida/x.wa
 
 ---
 
-## 11. Deuda conocida (honesta)
+## 11. Known debt (honest)
 
-**Arreglado el 26-oct** (con medida antes/después):
+**Fixed on 26-Oct** (measured before/after):
 
-| qué | antes | después |
+| what | before | after |
 |---|---|---|
-| `listar_ficheros` metía el workspace entero en el contexto | 586.682 B (recortados: el agente no veía sus ficheros) | 11.097 B la raíz · 5.022 B el proyecto · catálogo excluido |
-| `ejecutar_python` devolvía el árbol en cada llamada | recorrido de 4.231 ficheros por ejecución | sólo `escritos` (lo que cambió en el proyecto) |
-| abrir un proyecto de 21 pistas / 11 WAV | 38 s (un proceso Python por asset, en serie) | 16,8 s en frío · **0,5 s** con la caché de picos |
-| el texto del reintento sin razonamiento se descartaba | una respuesta buena se tiraba como turno vacío | se recalcula tras el reintento |
-| `resolveClip` con un solo clip | borraba el único clip aunque el nombre no coincidiera | error con la lista de clips |
-| `fallosIguales` vivía en el módulo | un fallo de ayer cortaba el turno de hoy | por turno |
-| dos listas de carpetas compartidas | al navegador le faltaba `catalogo/` | una sola en `src/core/rutas.ts` |
-| alias `oboe` con «е» cirílica | el oboe no se reconocía | arreglado |
-| `boot()` con 50 líneas muertas | prometía abrir el último proyecto (ya no lo hace) | arranque limpio real |
-| `leerCuerpo` sin tope | un POST de 9 MB se comía la memoria | 413 por encima de 8 MB |
-| el motor mezclaba biblioteca y obra | `cancion.py` y el `render.py` de una obra en el manifiesto; `dsp.BPM = 90` con un smoke que lo blindaba | biblioteca en `codigo/`, obra en `obras/quereme-despacio/`, `dsp` sin tempo |
-| `codigo/experimental/` | 21 scripts del agente, dos reimplementando el motor | archivados en `_archivo/experimental-26oct/` |
-| prompt en reposo | sin manifiesto (salida temprana en `cargarAgenteDelProyecto`) | 2.890 → 11.939 caracteres con manifiesto y contexto |
+| `listar_ficheros` put the whole workspace into the context | 586,682 B (trimmed: the agent did not see its files) | 11,097 B the root · 5,022 B the project · catalog excluded |
+| `ejecutar_python` returned the tree on every call | 4,231 files traversed per execution | only `escritos` (what changed in the project) |
+| opening a 21-track / 11-WAV project | 38 s (one Python process per asset, serially) | 16.8 s cold · **0.5 s** with the peak cache |
+| the text of the retry without reasoning was discarded | a good response was thrown away as an empty turn | it is recomputed after the retry |
+| `resolveClip` with a single clip | deleted the only clip even if the name did not match | error with the list of clips |
+| `fallosIguales` lived in the module | a failure from yesterday cut today's turn | per turn |
+| two lists of shared folders | the browser was missing `catalogo/` | a single one in `src/core/rutas.ts` |
+| `oboe` alias with a Cyrillic "е" | the oboe was not recognized | fixed |
+| `boot()` with 50 dead lines | promised to open the last project (it no longer does) | real clean start |
+| `leerCuerpo` without a limit | a 9 MB POST ate the memory | 413 above 8 MB |
+| the engine mixed library and work | `cancion.py` and a work's `render.py` in the manifest; `dsp.BPM = 90` with a smoke test that shielded it | library in `codigo/`, work in `obras/quereme-despacio/`, `dsp` without tempo |
+| `codigo/experimental/` | 21 agent scripts, two reimplementing the engine | archived in `_archivo/experimental-26oct/` |
+| prompt at rest | without manifest (early exit in `cargarAgenteDelProyecto`) | 2,890 → 11,939 characters with manifest and context |
 
-**Pendiente, por orden de importancia:**
+**Pending, in order of importance:**
 
-**Resuelto el 27-oct**: la «partitura como dato» es el propio `proyecto.json` con
-sus ops, ahora al alcance del agente (`leer_proyecto`, `editar_proyecto`,
-`escribir_progresion`); `theory.ts` está conectado; `parecidosA` se quitó. La lista
-completa, en `docs/REVISION-2026-10-27.md`.
+**Resolved on 27-Oct**: "score as data" is `proyecto.json` itself with
+its ops, now within the agent's reach (`leer_proyecto`, `editar_proyecto`,
+`escribir_progresion`); `theory.ts` is connected; `parecidosA` was removed. The complete
+list, in `docs/REVISION-2026-10-27.md`.
 
-1. **Mezcla**: no hay buses, ni automatización, ni medidores en vivo. `set_device`
-   existe pero con unidades normalizadas 0..1, no en Hz/dB/ms.
-2. **Dos transportes**: los WAV de más de 30 s suenan por `<audio>`, fuera del
-   mezclador de openDAW (sin efectos de pista ni master).
-3. **Aislamiento**: el agente ejecuta Python con los permisos del usuario.
-4. **`openDawToProject`** sólo lo usa la prueba de contrato, no la UI: no hay
-   importación de `.odw` desde la app.
-5. Tres clases CSS usadas sin estilo (`.cancel`, `.code-example`, `.texto`).
+1. **Mixing**: there are no buses, no automation, no live meters. `set_device`
+   exists but with normalized 0..1 units, not in Hz/dB/ms.
+2. **Two transports**: WAVs longer than 30 s play through `<audio>`, outside
+   openDAW's mixer (without track or master effects).
+3. **Isolation**: the agent runs Python with the user's permissions.
+4. **`openDawToProject`** is only used by the contract test, not by the UI: there is no
+   `.odw` import from the app.
+5. Three CSS classes used without styles (`.cancel`, `.code-example`, `.texto`).
 
 ---
 
-## 12. Mapa de ficheros, para orientarse
+## 12. File map, to orient yourself
 
-**Navegador (`web/src/`)**
+**Browser (`web/src/`)**
 
-| fichero | líneas | de qué es dueño |
+| file | lines | what it owns |
 |---|---|---|
-| `main.ts` | 1.839 | estado de la app, historial, autoguardado, arranque, diálogos |
-| `agent/tools.ts` | 1.256 | las 20 herramientas: esquemas, despacho y envoltorio |
-| `agent/acciones.ts` | 931 | las acciones sobre el proyecto (contrato `Estudio`) |
-| `timeline.ts` | 737 | canvas: pistas, clips, onda, arrastre, zoom |
-| `opendaw-engine.ts` | 411 | arranque del engine WASM y sincronización de mezcla |
-| `llm.ts` | 374 | SSE, timeouts, reintentos por `load` |
-| `agent/agent.ts` | 280 | bucle del turno y sus cortes |
-| `chat.ts` | 258 | panel del chat (no persiste nada) |
-| `audio-store.ts` | 239 | caché de AudioBuffers + hidratación en paralelo |
-| `proyecto-archivo.ts` | 199 | serializar/validar el maestro |
-| `stem-player.ts` | 180 | stems largos por `<audio>` sincronizados por reloj |
-| `agent/contexto.ts` | 196 | recortes, turnos, `agente.json`, recorte de la conversación |
-| `i18n.ts` | 120 | textos fijos de la página (es/en) |
+| `main.ts` | 1,839 | app state, history, autosave, startup, dialogs |
+| `agent/tools.ts` | 1,256 | the 20 tools: schemas, dispatch and wrapper |
+| `agent/acciones.ts` | 931 | the actions on the project (`Estudio` contract) |
+| `timeline.ts` | 737 | canvas: tracks, clips, waveform, drag, zoom |
+| `opendaw-engine.ts` | 411 | WASM engine startup and mix synchronization |
+| `llm.ts` | 374 | SSE, timeouts, retries on `load` |
+| `agent/agent.ts` | 280 | the turn loop and its cutoffs |
+| `chat.ts` | 258 | chat panel (persists nothing) |
+| `audio-store.ts` | 239 | AudioBuffers cache + parallel hydration |
+| `proyecto-archivo.ts` | 199 | serialize/validate the master |
+| `stem-player.ts` | 180 | long stems via `<audio>` synchronized by clock |
+| `agent/contexto.ts` | 196 | trimming, turns, `agente.json`, conversation trimming |
+| `i18n.ts` | 120 | fixed page texts (es/en) |
 | `editor.ts` | 175 | piano roll |
-| `code-lab.ts` | 143 | editor Strudel |
-| `agente-prompt.ts` | 65 | prompt con huella |
+| `code-lab.ts` | 143 | Strudel editor |
+| `agente-prompt.ts` | 65 | prompt with fingerprint |
 
-**Dominio (`src/`)**
+**Domain (`src/`)**
 
-| fichero | líneas | de qué es dueño |
+| file | lines | what it owns |
 |---|---|---|
-| `core/ops.ts` | 688 | las 17 operaciones, transaccionales, y su chuleta |
-| `core/sonidos.ts` | 338 | receta de sonido → script Python |
-| `core/palabras.ts` | 272 | 16 palabras de sonido → parámetros |
-| `core/taxonomia.ts` | 226 | 55 etiquetas (GM + BST + AudioSet) y alias |
-| `core/theory.ts` | 195 | escalas, acordes, tríadas diatónicas |
-| `core/composicion.ts` | 166 | progresión → notas, con conducción de voces |
-| `core/resumen.ts` | 109 | lo que ve el agente con `leer_proyecto` |
-| `core/project.ts` | 231 | crear, validar, estadísticas, carpeta del proyecto |
-| `core/types.ts` | 204 | el modelo de datos |
-| `core/buscar.ts` | 178 | búsqueda en lenguaje natural |
-| `core/nombres.ts` | 50 | slugs y normalización en cualquier alfabeto |
-| `core/rutas.ts` | 46 | carpetas compartidas |
-| `host/opendaw/adapter.ts` | 479 | IR ↔ proyecto de openDAW |
-| `host/opendaw/mapping.ts` | 214 | 10 dispositivos y 4 instrumentos al SDK |
+| `core/ops.ts` | 688 | the 17 operations, transactional, and their cheat sheet |
+| `core/sonidos.ts` | 338 | sound recipe → Python script |
+| `core/palabras.ts` | 272 | 16 sound words → parameters |
+| `core/taxonomia.ts` | 226 | 55 labels (GM + BST + AudioSet) and aliases |
+| `core/theory.ts` | 195 | scales, chords, diatonic triads |
+| `core/composicion.ts` | 166 | progression → notes, with voice leading |
+| `core/resumen.ts` | 109 | what the agent sees with `leer_proyecto` |
+| `core/project.ts` | 231 | create, validate, statistics, project folder |
+| `core/types.ts` | 204 | the data model |
+| `core/buscar.ts` | 178 | natural-language search |
+| `core/nombres.ts` | 50 | slugs and normalization in any alphabet |
+| `core/rutas.ts` | 46 | shared folders |
+| `host/opendaw/adapter.ts` | 479 | IR ↔ openDAW project |
+| `host/opendaw/mapping.ts` | 214 | 10 devices and 4 instruments to the SDK |
 
-**Servidor (`server/`)**
+**Server (`server/`)**
 
-| fichero | líneas | de qué es dueño |
+| file | lines | what it owns |
 |---|---|---|
-| `api.ts` | 36 | monta las rutas |
-| `contexto.ts` | 458 | rutas, Python, cuerpos y logs compartidos |
-| `api/ficheros.ts` | 287 | fs/*, manifiesto, build, agent-log |
+| `api.ts` | 36 | mounts the routes |
+| `contexto.ts` | 458 | shared paths, Python, bodies and logs |
+| `api/ficheros.ts` | 287 | fs/*, manifest, build, agent-log |
 | `api/proyectos.ts` | 88 | proyecto.json |
-| `api/audio.ts` | 215 | subir, servir, picos, MIDI, verificar, referencia |
-| `api/catalogo.ts` | 244 | biblioteca CC0 e instrumentos SFZ |
-| `api/voces.ts` | 188 | catálogo de voces y su puerta |
-| `api/gpu.ts` | 260 | Lambda: estado, encender, apagar, ejecutar |
-| `api/python.ts` | 162 | ejecutar un script con tope y cancelación |
-| `lambda.ts` | 587 | cliente de Lambda Cloud (API + ssh/scp) |
+| `api/audio.ts` | 215 | upload, serve, peaks, MIDI, verify, reference |
+| `api/catalogo.ts` | 244 | CC0 library and SFZ instruments |
+| `api/voces.ts` | 188 | voice catalog and its gate |
+| `api/gpu.ts` | 260 | Lambda: status, start, stop, run |
+| `api/python.ts` | 162 | run a script with limit and cancellation |
+| `lambda.ts` | 587 | Lambda Cloud client (API + ssh/scp) |

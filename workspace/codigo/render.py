@@ -1,22 +1,22 @@
 # -*- coding: utf-8 -*-
-"""render.py - utilidades de mezcla y escritura de audio (BIBLIOTECA).
+"""render.py - mixing and audio-writing utilities (LIBRARY).
 
-Aquí **no hay canción**: ni tempo, ni compases, ni estructura. Son las piezas que
-sirven para cualquier tema:
+There is **no song here**: no tempo, no bars, no structure. These are the pieces that
+serve any track:
 
     log, pcm_bytes, riff_header, StemWriter, write_wav,
     env_fn, place, reverb_st, actividad, midi_add,
-    a_nivel (pico a -6 dBFS), stem (renderiza un stem sólo si ha cambiado)
+    a_nivel (peak at -6 dBFS), stem (renders a stem only if it has changed)
 
-Mono y estéreo: `place`, `dsp.pan`, `dsp.reverb`, `dsp.delay` y los filtros
-aceptan las dos formas, (N,) y (N, 2).
+Mono and stereo: `place`, `dsp.pan`, `dsp.reverb`, `dsp.delay` and the filters
+accept both shapes, (N,) and (N, 2).
 
-La obra que las usa (sus datos, sus `gen_*` y su master) vive en
-`workspace/obras/<slug>/`, fuera del motor: el agente no debe ver una canción
-concreta como si fuera API.
+The work that uses them (its data, its `gen_*` and its master) lives in
+`workspace/obras/<slug>/`, outside the engine: the agent should not see a specific
+song as if it were the API.
 
-Nota de tiempo: `reverb()` devuelve len(x) + len(ir) - 1, así que `reverb_st`
-recorta la cola; sin eso la mezcla no suma (smoke.py lo comprueba).
+Timing note: `reverb()` returns len(x) + len(ir) - 1, so `reverb_st`
+trims the tail; without that the mix does not add up (smoke.py checks it).
 """
 import hashlib
 import inspect
@@ -83,28 +83,28 @@ class StemWriter:
 
 
 def write_wav(path, x, width=3, pico_db=-1.0):
-    """Escribe un WAV estéreo. Si la señal pasa de 0 dBFS, la baja a `pico_db`
-    y lo avisa: un WAV entero no guarda nada por encima de 0 dBFS y antes se
-    recortaba en silencio (medido el 28-oct: guitarras a +13 dBFS, ya rotas).
-    Los instrumentos del motor salen calientes (bombo +4, guitarra +5,6 dBFS):
-    el nivel se decide en la mezcla, con `a_nivel` o con ganancia."""
+    """Writes a stereo WAV. If the signal goes above 0 dBFS, it brings it down to `pico_db`
+    and says so: a full WAV stores nothing above 0 dBFS and before this it was
+    clipped in silence (measured on 28-Oct: guitars at +13 dBFS, already broken).
+    The engine instruments come out hot (kick +4, guitar +5.6 dBFS):
+    the level is decided in the mix, with `a_nivel` or with gain."""
     x = np.asarray(x, np.float32)
     if x.ndim == 1:
         x = np.stack([x, x], axis=1)
     pico = float(np.max(np.abs(x))) if x.size else 0.0
     if pico > 1.0:
         x = x * np.float32(10 ** (pico_db / 20.0) / pico)
-        print(f"write_wav: {os.path.basename(path)} llegaba a {20 * np.log10(pico):+.1f} dBFS; "
-              f"bajado a {pico_db:.0f} dBFS para no recortar", flush=True)
+        print(f"write_wav: {os.path.basename(path)} reached {20 * np.log10(pico):+.1f} dBFS; "
+              f"lowered to {pico_db:.0f} dBFS to avoid clipping", flush=True)
     data = pcm_bytes(x, width)
     with open(path, 'wb') as f:
         f.write(riff_header(SR, 2, width, len(data)))
         f.write(data)
 
 
-# ------------------------------------------------------------------ utilidades
+# ------------------------------------------------------------------ utilities
 def a_nivel(x, pico_db=-6.0):
-    """La señal con su pico en `pico_db` (por defecto -6 dBFS: margen para sumar)."""
+    """The signal with its peak at `pico_db` (default -6 dBFS: headroom for summing)."""
     x = np.asarray(x, np.float32)
     pico = float(np.max(np.abs(x))) if x.size else 0.0
     if pico <= 0.0:
@@ -113,7 +113,7 @@ def a_nivel(x, pico_db=-6.0):
 
 
 def _huella(fn, claves):
-    """Huella de lo que decide un stem: el código de `fn` y los datos que use."""
+    """Fingerprint of what decides a stem: the code of `fn` and the data it uses."""
     try:
         codigo = inspect.getsource(fn)
     except (OSError, TypeError):
@@ -125,23 +125,23 @@ def _huella(fn, claves):
 
 
 def stem(ruta, fn, *claves, pico_db=None):
-    """Renderiza un stem SOLO si ha cambiado: si `ruta` existe y la huella del
-    código de `fn` y de `claves` (las notas, los parámetros…) es la misma que la
-    última vez, no se recalcula. Devuelve True si lo ha renderizado.
+    """Renders a stem ONLY if it has changed: if `ruta` exists and the fingerprint of
+    the code of `fn` and of `claves` (the notes, the parameters…) is the same as
+    last time, it is not recomputed. Returns True if it has rendered it.
 
         R.stem("salida/bajo.wav", p_bajo, P.BAJO, P.BPM)
 
-    Medido el 28-oct: cada arreglo de un script de 10 stems volvía a calcularlos
-    todos (2,5 min por intento); con esto sólo se rehace lo que se ha tocado.
-    Ojo: lo que `fn` lee de otros módulos (una partitura, un instrumento) tiene
-    que ir en `claves`, o un cambio ahí no se nota.
+    Measured on 28-Oct: every tweak of a 10-stem script recalculated them all
+    (2.5 min per attempt); with this only what has been touched is redone.
+    Note: whatever `fn` reads from other modules (a score, an instrument) has
+    to go in `claves`, or a change there is not noticed.
     """
     marca = ruta + ".huella"
     huella = _huella(fn, claves)
     if os.path.exists(ruta) and os.path.exists(marca):
         with open(marca, encoding="utf-8") as f:
             if f.read().strip() == huella:
-                print(f"stem: {os.path.basename(ruta)} sin cambios (no se recalcula)", flush=True)
+                print(f"stem: {os.path.basename(ruta)} unchanged (not recomputed)", flush=True)
                 return False
     t0 = time.time()
     y = fn()
@@ -151,7 +151,7 @@ def stem(ruta, fn, *claves, pico_db=None):
     write_wav(ruta, y)
     with open(marca, "w", encoding="utf-8") as f:
         f.write(huella)
-    print(f"stem: {os.path.basename(ruta)} renderizado en {time.time() - t0:.1f} s", flush=True)
+    print(f"stem: {os.path.basename(ruta)} rendered in {time.time() - t0:.1f} s", flush=True)
     return True
 
 
@@ -162,9 +162,9 @@ def env_fn(pts):
 
 
 def place(dst, sig, t, gain=1.0, panp=0.0):
-    """Suma `sig` (mono o estéreo) en `dst` a partir de `t` segundos. `dst` puede
-    ser un bus estéreo (N, 2), donde lo mono se panea con `panp`, o mono (N,),
-    donde lo estéreo se reduce a mono. (Antes un bus mono reventaba.)"""
+    """Adds `sig` (mono or stereo) into `dst` starting at `t` seconds. `dst` can be
+    a stereo bus (N, 2), where mono is panned with `panp`, or mono (N,),
+    where stereo is reduced to mono. (Before, a mono bus blew up.)"""
     s = int(round(t * SR))
     sig = np.asarray(sig, np.float32)
     if dst.ndim == 1:
@@ -199,8 +199,8 @@ def place(dst, sig, t, gain=1.0, panp=0.0):
 
 
 def reverb_st(x, ir_l, ir_r, mix=0.2):
-    # reverb() devuelve len(x) + len(ir) - 1 (convolucion completa): hay que
-    # recortar la cola o la mezcla no suma (mismo bug que en dsp.filt).
+    # reverb() returns len(x) + len(ir) - 1 (full convolution): the tail has to be
+    # trimmed or the mix does not add up (same bug as in dsp.filt).
     x = np.asarray(x, np.float32)
     n = len(x)
     if x.ndim == 1:
@@ -224,7 +224,7 @@ def actividad(sil, n):
     return a
 
 
-# ------------------------------------------------------------------ MIDI acumulado
+# ------------------------------------------------------------------ accumulated MIDI
 MIDI = {}
 
 

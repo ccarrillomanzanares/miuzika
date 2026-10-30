@@ -1,6 +1,6 @@
 /**
- * Verificación de integración contra el SDK real.
- * Se ejecuta con `npm run test:opendaw` (esbuild + Node).
+ * Integration check against the real SDK.
+ * Run with `npm run test:opendaw` (esbuild + Node).
  */
 
 import assert from "node:assert/strict";
@@ -38,43 +38,43 @@ const source = applyOps(createProject({ name: "openDAW check", lengthBars: 4 }),
   ] },
 ]).project;
 const expectedNotes = countNotes(source);
-console.log(`origen: ${source.tracks.length} pistas, ${expectedNotes} notas`);
+console.log(`source: ${source.tracks.length} tracks, ${expectedNotes} notes`);
 
 const exported = await projectToOpenDaw(source);
 console.log(
-  `exportado: ${exported.bytes.byteLength} bytes · ${exported.stats.tracks} pistas · ${exported.stats.regions} clips · ${exported.stats.notes} notas · ${exported.stats.devices} FX`,
+  `exported: ${exported.bytes.byteLength} bytes · ${exported.stats.tracks} tracks · ${exported.stats.regions} clips · ${exported.stats.notes} notes · ${exported.stats.devices} FX`,
 );
-assert.ok(exported.bytes.byteLength > 1_000, "el proyecto serializado debe tener contenido");
+assert.ok(exported.bytes.byteLength > 1_000, "the serialized project must have content");
 assert.equal(exported.stats.tracks, source.tracks.length);
 assert.equal(exported.stats.notes, expectedNotes);
 assert.ok(exported.stats.regions >= source.tracks.length);
-assert.ok(exported.stats.devices > 0, "debería mapear algún efecto");
+assert.ok(exported.stats.devices > 0, "it should map some effect");
 
 const imported = await openDawToProject(exported.bytes);
 console.log(
-  `importado: ${imported.project.tracks.length} pistas · ${imported.stats.regions} clips · ${imported.stats.notes} notas`,
+  `imported: ${imported.project.tracks.length} tracks · ${imported.stats.regions} clips · ${imported.stats.notes} notes`,
 );
-assert.equal(imported.project.bpm, source.bpm, "el tempo debe sobrevivir");
-assert.equal(imported.project.tracks.length, source.tracks.length, "las pistas deben sobrevivir");
-assert.equal(imported.stats.notes, expectedNotes, "las notas deben sobrevivir");
-assert.equal(imported.project.lengthBars, source.lengthBars, "la duración debe sobrevivir");
+assert.equal(imported.project.bpm, source.bpm, "the tempo must survive");
+assert.equal(imported.project.tracks.length, source.tracks.length, "the tracks must survive");
+assert.equal(imported.stats.notes, expectedNotes, "the notes must survive");
+assert.equal(imported.project.lengthBars, source.lengthBars, "the duration must survive");
 
 for (const original of source.tracks) {
   const restored = imported.project.tracks.find((track) => track.name === original.name);
-  assert.ok(restored, `falta la pista "${original.name}"`);
+  assert.ok(restored, `missing track "${original.name}"`);
   const originalNotes = original.clips.reduce((sum, clip) => sum + clip.notes.length, 0);
   const restoredNotes = restored.clips.reduce((sum, clip) => sum + clip.notes.length, 0);
-  assert.equal(restoredNotes, originalNotes, `notas de "${original.name}"`);
-  assert.ok(Math.abs(restored.gainDb - original.gainDb) < 0.01, `ganancia de "${original.name}"`);
+  assert.equal(restoredNotes, originalNotes, `notes of "${original.name}"`);
+  assert.ok(Math.abs(restored.gainDb - original.gainDb) < 0.01, `gain of "${original.name}"`);
 }
 
 if (exported.warnings.length > 0) {
-  console.log("avisos:");
+  console.log("warnings:");
   for (const warning of exported.warnings) console.log(`  - ${warning}`);
 }
 
-// --- General MIDI: pistas con programa suenan con el SoundFont GM, con sus notas y
-// sus efectos (antes la rama SoundFont no exportaba notas ni efectos).
+// --- General MIDI: tracks with a program play through the GM SoundFont, with their
+// notes and effects (before, the SoundFont branch exported neither notes nor effects).
 const conGm = applyOps(createProject({ name: "openDAW GM", lengthBars: 2 }), [
   { op: "add_track", id: "trk_bajo", name: "Bajo GM", instrument: { type: "bass", program: 33 } },
   { op: "add_device", trackId: "trk_bajo", device: { type: "compressor" } },
@@ -93,15 +93,15 @@ const gm = {
 };
 const exportadoGm = await projectToOpenDaw(conGm, { gm });
 console.log(
-  `GM: ${exportadoGm.stats.tracks} pistas · ${exportadoGm.stats.notes} notas · ${exportadoGm.stats.devices} FX`,
+  `GM: ${exportadoGm.stats.tracks} tracks · ${exportadoGm.stats.notes} notes · ${exportadoGm.stats.devices} FX`,
 );
-assert.equal(exportadoGm.stats.notes, 3, "las pistas GM llevan sus notas");
-assert.equal(exportadoGm.stats.devices, 1, "las pistas GM llevan sus efectos");
+assert.equal(exportadoGm.stats.notes, 3, "GM tracks carry their notes");
+assert.equal(exportadoGm.stats.devices, 1, "GM tracks carry their effects");
 const reimportadoGm = await openDawToProject(exportadoGm.bytes);
-assert.equal(reimportadoGm.stats.notes, 3, "las notas GM sobreviven al .odw");
+assert.equal(reimportadoGm.stats.notes, 3, "GM notes survive the .odw");
 
-// --- Buses: una reverb compartida en un bus aux, con envíos de dos pistas. El .odw
-// tiene que volver a cargarse (Project.load valida los punteros del grafo).
+// --- Buses: a shared reverb on an aux bus, with sends from two tracks. The .odw
+// has to load back (Project.load validates the graph pointers).
 const conBus = applyOps(createProject({ name: "openDAW buses", lengthBars: 2 }), [
   { op: "add_track", id: "trk_a", name: "A", instrument: { type: "pad" } },
   { op: "add_notes", trackId: "trk_a", startBar: 0, notes: [{ pitch: 60, start: 0, duration: 4, velocity: 90 }] },
@@ -112,11 +112,11 @@ const conBus = applyOps(createProject({ name: "openDAW buses", lengthBars: 2 }),
   { op: "set_send", trackId: "trk_b", busId: "bus_sala", levelDb: -12 },
 ]).project;
 const exportadoBus = await projectToOpenDaw(conBus);
-console.log(`buses: ${exportadoBus.stats.buses} bus · ${exportadoBus.stats.sends} envíos · ${exportadoBus.stats.devices} FX`);
+console.log(`buses: ${exportadoBus.stats.buses} bus · ${exportadoBus.stats.sends} sends · ${exportadoBus.stats.devices} FX`);
 assert.equal(exportadoBus.stats.buses, 1);
 assert.equal(exportadoBus.stats.sends, 2);
-assert.equal(exportadoBus.stats.devices, 1, "la reverb del bus");
+assert.equal(exportadoBus.stats.devices, 1, "the bus reverb");
 const reimportadoBus = await openDawToProject(exportadoBus.bytes);
-assert.equal(reimportadoBus.project.tracks.length, 2, "el bus no se cuela como pista al reimportar");
+assert.equal(reimportadoBus.project.tracks.length, 2, "the bus does not sneak in as a track when reimporting");
 
 console.log("OPENDAW OK");

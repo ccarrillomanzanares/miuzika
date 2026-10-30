@@ -1,4 +1,4 @@
-/** Teoría musical mínima pero suficiente: escalas, acordes y voicings. */
+/** Minimal but sufficient music theory: scales, chords, and voicings. */
 
 import type { KeySignature, Mode } from "./types.ts";
 
@@ -29,7 +29,7 @@ const LETTER_SEMITONES: Record<string, number> = {
   B: 11,
 };
 
-/** Nombres en español que la gente escribe en los prompts. */
+/** Spanish names that people write in prompts. */
 const SOLFEGE: Record<string, string> = {
   do: "C",
   re: "D",
@@ -53,12 +53,12 @@ const SCALES: Record<Mode, readonly number[]> = {
 
 export const MODES = Object.keys(SCALES) as Mode[];
 
-/** Intervalos de la escala de un modo, en semitonos desde la tónica. */
+/** Scale intervals of a mode, in semitones from the tonic. */
 export function intervalosDe(mode: Mode): readonly number[] {
   return SCALES[mode] ?? SCALES.major;
 }
 
-/** Tupla para `z.enum`. */
+/** Tuple for `z.enum`. */
 export const MODE_NAMES = Object.keys(SCALES) as [Mode, ...Mode[]];
 
 export function pitchClass(name: string): number {
@@ -66,7 +66,7 @@ export function pitchClass(name: string): number {
   const solfege = SOLFEGE[cleaned.toLowerCase()];
   const source = solfege ?? cleaned;
   const match = /^([A-Ga-g])([#b]{0,2})$/.exec(source);
-  if (!match) throw new MusicError(`Nota no válida: "${name}"`);
+  if (!match) throw new MusicError(`Invalid note: "${name}"`);
   const letter = match[1]!.toUpperCase();
   let semitones = LETTER_SEMITONES[letter]!;
   for (const char of match[2] ?? "") semitones += char === "#" ? 1 : -1;
@@ -77,7 +77,7 @@ export function canonicalPitchClass(name: string): string {
   return PITCH_CLASSES[pitchClass(name)]!;
 }
 
-/** Semitonos desde la tónica para un grado (0 = tónica, 7 = octava). */
+/** Semitones from the tonic for a degree (0 = tonic, 7 = octave). */
 function degreeToSemitones(mode: Mode, degree: number): number {
   const scale = SCALES[mode];
   const size = scale.length;
@@ -114,29 +114,29 @@ const CHORD_QUALITIES: Record<string, readonly number[]> = {
 
 interface Chord {
   symbol: string;
-  /** Pitch class de la fundamental. */
+  /** Pitch class of the root. */
   root: number;
   intervals: readonly number[];
-  /** Bajo alternativo (acorde con barra). */
+  /** Alternate bass (slash chord). */
   bass?: number;
 }
 
 export function parseChord(symbol: string): Chord {
   const cleaned = symbol.replace(/\s+/g, "");
   const [head, bassPart] = cleaned.split("/");
-  if (!head) throw new MusicError(`Acorde no válido: "${symbol}"`);
+  if (!head) throw new MusicError(`Invalid chord: "${symbol}"`);
   const match = /^([A-Ga-g])([#b]?)(.*)$/.exec(head);
-  if (!match) throw new MusicError(`Acorde no válido: "${symbol}"`);
+  if (!match) throw new MusicError(`Invalid chord: "${symbol}"`);
   const root = pitchClass(`${match[1]}${match[2] ?? ""}`);
   const quality = (match[3] ?? "").toLowerCase();
   const intervals = CHORD_QUALITIES[quality];
-  if (!intervals) throw new MusicError(`Calidad de acorde desconocida: "${quality}" en "${symbol}"`);
+  if (!intervals) throw new MusicError(`Unknown chord quality: "${quality}" in "${symbol}"`);
   const chord: Chord = { symbol: cleaned, root, intervals };
   if (bassPart) chord.bass = pitchClass(bassPart);
   return chord;
 }
 
-/** Voicing ascendente. `octave` es la octava de la fundamental. */
+/** Ascending voicing. `octave` is the octave of the root. */
 export function chordToMidi(chord: Chord, octave: number, inversion = 0): number[] {
   const base = (octave + 1) * 12 + chord.root;
   let pitches = chord.intervals.map((interval) => base + interval);
@@ -148,7 +148,7 @@ export function chordToMidi(chord: Chord, octave: number, inversion = 0): number
 }
 
 
-/** Nombres con bemoles para tonalidades de bemoles (más legible que A#). */
+/** Flat names for flat keys (more readable than A#). */
 const MAJOR_SIGNATURE_BY_PC: Record<number, number> = {
   0: 0, // C
   1: 7, // C#
@@ -164,7 +164,7 @@ const MAJOR_SIGNATURE_BY_PC: Record<number, number> = {
   11: 5, // B
 };
 
-/** Armadura: positivo = sostenidos, negativo = bemoles. */
+/** Key signature: positive = sharps, negative = flats. */
 function keyAccidentals(key: KeySignature): number {
   const pc = pitchClass(key.tonic);
   if (key.mode === "major") return MAJOR_SIGNATURE_BY_PC[pc] ?? 0;
@@ -186,8 +186,8 @@ function pitchClassName(pc: number, flats: boolean): string {
 }
 
 /**
- * Tríada diatónica de un grado (0 = tónica). La calidad sale de la escala,
- * así que una progresión por grados funciona en cualquier tonalidad.
+ * Diatonic triad of a degree (0 = tonic). The quality comes from the scale,
+ * so a degree-based progression works in any key.
  */
 export function diatonicTriad(key: KeySignature, degree: number): string {
   const rootSemitones = degreeToSemitones(key.mode, degree);

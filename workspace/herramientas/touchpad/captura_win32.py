@@ -1,13 +1,13 @@
-"""Backend de captura para Windows: Raw Input API sobre un Precision Touchpad.
+"""Capture backend for Windows: Raw Input API on a Precision Touchpad.
 
-Traído de humseed (cliente_touchpad/entrada_win32.py), donde se probó tocando de
-verdad en el portátil de Carlos (HP 15s-fq, ELAN0712). Se arranca y se para en
-caliente (`iniciar()` / `parar()`).
+Brought from humseed (cliente_touchpad/entrada_win32.py), where it was tested by actually
+playing on Carlos's laptop (HP 15s-fq, ELAN0712). It is started and stopped live
+(`iniciar()` / `parar()`).
 
-El layout de los informes está verificado contra el HID report descriptor del
-ELAN0712: ver README.md de esta carpeta.
+The report layout is verified against the HID report descriptor of the
+ELAN0712: see README.md in this folder.
 
-Solo Windows. En otro sistema operativo, este modulo no debe importarse.
+Windows only. On another operating system, this module must not be imported.
 """
 
 from __future__ import annotations
@@ -32,8 +32,8 @@ WH_MOUSE_LL = 14
 WM_MOUSEMOVE = 0x0200
 ERROR_CLASS_ALREADY_EXISTS = 1410
 
-# Ctrl+Alt+T alterna congelar el cursor (si el cursor esta congelado, no hay
-# otra forma de pulsar un boton de la pagina).
+# Ctrl+Alt+T toggles freezing the cursor (if the cursor is frozen, there is
+# no other way to click a button on the page).
 HOTKEY_ID = 1
 MOD_ALT, MOD_CONTROL = 0x0001, 0x0002
 
@@ -133,9 +133,9 @@ USAGE_MOUSE = 0x02
 
 
 def nombre_dispositivo(hdevice) -> str:
-    """Ojo: con el handle que llega en WM_INPUT, pedir primero el tamano devuelve 0.
-    Hay que pasar un buffer fijo o el nombre sale vacio (y el filtro no identifica al
-    pad)."""
+    """Watch out: with the handle that arrives in WM_INPUT, asking first for the size
+    returns 0. A fixed buffer has to be passed or the name comes out empty (and the
+    filter does not identify the pad)."""
     buf = ctypes.create_unicode_buffer(1024)
     tam = wintypes.UINT(1024)
     if not user32.GetRawInputDeviceInfoW(hdevice, RIDI_DEVICENAME, buf,
@@ -145,7 +145,7 @@ def nombre_dispositivo(hdevice) -> str:
 
 
 def decodificar_informe(datos: bytes) -> dict:
-    """Un informe del Touch Pad (report ID 4) -> campos con nombre."""
+    """One Touch Pad report (report ID 4) -> named fields."""
     return {
         "report_id": datos[0],
         "confianza": bool(datos[1] & 0x01),
@@ -161,10 +161,10 @@ def decodificar_informe(datos: bytes) -> dict:
 
 NOMBRE_CLASE = "MiuzikaTouchpad"
 
-# La clase de ventana se registra UNA vez por proceso y su WNDPROC vive en el
-# modulo para siempre. Si se registrara por captura, al parar y volver a
-# arrancar la clase seguiria apuntando al callback ya liberado y Windows se
-# llevaria por delante el proceso con un access violation al crear la ventana.
+# The window class is registered ONCE per process and its WNDPROC lives in the
+# module forever. If it were registered per capture, on stopping and starting
+# again the class would still point to the already freed callback and Windows would
+# take the process down with an access violation when creating the window.
 _PROC_GLOBAL = None
 _CLASE_REGISTRADA = False
 _INSTANCIA: "CapturaWin32 | None" = None
@@ -195,7 +195,7 @@ def _registrar_clase() -> bool:
 
 
 class CapturaWin32:
-    """Lee el Precision Touchpad en un hilo propio, arrancable y pararable."""
+    """Reads the Precision Touchpad on its own thread, startable and stoppable."""
 
     def __init__(self, al_informe, al_latido=None, al_aviso=None):
         self.al_informe = al_informe
@@ -204,23 +204,23 @@ class CapturaWin32:
         self.n_informes = 0
         self.n_errores = 0
         self.ultimo_informe_t = 0.0
-        self.tasa = 0.0  # informes por segundo (medido cada segundo)
-        # Mientras haya un dedo en el pad, el puntero se congela: el touchpad
-        # nunca arrastra el cursor fuera de la aplicacion. El raton USB queda
-        # libre en cuanto se levanta el dedo.
-        # El gancho WH_MOUSE_LL no dice de que dispositivo viene el movimiento, pero
-        # el raw input de raton si: el pad se identifica por su nombre (ELAN). Asi se
-        # traga SOLO el movimiento del pad y el raton USB sigue libre.
-        # Encendido por defecto: mientras hay un dedo en el pad el puntero no se
-        # mueve (Carlos lo probo y va bien). Al levantar el dedo se suelta solo.
-        # En miuzika lo decide principal.py: sólo se congela con el pad ARMADO
-        # (la persona ha pulsado en el pad de la página); fuera, es un ratón normal.
+        self.tasa = 0.0  # reports per second (measured every second)
+        # While a finger is on the pad, the pointer is frozen: the touchpad
+        # never drags the cursor outside the application. The USB mouse is free
+        # as soon as the finger is lifted.
+        # The WH_MOUSE_LL hook does not say which device the movement comes from, but
+        # raw mouse input does: the pad is identified by its name (ELAN). That way it
+        # swallows ONLY the pad's movement and the USB mouse stays free.
+        # On by default: while a finger is on the pad the pointer does not
+        # move (Carlos tested it and it works). When the finger is lifted it is released.
+        # In miuzika principal.py decides: it only freezes with the pad ARMED
+        # (the person has pressed on the page's pad); outside, it is a normal mouse.
         self.bloquear_cursor = False
         self._ultimo_pad_mouse = 0.0
-        # Ultima posicion del cursor sin intervencion del pad: ahi se devuelve.
+        # Last cursor position without pad intervention: it is returned there.
         self._pos_ok: tuple[int, int] | None = None
         self._recolocaciones = 0
-        # Diagnostico: quien manda cada informe de raton (nombre -> cuantos).
+        # Diagnostics: who sends each mouse report (name -> how many).
         self._ratones: dict[str, int] = {}
         self._nombres: dict[int, str] = {}
         self.hotkey_ok = False
@@ -237,7 +237,7 @@ class CapturaWin32:
         self._t0 = 0.0
         self._informes_ultimo_segundo = 0
 
-    # -- API publica ------------------------------------------------------
+    # -- Public API -------------------------------------------------------
     @property
     def en_marcha(self) -> bool:
         return bool(self._hilo and self._hilo.is_alive())
@@ -271,13 +271,13 @@ class CapturaWin32:
         return not self.en_marcha
 
     def alternar_bloquear_cursor(self) -> bool:
-        """True = el pad no mueve el cursor (se recoloca). False = se comporta como
-        raton normal. Se aplica al momento, sin ganchos ni reinicios."""
-        """El gancho siempre se pone y se quita desde el bucle de captura (es el
-        unico hilo con bucle de mensajes); aqui solo se cambia la intencion."""
+        """True = the pad does not move the cursor (it is repositioned). False = it behaves like
+        a normal mouse. It is applied at once, with no hooks or restarts."""
+        """The hook is always set and removed from the capture loop (it is the
+        only thread with a message loop); here only the intention is changed."""
         self.bloquear_cursor = not self.bloquear_cursor
         self.al_aviso(
-            f"el pad {'NO mueve' if self.bloquear_cursor else 'SI mueve'} el cursor")
+            f"the pad {'does NOT move' if self.bloquear_cursor else 'DOES move'} the cursor")
         return self.bloquear_cursor
 
     def estado(self) -> dict:
@@ -296,23 +296,23 @@ class CapturaWin32:
             "hotkey": self.hotkey_ok,
         }
 
-    # -- hilo de captura --------------------------------------------------
+    # -- capture thread ---------------------------------------------------
     def _bucle(self):
         global _INSTANCIA
         hinst = kernel32.GetModuleHandleW(None)
         if not _registrar_clase():
-            self.al_aviso(f"RegisterClassExW fallo: {ctypes.get_last_error()}")
+            self.al_aviso(f"RegisterClassExW failed: {ctypes.get_last_error()}")
             return
         _INSTANCIA = self
-        self.al_aviso("paso: clase registrada, creando ventana")
+        self.al_aviso("step: class registered, creating window")
         self.hwnd = user32.CreateWindowExW(
             0, NOMBRE_CLASE, "cliente", 0, 0, 0, 0, 0, None, None, hinst, None)
         if not self.hwnd:
-            self.al_aviso(f"CreateWindowExW fallo: {ctypes.get_last_error()}")
+            self.al_aviso(f"CreateWindowExW failed: {ctypes.get_last_error()}")
             _INSTANCIA = None
             return
 
-        self.al_aviso(f"paso: ventana {self.hwnd}, registrando raw input")
+        self.al_aviso(f"step: window {self.hwnd}, registering raw input")
         registros = (RAWINPUTDEVICE * 2)(
             RAWINPUTDEVICE(USAGE_PAGE_DIGITIZER, USAGE_TOUCHPAD, RIDEV_INPUTSINK,
                            self.hwnd),
@@ -322,16 +322,16 @@ class CapturaWin32:
         if not user32.RegisterRawInputDevices(
                 registros, 2, ctypes.sizeof(RAWINPUTDEVICE)):
             self.al_aviso(
-                f"registro del touchpad fallo: {ctypes.WinError(ctypes.get_last_error())} "
-                "(¿no es un Precision Touchpad?)")
+                f"touchpad registration failed: {ctypes.WinError(ctypes.get_last_error())} "
+                "(is it not a Precision Touchpad?)")
             return
 
-        self.al_aviso("paso: raw input OK, registrando tecla")
-        # Sin hook de raton: el cursor se recoloca en vez de bloquearse.
+        self.al_aviso("step: raw input OK, registering key")
+        # No mouse hook: the cursor is repositioned instead of being locked.
         self.hotkey_ok = bool(user32.RegisterHotKey(
             self.hwnd, HOTKEY_ID, MOD_ALT | MOD_CONTROL, ord("T")))
         self._ventana_lista.set()
-        self.al_aviso("captura en marcha")
+        self.al_aviso("capture running")
 
         msg = wintypes.MSG()
         ultimo_latido = 0.0
@@ -360,18 +360,18 @@ class CapturaWin32:
         user32.DestroyWindow(self.hwnd)
         self.hwnd = None
         _INSTANCIA = None
-        self.al_aviso("captura parada")
+        self.al_aviso("capture stopped")
 
     def _ajustar_bloqueo_cursor(self, ahora: float):
-        """Con el bloqueo activo, el puntero se congela SOLO mientras hay un dedo
-        apoyado: es el unico rato en que el pad puede moverlo.
+        """With the lock active, the pointer is frozen ONLY while a finger is
+        resting: that is the only time the pad can move it.
 
-        La recolocacion a posteriori no sirve: Windows aplica el movimiento despues
-        de nuestro informe, asi que llegamos tarde y el cursor se escapa. El gancho
-        de raton gana esa carrera porque el movimiento ni siquiera se genera. Se
-        instala y se quita en cada gesto, de modo que el raton USB solo se queda
-        quieto mientras el dedo esta en el pad."""
-        if ahora - self._ultimo_pad_mouse > 0.15:      # posicion buena de referencia
+        Repositioning afterwards does not work: Windows applies the movement after
+        our report, so we arrive late and the cursor escapes. The mouse hook
+        wins that race because the movement is not even generated. It is
+        installed and removed on each gesture, so the USB mouse only stays
+        still while the finger is on the pad."""
+        if ahora - self._ultimo_pad_mouse > 0.15:      # good reference position
             p = PUNTO()
             if user32.GetCursorPos(ctypes.byref(p)):
                 self._pos_ok = (p.x, p.y)
@@ -385,13 +385,13 @@ class CapturaWin32:
 
     def _instalar_hook(self):
         def proc(ncode, wparam, lparam):
-            # Regla de oro: ante cualquier duda, DEJAR PASAR. Un hook que revienta
-            # devuelve basura y Windows lo interpreta como "bloquear": el usuario se
-            # queda sin puntero. Por eso todo va dentro de try y se devuelve 0.
+            # Golden rule: when in doubt, LET IT THROUGH. A hook that crashes
+            # returns garbage and Windows interprets it as "block": the user is
+            # left without a pointer. That is why everything is inside try and 0 is returned.
             try:
                 if (ncode >= 0 and wparam == WM_MOUSEMOVE and self.bloquear_cursor
                         and self._contactos):
-                    return 1  # movimiento del pad: se traga
+                    return 1  # pad movement: swallowed
             except Exception:
                 return 0
             try:
@@ -402,7 +402,7 @@ class CapturaWin32:
         self._hook_proc = ctypes.WINFUNCTYPE(
             ctypes.c_ssize_t, ctypes.c_int, ctypes.c_ulonglong, ctypes.c_longlong)(proc)
         self._hook = user32.SetWindowsHookExW(WH_MOUSE_LL, self._hook_proc, 0, 0)
-        self.al_aviso("hook de raton instalado" if self._hook else "hook de raton fallo")
+        self.al_aviso("mouse hook installed" if self._hook else "mouse hook failed")
 
     def _wndproc(self, hwnd, msg, wparam, lparam):
         if msg == WM_INPUT:
@@ -411,7 +411,7 @@ class CapturaWin32:
             except Exception as exc:
                 self.n_errores += 1
                 if self.n_errores <= 5:
-                    self.al_aviso(f"error procesando informe: {exc!r}")
+                    self.al_aviso(f"error processing report: {exc!r}")
             return 0
         if msg == WM_HOTKEY and wparam == HOTKEY_ID:
             self.alternar_bloquear_cursor()
@@ -437,14 +437,14 @@ class CapturaWin32:
             if nombre is None:
                 nombre = nombre_dispositivo(cab.hDevice)
                 self._nombres[cab.hDevice] = nombre
-            etiqueta = (nombre or "(sin nombre)").split("#")[1] if "#" in nombre else (
-                nombre or "(sin nombre)")
+            etiqueta = (nombre or "(unnamed)").split("#")[1] if "#" in nombre else (
+                nombre or "(unnamed)")
             self._ratones[etiqueta] = self._ratones.get(etiqueta, 0) + 1
-            # Identificar el pad por nombre no es fiable: en este equipo sus informes
-            # llegan sin nombre. La regla buena es otra: el pad SOLO puede mover el
-            # puntero mientras hay un dedo apoyado, asi que se recoloca unicamente en
-            # ese momento. El raton USB queda fuera porque no coincide con esa
-            # condicion, y ademas su nombre si se resuelve.
+            # Identifying the pad by name is not reliable: on this machine its reports
+            # arrive without a name. The right rule is different: the pad can ONLY move
+            # the pointer while a finger is resting, so it is repositioned only at
+            # that moment. The USB mouse is left out because it does not match that
+            # condition, and besides its name does resolve.
             es_del_pad = ("ELAN" in nombre.upper()) or not nombre
             if es_del_pad:
                 self._ultimo_pad_mouse = time.perf_counter()

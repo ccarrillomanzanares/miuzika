@@ -1,17 +1,17 @@
 /**
- * Las zonas globales de un SoundFont, repartidas en sus zonas.
+ * The global zones of a SoundFont, spread across its zones.
  *
- * Un SF2 puede guardar en la primera zona de un preset o de un instrumento («zona
- * global») lo que vale para todas: bucle, envolvente, pan… El motor de openDAW
- * (`simplifySoundfont` en studio-core-wasm) sólo lee las zonas normales y tira la
- * global. Medido el 28-oct con GeneralUser GS: 113 de los 128 presets del banco 0
- * guardan ahí el bucle (`sampleModes`), así que sus muestras sonaban una vez y se
- * acababan. «Saw Lead» (81) es una onda de milisegundos: cada nota era un chasquido,
- * con picos que recortaban y −50 dB de nivel medio en el coro de «Hard».
+ * An SF2 can store in the first zone of a preset or an instrument (the "global
+ * zone") whatever applies to all of them: loop, envelope, pan… The openDAW engine
+ * (`simplifySoundfont` in studio-core-wasm) only reads the normal zones and throws
+ * away the global one. Measured on Oct 28 with GeneralUser GS: 113 of the 128
+ * presets in bank 0 store the loop there (`sampleModes`), so their samples played
+ * once and ended. "Saw Lead" (81) is a wave lasting milliseconds: every note was a
+ * click, with peaks that clipped and −50 dB average level in the "Hard" choir.
  *
- * Aquí se copia cada generador de la zona global a las zonas que no lo tienen (lo
- * que dice la especificación: la zona propia manda). Se hace sobre el SF2 ya
- * parseado, antes de dárselo al motor.
+ * Here every generator from the global zone is copied to the zones that do not
+ * have it (as the specification says: the zone's own value wins). This is done on
+ * the already parsed SF2, before handing it to the engine.
  */
 
 type Generadores = Record<number, unknown>;
@@ -27,7 +27,7 @@ interface PresetSf2 {
   zones: (ZonaSf2 & { instrument?: InstrumentoSf2 })[];
 }
 
-/** Instrumento (41) y muestra (53) apuntan a otra cosa: nunca se heredan. */
+/** Instrument (41) and sample (53) point to something else: they are never inherited. */
 const NO_SE_HEREDAN = new Set([41, 53]);
 
 function heredar(global: ZonaSf2 | undefined, zonas: ZonaSf2[]): number {
@@ -44,11 +44,11 @@ function heredar(global: ZonaSf2 | undefined, zonas: ZonaSf2[]): number {
   return copiados;
 }
 
-/** Reparte las zonas globales (de presets e instrumentos). Devuelve cuántos generadores copió. */
+/** Spreads the global zones (from presets and instruments). Returns how many generators it copied. */
 export function repartirZonasGlobales(soundfont: { presets: PresetSf2[]; instruments?: InstrumentoSf2[] }): number {
   let copiados = 0;
-  // Los instrumentos se recorren una vez aunque los usen varios presets; repetir no
-  // cambiaría nada (sólo se rellena lo que falta), pero contaría de más.
+  // Instruments are traversed once even if several presets use them; repeating would
+  // change nothing (only what is missing gets filled in), but it would overcount.
   const instrumentos = new Set<InstrumentoSf2>(soundfont.instruments ?? []);
   for (const preset of soundfont.presets) {
     copiados += heredar(preset.globalZone, preset.zones);

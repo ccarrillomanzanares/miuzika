@@ -1,7 +1,7 @@
-"""Seguimiento de los dedos del touchpad: independiente del sistema operativo.
+"""Touchpad finger tracking: independent of the operating system.
 
-Traído de humseed (cliente_touchpad/modelo.py). Aquí no hay nada de Windows ni de
-HTTP: sólo contactos y el ciclo de vida de cada dedo (pulsar, mover, soltar).
+Brought from humseed (cliente_touchpad/modelo.py). There is nothing Windows- or
+HTTP-specific here: only contacts and the life cycle of each finger (press, move, release).
 """
 
 from __future__ import annotations
@@ -9,25 +9,25 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
-# Rango lógico del touchpad, en unidades del dispositivo. Sacado del HID report
-# descriptor del ELAN0712; otros pads tendrán otros valores y hay que leerlos.
+# Logical touchpad range, in device units. Taken from the HID report
+# descriptor of the ELAN0712; other pads will have other values and they must be read.
 X_MAX = 3520
 Y_MAX = 1784
 
-# Un contacto del que no llega ningún informe durante este tiempo se da por
-# levantado (el pad no manda evento de salida salvo el tip switch a 0).
+# A contact for which no report arrives during this time is taken as
+# lifted (the pad sends no exit event except the tip switch at 0).
 TIMEOUT_CONTACTO_S = 0.08
 
 
 @dataclass
 class Contacto:
     id: int
-    x: float  # 0..1, izquierda a derecha
-    y: float  # 0..1, arriba a abajo
+    x: float  # 0..1, left to right
+    y: float  # 0..1, top to bottom
 
 
 class Seguidor:
-    """Convierte informes sueltos (uno por dedo) en down / move / up."""
+    """Turns individual reports (one per finger) into down / move / up."""
 
     def __init__(self, al_evento):
         self.al_evento = al_evento
@@ -55,7 +55,7 @@ class Seguidor:
             self.al_evento("up", id_, c.x, c.y)
 
     def latido(self):
-        """Suelta los dedos que han dejado de informar."""
+        """Releases the fingers that have stopped reporting."""
         ahora = time.perf_counter()
         for id_ in list(self.activos):
             if ahora - self.ultimo_visto.get(id_, ahora) > TIMEOUT_CONTACTO_S:

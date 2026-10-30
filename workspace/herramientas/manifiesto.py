@@ -1,7 +1,7 @@
-"""Genera MANIFEST.json (y MANIFEST.md) escaneando codigo/*.py con AST.
+"""Generates MANIFEST.json (and MANIFEST.md) by scanning codigo/*.py with AST.
 
-No ejecuta el codigo: solo lee firmas, docstrings e imports. Determinista.
-Uso: python herramientas/manifiesto.py
+Does not execute the code: it only reads signatures, docstrings and imports. Deterministic.
+Usage: python herramientas/manifiesto.py
 """
 
 import ast
@@ -10,20 +10,20 @@ import json
 import pathlib
 
 RAIZ = pathlib.Path(__file__).resolve().parents[1]
-# Dos motores: el numpy de referencia y el nativo de GPU. Los dos entran en el
-# manifiesto; si solo entrara codigo/, el agente no sabria que motor_gpu existe y
-# lo reescribiria en cada turno (que es justo lo que este manifiesto evita).
+# Two engines: the reference numpy one and the native GPU one. Both go into the
+# manifest; if only codigo/ went in, the agent would not know that motor_gpu exists and
+# would rewrite it on every turn (which is exactly what this manifest avoids).
 CAPETAS = [(RAIZ / "codigo", "codigo"), (RAIZ / "gpu", "gpu")]
 JSON_OUT = RAIZ / "MANIFEST.json"
 MD_OUT = RAIZ / "MANIFEST.md"
 
-# Modulos que forman el MOTOR. Los scripts one-off (sample_*.py, pruebas) NO entran:
-# si entraran, la puerta rechazaria cualquier script nuevo que definiera "main".
+# Modules that make up the ENGINE. One-off scripts (sample_*.py, tests) do NOT go in:
+# if they did, the gate would reject any new script that defined "main".
 NUCLEO = {"dsp", "instruments", "render", "midi", "motor_gpu"}
-# Las OBRAS (workspace/obras/<slug>/cancion.py, tema.py) no son motor y no entran:
-# son los datos de una canción concreta, no API reutilizable.
+# The WORKS (workspace/obras/<slug>/cancion.py, tema.py) are not the engine and do not go in:
+# they are the data of a specific song, not reusable API.
 
-# Nombres de entrada, no API: cualquier script puede definir su propio main().
+# Entry-point names, not API: any script can define its own main().
 IGNORAR = {"main", "run"}
 
 
@@ -61,13 +61,13 @@ def main() -> None:
         "generado": datetime.datetime.now().isoformat(timespec="seconds"),
         "raiz": "workspace/",
         "regla": (
-            "Estos simbolos YA existen. Reutilizalos con 'from <modulo> import <simbolo>'. "
-            "Escribir un fichero nuevo que los redefina sera rechazado (409)."
+            "These symbols ALREADY exist. Reuse them with 'from <module> import <symbol>'. "
+            "Writing a new file that redefines them will be rejected (409)."
         ),
         "modulos": {},
     }
 
-    # 1) quien importa a quien: entra si es nucleo o si otro modulo lo importa
+    # 1) who imports whom: it goes in if it is core or if another module imports it
     arboles: dict[str, ast.Module] = {}
     importados: set[str] = set()
     ficheros: list[tuple[pathlib.Path, str]] = []
@@ -120,26 +120,26 @@ def main() -> None:
 
     JSON_OUT.write_text(json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
 
-    lineas = ["# Motores disponibles: workspace/codigo/ (numpy) y workspace/gpu/ (torch)", ""]
-    lineas.append("Reutiliza estos simbolos; NO los redefinas.")
+    lineas = ["# Available engines: workspace/codigo/ (numpy) and workspace/gpu/ (torch)", ""]
+    lineas.append("Reuse these symbols; do NOT redefine them.")
     lineas.append("")
     for nombre, mod in manifest["modulos"].items():
         if "error" in mod:
-            lineas.append(f"- **{mod['archivo']}**  (NO PARSEA: {mod['error']})")
+            lineas.append(f"- **{mod['archivo']}**  (DOES NOT PARSE: {mod['error']})")
             continue
         deps = ", ".join(sorted(set(mod["importa_de"]))) or "-"
-        lineas.append(f"- **{mod['archivo']}**  (importa de: {deps})")
+        lineas.append(f"- **{mod['archivo']}**  (imports from: {deps})")
         for sym, info in mod["simbolos"].items():
             if info["tipo"] == "funcion":
                 doc = f"  -- {info['doc']}" if info["doc"] else ""
                 lineas.append(f"    - `{sym}{info['firma']}`{doc}")
             else:
                 met = ", ".join(f"{k}{v}" for k, v in info["metodos"].items())
-                lineas.append(f"    - clase `{sym}`: {met}")
+                lineas.append(f"    - class `{sym}`: {met}")
     MD_OUT.write_text("\n".join(lineas) + "\n", encoding="utf-8")
 
     total = sum(len(m.get("simbolos", {})) for m in manifest["modulos"].values())
-    print(f"MANIFEST.json: {len(manifest['modulos'])} modulos, {total} simbolos")
+    print(f"MANIFEST.json: {len(manifest['modulos'])} modules, {total} symbols")
     print(f"MANIFEST.md  : {MD_OUT.stat().st_size} bytes")
 
 

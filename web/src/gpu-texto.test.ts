@@ -1,4 +1,4 @@
-import { test } from "node:test";
+﻿import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
@@ -28,7 +28,7 @@ const base: EstadoGpu = {
   proveedor: "lambda",
 };
 
-test("el tipo se abrevia sin perder lo que distingue a las tarjetas", () => {
+test("the type is abbreviated without losing what distinguishes the cards", () => {
   assert.equal(tipoCorto("gpu_1x_a10"), "A10");
   assert.equal(tipoCorto("gpu_1x_a100_sxm4"), "A100 SXM4");
   assert.equal(tipoCorto("gpu_1x_a100"), "A100");
@@ -36,7 +36,7 @@ test("el tipo se abrevia sin perder lo que distingue a las tarjetas", () => {
   assert.equal(tipoCorto(""), "GPU");
 });
 
-test("el dinero va con dos decimales, en el formato del idioma", () => {
+test("money has two decimals, in the language format", () => {
   assert.equal(dinero(1.29), "1.29");
   assert.equal(dinero(0), "0.00");
   assert.equal(dinero(0.0671), "0.07");
@@ -49,7 +49,7 @@ test("el dinero va con dos decimales, en el formato del idioma", () => {
   }
 });
 
-test("los relojes: hh:mm:ss facturado y minutos de arranque", () => {
+test("the clocks: billed hh:mm:ss and startup minutes", () => {
   assert.equal(transcurrido(null), "00:00:00");
   assert.equal(transcurrido("2026-10-23T20:09:00Z", AHORA), "00:01:00");
   assert.equal(transcurrido("2026-10-23T19:06:55Z", AHORA), "01:03:05");
@@ -57,16 +57,16 @@ test("los relojes: hh:mm:ss facturado y minutos de arranque", () => {
   assert.equal(minutosYsegundos("2026-10-23T20:09:20Z", AHORA), "40 s");
 });
 
-test("con la GPU activa se enseña la tarifa REAL y el gasto de la instancia", () => {
+test("with the GPU active the REAL rate and the instance spend are shown", () => {
   assert.equal(textoCoste(base, 0.05, AHORA), "A10 · 1.29 $/h · 00:01:00 · 0.02 $ (session 0.05 $)");
 });
 
-test("la tarifa cambia con el tipo: un A100 no cuesta lo mismo que un A10", () => {
+test("the rate changes with the type: an A100 does not cost the same as an A10", () => {
   const a100 = { ...base, tipo: "gpu_1x_a100_sxm4", precioHora: 1.99 };
   assert.match(textoCoste(a100, 0, AHORA), /^A100 SXM4 · 1\.99 \$\/h/);
 });
 
-test("arrancando: reloj de arranque y aviso de que aún no factura", () => {
+test("starting: startup clock and a notice that it is not billing yet", () => {
   const estado: EstadoGpu = {
     ...base,
     fase: "arrancando",
@@ -78,16 +78,16 @@ test("arrancando: reloj de arranque y aviso de que aún no factura", () => {
   assert.equal(textoCoste(estado, 0.05, AHORA), "A10 starting · 2 min 34 s · not billing yet");
 });
 
-test("apagándose: se dice que se apaga, sin inventar cifras", () => {
+test("shutting down: it says it is shutting down, without inventing figures", () => {
   const estado: EstadoGpu = { ...base, fase: "apagandose", activo: false };
   assert.equal(textoCoste(estado, 0.05, AHORA), "A10 shutting down…");
 });
 
-test("apagada no enseña ninguna tarifa (ésa era la queja)", () => {
+test("off shows no rate at all (that was the complaint)", () => {
   const estado: EstadoGpu = { ...base, fase: "apagada", activo: false, desde: null, gastado: 0 };
   assert.equal(textoCoste(estado, 0, AHORA), "GPU off");
   assert.equal(textoCoste(estado, 0.07, AHORA), "GPU off · session 0.07 $");
-  // Con ?lang=es, en español.
+  // With ?lang=es, in Spanish.
   fijarIdioma("es");
   try {
     assert.equal(textoCoste(estado, 0.07, AHORA), "GPU apagada · sesión 0,07 $");
@@ -97,12 +97,12 @@ test("apagada no enseña ninguna tarifa (ésa era la queja)", () => {
   }
 });
 
-test("antiguos estados sin fase se deducen de `activo`", () => {
+test("old states without a phase are inferred from `activo`", () => {
   const sinFase = { ...base, fase: undefined };
   assert.match(textoCoste(sinFase, 0, AHORA), /^A10 · 1\.29 \$\/h/);
 });
 
-test("el detalle nombra cada instancia con su tarifa", () => {
+test("the detail names each instance with its rate", () => {
   const estado: EstadoGpu = {
     ...base,
     instancias: [
@@ -117,7 +117,7 @@ test("el detalle nombra cada instancia con su tarifa", () => {
   assert.match(detalle, /gpu_1x_a100_sxm4 · terminating · 1\.99 \$\/h · 7,882\.67 \$/);
   fijarIdioma("es");
   try {
-    // es-ES no separa los millares de cuatro cifras (RAE): 7882,67, no 7.882,67.
+    // es-ES does not separate thousands of four digits (RAE): 7882.67, not 7,882.67.
     assert.match(detalleCoste(estado, 0.12), /gpu_1x_a100_sxm4 · terminating · 1,99 \$\/h · 7882,67 \$/);
     assert.match(detalleCoste(estado, 0.12), /tarifa 1,29 \$\/hora \(A10\)/);
   } finally {
@@ -125,7 +125,7 @@ test("el detalle nombra cada instancia con su tarifa", () => {
   }
 });
 
-test("el estado del endpoint (snake_case) se normaliza sin NaN", () => {
+test("the endpoint state (snake_case) is normalized without NaN", () => {
   const estado = normalizarEstadoGpu({
     configurado: true,
     fase: "activa",
@@ -143,13 +143,13 @@ test("el estado del endpoint (snake_case) se normaliza sin NaN", () => {
   assert.equal(estado.instancias?.length, 1);
   assert.doesNotMatch(detalleCoste(estado, 0), /NaN/);
 
-  // Y sin datos no se inventa tarifa.
+  // And with no data no rate is invented.
   const vacio = normalizarEstadoGpu({ configurado: false });
   assert.equal(vacio.precioHora, 0);
   assert.equal(textoCoste(vacio, 0, AHORA), "GPU off");
 });
 
-test("sin señales sólo avisa pasados los segundos del umbral", () => {
+test("without signals it only warns after the threshold seconds", () => {
   assert.equal(sinSenales(AHORA - 30_000, AHORA), 0);
   assert.equal(sinSenales(AHORA - 90_000, AHORA), 0);
   assert.equal(sinSenales(AHORA - 132_000, AHORA), 132);

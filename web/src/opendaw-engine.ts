@@ -1,6 +1,6 @@
 /**
- * Reproducción con el motor real de openDAW (WASM si está disponible).
- * Único camino de playback: MIDI, batería Playfield y pistas WAV.
+ * Playback with the real openDAW engine (WASM if available).
+ * The only playback path: MIDI, Playfield drums and WAV tracks.
  */
 
 import type { Project as MiuzikaProject } from "../../src/core/types.ts";
@@ -18,19 +18,19 @@ export interface OpenDawPlaybackHandle {
   readonly isPlaying: boolean;
   stop: () => void;
   seek: (beat: number) => void;
-  /** Aplica mute/solo/volumen/pan al proyecto vivo del engine. */
+  /** Applies mute/solo/volume/pan to the engine's live project. */
   syncMix: (source: MiuzikaProject) => void;
-  /** Arranca el transporte (si se cargó con `reproducir: false`). */
+  /** Starts the transport (if it was loaded with `reproducir: false`). */
   play: () => void;
   /**
-   * Nota en directo en el instrumento de una pista (el touchpad): `velocidad`
-   * 1..127 la empieza, 0 la suelta. Suena con el transporte parado o en marcha.
+   * Live note on a track's instrument (the touchpad): `velocidad` 1..127 starts it,
+   * 0 releases it. It sounds with the transport stopped or running.
    */
   nota: (nombrePista: string, pitch: number, velocidad: number) => void;
 }
 
 export interface OpcionesOpenDaw {
-  /** false: carga el proyecto y deja el motor listo, sin arrancar el transporte. */
+  /** false: loads the project and leaves the engine ready, without starting the transport. */
   reproducir?: boolean;
 }
 
@@ -42,8 +42,8 @@ interface EngineBoot {
   AudioData: typeof import("@opendaw/lib-dsp").AudioData;
 }
 
-// El engine WASM registra el processor una sola vez por página y contexto.
-// Guardarlo en globalThis evita crear un contexto nuevo tras un HMR.
+// The WASM engine registers the processor only once per page and context.
+// Keeping it in globalThis avoids creating a new context after an HMR.
 const bootStore = globalThis as typeof globalThis & {
   __miuzikaOpenDawBoot?: Promise<EngineBoot>;
 };
@@ -69,7 +69,7 @@ async function bootEngine(): Promise<EngineBoot> {
     try {
       await Workers.install(workersUrl);
     } catch (error) {
-      // HMR puede conservar la instalación estática entre módulos.
+      // HMR may keep the static installation between modules.
       if (!String(error).includes("already installed")) throw error;
     }
     AudioWorklets.install(workletsUrl);
@@ -171,15 +171,15 @@ async function prepareSamples(
           exclude: false,
         });
       } catch (error) {
-        console.warn(`[openDAW] no se pudo cargar ${entry.file}`, error);
+        console.warn(`[openDAW] could not load ${entry.file}`, error);
       }
     }
   }
   for (const [id, asset] of audioAssets) {
     const buffer = asset.buffer;
     const chunks: OpenDawAudioAsset["chunks"][number][] = [];
-    // El engine no carga fiablemente samples de ~4 minutos; partimos los WAV
-    // en bloques de 2 minutos. Sigue siendo el mismo audio, sin recompresión.
+    // The engine does not reliably load samples of ~4 minutes; we split the WAVs
+    // into 2-minute chunks. It is still the same audio, with no recompression.
     const chunkFrames = Math.max(1, Math.floor(buffer.sampleRate * 120));
     const chunkCount = Math.ceil(buffer.length / chunkFrames);
     for (let index = 0; index < chunkCount; index++) {
@@ -230,9 +230,9 @@ async function prepareSamples(
     };
     loaders.set(key, loader);
   }
-  // No usamos el loader de samples de openDAW aquí: calcula peaks en un
-  // worker y tarda decenas de segundos con los WAV de canción completa. El
-  // engine solo necesita los datos, y ya están en memoria.
+  // We do not use openDAW's sample loader here: it computes peaks in a
+  // worker and takes tens of seconds with full-song WAVs. The engine only needs
+  // the data, and it is already in memory.
   const manager = {
     register: () => ({ terminate: () => {} }),
     record: () => {},
@@ -243,7 +243,7 @@ async function prepareSamples(
     getOrCreate: (uuid: Uint8Array) => {
       const key = UUID.toString(uuid);
       const loader = loaders.get(key);
-      if (!loader) throw new Error(`Sample no registrado: ${key}`);
+      if (!loader) throw new Error(`Sample not registered: ${key}`);
       return loader;
     },
   };
@@ -251,14 +251,14 @@ async function prepareSamples(
 }
 
 /**
- * Carga el IR en un Project de openDAW y lo reproduce.
- * `onTick` recibe el beat actual para mover el playhead.
+ * Loads the IR into an openDAW Project and plays it.
+ * `onTick` receives the current beat to move the playhead.
  */
 type SoundfontEntrada = { uuid: Uint8Array; name: string; bytes: ArrayBuffer };
 
 /**
- * El proyecto de miuzika montado como Project de openDAW, con sus samples y
- * SoundFonts. Lo comparten la reproducción y la exportación a WAV.
+ * The miuzika project built as an openDAW Project, with its samples and
+ * SoundFonts. Playback and WAV export share it.
  */
 async function montarProyecto(
   source: MiuzikaProject,
@@ -277,9 +277,9 @@ async function montarProyecto(
     hasDrums,
     audioAssets,
   );
-  // Se parsean ANTES de exportar y de montar el proyecto: `getOrCreate` es síncrono
-  // y el motor lo llama en cuanto ve un dispositivo Soundfont; y para el General
-  // MIDI hace falta la lista de presets (banco, programa) al exportar.
+  // They are parsed BEFORE exporting and building the project: `getOrCreate` is
+  // synchronous and the engine calls it as soon as it sees a Soundfont device; and for
+  // General MIDI the preset list (bank, program) is needed when exporting.
   const parseados = new Map<string, unknown>();
   if (soundfonts.size > 0 || gm) {
     const { SoundFont2 } = (await import("soundfont2")) as unknown as {
@@ -289,7 +289,7 @@ async function montarProyecto(
       const clave = claveDeUuid(sf.uuid);
       if (parseados.has(clave)) continue;
       const parseado = new SoundFont2(new Uint8Array(sf.bytes));
-      // openDAW tira las zonas globales: sin esto, 113 de los 128 presets GM pierden el bucle.
+      // openDAW discards global zones: without this, 113 of the 128 GM presets lose the loop.
       repartirZonasGlobales(parseado as Parameters<typeof repartirZonasGlobales>[0]);
       parseados.set(clave, parseado);
     }
@@ -312,8 +312,8 @@ async function montarProyecto(
     audioContext: context,
     audioWorklets: core.AudioWorklets.get(context),
     sampleManager: prepared.sampleManager,
-    // El motor no recibe los bytes: recibe un gestor al que le pide el SoundFont
-    // por uuid (`getOrCreate`). Es la única puerta que expone openDAW.
+    // The engine does not receive the bytes: it receives a manager it asks for the
+    // SoundFont by uuid (`getOrCreate`). It is the only door openDAW exposes.
     soundfontManager: nuevoGestorDeSoundfonts(Option, parseados),
     sampleService: {},
     soundfontService: {},
@@ -321,8 +321,8 @@ async function montarProyecto(
 
   const project = Project.load(env as never, exported.bytes);
   if (import.meta.env.DEV && (soundfonts.size > 0 || gm)) {
-    // Sonda de desarrollo: qué ha entendido openDAW de cada SoundFont. Si `estado`
-    // no es "loaded", el motor no ha podido parsear el fichero.
+    // Development probe: what openDAW has understood from each SoundFont. If `estado`
+    // is not "loaded", the engine has not been able to parse the file.
     const gestor = env.soundfontManager as {
       getOrCreate: (uuid: Uint8Array) => { state: { type: string }; soundfont: { isEmpty: () => boolean; unwrapOrUndefined?: () => { presets?: { length: number } } } };
     };
@@ -372,19 +372,19 @@ export async function playWithOpenDaw(
   const worklet = project.startAudioWorklet();
   await worklet.isReady();
   await context.resume();
-  // El motor pide los samples y los SoundFonts DESPUÉS de montar el proyecto, y
-  // tarda en tenerlos (un Steinway son 40 MB). Si se arranca antes, lo que suena
-  // al principio sale en silencio: medido el 28-oct, el primer acorde del pad y el
-  // piano de la intro no se oían y lo de más adelante sí.
+  // The engine requests the samples and SoundFonts AFTER building the project, and
+  // takes a while to have them (a Steinway is 40 MB). If it starts before, what sounds
+  // at the beginning comes out silent: measured on Oct 28, the pad's first chord and the
+  // intro piano were not heard and later parts were.
   await esperarCarga(project.engine);
-  // Sin esto, un mute/solo/volumen puesto en parado se pierde: syncMix solo
-  // corria cuando se cambiaba algo con el transporte ya sonando.
+  // Without this, a mute/solo/volume set while stopped is lost: syncMix only
+  // ran when something was changed with the transport already playing.
   syncMix(source);
 
   const subscription = project.engine.position.catchupAndSubscribe((owner) => {
     onTick(owner.getValue() / 960);
   });
-  // El primer comando puede perderse mientras el processor termina de arrancar.
+  // The first command can be lost while the processor finishes starting up.
   const arrancar = async (): Promise<void> => {
     project.engine.play();
     await new Promise((resolve) => setTimeout(resolve, 150));
@@ -428,9 +428,9 @@ export async function playWithOpenDaw(
 
 
 /**
- * La mezcla entera renderizada con el motor de openDAW, sin reproducirla: es la
- * exportación «WAV» del encargo, y suena igual que el Play (mismos instrumentos,
- * efectos y mezcla). Los stems largos que van por streaming no entran.
+ * The whole mix rendered with the openDAW engine, without playing it: it is the
+ * brief's "WAV" export, and it sounds the same as Play (same instruments, effects and
+ * mix). Long stems that go through streaming are not included.
  */
 export async function renderizarMezcla(
   source: MiuzikaProject,
@@ -443,12 +443,12 @@ export async function renderizarMezcla(
   const { loopArea } = project.timelineBox;
   const conBucle = loopArea.enabled.getValue();
   try {
-    // No `OfflineEngineRenderer.start`: deja de renderizar tras 10 s de silencio
-    // (por debajo de −72 dB) una vez ha sonado algo. Medido el 28-oct en «Hard»: el
-    // piano solo tenía 17 s sin notas (compases 17-24) y todo lo de después salía
-    // MUDO en `escuchar_mezcla`; el agente gastó ~40 pasos buscando clips rotos. Un
-    // parón largo en la canción cortaría igual el WAV exportado. Aquí se renderiza
-    // hasta el final del último clip, más una cola para reverbs y delays.
+    // Not `OfflineEngineRenderer.start`: it stops rendering after 10 s of silence
+    // (below −72 dB) once something has sounded. Measured on Oct 28 on "Hard": the
+    // piano alone had 17 s with no notes (bars 17-24) and everything after came out
+    // MUTED in `escuchar_mezcla`; the agent spent ~40 steps looking for broken clips. A
+    // long pause in the song would cut the exported WAV the same way. Here it renders
+    // up to the end of the last clip, plus a tail for reverbs and delays.
     project.boxGraph.beginTransaction();
     loopArea.enabled.setValue(false);
     project.boxGraph.endTransaction();
@@ -471,17 +471,17 @@ export async function renderizarMezcla(
 }
 
 /**
- * Segundos que se siguen renderizando tras el último clip: las colas de reverb y
- * delay. El silencio del final se recorta igual (el motor deja 0,25 s), así que no
- * alarga el WAV si no hay cola. `start` daba 30 s; con 10 caben las reverbs largas.
+ * Seconds still rendered after the last clip: the reverb and delay tails. The final
+ * silence is trimmed anyway (the engine leaves 0.25 s), so it does not lengthen the
+ * WAV if there is no tail. `start` gave 30 s; with 10 the long reverbs fit.
  */
 const COLA_RENDER_SEG = 10;
 
 /**
- * Espera a que el motor haya cargado todo lo que ha pedido (samples y SoundFonts).
- * `queryLoadingComplete` sólo ve lo ya pedido, y las peticiones salen cuando el
- * worklet procesa el proyecto: por eso se pregunta varias veces, con un respiro.
- * Con tope: si algo no carga nunca, se reproduce igual a los 20 s.
+ * Waits for the engine to load everything it has requested (samples and SoundFonts).
+ * `queryLoadingComplete` only sees what has already been requested, and requests come
+ * out when the worklet processes the project: that is why it is asked several times,
+ * with a breather. With a cap: if something never loads, it still plays at 20 s.
  */
 async function esperarCarga(engine: { queryLoadingComplete(): Promise<boolean> }, topeMs = 20_000): Promise<void> {
   const fin = Date.now() + topeMs;
@@ -493,12 +493,12 @@ async function esperarCarga(engine: { queryLoadingComplete(): Promise<boolean> }
 }
 
 /**
- * Gestor de SoundFonts propio, sin pasar por el almacén de openDAW.
+ * Our own SoundFont manager, without going through the openDAW store.
  *
- * El gestor de la librería intenta primero leer el .sf2 de su OPFS (IndexedDB
- * disfrazado); si ese almacén no está instalado, la promesa no se resuelve nunca y
- * el instrumento se queda en "progress" para siempre (medido). Aquí el fichero ya
- * está en memoria, así que se entrega ya parseado y el estado nace en "loaded".
+ * The library manager first tries to read the .sf2 from its OPFS (IndexedDB in
+ * disguise); if that store is not installed, the promise never resolves and the
+ * instrument stays in "progress" forever (measured). Here the file is already in
+ * memory, so it is delivered already parsed and the state starts as "loaded".
  */
 function nuevoGestorDeSoundfonts(
   Option: { wrap: (valor: unknown) => unknown; None: unknown },
@@ -513,7 +513,7 @@ function nuevoGestorDeSoundfonts(
       const soundfont = parseados.get(clave);
       const cargador = {
         uuid,
-        state: soundfont ? { type: "loaded" } : { type: "error", reason: "soundfont desconocido" },
+        state: soundfont ? { type: "loaded" } : { type: "error", reason: "unknown soundfont" },
         soundfont: soundfont ? Option.wrap(soundfont) : Option.None,
         meta: Option.None,
         subscribe: (observador: (estado: unknown) => void) => {
@@ -526,7 +526,7 @@ function nuevoGestorDeSoundfonts(
       return cargador;
     },
     fetch: async () => {
-      throw new Error("los SoundFonts se cargan del proyecto, no de la red");
+      throw new Error("SoundFonts are loaded from the project, not from the network");
     },
     remove: (uuid: Uint8Array) => {
       cache.delete(claveDeUuid(uuid));

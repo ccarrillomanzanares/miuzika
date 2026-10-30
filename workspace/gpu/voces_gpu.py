@@ -1,27 +1,27 @@
-"""Voces que solo pueden renderizarse en la GPU (torch).
+"""Voices that can only be rendered on the GPU (torch).
 
-Mismo contrato que `codigo/instruments.py`, pero estas funciones pueden usar torch
-y los tensores de `motor_gpu`: se ejecutan en Lambda, nunca en el portátil. Por eso
-`codigo/voces.py` las lee con `ast` (sin importarlas): así el catálogo las lista sin
-necesitar torch instalado.
+Same contract as `codigo/instruments.py`, but these functions can use torch
+and the tensors from `motor_gpu`: they run in Lambda, never on the laptop. That is why
+`codigo/voces.py` reads them with `ast` (without importing them): that way the catalogue lists them
+without needing torch installed.
 
-Formato del docstring, igual que en el motor de CPU:
+Docstring format, same as in the CPU engine:
 
     def kit_bombo(vel=1.0, pitch=1.0, dur=0.9, seed=0):
-        \"\"\"Bombo de batería con cuerpo sobremuestreado.
+        \"\"\"Bass drum with an oversampled body.
         familia: percusión
-        vel: 0.05..1 Intensidad
-        pitch: 0.7..1.4 Tono (x)
-        dur: 0.2..2 Duración (s)
-        seed: 0..9999 Semilla
+        vel: 0.05..1 Intensity
+        pitch: 0.7..1.4 Pitch (x)
+        dur: 0.2..2 Duration (s)
+        seed: 0..9999 Seed
         \"\"\"
 
-Reglas: devuelve un array float (numpy o tensor), determinista por `seed`, sin
-escribir ficheros (de eso se encarga la puerta) y por debajo de 3 s de render.
+Rules: returns a float array (numpy or tensor), deterministic by `seed`, without
+writing files (the gate takes care of that) and under 3 s per render.
 
-Lo que la GPU aporta aquí: filtros y resonadores aplicados por FFT sobre tensores
-grandes, saturación con sobremuestreo y ruido determinista — en numpy y en un
-bucle de Python esto tarda segundos; aquí, milisegundos.
+What the GPU brings here: filters and resonators applied by FFT over large
+tensors, oversampled saturation and deterministic noise — in numpy and in a
+Python loop this takes seconds; here, milliseconds.
 """
 
 import math
@@ -31,7 +31,7 @@ import torch
 SR = 44100
 
 
-# ── utilidades ──────────────────────────────────────────────────────────────
+# ── utilities ───────────────────────────────────────────────────────────────
 
 
 def _t(n):
@@ -44,7 +44,7 @@ def _ruido(n, seed):
 
 
 def _respuesta(x, b0, b1, b2, a0, a1, a2):
-    """Aplica un biquad de una vez, por FFT (el filtro es una multiplicación)."""
+    """Applies a biquad in one go, via FFT (the filter is a multiplication)."""
     n = x.numel()
     freqs = torch.fft.rfftfreq(n, 1.0 / SR)
     z = torch.exp(-1j * 2 * math.pi * freqs / SR)
@@ -71,7 +71,7 @@ def _saturar(x, veces=4.0):
 
 
 def _resonadores(n, freqs, decays, ganancias):
-    """Suma de senos con caída: el cuerpo metálico de un plato."""
+    """Sum of decaying sines: the metallic body of a cymbal."""
     t = _t(n)
     salida = torch.zeros(n, dtype=torch.float32)
     for f, d, g in zip(freqs, decays, ganancias):
@@ -79,16 +79,16 @@ def _resonadores(n, freqs, decays, ganancias):
     return salida
 
 
-# ── voces de batería ────────────────────────────────────────────────────────
+# ── drum voices ─────────────────────────────────────────────────────────────
 
 
 def kit_bombo(vel=1.0, pitch=1.0, dur=0.9, seed=0):
-    """Bombo de batería: cuerpo con caída de tono, click y saturación.
+    """Bass drum: body with pitch drop, click and saturation.
     familia: percusión
-    vel: 0.05..1 Intensidad
-    pitch: 0.7..1.4 Tono (x)
-    dur: 0.2..2 Duración (s)
-    seed: 0..9999 Semilla
+    vel: 0.05..1 Intensity
+    pitch: 0.7..1.4 Pitch (x)
+    dur: 0.2..2 Duration (s)
+    seed: 0..9999 Seed
     """
     n = int(dur * SR)
     t = _t(n)
@@ -102,12 +102,12 @@ def kit_bombo(vel=1.0, pitch=1.0, dur=0.9, seed=0):
 
 
 def kit_caja(vel=1.0, pitch=1.0, dur=0.55, seed=0):
-    """Caja de batería: dos cuerpos tonales, bordona y cola corta.
+    """Snare drum: two tonal bodies, snare wires and short tail.
     familia: percusión
-    vel: 0.05..1 Intensidad
-    pitch: 0.7..1.5 Tono (x)
-    dur: 0.15..2 Duración (s)
-    seed: 0..9999 Semilla
+    vel: 0.05..1 Intensity
+    pitch: 0.7..1.5 Pitch (x)
+    dur: 0.15..2 Duration (s)
+    seed: 0..9999 Seed
     """
     n = int(dur * SR)
     t = _t(n)
@@ -120,12 +120,12 @@ def kit_caja(vel=1.0, pitch=1.0, dur=0.55, seed=0):
 
 
 def kit_tom(vel=1.0, pitch=1.0, dur=1.3, seed=0):
-    """Tom de batería: parche grande con caída de tono lenta y algo de aire.
+    """Tom drum: large head with a slow pitch drop and some air.
     familia: percusión
-    vel: 0.05..1 Intensidad
-    pitch: 0.6..1.6 Tono (x)
-    dur: 0.2..4 Duración (s)
-    seed: 0..9999 Semilla
+    vel: 0.05..1 Intensity
+    pitch: 0.6..1.6 Pitch (x)
+    dur: 0.2..4 Duration (s)
+    seed: 0..9999 Seed
     """
     n = int(dur * SR)
     t = _t(n)
@@ -138,12 +138,12 @@ def kit_tom(vel=1.0, pitch=1.0, dur=1.3, seed=0):
 
 
 def kit_charles(vel=1.0, pitch=1.0, dur=0.35, seed=0):
-    """Charles cerrado: ruido muy agudo y corto con un toque metálico.
+    """Closed hi-hat: very bright, short noise with a metallic touch.
     familia: percusión
-    vel: 0.05..1 Intensidad
-    pitch: 0.7..1.6 Tono (x)
-    dur: 0.08..1 Duración (s)
-    seed: 0..9999 Semilla
+    vel: 0.05..1 Intensity
+    pitch: 0.7..1.6 Pitch (x)
+    dur: 0.08..1 Duration (s)
+    seed: 0..9999 Seed
     """
     n = int(dur * SR)
     t = _t(n)
@@ -159,12 +159,12 @@ def kit_charles(vel=1.0, pitch=1.0, dur=0.35, seed=0):
 
 
 def kit_crash(vel=1.0, pitch=1.0, dur=2.5, seed=0):
-    """Plato crash: parciales inarmónicos y cola larga con aire.
+    """Crash cymbal: inharmonic partials and a long tail with air.
     familia: percusión
-    vel: 0.05..1 Intensidad
-    pitch: 0.7..1.5 Tono (x)
-    dur: 0.5..8 Duración (s)
-    seed: 0..9999 Semilla
+    vel: 0.05..1 Intensity
+    pitch: 0.7..1.5 Pitch (x)
+    dur: 0.5..8 Duration (s)
+    seed: 0..9999 Seed
     """
     n = int(dur * SR)
     t = _t(n)
@@ -181,12 +181,12 @@ def kit_crash(vel=1.0, pitch=1.0, dur=2.5, seed=0):
 
 
 def kit_china(vel=1.0, pitch=1.0, dur=2.0, seed=0):
-    """Plato china: más sucio y agresivo que el crash, con cola gated.
+    """China cymbal: dirtier and more aggressive than the crash, with a gated tail.
     familia: percusión
-    vel: 0.05..1 Intensidad
-    pitch: 0.7..1.5 Tono (x)
-    dur: 0.5..8 Duración (s)
-    seed: 0..9999 Semilla
+    vel: 0.05..1 Intensity
+    pitch: 0.7..1.5 Pitch (x)
+    dur: 0.5..8 Duration (s)
+    seed: 0..9999 Seed
     """
     n = int(dur * SR)
     t = _t(n)
@@ -203,12 +203,12 @@ def kit_china(vel=1.0, pitch=1.0, dur=2.0, seed=0):
 
 
 def kit_ride(vel=1.0, pitch=1.0, dur=2.0, seed=0):
-    """Plato ride: campana definida (ping) y cola metálica limpia.
+    """Ride cymbal: defined bell (ping) and a clean metallic tail.
     familia: percusión
-    vel: 0.05..1 Intensidad
-    pitch: 0.7..1.5 Tono (x)
-    dur: 0.5..8 Duración (s)
-    seed: 0..9999 Semilla
+    vel: 0.05..1 Intensity
+    pitch: 0.7..1.5 Pitch (x)
+    dur: 0.5..8 Duration (s)
+    seed: 0..9999 Seed
     """
     n = int(dur * SR)
     t = _t(n)
@@ -230,13 +230,13 @@ def kit_ride(vel=1.0, pitch=1.0, dur=2.0, seed=0):
 
 
 def campana_fm(note=69, dur=4.0, ratio=3.5, index=2.0, seed=0):
-    """Campana FM grande con cola larga y parciales inarmónicos.
+    """Large FM bell with a long tail and inharmonic partials.
     familia: tonal
-    note: 21..108 Nota (midi)
-    dur: 0.5..20 Duración (s)
-    ratio: 1..8 Relación FM (x)
-    index: 0.1..8 Índice FM
-    seed: 0..9999 Semilla
+    note: 21..108 Note (midi)
+    dur: 0.5..20 Duration (s)
+    ratio: 1..8 FM ratio (x)
+    index: 0.1..8 FM index
+    seed: 0..9999 Seed
     """
     n = int(dur * SR)
     t = _t(n)

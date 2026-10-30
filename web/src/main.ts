@@ -70,7 +70,7 @@ import { locale, traducirPagina } from "./i18n.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
-// Textos fijos de la página en el idioma del navegador (la conversación no pasa por aquí).
+// Fixed page texts in the browser's language (the conversation does not go through here).
 traducirPagina();
 
 const canvas = $<HTMLCanvasElement>("timeline");
@@ -84,20 +84,20 @@ const statusEl = $("status");
 const songInfo = $("song-info");
 
 const chat = initChat();
-/** Contador de gasto de la GPU (generico: lo alimenta /api/gpu/estado). */
+/** GPU spending counter (generic: fed by /api/gpu/estado). */
 const costeGpu = initCosteGpu(document.getElementById("gpu-coste"));
 
 const timeline = new TimelineView(canvas, wrap, heads);
 
-// Al plegar el chat se libera espacio: el lienzo tiene que reajustarse.
+// Collapsing the chat frees up space: the canvas has to be readjusted.
 chat.onLayout(() => timeline.relayout());
 
-// ── Agente: piensa y actúa (la clave la pone el servidor; las manos, el workspace)
+// ── Agent: thinks and acts (the server sets the key; the workspace sets the hands)
 const AGENTE_SISTEMA = promptDelSistema();
 
 let manifiestoMotor = "";
 
-/** Trae el manifiesto del motor y lo deja disponible para el prompt. */
+/** Fetches the engine manifest and makes it available to the prompt. */
 async function refrescarManifiesto(): Promise<void> {
   try {
     const res = await fetch("/api/manifiesto");
@@ -107,18 +107,18 @@ async function refrescarManifiesto(): Promise<void> {
     const sistema = conversacion[0];
     if (sistema && sistema.role === "system") {
       const carpeta = project
-        ? `\n\n=== PROYECTO ABIERTO ===\nCarpeta del proyecto: proyectos/${slugDeProyecto(project)}/\n` +
-          "Escribe ahi los WAV y MIDI con rutas como 'salida/tema.wav' (el servidor las resuelve " +
-          "dentro de la carpeta del proyecto). 'codigo/', 'herramientas/' y 'plantillas/' son comunes."
-        : "\n\n=== PROYECTO ===\nNo hay proyecto abierto: crea uno o usa anadir_pistas.";
+        ? `\n\n=== OPEN PROJECT ===\nProject folder: proyectos/${slugDeProyecto(project)}/\n` +
+          "Write the WAV and MIDI files there with paths like 'salida/tema.wav' (the server resolves them " +
+          "inside the project folder). 'codigo/', 'herramientas/' and 'plantillas/' are shared."
+        : "\n\n=== PROJECT ===\nThere is no open project: create one or use anadir_pistas.";
       sistema.content =
         AGENTE_SISTEMA +
         carpeta +
-        (manifiestoMotor ? `\n\n=== MOTOR DISPONIBLE ===\n${manifiestoMotor}` : "") +
+        (manifiestoMotor ? `\n\n=== AVAILABLE ENGINE ===\n${manifiestoMotor}` : "") +
         bloqueContexto(resumenAgente, turnosAgente);
     }
   } catch {
-    /* sin manifiesto: se trabaja con el prompt basico */
+    /* no manifest: work with the basic prompt */
   }
 }
 
@@ -126,14 +126,14 @@ const conversacion: ChatMessage[] = [{ role: "system", content: AGENTE_SISTEMA }
 
 let trabajando = false;
 
-// ── Barra de actividad: frase de lo que hace + reloj, sin llenar el chat.
+// ── Activity bar: a phrase for what it is doing + clock, without filling the chat.
 let latido: number | null = null;
 let pasoActual = "thinking";
-/** Cuando empezo la herramienta en curso (null = el modelo esta pensando). */
+/** When the current tool started (null = the model is thinking). */
 let pasoDesde: number | null = null;
-/** Ultima senal del turno: evento del agente o resultado de una herramienta. */
+/** Last signal from the turn: agent event or tool result. */
 let ultimoEventoMs = Date.now();
-/** Control para cortar el turno desde «Cancelar». */
+/** Control to cut the turn from "Cancel". */
 let cancelador: AbortController | null = null;
 
 function pararLatido(): void {
@@ -144,9 +144,9 @@ function pararLatido(): void {
 }
 
 /**
- * Lo que se puede decir con fundamento cuando el turno lleva rato callado: si la
- * GPU esta arrancando no esta colgado, esta esperando; si de verdad no hay
- * senales, se dice cuanto lleva asi.
+ * What can honestly be said when the turn has been quiet for a while: if the GPU is
+ * starting it is not hung, it is waiting; if there really are no signals, it says how
+ * long it has been like that.
  */
 function avisoDeEspera(): string {
   const gpu = costeGpu.estado();
@@ -155,16 +155,16 @@ function avisoDeEspera(): string {
     return `GPU starting${rato ? ` ${rato}` : ""} · not billing yet`;
   }
   if (/@lambda/.test(pasoActual) && gpu?.fase === "activa") return "GPU running · no output yet";
-  // Un script en este equipo no manda señales hasta que acaba: un render de 2,5 min
-  // salía como «⚠ sin señales» y parecía colgado. Su reloj ya dice cuánto lleva.
+  // A script on this machine sends no signals until it finishes: a 2.5-min render
+  // showed up as "⚠ no signal" and looked hung. Its clock already says how long it has been.
   if (pasoDesde !== null && /^(running|exporting) /.test(pasoActual)) return "";
   const callado = sinSenales(ultimoEventoMs);
   return callado > 0 ? `⚠ no signal for ${callado}s` : "";
 }
 
 /**
- * Repinta la barra cada segundo con lo que esta haciendo AHORA: el reloj del
- * turno y, si hay una herramienta corriendo, lo que lleva esa llamada.
+ * Repaints the bar every second with what it is doing NOW: the turn clock and, if a
+ * tool is running, how long that call has been going.
  */
 function arrancarLatido(desde: number): void {
   pararLatido();
@@ -173,8 +173,8 @@ function arrancarLatido(desde: number): void {
     const nota = avisoDeEspera();
     const marco = fraseBarra(pasoActual, enPaso, Date.now() - desde) + (nota ? ` · ${nota}` : "");
     setStatus(marco);
-    // La misma frase, en el chat: la barra de abajo es pequeña y con el chat abierto
-    // no se mira. Un turno largo sin esto parece que no hace nada.
+    // The same phrase, in the chat: the bottom bar is small and with the chat open
+    // nobody looks at it. A long turn without this looks like it is doing nothing.
     chat.mostrarProgreso(marco);
   };
   pintar();
@@ -203,9 +203,9 @@ async function responderAlUsuario(texto: string): Promise<void> {
     const resultado = await ejecutarAgente(conversacion, {
       signal: cancelador.signal,
       alEvento: (evento) => {
-        // Cualquier evento cuenta como señal de vida del turno.
+        // Any event counts as a sign of life for the turn.
         ultimoEventoMs = Date.now();
-        // La actividad vive en la barra de abajo, no en tarjetas dentro del chat.
+        // The activity lives in the bottom bar, not in cards inside the chat.
         if (evento.tipo === "progreso") {
           pasoActual = evento.texto;
           pasoDesde = null;
@@ -214,13 +214,13 @@ async function responderAlUsuario(texto: string): Promise<void> {
           return;
         }
         if (evento.tipo === "herramienta") {
-          // Empieza una llamada: el reloj del paso arranca aqui.
+          // A call starts: the step clock starts here.
           pasoActual = evento.texto;
           pasoDesde = Date.now();
           chat.mostrarProgreso(evento.texto);
           return;
         }
-        // Termino: su tiempo se queda a la vista hasta la siguiente herramienta.
+        // Finished: its time stays visible until the next tool.
         pasoDesde = null;
         pasoActual =
           evento.nombre && typeof evento.ms === "number"
@@ -232,11 +232,11 @@ async function responderAlUsuario(texto: string): Promise<void> {
     chat.ocultarProgreso();
     chat.update(burbuja, resultado.texto || "(no final answer)");
     pararLatido();
-    // Una linea discreta al final del historial: en que se fue el tiempo del turno.
+    // A discreet line at the end of the history: where the turn's time went.
     chat.add("meta", `✓ ${lineaResumen(resultado)} · ${getModel()}`);
-    // El turno va al historial del proyecto SIEMPRE, también si no hubo respuesta
-    // final: si no, el encargo del usuario se perdía y el turno siguiente no sabía
-    // qué se le había pedido.
+    // The turn goes into the project history ALWAYS, even if there was no final
+    // answer: otherwise the user's brief was lost and the next turn did not know
+    // what had been asked.
     const estado = agregarTurno(resumenAgente, turnosAgente, {
       usuario: texto,
       asistente:
@@ -273,8 +273,8 @@ async function responderAlUsuario(texto: string): Promise<void> {
     $<HTMLButtonElement>("cancelar").hidden = true;
     chat.setBusy(false);
   }
-  // El historial no puede crecer sin limite: sistema + los ultimos turnos, cortando
-  // siempre por un mensaje del usuario (nunca entre una llamada y su resultado).
+  // The history cannot grow without limit: system + the last turns, always cutting
+  // at a user message (never between a call and its result).
   recortarConversacion(conversacion, 25);
 }
 
@@ -282,15 +282,15 @@ chat.onSend((texto) => {
   void responderAlUsuario(texto);
 });
 
-// Cancelar: corta el modelo y la herramienta en vuelo (una GPU a medias no se
-// apaga sola, pero deja de tener un turno empujándola).
+// Cancel: cuts off the model and the tool in flight (a half-done GPU does not switch
+// itself off, but it no longer has a turn pushing it).
 $("cancelar").addEventListener("click", () => {
   if (!cancelador) return;
   cancelador.abort();
   setStatus("cancelling… (a running GPU is stopped separately)");
 });
 
-// El servidor publica un id de su código: si cambia, esta pestaña está vieja.
+// The server publishes an id for its code: if it changes, this tab is stale.
 vigilarVersion(() => {
   const boton = $<HTMLButtonElement>("recargar");
   boton.hidden = false;
@@ -306,20 +306,20 @@ vigilarVersion(() => {
 $("recargar").addEventListener("click", () => location.reload());
 
 /**
- * Conversación del agente POR PROYECTO, en `proyectos/<slug>/agente.json`.
- * Al recargar se rehidrata en el prompt de sistema, así que el agente sabe qué
- * se hizo antes en este proyecto (antes se perdía todo con un F5).
+ * Agent conversation PER PROJECT, in `proyectos/<slug>/agente.json`.
+ * On reload it is rehydrated into the system prompt, so the agent knows what was
+ * done before in this project (before, everything was lost with an F5).
  */
 let resumenAgente = "";
 let turnosAgente: TurnoAgente[] = [];
-/** Slug cuya conversación está cargada en memoria (para no recargarla sin motivo). */
+/** Slug whose conversation is loaded in memory (so it is not reloaded needlessly). */
 let slugAgente = "";
 
 /**
- * Sin proyecto abierto la conversación va a `proyectos/sin-proyecto/agente.json`
- * (la misma carpeta que usa el servidor para lo que no tiene proyecto). Antes no se
- * guardaba en ningún sitio y un F5 tiraba lo hablado (ESTADO 28-oct, pendiente 1).
- * No sale en la lista de proyectos: allí sólo cuentan carpetas con proyecto.json.
+ * With no project open the conversation goes to `proyectos/sin-proyecto/agente.json`
+ * (the same folder the server uses for things without a project). Before, it was not
+ * saved anywhere and an F5 threw away what had been said (STATUS Oct 28, pending 1).
+ * It does not show up in the project list: only folders with proyecto.json count there.
  */
 const SLUG_SIN_PROYECTO = "sin-proyecto";
 
@@ -337,8 +337,8 @@ async function cargarAgenteDelProyecto(vista: Project | null): Promise<void> {
     });
     if (res.ok) {
       const datos = (await res.json()) as { contenido?: string };
-      // Al arrancar se pide «sin-proyecto» y enseguida el proyecto que se restaura:
-      // si esta lectura llega tarde, no puede pisar la del proyecto ya abierto.
+      // At startup "sin-proyecto" is requested and then the project being restored:
+      // if this read arrives late, it cannot overwrite that of the already open project.
       if (slugAgente !== slug) return;
       const leido = interpretarAgente(String(datos.contenido ?? ""));
       resumenAgente = leido.resumen;
@@ -347,18 +347,18 @@ async function cargarAgenteDelProyecto(vista: Project | null): Promise<void> {
   } catch {
     /* sin historial: se empieza limpio */
   }
-  // A MITAD de turno (el agente acaba de llamar a crear_proyecto) la conversación NO
-  // se toca: es la del encargo en curso. Antes se vaciaba aquí y la siguiente llamada
-  // al modelo llevaba sólo el prompt de sistema: el agente perdía la petición del
-  // usuario, el proveedor contestaba 'load' a una conversación sin mensaje de usuario
-  // y el turno se gastaba en reintentos (27-oct, proyecto «doubledare»). Sólo se
-  // pone al día el prompt de sistema, que dice qué proyecto está abierto.
+  // MID-TURN (the agent has just called crear_proyecto) the conversation is NOT
+  // touched: it is the one for the brief in progress. Before, it was emptied here and the
+  // next model call carried only the system prompt: the agent lost the user's request,
+  // the provider answered 'load' to a conversation with no user message and the turn was
+  // wasted on retries (Oct 27, "doubledare" project). Only the system prompt is brought
+  // up to date, saying which project is open.
   if (trabajando) {
     await refrescarManifiesto();
     return;
   }
-  // Fuera de un turno, la conversación en curso es del proyecto anterior: se tira, y
-  // el panel se pinta con lo que el modelo recuerda de ESTE proyecto.
+  // Outside a turn, the current conversation belongs to the previous project: it is
+  // discarded, and the panel is painted with what the model remembers from THIS project.
   conversacion.length = 1;
   chat.clear();
   if (turnosAgente.length > 0) {
@@ -375,9 +375,9 @@ async function cargarAgenteDelProyecto(vista: Project | null): Promise<void> {
 }
 
 /**
- * Foto del proyecto ANTES del turno, en `proyectos/<carpeta>/versiones/`: es lo
- * que permite al agente (herramienta `versiones`) volver atrás una pista o el
- * proyecto entero. El servidor se queda con las últimas MAX_VERSIONES.
+ * Snapshot of the project BEFORE the turn, in `proyectos/<carpeta>/versiones/`: it is
+ * what lets the agent (the `versiones` tool) go back one track or the whole project.
+ * The server keeps the last MAX_VERSIONES.
  */
 async function guardarVersion(pedido: string): Promise<void> {
   const vista = project;
@@ -393,7 +393,7 @@ async function guardarVersion(pedido: string): Promise<void> {
       }),
     });
   } catch {
-    /* una foto que falla no puede impedir el turno */
+    /* a snapshot that fails cannot stop the turn */
   }
 }
 
@@ -409,19 +409,19 @@ async function guardarAgente(): Promise<void> {
       }),
     });
   } catch {
-    /* el historial no puede romper un turno */
+    /* the history cannot break a turn */
   }
 }
 
 let project: Project | null = null;
-/** Panel del touchpad (se crea más abajo; applyProject le avisa de los cambios). */
+/** Touchpad panel (created further down; applyProject notifies it of changes). */
 let panelPad: PanelPad | null = null;
 let busy = false;
 let ready = false;
 let restoring = false;
 let selectedTrackIds: string[] = [];
 let selectedClipIds: string[] = [];
-/** Referencias copiadas con Ctrl+C (se pegan duplicando el original). */
+/** References copied with Ctrl+C (they are pasted by duplicating the original). */
 let portapapeles: { trackId: string; clipId: string; start: number }[] = [];
 let persistenceWarned = false;
 let openDawHandle: OpenDawPlaybackHandle | null = null;
@@ -429,13 +429,13 @@ let openDawGeneration = 0;
 
 const stemPlayer = new StemPlayer();
 
-/** Ruta completa (con la carpeta del proyecto) para <audio src>, que no manda cabeceras. */
+/** Full path (with the project folder) for <audio src>, which does not send headers. */
 function rutaCompleta(src: string): string {
   if (!project) return src;
   return rutaEnProyecto(src, slugDeProyecto(project));
 }
 
-/** Prepara los stems de streaming del proyecto abierto (los que no van por openDAW). */
+/** Prepares the streaming stems of the open project (the ones that do not go through openDAW). */
 function sincronizarStems(): void {
   const vista = project;
   if (!vista) {
@@ -453,7 +453,7 @@ function sincronizarStems(): void {
     gainDb: number;
   }[] = [];
   for (const track of vista.tracks) {
-    // Solo suena lo que suena: mute lo calla y, si hay algún solo, manda ese.
+    // Only what sounds is heard: mute silences it and, if there is any solo, that wins.
     if (track.muted || (haySolo && !track.solo)) continue;
     for (const clip of track.clips) {
       if (!clip.audio) continue;
@@ -472,14 +472,14 @@ function sincronizarStems(): void {
   stemPlayer.definir(defs);
 }
 
-// Un turno del agente hace decenas de cambios: con 8 el deshacer no llegaba ni al
-// principio del turno. Para ir más atrás están las versiones (una por turno).
+// An agent turn makes dozens of changes: with 8, undo did not even reach the start of
+// the turn. To go further back there are versions (one per turn).
 const HISTORY_LIMIT = 60;
-/** Historial de undo: en memoria, de la sesión. El disco guarda el estado, no los pasos. */
+/** Undo history: in memory, for the session. The disk keeps the state, not the steps. */
 let history: Project[] = [];
 let future: Project[] = [];
 
-/** Carpeta del proyecto en workspace/proyectos/ (fija desde que se crea: ver meta.carpeta). */
+/** Project folder in workspace/proyectos/ (fixed from creation: see meta.carpeta). */
 function slugDeProyecto(origen: Project): string {
   return carpetaDeProyecto(origen);
 }
@@ -583,8 +583,8 @@ function stopOpenDaw(): void {
 }
 
 /**
- * Carga el proyecto en openDAW. Con `reproducir: false` deja el motor listo sin
- * arrancar el transporte: es lo que usa el pad para sonar en directo.
+ * Loads the project into openDAW. With `reproducir: false` it leaves the engine ready
+ * without starting the transport: that is what the pad uses to sound live.
  */
 async function startOpenDawPlayback(view: Project, reproducir = true): Promise<void> {
   if (openDawHandle) stopOpenDaw();
@@ -595,7 +595,7 @@ async function startOpenDawPlayback(view: Project, reproducir = true): Promise<v
     warnMissingAudio(faltan);
     const { playWithOpenDaw } = await import("./opendaw-engine.ts");
     const endBeat = view.lengthBars * beatsPerBar(view);
-    // openDAW solo recibe lo que esta decodificado; los stems largos van aparte.
+    // openDAW only receives what is decoded; long stems are handled separately.
     const paraEngine = new Map<string, { name: string; buffer: AudioBuffer }>();
     for (const [id, asset] of audioAssets) {
       if (asset.buffer) paraEngine.set(id, { name: asset.name, buffer: asset.buffer });
@@ -662,13 +662,13 @@ function warnPersistence(message: string): void {
   addMessage("system", message);
 }
 
-/** Clave con el proyecto abierto: lo único que queda en el navegador. */
+/** Key with the open project: the only thing left in the browser. */
 const CLAVE_ABIERTO = "miuzika.proyecto-abierto";
 
 /**
- * Un cambio del proyecto: apunta el proyecto abierto (para reabrirlo al
- * recargar) y programa la escritura del fichero maestro. No hay más estado en
- * el navegador: los datos y los WAV viven en el disco.
+ * A project change: it records the open project (to reopen it on reload) and schedules
+ * the master file write. There is no more state in the browser: the data and the WAVs
+ * live on disk.
  */
 function persist(): void {
   try {
@@ -680,10 +680,10 @@ function persist(): void {
   programarGuardado();
 }
 
-// ── Fichero maestro en disco: proyectos/<slug>/proyecto.json ────────────────
-// Autoguardado con retardo: escribir en cada arrastre de fader sería un POST por
-// movimiento; 1,5 s tras el último cambio es invisible y no pierde nada. El botón
-// «Guardar» (y Ctrl+S) fuerza la escritura y lo cuenta en el chat.
+// ── Master file on disk: proyectos/<slug>/proyecto.json ─────────────────────
+// Autosave with a delay: writing on every fader drag would be a POST per movement;
+// 1.5 s after the last change is invisible and loses nothing. The "Save" button (and
+// Ctrl+S) forces the write and reports it in the chat.
 const RETARDO_GUARDADO = 1500;
 let guardadoTimer: number | null = null;
 let guardando = false;
@@ -703,8 +703,8 @@ function horaActual(): string {
 }
 
 /**
- * Escribe el fichero maestro. `silencioso` (autoguardado) sólo deja el aviso en
- * la barra de estado; el botón «Guardar» además lo cuenta en el chat.
+ * Writes the master file. `silencioso` (autosave) only leaves the notice in the status
+ * bar; the "Save" button also reports it in the chat.
  */
 async function guardarEnDisco(silencioso: boolean): Promise<void> {
   const vista = project;
@@ -714,7 +714,7 @@ async function guardarEnDisco(silencioso: boolean): Promise<void> {
   }
   if (!ready) return;
   if (guardando) {
-    // Ya hay una escritura en vuelo: al terminar se relanza con el estado nuevo.
+    // There is already a write in flight: when it finishes it is relaunched with the new state.
     guardadoPendiente = true;
     return;
   }
@@ -804,8 +804,8 @@ async function redo(): Promise<void> {
 }
 
 function setProject(next: Project | null, record = true): void {
-  // El historial es de UN proyecto: deshacer nunca debe resucitar otro proyecto
-  // dentro de la carpeta del actual.
+  // The history belongs to ONE project: undo must never resurrect another project
+  // inside the current one's folder.
   if (!project || !next || slugDeProyecto(project) !== slugDeProyecto(next)) {
     history = [];
     future = [];
@@ -816,7 +816,7 @@ function setProject(next: Project | null, record = true): void {
   updateHistoryButtons();
 }
 
-/** Cambio en vivo (mute/solo): no reinicia el engine ni el playhead. */
+/** Live change (mute/solo): it does not restart the engine or the playhead. */
 function commitLive(next: Project): void {
   if (!project) return;
   const view = next;
@@ -853,9 +853,9 @@ function applyProject(next: Project | null): void {
   else openDawGeneration++;
   setPlaying(false);
   project = next;
-  // Cambiar de proyecto no debe dejar los WAV del anterior ocupando RAM.
+  // Changing project must not leave the previous project's WAVs occupying RAM.
   liberarAssetsNoUsados(next);
-  // Y el agente cambia de conversación: cada proyecto tiene la suya en disco.
+  // And the agent changes conversation: each project has its own on disk.
   void cargarAgenteDelProyecto(next);
   persist();
   updateActions();
@@ -880,8 +880,8 @@ function applyProject(next: Project | null): void {
   setProyectoActivo(slugDeProyecto(view));
   panelPad?.proyectoCambiado();
   timeline.setProject(view);
-  // setProject cambia los datos y los cabezales, pero no repinta el lienzo:
-  // sin esto, un proyecto aplicado por el agente deja la timeline vacia.
+  // setProject changes the data and the heads, but does not repaint the canvas:
+  // without this, a project applied by the agent leaves the timeline empty.
   timeline.relayout();
   sincronizarStems();
   const stats = projectStats(view);
@@ -914,7 +914,7 @@ function updateSelectionBar(): void {
   $<HTMLButtonElement>("clip-dup").disabled = !enabled || clips === 0;
 }
 
-/** Devuelve el par (pista, clip) de cada id seleccionado. */
+/** Returns the (track, clip) pair for each selected id. */
 function clipsSeleccionados(): { trackId: string; clipId: string; start: number; length: number }[] {
   if (!project) return [];
   const salida: { trackId: string; clipId: string; start: number; length: number }[] = [];
@@ -928,7 +928,7 @@ function clipsSeleccionados(): { trackId: string; clipId: string; start: number;
   return salida;
 }
 
-/** Aplica ops de clips y deja seleccionado lo que ha quedado (las copias, si las hay). */
+/** Applies clip ops and leaves whatever remains selected (the copies, if any). */
 function aplicarOpsClips(ops: Op[], mensaje: string, seleccionarNuevas: boolean): void {
   if (!project || ops.length === 0) return;
   try {
@@ -958,7 +958,7 @@ function copiarClips(): void {
 function pegarClips(): void {
   if (!project || portapapeles.length === 0) return;
   const base = Math.min(...portapapeles.map((item) => item.start));
-  // iman a semicorchea, igual que el arrastre
+  // sixteenth-note snap, same as dragging
   const destino = Math.round(currentBeat() / 0.25) * 0.25;
   const ops: Op[] = portapapeles.map((item) => ({
     op: "duplicate_clip" as const,
@@ -1010,7 +1010,7 @@ function deleteSelectedTracks(): void {
   }
 }
 
-/** Renderiza con el motor real de Strudel y lo inserta como pista de audio. */
+/** Renders with the real Strudel engine and inserts it as an audio track. */
 async function renderStrudelAudioSource(request: CodeAudioRequest): Promise<void> {
   const base = project;
   if (!base) throw new Error("There is no open project.");
@@ -1019,8 +1019,8 @@ async function renderStrudelAudioSource(request: CodeAudioRequest): Promise<void
   const assetId = `aud_strudel_${request.sourceId}_${Date.now().toString(36)}`;
   const assetName = `${request.name} [Strudel]`;
   const duracionBeats = request.bars * barBeats;
-  // El WAV renderizado va al disco como cualquier otro audio del proyecto: si no,
-  // el fichero maestro no podría referenciarlo y se perdería al recargar.
+  // The rendered WAV goes to disk like any other audio in the project: otherwise the
+  // master file could not reference it and it would be lost on reload.
   let ruta: string | null = null;
   try {
     const fichero = new File([rendered.blob], `${slugDeProyecto(base)}_strudel_${request.sourceId}.wav`, {
@@ -1108,7 +1108,7 @@ function openCodeEditor(): void {
   });
 }
 
-// --- Eventos ---------------------------------------------------------------
+// --- Events ----------------------------------------------------------------
 
 playButton.addEventListener("click", () => {
   const view = project;
@@ -1117,7 +1117,7 @@ playButton.addEventListener("click", () => {
     stopOpenDaw();
     return;
   }
-  // Un motor cargado sin reproducir (el del pad) se descarga y se arranca de nuevo.
+  // An engine loaded without playing (the pad's) is unloaded and started again.
   if (openDawHandle) stopOpenDaw();
   void startOpenDawPlayback(view);
 });
@@ -1149,25 +1149,25 @@ $("sel-delete").addEventListener("click", deleteSelectedTracks);
 $("sel-all").addEventListener("click", () => timeline.selectAll());
 $("sel-clear").addEventListener("click", () => timeline.clearSelection());
 
-// Menú «Modelos»: proveedor, clave y modelo del agente (server/api/proveedores.ts).
+// "Models" menu: the agent's provider, key and model (server/api/proveedores.ts).
 void cargarConfigLlm();
 const ajustesModelos = new AjustesModelos((proveedor, modelo) =>
   addMessage("system", `The agent will use ${modelo} (${proveedor}) from the next turn on.`),
 );
 $<HTMLButtonElement>("ajustes-modelos").addEventListener("click", () => void ajustesModelos.abrir());
 
-// El botón «Encargo» del chat: un formulario que escribe el mensaje (no lo envía).
+// The chat's "Brief" button: a form that writes the message (it does not send it).
 const formularioEncargo = new FormularioEncargo({
   proyecto: () => project,
   escribir: (texto) => escribirEnCompositor(texto),
 });
 setAbrirEncargo(() => void formularioEncargo.abrir());
 
-// Las herramientas del agente que tocan el proyecto (agent/acciones.ts) trabajan
-// sobre ESTA pestaña a través de un contrato pequeño.
+// The agent tools that touch the project (agent/acciones.ts) work on THIS tab through a
+// small contract.
 /**
- * Exportación del encargo: el proyecto a MIDI y/o la mezcla a WAV, en
- * `proyectos/<carpeta>/salida/`. El WAV lo renderiza el mismo motor que el Play.
+ * Brief export: the project to MIDI and/or the mix to WAV, in
+ * `proyectos/<carpeta>/salida/`. The WAV is rendered by the same engine as Play.
  */
 async function exportarProyecto(formatos: { midi: boolean; wav: boolean }): Promise<{ ok: boolean; texto: string }> {
   const view = project;
@@ -1214,9 +1214,9 @@ async function exportarProyecto(formatos: { midi: boolean; wav: boolean }): Prom
 }
 
 /**
- * Lo que necesita el motor para renderizar el proyecto sin reproducirlo: WAV,
- * SoundFonts del proyecto y el GM. Se carga una vez y sirve para varios renders
- * (la mezcla y cada pista sola en `escuchar_mezcla`).
+ * What the engine needs to render the project without playing it: WAVs, the project's
+ * SoundFonts and the GM. It is loaded once and serves several renders (the mix and each
+ * track alone in `escuchar_mezcla`).
  */
 async function prepararRender(view: Project, slug: string) {
   const { faltan } = await hidratarAssets(view, slug);
@@ -1227,8 +1227,8 @@ async function prepararRender(view: Project, slug: string) {
   }
   const soundfonts = await cargarSoundfontsDelProyecto(view);
   const gm = await cargarGm(view);
-  // `cargarSoundfontsDelProyecto` salta en silencio los .sf2 que no llegan: aquí se
-  // apuntan, porque una pista sin su instrumento es justo lo que hay que diagnosticar.
+  // `cargarSoundfontsDelProyecto` silently skips the .sf2 files that do not arrive: here
+  // they are noted, because a track without its instrument is exactly what has to be diagnosed.
   const sinCargar = [
     ...new Set(
       view.tracks.flatMap((t) => (t.instrument.type === "soundfont" && t.instrument.archivo && !soundfonts.has(t.instrument.archivo) ? [t.instrument.archivo] : [])),
@@ -1239,9 +1239,9 @@ async function prepararRender(view: Project, slug: string) {
 }
 
 /**
- * `escuchar_mezcla`: el nivel de la mezcla y de cada pista sola, por tramos de
- * compases, renderizado con openDAW. Es lo que suena de verdad, no el render numpy
- * del agente (ESTADO 28-oct, pendiente 7).
+ * `escuchar_mezcla`: the level of the mix and of each track alone, by bar ranges,
+ * rendered with openDAW. It is what really sounds, not the agent's numpy render
+ * (STATUS Oct 28, pending 7).
  */
 async function escucharMezcla(opciones: { pistas?: string[]; compasesPorTramo?: number }): Promise<{ ok: boolean; texto: string }> {
   const view = project;
@@ -1255,7 +1255,7 @@ async function escucharMezcla(opciones: { pistas?: string[]; compasesPorTramo?: 
       (t) => pedidas.length === 0 || pedidas.includes(t.id.toLowerCase()) || pedidas.includes(t.name.toLowerCase()),
     );
     if (pedidas.length > 0 && elegidas.length === 0) {
-      return { ok: false, texto: `No hay pistas llamadas ${pedidas.join(", ")}. Pistas: ${view.tracks.map((t) => t.name).join(", ")}.` };
+      return { ok: false, texto: `No tracks named ${pedidas.join(", ")}. Tracks: ${view.tracks.map((t) => t.name).join(", ")}.` };
     }
     const render = await prepararRender(view, slugDeProyecto(view));
     const medir = (r: { sampleRate: number; canales: Float32Array[] }) =>
@@ -1265,9 +1265,9 @@ async function escucharMezcla(opciones: { pistas?: string[]; compasesPorTramo?: 
     const pistas: PistaEscuchada[] = [];
     for (const [i, pista] of elegidas.entries()) {
       setStatus(`Listening: track ${i + 1}/${elegidas.length} (${pista.name})…`);
-      // La pista sola, sin mute ni solo: se mide si su instrumento produce señal.
+      // The track alone, without mute or solo: it measures whether its instrument produces signal.
       const sola: Project = { ...view, tracks: [{ ...pista, muted: false, solo: false }] };
-      // Los clips de WAV por streaming no pasan por openDAW: contarlos daría un MUDO falso.
+      // Streaming WAV clips do not go through openDAW: counting them would give a false MUTE.
       const enMotor = pista.clips.filter((clip) => !(clip.audio && audioAssets.get(clip.audio.assetId)?.streaming));
       pistas.push({
         nombre: pista.name,
@@ -1277,7 +1277,7 @@ async function escucharMezcla(opciones: { pistas?: string[]; compasesPorTramo?: 
       });
     }
     const fuera = assetsPorStreaming(view);
-    const nota = fuera.length > 0 ? `\nNO medidos (WAV largos por streaming, fuera de openDAW; suenan en el Play): ${fuera.join(", ")}.` : "";
+    const nota = fuera.length > 0 ? `\nNOT measured (long WAVs through streaming, outside openDAW; they sound in Play): ${fuera.join(", ")}.` : "";
     return { ok: true, texto: informeEscucha({ compasesPorTramo, mezcla, pistas, sinCargar: render.sinCargar }) + nota };
   } catch (error) {
     return { ok: false, texto: `Could not listen to the mix: ${error instanceof Error ? error.message : String(error)}` };
@@ -1294,7 +1294,7 @@ const acciones = crearAcciones({
 });
 registrarAcciones(acciones);
 
-// El touchpad como instrumento (web/src/pad.ts).
+// The touchpad as an instrument (web/src/pad.ts).
 panelPad = new PanelPad({
   proyecto: () => project,
   motorActual: () => openDawHandle,
@@ -1329,18 +1329,18 @@ panelPad = new PanelPad({
 });
 $<HTMLButtonElement>("pad").addEventListener("click", () => panelPad?.abrir());
 
-/** ¿Es un MIDI? Un .mid NO es audio: son notas, y hay que leerlas, no decodificarlas. */
+/** Is it a MIDI? A .mid is NOT audio: it is notes, and they have to be read, not decoded. */
 function esMidi(file: File): boolean {
   return /\.(mid|midi)$/i.test(file.name) || /midi/i.test(file.type);
 }
 
 /**
- * Mete un `.mid` del disco en el proyecto: copia el fichero a `entrada/`, lee sus
- * pistas con `/api/midi` y las crea como pistas MIDI, con el mismo camino que
- * `anadir_pistas` (así el resultado se puede deshacer y se guarda solo).
+ * Puts a `.mid` from disk into the project: copies the file to `entrada/`, reads its
+ * tracks with `/api/midi` and creates them as MIDI tracks, through the same path as
+ * `anadir_pistas` (so the result can be undone and saves itself).
  *
- * Antes no existía ninguna vía: «Abrir» lo trataba como un proyecto JSON y fallaba,
- * y el lienzo prometía «arrastra un WAV aquí» sin tener manejador de arrastre.
+ * Before, there was no way at all: "Open" treated it as a JSON project and failed,
+ * and the canvas promised "drag a WAV here'" without having a drag handler.
  */
 async function importarMidiDesdeDisco(file: File): Promise<void> {
   if (!ready) return;
@@ -1366,36 +1366,36 @@ async function importarMidiDesdeDisco(file: File): Promise<void> {
   }
 }
 
-/** ¿Es un fichero de audio? (por MIME o por extension) */
+/** Is it an audio file? (by MIME or by extension) */
 function esAudio(file: File): boolean {
   return file.type.startsWith("audio/") || /\.(wav|mp3|ogg|oga|flac|aif|aiff|m4a)$/i.test(file.name);
 }
 
-/** RAM que ocupan los audio ya decodificados (Float32 intercalado). */
+/** RAM taken up by the audio already decoded (interleaved Float32). */
 function ramAudioBytes(): number {
   let total = 0;
   for (const asset of audioAssets.values()) {
-    if (!asset.buffer) continue; // los de streaming no ocupan RAM
+    if (!asset.buffer) continue; // streaming ones do not take up RAM
     total += asset.buffer.length * asset.buffer.numberOfChannels * 4;
   }
   return total;
 }
 
 /**
- * Mete ficheros de audio en el proyecto: una pista por fichero, en el compas actual.
- * Lo usan tanto el boton «Audio» como «Abrir» (una sola via para lo mismo).
+ * Puts audio files into the project: one track per file, at the current bar.
+ * Both the "Audio" button and "Open" use it (a single path for the same thing).
  *
- * Cada fichero se copia primero a `proyectos/<slug>/entrada/`: el proyecto es
- * portable porque referencia sus WAV por ruta, no por bytes en el navegador.
+ * Each file is first copied to `proyectos/<slug>/entrada/`: the project is portable
+ * because it references its WAVs by path, not by bytes in the browser.
  *
- * `destino` decide dónde caen: «anadir» respeta el proyecto abierto y el cursor;
- * «nuevo» empieza de cero con el nombre de la carpeta elegida (el caso de abrir
- * la carpeta `salida/` de un proyecto, que antes se pegaba al proyecto viejo).
+ * `destino` decides where they land: "anadir" respects the open project and the cursor;
+ * "nuevo" starts from scratch with the chosen folder's name (the case of opening a
+ * project's `salida/` folder, which before was pasted onto the old project).
  */
 async function importarAudio(files: File[], destino: "anadir" | "nuevo" = "anadir"): Promise<void> {
   if (!ready || files.length === 0) return;
   const nuevo = destino === "nuevo" || !project;
-  const LIMITE_RAM = 900 * 1024 * 1024; // ~900 MB: por encima el navegador se cae
+  const LIMITE_RAM = 900 * 1024 * 1024; // ~900 MB: above this the browser crashes
   const nombreNuevo = nombreDeProyectoDesdeFicheros(files);
   setBusy(true, nuevo ? `Creating “${nombreNuevo}”…` : "Importing audio…");
   try {
@@ -1414,7 +1414,7 @@ async function importarAudio(files: File[], destino: "anadir" | "nuevo" = "anadi
         cortado = true;
         break;
       }
-      // 1) al disco. Sin copia no hay nada que el fichero maestro pueda referenciar.
+      // 1) to disk. Without a copy there is nothing the master file can reference.
       let ruta = "";
       try {
         ruta = (await subirAudio(file, slug)).path;
@@ -1423,7 +1423,7 @@ async function importarAudio(files: File[], destino: "anadir" | "nuevo" = "anadi
         continue;
       }
 
-      // 2) duración y onda las mide el servidor (el WAV ya está en su sitio).
+      // 2) duration and waveform are measured by the server (the WAV is already in place).
       const meta = await metadatosWav(rutaEnProyecto(ruta, slug));
       const segundos = meta.duracionSeg;
       let assetId: string;
@@ -1432,7 +1432,7 @@ async function importarAudio(files: File[], destino: "anadir" | "nuevo" = "anadi
 
       const soltar = reservarDecodificado(segundos);
       if (!soltar) {
-        // Largo y sin memoria para él: no se decodifica (así caben stems de 6 minutos).
+        // Long and with no memory for it: it is not decoded (so 6-minute stems fit).
         assetId = idDeAsset(nombre);
         registrarAssetStreaming({
           id: assetId,
@@ -1442,7 +1442,7 @@ async function importarAudio(files: File[], destino: "anadir" | "nuevo" = "anadi
           peaks: Float32Array.from(meta.picos),
         });
       } else {
-        // Cabe: decodificado para que openDAW lo pueda reproducir.
+        // It fits: decoded so openDAW can play it.
         const asset = await loadAudioFile(file, current.bpm, ruta).finally(soltar);
         assetId = asset.id;
         nombre = asset.name;
@@ -1495,8 +1495,8 @@ async function importarAudio(files: File[], destino: "anadir" | "nuevo" = "anadi
 }
 
 /**
- * Pregunta qué hacer con los audios elegidos. Con proyecto abierto el usuario
- * elige: añadirlos (como siempre) o empezar uno nuevo con el nombre de la carpeta.
+ * Asks what to do with the chosen audio files. With a project open the user chooses:
+ * add them (as always) or start a new one with the folder's name.
  */
 type DestinoAudio = "anadir" | "nuevo" | "cancelar";
 
@@ -1517,7 +1517,7 @@ function preguntarDestinoAudio(files: File[]): Promise<DestinoAudio> {
       dialogo.close();
       resolver(valor);
     };
-    // onclick/oncancel se reasignan (no se acumulan) en cada apertura.
+    // onclick/oncancel are reassigned (not accumulated) on each opening.
     $("audio-anadir").onclick = () => terminar("anadir");
     $("audio-nuevo").onclick = () => terminar("nuevo");
     $("audio-cancelar").onclick = () => terminar("cancelar");
@@ -1535,7 +1535,7 @@ function preguntarDestinoAudio(files: File[]): Promise<DestinoAudio> {
   });
 }
 
-/** Punto único para importar audio con el selector: pregunta el destino si hay proyecto. */
+/** Single entry point for importing audio with the picker: asks for the destination if there is a project. */
 async function importarAudioDesdeSelector(files: File[]): Promise<void> {
   if (files.length === 0) return;
   const destino: DestinoAudio = project ? await preguntarDestinoAudio(files) : "nuevo";
@@ -1543,7 +1543,7 @@ async function importarAudioDesdeSelector(files: File[]): Promise<void> {
   await importarAudio(files, destino);
 }
 
-/** Fecha corta para la lista de proyectos ("23 oct, 21:04"). */
+/** Short date for the project list ("23 Oct, 21:04"). */
 function fechaCorta(iso: string): string {
   if (!iso) return "no date";
   const fecha = new Date(iso);
@@ -1552,8 +1552,8 @@ function fechaCorta(iso: string): string {
 }
 
 /**
- * Diálogo «Sonidos»: busca en la biblioteca CC0 (índice del servidor) y trae lo que
- * elijas al proyecto. Sin copiar a mano: el sample entra convertido y normalizado.
+ * "Sounds" dialog: searches the CC0 library (server index) and brings what you choose
+ * into the project. No manual copying: the sample comes in converted and normalized.
  */
 let sonidosTimer: number | null = null;
 let sonidosReproduciendo: HTMLAudioElement | null = null;
@@ -1584,8 +1584,8 @@ async function pintarSonidos(consulta: string): Promise<void> {
       }[];
     };
     const todos = datos.resultados ?? [];
-    // La biblioteca trae la misma toma en 6-12 capas y repeticiones: se agrupa por
-    // instrumento y se queda el primero (el que mejor puntuó), diciendo cuántos hay.
+    // The library brings the same take in 6-12 layers and repetitions: it is grouped by
+    // instrument and the first one is kept (the one that scored best), saying how many there are.
     const porInstrumento = new Map<string, { fila: (typeof todos)[number]; cuantos: number }>();
     for (const fila of todos) {
       const previo = porInstrumento.get(fila.instrumento);
@@ -1635,7 +1635,7 @@ function abrirSonidos(): void {
   void pintarSonidos(campo.value);
 }
 
-/** Abre el diálogo con los proyectos que tienen proyecto.json en el disco. */
+/** Opens the dialog with the projects that have a proyecto.json on disk. */
 async function abrirListaDeProyectos(): Promise<void> {
   const dialogo = $<HTMLDialogElement>("dialogo-proyectos");
   const lista = $("lista-proyectos");
@@ -1673,8 +1673,8 @@ async function abrirListaDeProyectos(): Promise<void> {
 }
 
 /**
- * Abre un proyecto del disco: el fichero maestro manda y sus WAV se cargan de la
- * carpeta (`/api/audio`), decodificados si son cortos y por streaming si son largos.
+ * Opens a project from disk: the master file rules and its WAVs are loaded from the
+ * folder (`/api/audio`), decoded if they are short and streamed if they are long.
  */
 async function abrirProyectoDeDisco(ruta: string): Promise<void> {
   setBusy(true, "Opening project from disk…");
@@ -1683,13 +1683,13 @@ async function abrirProyectoDeDisco(ruta: string): Promise<void> {
     const texto = await leerProyectoDeDisco(ruta);
     const disco = interpretarProyectoEnDisco(texto);
     const carpeta = carpetaDeRuta(ruta);
-    // La carpeta de la que se abre es la del proyecto, se llame como se llame: antes
-    // un proyecto abierto de proyectos/stahl/ llamado «Stahl II» se guardaba en
-    // proyectos/stahl-ii/, sin sus WAV.
+    // The folder it is opened from is the project's, whatever it is called: before, a
+    // project opened from proyectos/stahl/ named "Stahl II" was saved in
+    // proyectos/stahl-ii/, without its WAVs.
     disco.proyecto.meta = { ...disco.proyecto.meta, carpeta };
     const { cargados, faltan } = await hidratarAssets(disco.proyecto, carpeta);
-    // `restoring` sigue en true al aplicar el proyecto: abrir no debe reescribir
-    // el fichero maestro (pisaría lo que haya en disco, incluido guardadoEn).
+    // `restoring` is still true when applying the project: opening must not rewrite
+    // the master file (it would overwrite what is on disk, including guardadoEn).
     setProject(disco.proyecto);
     addMessage(
       "assistant",
@@ -1723,7 +1723,7 @@ $("lista-sonidos").addEventListener("click", (event) => {
   if (!objetivo) return;
   const oir = objetivo.dataset.oir;
   if (oir) {
-    // Escuchar sin traerlo: el <audio> lee el WAV del catálogo tal cual.
+    // Listen without bringing it in: the <audio> reads the catalog WAV as is.
     sonidosReproduciendo?.pause();
     sonidosReproduciendo = new Audio(`/api/catalogo/audio?path=${encodeURIComponent(oir)}`);
     void sonidosReproduciendo.play();
@@ -1777,10 +1777,10 @@ $<HTMLInputElement>("audio-file").addEventListener("change", async (event) => {
 });
 
 /**
- * Reparte lo que se elige en «Abrir» o se suelta sobre el lienzo: un proyecto
- * (.json / .miuzika.zip), audio (WAV, MP3…) o MIDI (.mid).
+ * Distributes what is chosen in "Open" or dropped onto the canvas: a project
+ * (.json / .miuzika.zip), audio (WAV, MP3…) or MIDI (.mid).
  *
- * El orden importa: primero el proyecto, porque las pistas necesitan dónde ir.
+ * Order matters: the project first, because the tracks need somewhere to go.
  */
 async function abrirArchivos(todos: File[]): Promise<void> {
   if (!ready || todos.length === 0) return;
@@ -1802,8 +1802,8 @@ async function abrirArchivos(todos: File[]): Promise<void> {
       const avisos: string[] = [];
       const esZip = /\.(miuzika\.)?zip$/i.test(file.name);
       if (esZip) {
-        // Los WAV del bundle se escriben en la carpeta del proyecto y el proyecto
-        // se queda con sus rutas: así el bundle se convierte en un proyecto de disco.
+        // The bundle's WAVs are written into the project folder and the project keeps
+        // their paths: that way the bundle becomes an on-disk project.
         const imported = await importProjectBundle(file);
         parsed = imported.project;
         avisos.push(...imported.warnings);
@@ -1823,7 +1823,7 @@ async function abrirArchivos(todos: File[]): Promise<void> {
           }
         }
       } else {
-        // Un .json puede ser un fichero maestro, un bundle suelto o un Project.
+        // A .json can be a master file, a loose bundle or a Project.
         const disco = interpretarProyectoEnDisco(await file.text());
         parsed = disco.proyecto;
       }
@@ -1855,9 +1855,8 @@ $<HTMLInputElement>("open").addEventListener("change", async (event) => {
   await abrirArchivos(todos);
 });
 
-// Arrastrar y soltar sobre la ventana. El estado vacío prometía «arrastra un WAV
-// aquí» desde el primer día y no había ningún manejador: soltar un fichero no hacía
-// absolutamente nada.
+// Drag and drop onto the window. The empty state promised "drag a WAV here" from day
+// one and there was no handler: dropping a file did absolutely nothing.
 for (const tipo of ["dragenter", "dragover"] as const) {
   document.addEventListener(tipo, (event: DragEvent) => {
     if (!event.dataTransfer?.types.includes("Files")) return;
@@ -1868,7 +1867,7 @@ for (const tipo of ["dragenter", "dragover"] as const) {
 }
 
 document.addEventListener("dragleave", (event: DragEvent) => {
-  if (event.relatedTarget) return; // se mueve por dentro de la ventana: no parpadea
+  if (event.relatedTarget) return; // moving inside the window: do not flicker
   document.body.classList.remove("arrastrando");
 });
 
@@ -1885,9 +1884,9 @@ window.addEventListener("keydown", (event) => {
   const target = event.target as HTMLElement | null;
   if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
   if (target?.isContentEditable) return;
-  // Con texto seleccionado en la página, Ctrl+C/X son del navegador: si no, al
-  // copiar un trozo de la respuesta del agente el atajo se lo comía el portapapeles
-  // de clips y no copiaba nada.
+  // With text selected on the page, Ctrl+C/X belong to the browser: otherwise, when
+  // copying a piece of the agent's answer, the shortcut was eaten by the clips
+  // clipboard and nothing was copied.
   const seleccion = window.getSelection();
   const hayTexto = Boolean(seleccion && !seleccion.isCollapsed && seleccion.toString().trim().length > 0);
   if (hayTexto && ["c", "x"].includes(event.key.toLowerCase())) return;
@@ -1928,7 +1927,7 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     duplicarClips();
   } else if (key === "s") {
-    // Ctrl+S = escribir el fichero maestro ahora, sin esperar al autoguardado.
+    // Ctrl+S = write the master file now, without waiting for autosave.
     event.preventDefault();
     if (guardadoTimer !== null) {
       window.clearTimeout(guardadoTimer);
@@ -1945,22 +1944,22 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
-// --- Arranque --------------------------------------------------------------
+// --- Startup ---------------------------------------------------------------
 
 /**
- * Arranque: el disco es la fuente de verdad, pero **no se abre ningún proyecto
- * solo**. El usuario decide con «Proyectos» (o pidiendo una pieza nueva).
+ * Startup: the disk is the source of truth, but **no project is opened on its own**.
+ * The user decides with "Projects" (or by asking for a new piece).
  *
- * Antes se abría el último apuntado en `localStorage` y sustituía lo que el
- * usuario estuviera mirando; en un proyecto vacío se leía como fallo de carga.
- * El lienzo vacío ya explica qué hacer, así que aquí no se escribe nada.
+ * Before, the last one recorded in `localStorage` was opened and replaced whatever the
+ * user was looking at; in an empty project it read as a loading failure. The empty
+ * canvas already explains what to do, so nothing is written here.
  */
 async function boot(): Promise<void> {
   setProject(null, false);
-  // El prompt de sistema tiene que llevar el manifiesto y la línea del proyecto desde
-  // el arranque (antes se quedaba pelado y el estado en reposo mentía a quien mirase
-  // `__miuzika.conversacion`). `cargarAgenteDelProyecto` también lo refresca, pero
-  // no se le espera aquí.
+  // The system prompt has to carry the manifest and the project line from startup
+  // (before, it stayed bare and the resting state lied to whoever looked at
+  // `__miuzika.conversacion`). `cargarAgenteDelProyecto` refreshes it too, but it is
+  // not awaited here.
   await refrescarManifiesto();
   setPlaying(false);
   ready = true;
@@ -1988,7 +1987,7 @@ if (import.meta.env.DEV) {
     get history() {
       return history;
     },
-    /** Para depurar: el contexto que ve el modelo y el ejecutor de herramientas. */
+    /** For debugging: the context the model sees and the tool runner. */
     get conversacion() {
       return conversacion;
     },
@@ -1997,7 +1996,7 @@ if (import.meta.env.DEV) {
       return future;
     },
     acciones,
-    abrirArchivos,   // mismo camino que «Abrir» y el arrastre: sirve para probarlo
+    abrirArchivos,   // same path as "Open" and drag-and-drop: useful for testing
     stems: stemPlayer,
     costeGpu,
     nuevoProyecto: (nombre: string, bpm: number, lengthBars: number) =>
@@ -2006,9 +2005,9 @@ if (import.meta.env.DEV) {
 }
 
 /**
- * Los .sf2 del proyecto, para dárselos al motor. Se piden al servidor porque el
- * fichero vive en `proyectos/<slug>/` y no en memoria: así el proyecto sigue
- * siendo portable y suena igual en otra máquina.
+ * The project's .sf2 files, to hand them to the engine. They are requested from the
+ * server because the file lives in `proyectos/<slug>/` and not in memory: that way the
+ * project remains portable and sounds the same on another machine.
  */
 async function cargarSoundfontsDelProyecto(
   view: Project,
@@ -2030,13 +2029,13 @@ async function cargarSoundfontsDelProyecto(
   return mapa;
 }
 
-/** El SoundFont General MIDI, una vez por sesión (son ~30 MB). */
+/** The General MIDI SoundFont, once per session (~30 MB). */
 let gmEnMemoria: { ruta: string; sf: { uuid: Uint8Array; name: string; bytes: ArrayBuffer } } | null = null;
 
 /**
- * El SoundFont General MIDI de `workspace/catalogo/gm/`, si alguna pista lo usa
- * (una pista MIDI con `instrument.program`). Sin fichero, esas pistas suenan con
- * los instrumentos de openDAW, como antes.
+ * The General MIDI SoundFont from `workspace/catalogo/gm/`, if any track uses it (a MIDI
+ * track with `instrument.program`). Without the file, those tracks sound with openDAW's
+ * instruments, as before.
  */
 async function cargarGm(view: Project): Promise<{ uuid: Uint8Array; name: string; bytes: ArrayBuffer } | null> {
   const loUsa = view.tracks.some(
@@ -2065,7 +2064,7 @@ async function cargarGm(view: Project): Promise<{ uuid: Uint8Array; name: string
   }
 }
 
-/** 16 bytes estables a partir de la ruta: el adaptador y el motor deben coincidir. */
+/** 16 stable bytes from the path: the adapter and the engine must match. */
 function uuidDeSoundfont(texto: string): Uint8Array {
   let h1 = 0x811c9dc5;
   let h2 = 0x01000193;

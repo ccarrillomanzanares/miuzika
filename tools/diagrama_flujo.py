@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Genera docs/flujo-aplicacion.html: dos diagramas de flujo con calles.
+"""Generates docs/flujo-aplicacion.html: two flowcharts with lanes.
 
-Nada de esto se ejecuta en la app: es un generador de documentación. Dibuja SVG a
-partir de listas de nodos para que las coordenadas no se inventen a mano.
+None of this runs in the app: it is a documentation generator. It draws SVG from
+lists of nodes so that coordinates are not invented by hand.
 """
 import html
 import os
 
-W = 980                 # ancho del lienzo
-CALLE_W = 214           # ancho de cada calle (se recalcula por flujo)
+W = 980                 # canvas width
+CALLE_W = 214           # width of each lane (recomputed per flow)
 GAP = 16
 X0 = 16
 ALTO_CAB = 30
@@ -17,9 +17,9 @@ FUENTE = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
 MONO = "ui-monospace, SFMono-Regular, Menlo, monospace"
 
 def repartir(n_calles, margen=16):
-    """Reparte el ancho del lienzo entre las calles que haya.
+    """Distributes the canvas width among however many lanes there are.
 
-    `margen` mayor deja sitio al bucle dibujado por el lado izquierdo.
+    A larger `margen` leaves room for the loop drawn on the left side.
     """
     global CALLE_W, CENTRO, X0
     X0 = margen
@@ -32,7 +32,7 @@ def calle_x(i):
 
 CENTRO = [calle_x(i) + CALLE_W / 2 for i in range(4)]
 
-# id del marcador de flecha; cambia por SVG para no duplicar ids en el documento
+# arrow marker id; changes per SVG so ids are not duplicated in the document
 MARCA = ["flecha"]
 
 
@@ -52,15 +52,15 @@ def envolver(texto, maximo):
 
 
 def nodo(nid, calle, tipo, titulo, sub, y, *, alto_extra=0, no=None, no_y=None):
-    """Un nodo del diagrama. tipo: proceso | decision | datos | extremo.
+    """A diagram node. tipo: proceso | decision | datos | extremo.
 
-    La rama «no» de una decisión se escribe DENTRO de la forma: una flecha lateral
-    se metía en la calle de al lado y parecía que iba a otro actor.
+    The "no" branch of a decision is written INSIDE the shape: a side arrow
+    ran into the next lane and looked as if it went to another actor.
     """
-    # el rombo estrecha por los lados: su texto tiene que ser más corto que el de
-    # una caja, o se sale por las esquinas
-    # ~5,1 px por carácter a 9,4 px: el límite sale del ancho disponible. El óvalo
-    # redondea las esquinas y el paralelogramo está inclinado: los dos pierden ancho.
+    # the diamond narrows at the sides: its text has to be shorter than a
+    # box's, or it spills out through the corners
+    # ~5.1 px per character at 9.4 px: the limit comes from the available width. The oval
+    # rounds the corners and the parallelogram is slanted: both lose width.
     util = CALLE_W - {"extremo": 58, "datos": 34}.get(tipo, 16)
     max_sub = max(14, int(util / 5.45))
     max_tit = max(14, int(max_sub * (0.72 if tipo == "decision" else 0.86)))
@@ -84,7 +84,7 @@ def dibujar_nodo(n, idx):
     cx = x + CALLE_W / 2
     clase = {"proceso": "p", "decision": "d", "datos": "b", "extremo": "e"}[n["tipo"]]
     if n["tipo"] == "decision":
-        # rombo: 8 px de margen dentro de la calle
+        # diamond: 8 px margin inside the lane
         m = 10
         pts = f"{cx},{y} {x + CALLE_W - m},{y + h / 2} {cx},{y + h} {x + m},{y + h / 2}"
         forma = f'<polygon class="forma d" points="{pts}"/>'
@@ -108,14 +108,14 @@ def dibujar_nodo(n, idx):
     for i, l in enumerate(n["sl"]):
         textos += f'<tspan x="{cx}" dy="{0 if i == 0 else 10}">{html.escape(l)}</tspan>'
     textos += "</text>"
-    # rama «no», dentro de la forma
+    # "no" branch, inside the shape
     if n.get("al"):
         yn = ys + 12 * len(n["sl"]) + 2 if n["sl"] else ys + 12
         textos += f'<text class="sn" x="{cx}" y="{yn}" text-anchor="middle">'
         for i, l in enumerate(n["al"]):
             textos += f'<tspan x="{cx}" dy="{0 if i == 0 else 10}">{html.escape(l)}</tspan>'
         textos += "</text>"
-    # número del paso
+    # step number
     num = f'<text class="n" x="{x + 9}" y="{y + 12}">{idx}</text>'
     return forma + textos + num
 
@@ -128,8 +128,8 @@ def dibujar_conector(a, b, clase="f", etiqueta=None):
     if abs(ax - bx) < 1:
         d = f"M {ax} {ay} V {by - 2}"
     else:
-        # el codo va a la mitad del hueco real: con un tope fijo, dos nodos casi a
-        # la misma altura dejaban la flecha pasando por debajo del destino
+        # the elbow goes to the middle of the actual gap: with a fixed cap, two nodes almost at
+        # the same height left the arrow passing below the destination
         medio = ay + (by - ay) / 2
         d = f"M {ax} {ay} V {medio} H {bx} V {by - 2}"
     etq = ""
@@ -139,7 +139,7 @@ def dibujar_conector(a, b, clase="f", etiqueta=None):
 
 
 def dibujar_flujo(titulo, subtitulo, calles, nodos, notas):
-    """Devuelve el SVG completo y la tabla de detalle."""
+    """Returns the complete SVG and the detail table."""
     alto = (nodos[-1]["y"] + nodos[-1]["alto"] + 26) if nodos else 200
     partes = [
         f'<svg class="diag" viewBox="0 0 {W} {alto}" width="100%" preserveAspectRatio="xMinYMin meet" role="img" '
@@ -147,14 +147,14 @@ def dibujar_flujo(titulo, subtitulo, calles, nodos, notas):
         f'<defs><marker id="{MARCA[0]}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">'
         '<path d="M0,0 L8,4 L0,8 z" fill="var(--doc-muted)"/></marker></defs>',
     ]
-    # calles
+    # lanes
     for i, nombre in enumerate(calles):
         x = calle_x(i)
         partes.append(
             f'<rect class="calle" x="{x}" y="{ALTO_CAB}" width="{CALLE_W}" height="{alto - ALTO_CAB}" rx="8"/>'
         )
         partes.append(f'<text class="cc" x="{x + CALLE_W / 2}" y="{ALTO_CAB - 10}" text-anchor="middle">{html.escape(nombre)}</text>')
-    # conectores primero (debajo de las cajas no: van entre medias, el SVG respeta el orden)
+    # connectors first (not below the boxes: they go in between, SVG respects the order)
     for i in range(len(nodos) - 1):
         partes.append(dibujar_conector(nodos[i], nodos[i + 1]))
     for i, n in enumerate(nodos, start=1):
@@ -167,14 +167,14 @@ def dibujar_flujo(titulo, subtitulo, calles, nodos, notas):
         for i, n in enumerate(nodos, start=1)
     )
     tabla = (
-        '<table><thead><tr><th>#</th><th>paso</th><th>qué hace exactamente</th>'
-        f'<th>si falla / rama</th></tr></thead><tbody>{filas}</tbody></table>'
+        '<table><thead><tr><th>#</th><th>step</th><th>what it does exactly</th>'
+        f'<th>if it fails / branch</th></tr></thead><tbody>{filas}</tbody></table>'
     )
     return "".join(partes), tabla
 
 
 def dibujar_bucle(desde, hasta, etiqueta):
-    """Vuelta del bucle por el margen izquierdo (el bucle del turno)."""
+    """Loop return along the left margin (the turn's loop)."""
     yd = desde["y"] + desde["alto"] / 2
     yh = hasta["y"] + hasta["alto"] / 2
     xd = calle_x(desde["calle"])
@@ -182,23 +182,23 @@ def dibujar_bucle(desde, hasta, etiqueta):
     carril = X0 / 2
     d = f"M {xd} {yd} H {carril} V {yh} H {xh - 2}"
     medio = (yd + yh) / 2
-    # La etiqueta va en horizontal sobre la calle 0, que en ese tramo está vacía:
-    # rotada contra el margen se cortaba y no se leía.
+    # The label goes horizontally over lane 0, which is empty in that stretch:
+    # rotated against the margin it was cut off and unreadable.
     x_etq = calle_x(0) + 6
     texto = (
         f'<text class="etq" x="{x_etq}" y="{medio}">{html.escape(etiqueta)}</text>'
-        f'<text class="etq2" x="{x_etq}" y="{medio + 11}">vuelve a la llamada al modelo</text>'
+        f'<text class="etq2" x="{x_etq}" y="{medio + 11}">back to the model call</text>'
     )
     return f'<path class="f bucle" d="{d}" marker-end="url(#{MARCA[0]})"/>' + texto
 
 
-# ====================================================================== datos
+# ====================================================================== data
 CALLE_NAV, CALLE_SRV, CALLE_PY = 1, 2, 3
 PERSONA = 0
 
 
 def construir(calles, pasos):
-    """pasos: (calle, tipo, titulo, sub, no) -> lista de nodos con y calculada."""
+    """pasos: (lane, type, title, sub, no) -> list of nodes with computed y."""
     nodos, y = [], ALTO_CAB + 26
     for calle, tipo, titulo, sub, no in pasos:
         n = nodo(len(nodos) + 1, calle, tipo, titulo, sub, y, no=no)
@@ -208,100 +208,100 @@ def construir(calles, pasos):
 
 
 FLUJO1 = [
-    (PERSONA, "extremo", "Abres localhost:5173", "Chrome. La app sólo escucha en [::1]", None),
-    (CALLE_SRV, "proceso", "Vite sirve web/ y monta /api/*", "25 endpoints · COOP/COEP · proxy /api/llm", None),
-    (CALLE_NAV, "proceso", "boot()", "migra un proyecto viejo de localStorage · lienzo vacío · prompt con manifiesto", None),
-    (CALLE_NAV, "decision", "¿se abre algún proyecto solo?", "decisión de producto: no", "nada abierto"),
-    (PERSONA, "proceso", "pulsa «Proyectos»", "o arrastra un WAV / pide una pieza al agente", None),
-    (CALLE_SRV, "datos", "GET /api/proyectos", "lista carpetas con proyecto.json: nombre, BPM, compases, pistas, guardadoEn, bytes", None),
-    (PERSONA, "proceso", "elige uno", "diálogo con fecha y tamaño", None),
-    (CALLE_SRV, "datos", "GET /api/proyectos?path=", "maestro entero (sin el recorte de 20 KB; tope 64 MB)", None),
-    (CALLE_NAV, "decision", "¿el JSON es de miuzika?", "formato + schemaVersion 1", "aviso, no se abre"),
-    (CALLE_NAV, "proceso", "interpretarProyectoEnDisco()", "→ Project en memoria; cada asset conserva su ruta relativa", None),
-    (CALLE_NAV, "proceso", "hidratarAssets()", "4 assets a la vez; por cada uno pide /api/picos (caché por mtime)", None),
-    (CALLE_SRV, "proceso", "/api/picos + /api/audio", "picos calculados con un proceso Python; el WAV se sirve con Range", None),
-    (CALLE_NAV, "decision", "¿el WAV dura más de 30 s?", "≤30 s se decodifica", "streaming por Range"),
-    (CALLE_NAV, "proceso", "projectToOpenDaw()", "IR en beats → pulsos (960/negra); .sf2 por un gestor propio, no el de la librería", None),
-    (CALLE_NAV, "proceso", "▶ play", "engine.position/960 → onTick: playhead + stems sincronizados (corrige deriva >120 ms)", None),
-    (CALLE_NAV, "decision", "¿beat ≥ fin del proyecto?", "lengthBars × compás", "stop()"),
-    (CALLE_NAV, "proceso", "editar", "arrastrar/mover/borrar clip, mute, solo, piano roll → applyOps() transaccional", None),
-    (CALLE_NAV, "proceso", "autoguardado · 1,5 s", "programarGuardado() tras el último cambio; Ctrl+S lo fuerza", None),
-    (CALLE_SRV, "datos", "POST /api/proyectos", "valida {formato, schemaVersion:1} antes de escribir; guardadoEn delata quién", None),
-    (CALLE_SRV, "extremo", "proyecto en disco", "lo que suena es lo que hay en la carpeta", None),
+    (PERSONA, "extremo", "You open localhost:5173", "Chrome. The app only listens on [::1]", None),
+    (CALLE_SRV, "proceso", "Vite serves web/ and mounts /api/*", "25 endpoints · COOP/COEP · /api/llm proxy", None),
+    (CALLE_NAV, "proceso", "boot()", "migrates an old project from localStorage · empty canvas · prompt with manifest", None),
+    (CALLE_NAV, "decision", "does any project open by itself?", "product decision: no", "nothing open"),
+    (PERSONA, "proceso", "presses “Proyectos”", "or drags a WAV / asks the agent for a piece", None),
+    (CALLE_SRV, "datos", "GET /api/proyectos", "lists folders with proyecto.json: name, BPM, bars, tracks, guardadoEn, bytes", None),
+    (PERSONA, "proceso", "chooses one", "dialog with date and size", None),
+    (CALLE_SRV, "datos", "GET /api/proyectos?path=", "whole master (without the 20 KB cut; 64 MB cap)", None),
+    (CALLE_NAV, "decision", "is the JSON from miuzika?", "formato + schemaVersion 1", "warning, it is not opened"),
+    (CALLE_NAV, "proceso", "interpretarProyectoEnDisco()", "→ Project in memory; each asset keeps its relative path", None),
+    (CALLE_NAV, "proceso", "hidratarAssets()", "4 assets at a time; for each one it requests /api/picos (cache by mtime)", None),
+    (CALLE_SRV, "proceso", "/api/picos + /api/audio", "peaks computed with a Python process; the WAV is served with Range", None),
+    (CALLE_NAV, "decision", "does the WAV last more than 30 s?", "≤30 s is decoded", "Range streaming"),
+    (CALLE_NAV, "proceso", "projectToOpenDaw()", "IR in beats → pulses (960/quarter); .sf2 through its own manager, not the library's", None),
+    (CALLE_NAV, "proceso", "▶ play", "engine.position/960 → onTick: playhead + synchronized stems (corrects drift >120 ms)", None),
+    (CALLE_NAV, "decision", "beat ≥ end of project?", "lengthBars × bar", "stop()"),
+    (CALLE_NAV, "proceso", "edit", "drag/move/delete clip, mute, solo, piano roll → transactional applyOps()", None),
+    (CALLE_NAV, "proceso", "autosave · 1.5 s", "programarGuardado() after the last change; Ctrl+S forces it", None),
+    (CALLE_SRV, "datos", "POST /api/proyectos", "validates {formato, schemaVersion:1} before writing; guardadoEn reveals who", None),
+    (CALLE_SRV, "extremo", "project on disk", "what sounds is what is in the folder", None),
 ]
 
 FLUJO2 = [
-    (PERSONA, "extremo", "escribes y pulsas Enter", "chat.ts → onSend → responderAlUsuario()", None),
-    (CALLE_NAV, "decision", "¿hay un turno en marcha?", "un solo turno a la vez", "sí: aviso, no arranca"),
-    (CALLE_SRV, "proceso", "GET /api/manifiesto", "regenera firmas con ast: 8.949 caracteres, 7 módulos", None),
-    (CALLE_NAV, "proceso", "prompt de sistema", "literal con huella + carpeta + manifiesto + agente.json (11.939 car.)", None),
-    (CALLE_NAV, "proceso", "POST /api/llm (SSE)", "180 s de tope · 32.768 tokens · progreso cada 700 ms", None),
-    (CALLE_SRV, "proceso", "proxy + clave del .env", "la clave no entra en el bundle del cliente", None),
-    (CALLE_NAV, "decision", "¿finish_reason?", "load · sin_salida · vacío · stop", "los tres se reintentan"),
-    (CALLE_NAV, "decision", "¿pide herramientas?", "tool_calls en orden", "no: respuesta final"),
-    (CALLE_NAV, "proceso", "ejecutarHerramienta()", "17 herramientas · timeout propio · AbortSignal del turno", None),
-    (CALLE_NAV, "decision", "¿la herramienta toca el proyecto?", "7 de las 17", "no: al servidor"),
-    (CALLE_NAV, "proceso", "op en la pestaña", "entra en el historial, se deshace con Ctrl+Z, la pestaña es la única que escribe el maestro", None),
-    (CALLE_SRV, "proceso", "puertas", "409 si redefine el motor o es patch*.py · 413 si >8 MB · 409 si numpy en Lambda", None),
-    (CALLE_SRV, "proceso", "run/python | run/lambda", "cwd = carpeta del proyecto · PYTHONPATH = codigo/ · GPU: scp + ssh", None),
-    (CALLE_PY, "proceso", "ejecuta y escribe salida/", "devuelve escritos: sólo lo que cambió en el proyecto", None),
-    (CALLE_NAV, "proceso", "resultado → modelo", ">4.000 caracteres: cabeza + cola y el resto a _salidas/", None),
-    (CALLE_NAV, "decision", "¿quedan pasos?", "máximo 12", "corta el turno"),
-    (CALLE_NAV, "proceso", "respuesta final", "burbuja en el chat + línea meta (pasos, herramientas, ms, modelo)", None),
-    (CALLE_NAV, "datos", "agregarTurno() → agente.json", "8 turnos íntegros + resumen rodante de 1.800 caracteres", None),
-    (CALLE_NAV, "extremo", "turno cerrado", "el disco es la memoria; la siguiente petición lo lee de ahí", None),
+    (PERSONA, "extremo", "you type and press Enter", "chat.ts → onSend → responderAlUsuario()", None),
+    (CALLE_NAV, "decision", "is a turn in progress?", "only one turn at a time", "yes: warning, it does not start"),
+    (CALLE_SRV, "proceso", "GET /api/manifiesto", "regenerates signatures with ast: 8,949 characters, 7 modules", None),
+    (CALLE_NAV, "proceso", "system prompt", "literal with fingerprint + folder + manifest + agente.json (11,939 chars)", None),
+    (CALLE_NAV, "proceso", "POST /api/llm (SSE)", "180 s cap · 32,768 tokens · progress every 700 ms", None),
+    (CALLE_SRV, "proceso", "proxy + key from .env", "the key does not enter the client bundle", None),
+    (CALLE_NAV, "decision", "finish_reason?", "load · sin_salida · empty · stop", "all three are retried"),
+    (CALLE_NAV, "decision", "does it request tools?", "tool_calls in order", "no: final answer"),
+    (CALLE_NAV, "proceso", "ejecutarHerramienta()", "17 tools · own timeout · turn's AbortSignal", None),
+    (CALLE_NAV, "decision", "does the tool touch the project?", "7 of the 17", "no: to the server"),
+    (CALLE_NAV, "proceso", "op in the tab", "enters the history, undone with Ctrl+Z, the tab is the only one that writes the master", None),
+    (CALLE_SRV, "proceso", "gates", "409 if it redefines the engine or is patch*.py · 413 if >8 MB · 409 if numpy on Lambda", None),
+    (CALLE_SRV, "proceso", "run/python | run/lambda", "cwd = project folder · PYTHONPATH = codigo/ · GPU: scp + ssh", None),
+    (CALLE_PY, "proceso", "runs and writes salida/", "returns escritos: only what changed in the project", None),
+    (CALLE_NAV, "proceso", "result → model", ">4,000 characters: head + tail and the rest to _salidas/", None),
+    (CALLE_NAV, "decision", "are there steps left?", "maximum 12", "cuts the turn"),
+    (CALLE_NAV, "proceso", "final answer", "bubble in the chat + meta line (steps, tools, ms, model)", None),
+    (CALLE_NAV, "datos", "agregarTurno() → agente.json", "8 full turns + rolling summary of 1,800 characters", None),
+    (CALLE_NAV, "extremo", "turn closed", "the disk is the memory; the next request reads it from there", None),
 ]
 
 NOTAS1 = {
-    1: "Sin servidor de dev no hay app: /api/* son middlewares de Vite.",
-    2: "Si Vite se reinicia, la pestaña sigue con el bundle viejo; /api/build lo avisa y ofrece recargar.",
-    3: "Migra un proyecto viejo de localStorage y no abre nada solo: el lienzo vacío lo explica.",
-    4: "Antes abría el último proyecto y sustituía lo que estabas mirando (en uno vacío, parecía fallo).",
-    5: "También se puede pedir una pieza al agente, con sus 17 herramientas.",
-    6: "Sólo lista carpetas que tienen proyecto.json; las demás no existen para la app.",
-    7: "Enseña fecha, tamaño del maestro y número de pistas antes de abrir.",
-    8: "400 si el formato no es miuzika-proyecto o schemaVersion no es 1.",
-    9: "Un .json exportado a mano también vale (Project suelto).",
-    10: "Cada asset conserva su ruta relativa a la carpeta del proyecto.",
-    11: "Cuatro a la vez. Sin ruta: «faltan N WAV» y esas pistas suenan vacías.",
-    12: "Primera apertura en frío: 16,8 s con 21 pistas / 11 WAV. Con la caché: 0,5 s.",
-    13: "Por encima de 30 s no se decodifica nunca: 10 stems de 6 min ocupan 20 MB, no 1,3 GB.",
-    14: "El engine WASM se instala una vez por página; Playfield usa /drums/*.wav.",
-    15: "Un clic sintético no arranca el audio: el AudioContext necesita gesto de usuario.",
-    16: "El final lo decide lengthBars, no lo que dure el último fichero.",
-    17: "Todo pasa por applyOps(): transaccional, con historial de 8 pasos.",
-    18: "1,5 s tras el último cambio; Ctrl+S lo escribe ya y lo cuenta en el chat.",
-    19: "Si ready=false no se guarda y el lienzo queda en blanco: se diagnostica leyendo el fichero.",
-    20: "Lo que suena es exactamente lo que hay en la carpeta.",
+    1: "Without a dev server there is no app: /api/* are Vite middlewares.",
+    2: "If Vite restarts, the tab keeps the old bundle; /api/build warns about it and offers to reload.",
+    3: "Migrates an old project from localStorage and opens nothing by itself: the empty canvas explains it.",
+    4: "It used to open the last project and replace what you were looking at (on an empty one, it looked like a bug).",
+    5: "You can also ask the agent for a piece, with its 17 tools.",
+    6: "It only lists folders that have proyecto.json; the others do not exist for the app.",
+    7: "Shows the date, the master's size and the number of tracks before opening.",
+    8: "400 if the format is not miuzika-proyecto or schemaVersion is not 1.",
+    9: "A hand-exported .json also works (standalone Project).",
+    10: "Each asset keeps its path relative to the project folder.",
+    11: "Four at a time. Without a path: “missing N WAVs” and those tracks sound empty.",
+    12: "First cold opening: 16.8 s with 21 tracks / 11 WAVs. With the cache: 0.5 s.",
+    13: "Above 30 s it is never decoded: 10 stems of 6 min take 20 MB, not 1.3 GB.",
+    14: "The WASM engine is installed once per page; Playfield uses /drums/*.wav.",
+    15: "A synthetic click does not start the audio: the AudioContext needs a user gesture.",
+    16: "The end is decided by lengthBars, not by how long the last file lasts.",
+    17: "Everything goes through applyOps(): transactional, with an 8-step history.",
+    18: "1.5 s after the last change; Ctrl+S writes it immediately and counts it in the chat.",
+    19: "If ready=false it is not saved and the canvas stays blank: it is diagnosed by reading the file.",
+    20: "What sounds is exactly what is in the folder.",
 }
 
 NOTAS2 = {
-    1: "El chat arranca vacío: su memoria es agente.json, del proyecto.",
-    2: "Un solo turno a la vez; el latido pinta «pensando · N s · N tokens».",
-    3: "Si /api/manifiesto falla, el turno sigue con el prompt básico.",
-    4: "Pasa de 2.890 a 11.939 caracteres: literal + carpeta + manifiesto + memoria.",
-    5: "load = proveedor cargando (0 tokens en 250 ms), no falta de contexto.",
-    6: "La clave vive en el .env y nunca entra en el bundle del cliente.",
-    7: "sin_salida se repite sin razonar; vacío: 5 reintentos (1-2-4-8-16 s) + 1 reanudación.",
-    8: "Si no pide ninguna herramienta, esa respuesta es la final del turno.",
-    9: "Una por una, en orden, con timeout propio y el AbortSignal del turno.",
-    10: "Las 7 que cambian el proyecto lo hacen en la pestaña: es la dueña del maestro.",
-    11: "Entra en el historial, se deshace con Ctrl+Z y se guarda sola.",
-    12: "El smoke importa el motor y renderiza un bombo: si falla, el cambio se revierte.",
-    13: "Sin destino explícito se usa el selector del panel; el 409 evita pagar GPU por CPU.",
-    14: "Escribir en codigo/ regenera el manifiesto con ast, sin ejecutar nada.",
-    15: "Por encima de 4.000 caracteres: cabeza + cola y el resto a _salidas/.",
-    16: "Cortes: 3 fallos idénticos · 3 escrituras sin ejecutar · 12 pasos.",
-    17: "Burbuja + línea meta: pasos, herramientas, tiempo y modelo.",
-    18: "8 turnos íntegros y un resumen rodante de 1.800 caracteres.",
-    19: "El disco es la memoria del proyecto: la siguiente petición lo lee de ahí.",
+    1: "The chat starts empty: its memory is agente.json, from the project.",
+    2: "Only one turn at a time; the heartbeat displays “thinking · N s · N tokens”.",
+    3: "If /api/manifiesto fails, the turn continues with the basic prompt.",
+    4: "It goes from 2,890 to 11,939 characters: literal + folder + manifest + memory.",
+    5: "load = provider loading (0 tokens in 250 ms), not a lack of context.",
+    6: "The key lives in the .env and never enters the client bundle.",
+    7: "sin_salida repeats without reasoning; empty: 5 retries (1-2-4-8-16 s) + 1 resumption.",
+    8: "If it does not request any tool, that response is the turn's final one.",
+    9: "One by one, in order, with its own timeout and the turn's AbortSignal.",
+    10: "The 7 that change the project do it in the tab: it owns the master.",
+    11: "Enters the history, is undone with Ctrl+Z and saves itself.",
+    12: "Smoke imports the engine and renders a kick: if it fails, the change is reverted.",
+    13: "Without an explicit destination the panel selector is used; the 409 avoids paying for GPU at CPU speed.",
+    14: "Writing in codigo/ regenerates the manifest with ast, without executing anything.",
+    15: "Above 4,000 characters: head + tail and the rest to _salidas/.",
+    16: "Cuts: 3 identical failures · 3 writes without running · 12 steps.",
+    17: "Bubble + meta line: steps, tools, time and model.",
+    18: "8 full turns and a rolling summary of 1,800 characters.",
+    19: "The disk is the project's memory: the next request reads it from there.",
 }
 
 
 CSS = """
-  /* Paleta propia, con prefijo --doc-: este fichero se abre con doble clic, sin el
-     tema de la app. Con var(--doc-card) a secas, fuera de Hermes el fill es inválido y
-     las cajas salían NEGRAS con el texto negro dentro. */
+  /* Own palette, with a --doc- prefix: this file is opened by double click, without the
+     app's theme. With plain var(--doc-card), outside Hermes the fill is invalid and
+     the boxes came out BLACK with the text black inside. */
   :root{
     --doc-bg:#0c0e13; --doc-fg:#e6e8ee; --doc-muted:#8b91a1;
     --doc-accent:#ff5f6d; --doc-border:#2a2f3d; --doc-card:#141822;
@@ -354,81 +354,81 @@ CSS = """
 
 
 def main():
-    # El flujo 1 no tiene pasos en el motor: el Python lo lanza el servidor y
-    # openDAW corre en el navegador. Tres calles, más anchas y legibles.
-    calles1 = ["persona", "navegador · web/src", "servidor · vite / lambda"]
-    calles2 = ["persona", "navegador · bucle y herramientas", "servidor · puertas y ejecución", "motor · python / gpu"]
+    # Flow 1 has no steps in the engine: Python is launched by the server and
+    # openDAW runs in the browser. Three lanes, wider and more legible.
+    calles1 = ["person", "browser · web/src", "server · vite / lambda"]
+    calles2 = ["person", "browser · turn loop and tools", "server · gates and execution", "engine · python / gpu"]
 
     repartir(len(calles1))
     nodos1 = construir(calles1, FLUJO1)
-    repartir(len(calles2), 52)   # 26 px de carril para el bucle
+    repartir(len(calles2), 52)   # 26 px lane for the loop
     nodos2 = construir(calles2, FLUJO2)
 
     MARCA[0] = "flecha1"
-    svg1, tabla1 = dibujar_flujo("Flujo 1 · abrir y tocar", "", calles1, nodos1, NOTAS1)
+    svg1, tabla1 = dibujar_flujo("Flow 1 · open and play", "", calles1, nodos1, NOTAS1)
     MARCA[0] = "flecha2"
-    svg2, tabla2 = dibujar_flujo("Flujo 2 · un turno del agente", "", calles2, nodos2, NOTAS2)
-    # bucle del turno: del paso 16 (¿quedan pasos?) al 5 (POST /api/llm)
-    bucle = dibujar_bucle(nodos2[15], nodos2[4], "bucle: hasta 12 pasos")
+    svg2, tabla2 = dibujar_flujo("Flow 2 · an agent turn", "", calles2, nodos2, NOTAS2)
+    # turn loop: from step 16 (are there steps left?) to 5 (POST /api/llm)
+    bucle = dibujar_bucle(nodos2[15], nodos2[4], "loop: up to 12 steps")
     svg2 = svg2.replace("</svg>", bucle + "</svg>")
 
     doc = f"""<!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>miuzika · diagramas de flujo</title>
+<title>miuzika · flowcharts</title>
 <style>{CSS.replace("__FUENTE__", FUENTE).replace("__MONO__", MONO)}</style>
 </head>
 <body>
 <div class="wrap">
 
   <div>
-    <h1>miuzika · diagramas de flujo</h1>
-    <p class="lead">Notación: óvalo = inicio o fin · rectángulo = proceso · rombo = decisión · paralelogramo punteado = dato o llamada HTTP.
-    Cada calle es un actor: lo que ocurre en una calle no lo puede hacer otra.</p>
+    <h1>miuzika · flowcharts</h1>
+    <p class="lead">Notation: oval = start or end · rectangle = process · diamond = decision · dotted parallelogram = data or HTTP call.
+    Each lane is an actor: what happens in one lane cannot be done by another.</p>
     <div class="leyenda" style="margin-top:9px">
-      <span class="muestra"><i class="oval"></i> inicio / fin</span>
-      <span class="muestra"><i></i> proceso</span>
-      <span class="muestra"><i class="rombo"></i> decisión</span>
-      <span class="muestra"><i class="datos"></i> dato / HTTP</span>
-      <span><b>n</b> = número del paso en la tabla de abajo</span>
+      <span class="muestra"><i class="oval"></i> start / end</span>
+      <span class="muestra"><i></i> process</span>
+      <span class="muestra"><i class="rombo"></i> decision</span>
+      <span class="muestra"><i class="datos"></i> data / HTTP</span>
+      <span><b>n</b> = step number in the table below</span>
     </div>
   </div>
 
   <div class="seccion">
-    <h2>Flujo 1 · abrir y tocar</h2>
-    <p class="lead">Del disco a los altavoces: {len(nodos1)} pasos. Lo que se rompe aquí es un WAV que falta, un .sf2 que no carga o un proyecto vacío.</p>
+    <h2>Flow 1 · open and play</h2>
+    <p class="lead">From disk to speakers: {len(nodos1)} steps. What breaks here is a missing WAV, a .sf2 that will not load or an empty project.</p>
     {svg1}
     {tabla1}
-    <div class="nota">Tiempos medidos: 21 pistas / 11 WAV abren en 16,8 s en frío y 0,5 s con la caché de picos.
-    Autoguardado 1,5 s tras el último cambio.</div>
+    <div class="nota">Measured times: 21 tracks / 11 WAVs open in 16.8 s cold and 0.5 s with the peak cache.
+    Autosave 1.5 s after the last change.</div>
   </div>
 
   <div class="seccion">
-    <h2>Flujo 2 · un turno del agente</h2>
-    <p class="lead">{len(nodos2)} pasos y un bucle. Aquí están las puertas que impiden que el modelo rompa el motor y los cortes que impiden que un turno se coma la sesión.</p>
+    <h2>Flow 2 · an agent turn</h2>
+    <p class="lead">{len(nodos2)} steps and a loop. Here are the gates that keep the model from breaking the engine and the cuts that keep a turn from eating the session.</p>
     {svg2}
     {tabla2}
-    <div class="nota">Cortes del turno: 3 fallos idénticos seguidos · 3 escrituras sin ejecutar · 12 pasos.
-    Un vacío se reintenta 5 veces (1-2-4-8-16 s) y luego una reanudación automática.</div>
+    <div class="nota">Turn cuts: 3 identical failures in a row · 3 writes without running · 12 steps.
+    An empty response is retried 5 times (1-2-4-8-16 s) and then an automatic resumption.</div>
   </div>
 
   <div class="nota" style="border:0;padding:0">
-    Lo que no está en ningún flujo porque no existe: buses, automatización, medidores en vivo, exportación de stems o de proyecto.
-    Arquitectura y deuda: <code>docs/ARCHITECTURE.md</code> · capas: <code>docs/esquema-arquitectura.html</code>.
+    What is not in any flow because it does not exist: buses, automation, live meters, stem or project export.
+    Architecture and debt: <code>docs/ARCHITECTURE.md</code> · layers: <code>docs/esquema-arquitectura.html</code>.
   </div>
 
 </div>
 </body>
 </html>
 """
-    # el flujo 2 lleva el bucle dibujado dentro de su SVG
+    # flow 2 has the loop drawn inside its SVG
     salida = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "flujo-aplicacion.html")
     with open(salida, "w", encoding="utf-8", newline="") as f:
         f.write(doc)
-    print("escrito", salida, len(doc), "chars")
-    print("flujo1:", len(nodos1), "nodos ·", len(tabla1), "chars de tabla")
-    print("flujo2:", len(nodos2), "nodos")
+    print("written", salida, len(doc), "chars")
+    print("flujo1:", len(nodos1), "nodes ·", len(tabla1), "chars of table")
+    print("flujo2:", len(nodos2), "nodes")
 
 
 if __name__ == "__main__":

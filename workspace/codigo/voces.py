@@ -1,26 +1,26 @@
-"""Catálogo de voces del motor, leído del propio `instruments.py`.
+"""Catalogue of engine voices, read from `instruments.py` itself.
 
-Una **voz** es una función pública de `instruments.py` que devuelve un array numpy
-mono y cuyos parámetros son números o listas de números con valor por defecto.
-Sin docstring no hay etiqueta ni rango, pero la voz se lista igual (marcada como
-`documentada: False`): lo que no se hace nunca es inventar.
+A **voice** is a public function in `instruments.py` that returns a mono numpy
+array and whose parameters are numbers or lists of numbers with a default value.
+Without a docstring there is no label or range, but the voice is listed anyway
+(marked as `documentada: False`): what is never done is inventing.
 
-Formato del docstring (la primera línea es la descripción):
+Docstring format (the first line is the description):
 
     def cowbell(vel=1.0, pitch=1.0, seed=0):
-        \"\"\"Cencerro metálico de dos tonos.
+        \"\"\"Two-tone metallic cowbell.
         familia: percusión
-        vel: 0.05..1 Intensidad
-        pitch: 0.5..2.5 Tono (x)
-        seed: 0..9999 Semilla
+        vel: 0.05..1 Intensity
+        pitch: 0.5..2.5 Pitch (x)
+        seed: 0..9999 Seed
         \"\"\"
 
-Para listas de notas: `midis: 21..108[8] Notas` (el `[8]` es el máximo de notas).
+For note lists: `midis: 21..108[8] Notes` (the `[8]` is the maximum number of notes).
 
-Uso:
-    python codigo/voces.py                  # catálogo en JSON
-    python codigo/voces.py --medir          # además mide cada voz (renderiza)
-    python codigo/voces.py --json ruta.json # escribe el catálogo en un fichero
+Usage:
+    python codigo/voces.py                  # catalogue as JSON
+    python codigo/voces.py --medir          # also measures each voice (renders)
+    python codigo/voces.py --json ruta.json # writes the catalogue to a file
 """
 
 import ast
@@ -40,12 +40,12 @@ sys.path.insert(0, AQUI)
 import dsp  # noqa: E402
 import instruments  # noqa: E402
 
-# Voces que necesitan material de entrada (un patrón de notas, un sonido de
-# origen o sílabas) y por tanto no se pueden describir con números sueltos.
+# Voices that need input material (a note pattern, a source sound or syllables)
+# and therefore cannot be described with plain numbers.
 EXCLUIR = {
-    "guitar_loop": "pide un patrón de notas (partitura, no parámetros)",
-    "reverse_swell": "pide un sonido de origen",
-    "voice": "pide sílabas",
+    "guitar_loop": "needs a note pattern (a score, not parameters)",
+    "reverse_swell": "needs a source sound",
+    "voice": "needs syllables",
 }
 
 FAMILIAS = ("percusión", "tonal", "ruido", "textura", "sin clasificar")
@@ -61,7 +61,7 @@ LINEA_BOOL = re.compile(r"^(?P<clave>[a-z_][a-z0-9_]*):\s*bool\s+(?P<etiqueta>.+
 
 
 def _leer_docstring(fn):
-    """Saca descripción, familia y parámetros del docstring de una voz."""
+    """Extracts description, family and parameters from a voice's docstring."""
     doc = inspect.getdoc(fn) or ""
     lineas = [l.strip() for l in doc.splitlines() if l.strip()]
     datos = {"descripcion": lineas[0] if lineas else "", "familia": "sin clasificar", "params": {}}
@@ -88,7 +88,7 @@ def _leer_docstring(fn):
 
 
 def _defecto(valor):
-    """Valor por defecto serializable a JSON."""
+    """Default value serializable to JSON."""
     if isinstance(valor, (bool, int, float, str)):
         return valor
     if isinstance(valor, (list, tuple)):
@@ -111,7 +111,7 @@ def _tipo_de(valor, anotacion):
 
 
 def voces(excluidas=None):
-    """Lista de voces del motor, con sus parámetros tal como están en el código."""
+    """List of engine voices, with their parameters as they are in the code."""
     excluidas = EXCLUIR if excluidas is None else excluidas
     salida = []
     for nombre, fn in sorted(vars(instruments).items()):
@@ -151,13 +151,13 @@ def voces(excluidas=None):
     return salida
 
 
-# ── Voces de GPU: se leen sin importarlas (aquí no hay torch) ────────────────
+# ── GPU voices: read without importing them (there is no torch here) ─────────
 
 RUTA_GPU = os.path.abspath(os.path.join(AQUI, "..", "gpu", "voces_gpu.py"))
 
 
 def _docstring_de(nodo):
-    """Igual que _leer_docstring pero desde el AST, sin importar el módulo."""
+    """Same as _leer_docstring but from the AST, without importing the module."""
     doc = ast.get_docstring(nodo) or ""
     lineas = [l.strip() for l in doc.splitlines() if l.strip()]
     datos = {"descripcion": lineas[0] if lineas else "", "familia": "sin clasificar", "params": {}}
@@ -184,7 +184,7 @@ def _docstring_de(nodo):
 
 
 def voces_gpu(ruta=None):
-    """Voces del motor de GPU, leídas del código con `ast` (sin torch)."""
+    """GPU engine voices, read from the code with `ast` (no torch)."""
     ruta = ruta or RUTA_GPU
     if not os.path.exists(ruta):
         return []
@@ -231,7 +231,7 @@ def voces_gpu(ruta=None):
     return salida
 
 
-# ── Medida del perfil ────────────────────────────────────────────────────────
+# ── Profile measurement ──────────────────────────────────────────────────────
 
 
 def _db(x):
@@ -239,7 +239,7 @@ def _db(x):
 
 
 def perfil(x):
-    """Perfil acústico medible de un render: lo que no admite opinión."""
+    """Measurable acoustic profile of a render: what admits no opinion."""
     x = np.asarray(x, dtype=float)
     if x.ndim > 1:
         x = x.mean(axis=1)
@@ -250,19 +250,19 @@ def perfil(x):
     if pico < 1e-9:
         return {"duracion_s": n / dsp.SR, "vacia": True}
     rms = float(np.sqrt(np.mean(x**2)))
-    # Ataque: hasta dónde tarda en llegar al 90 % del pico.
+    # Attack: how long it takes to reach 90 % of the peak.
     indice_pico = int(np.argmax(np.abs(x)))
     umbral90 = 0.9 * pico
     ataques = np.nonzero(np.abs(x[: indice_pico + 1]) >= umbral90)[0]
     ataque_ms = (ataques[0] / dsp.SR * 1000.0) if len(ataques) else 0.0
-    # Cola: desde el pico hasta caer 40 dB por debajo.
-    # La cola es hasta el ULTIMO sample por encima del umbral: buscar el primero
-    # por debajo daba 5 ms en un bombo, porque la onda cruza por cero.
+    # Tail: from the peak until it falls 40 dB below.
+    # The tail goes up to the LAST sample above the threshold: looking for the first
+    # one below gave 5 ms on a kick, because the wave crosses zero.
     umbral40 = pico * 10 ** (-40 / 20)
     por_encima = np.nonzero(np.abs(x[indice_pico:]) >= umbral40)[0]
     ultimo = int(por_encima[-1]) if len(por_encima) else 0
     cola_ms = ultimo / dsp.SR * 1000.0
-    # Centroide espectral (energía) hasta 16 kHz.
+    # Spectral centroid (energy) up to 16 kHz.
     bloque = x[: min(n, dsp.SR * 4)]
     espectro = np.abs(np.fft.rfft(bloque * np.hanning(len(bloque))))
     freqs = np.fft.rfftfreq(len(bloque), 1.0 / dsp.SR)
@@ -284,10 +284,10 @@ def perfil(x):
 
 
 def medir_voz(nombre, args=None, timeout_s=10.0):
-    """Renderiza una voz con sus valores por defecto y devuelve su perfil."""
+    """Renders a voice with its default values and returns its profile."""
     fn = getattr(instruments, nombre, None)
     if fn is None:
-        return {"error": f"no existe la voz {nombre}"}
+        return {"error": f"voice {nombre} does not exist"}
     if args is None:
         args = {
             clave: param.default
@@ -303,17 +303,17 @@ def medir_voz(nombre, args=None, timeout_s=10.0):
 
 
 def catalogo(con_perfil=False):
-    """Catálogo completo: voces (las excluidas, marcadas) y su perfil si se pide."""
+    """Full catalogue: voices (the excluded ones, marked) and their profile if requested."""
     lista = voces() + voces_gpu()
     for voz in lista:
         if voz.get("destino") == "gpu":
-            # El perfil de una voz GPU se mide en Lambda, no aqui (no hay torch).
+            # The profile of a GPU voice is measured on Lambda, not here (there is no torch).
             continue
         if voz["excluida"]:
             continue
         if any(p["obligatorio"] for p in voz["params"]):
-            # Sin valores por defecto no se puede ni escuchar ni medir: se avisa.
-            voz["aviso"] = "tiene parametros obligatorios: no se puede usar sin argumentos"
+            # Without default values it can neither be listened to nor measured: a warning is given.
+            voz["aviso"] = "has required parameters: it cannot be used without arguments"
             continue
         if con_perfil:
             voz["perfil"] = medir_voz(voz["clave"])
@@ -335,7 +335,7 @@ def main(argv):
     if destino:
         with open(destino, "w", encoding="utf-8") as f:
             f.write(texto)
-        print(f"escrito {destino}")
+        print(f"wrote {destino}")
         return 0
     print(texto)
     return 0

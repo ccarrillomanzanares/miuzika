@@ -1,8 +1,8 @@
 /**
- * La caja de los scripts del agente, probada con Python de verdad: un repositorio
- * falso en una carpeta temporal (con su .env), un proyecto dentro de workspace/ y
- * scripts que intentan cada cosa prohibida. El motor real (workspace/codigo) va en
- * el PYTHONPATH, para comprobar que numpy y el render siguen funcionando.
+ * The agent script sandbox, tested with real Python: a fake repository in a temporary
+ * folder (with its own .env), a project inside workspace/ and
+ * scripts that attempt each forbidden thing. The real engine (workspace/codigo) goes on
+ * the PYTHONPATH, to check that numpy and the render still work.
  */
 
 import { test } from "node:test";
@@ -37,7 +37,7 @@ function montar() {
   return { repo, proyecto, correr };
 }
 
-test("un script normal escribe en su proyecto y usa el motor (numpy)", () => {
+test("a normal script writes in its project and uses the engine (numpy)", () => {
   const { proyecto, correr } = montar();
   const r = correr(
     [
@@ -51,40 +51,40 @@ test("un script normal escribe en su proyecto y usa el motor (numpy)", () => {
     ].join("\n"),
   );
   assert.equal(r.codigo, 0, r.errores);
-  assert.match(r.salida, /ok None/, "las variables del servidor no llegan al script");
+  assert.match(r.salida, /ok None/, "the server variables do not reach the script");
   assert.ok(existsSync(join(proyecto, "salida", "tono.wav")));
-  assert.ok(!existsSync(join(proyecto, ".tmp-caja")), "el temp del script se borra al acabar");
+  assert.ok(!existsSync(join(proyecto, ".tmp-caja")), "the script temp is deleted when it finishes");
 });
 
-test("no escribe ni borra fuera del proyecto", () => {
+test("does not write to or delete anything outside the project", () => {
   const { repo, correr } = montar();
   const fuera = join(repo, "workspace", "codigo_pisado.py").replaceAll("\\", "/");
   const escribir = correr(`open(r"${fuera}", "w").write("x")`);
   assert.notEqual(escribir.codigo, 0);
-  assert.match(escribir.errores, /miuzika: escribir .* fuera de la carpeta del proyecto/);
+  assert.match(escribir.errores, /miuzika: write .* is outside the project folder/);
   assert.ok(!existsSync(fuera));
 
   const borrar = correr(`import os\nos.remove(r"${join(repo, ".env").replaceAll("\\", "/")}")`);
   assert.notEqual(borrar.codigo, 0);
-  assert.ok(existsSync(join(repo, ".env")), "el .env sigue ahí");
+  assert.ok(existsSync(join(repo, ".env")), "the .env is still there");
 });
 
-test("no lee las claves del repositorio", () => {
+test("does not read the repository keys", () => {
   const { repo, correr } = montar();
   const r = correr(`print(open(r"${join(repo, ".env").replaceAll("\\", "/")}").read())`);
   assert.notEqual(r.codigo, 0);
   assert.doesNotMatch(r.salida, /secreta/);
-  assert.match(r.errores, /no está permitido/);
+  assert.match(r.errores, /not allowed/);
 });
 
-test("no lanza procesos ni abre la red", () => {
+test("does not launch processes or open the network", () => {
   const { correr } = montar();
   const proceso = correr("import subprocess\nsubprocess.run(['whoami'])");
   assert.notEqual(proceso.codigo, 0);
-  assert.match(proceso.errores, /no lanzan otros programas/);
+  assert.match(proceso.errores, /do not launch other programs/);
   const sistema = correr("import os\nos.system('echo hola')");
   assert.notEqual(sistema.codigo, 0);
   const red = correr("import socket\nsocket.create_connection(('example.com', 80), timeout=2)");
   assert.notEqual(red.codigo, 0);
-  assert.match(red.errores, /no abren conexiones de red/);
+  assert.match(red.errores, /do not open network connections/);
 });

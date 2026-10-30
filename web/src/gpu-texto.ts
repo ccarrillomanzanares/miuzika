@@ -1,10 +1,10 @@
 /**
- * Texto del contador de GPU. Sin DOM, con tests.
+ * GPU counter text. No DOM, with tests.
  *
- * Regla: el precio que se enseña es el de la instancia que hay delante (lo da
- * Lambda por tipo), no el del `.env`, y sólo se enseña cuando hay algo que
- * factura. Una máquina arrancando aún no cobra; una apagada no tiene tarifa que
- * mostrar.
+ * Rule: the price shown is that of the instance in front of us (Lambda gives it
+ * per type), not the one from `.env`, and it is only shown when there is something
+ * to bill. A machine that is starting is not charging yet; a machine that is off
+ * has no rate to show.
  */
 
 import { locale, t } from "./i18n.ts";
@@ -39,23 +39,23 @@ export interface EstadoGpu {
 
 const simbolo = (moneda: string): string => (moneda === "USD" ? "$" : moneda === "EUR" ? "€" : `${moneda} `);
 
-/** Nombre corto del tipo de Lambda: gpu_1x_a10 -> A10, gpu_8x_h100_sxm -> 8× H100 SXM. */
+/** Short name of the Lambda type: gpu_1x_a10 -> A10, gpu_8x_h100_sxm -> 8× H100 SXM. */
 export function tipoCorto(tipo: string): string {
   const partes = /^gpu_(\d+)x_(.+)$/.exec(tipo);
   if (!partes) return tipo.replace(/_/g, " ").toUpperCase() || "GPU";
   const cuantas = Number(partes[1]);
   const resto = partes[2]!.replace(/_/g, " ").toUpperCase();
-  // El número de GPUs importa: ocho H100 cuestan ocho veces más.
+  // The number of GPUs matters: eight H100s cost eight times as much.
   return cuantas > 1 ? `${cuantas}× ${resto}` : resto;
 }
 
-/** Dos decimales en el formato del idioma de la interfaz: "1.29" en inglés, "1,29" en español. */
+/** Two decimals in the interface language's format: "1.29" in English, "1,29" in Spanish. */
 export function dinero(valor: number): string {
   const redondeado = Math.round(valor * 100) / 100;
   return redondeado.toLocaleString(locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** hh:mm:ss desde el instante dado (vacío si no hay instante). */
+/** hh:mm:ss since the given instant (empty if there is no instant). */
 export function transcurrido(desde: string | null | undefined, ahora = Date.now()): string {
   if (!desde) return "00:00:00";
   const ms = ahora - Date.parse(desde);
@@ -67,7 +67,7 @@ export function transcurrido(desde: string | null | undefined, ahora = Date.now(
   return `${hh}:${mm}:${ss}`;
 }
 
-/** "2 min 34 s" para el arranque, que se cuenta en minutos. */
+/** "2 min 34 s" for the startup, which is counted in minutes. */
 export function minutosYsegundos(desde: string | null | undefined, ahora = Date.now()): string {
   if (!desde) return "";
   const ms = ahora - Date.parse(desde);
@@ -79,7 +79,7 @@ export function minutosYsegundos(desde: string | null | undefined, ahora = Date.
 }
 
 /**
- * Línea del contador. `totalSesion` es lo acumulado en este navegador.
+ * Counter line. `totalSesion` is what has accumulated in this browser.
  */
 export function textoCoste(estado: EstadoGpu, totalSesion: number, ahora = Date.now()): string {
   const signo = simbolo(estado.moneda);
@@ -97,16 +97,16 @@ export function textoCoste(estado: EstadoGpu, totalSesion: number, ahora = Date.
     return `${tipo} ${t("gpu.arrancando", "starting")}${rato ? ` · ${rato}` : ""} · ${t("gpu.sinFacturar", "not billing yet")}`;
   }
   if (fase === "apagandose") {
-    // Lo facturado de esa tanda ya no se sabe con exactitud cuando el proveedor
-    // deja de contarla: se dice que se apaga, sin inventar cifras.
+    // What that run billed is no longer known exactly when the provider stops
+    // counting it: we say it is shutting down, without inventing figures.
     return `${tipo} ${t("gpu.apagandose", "shutting down…")}`;
   }
-  // Apagada: no hay tarifa que enseñar, sólo lo que se gastó en la sesión.
+  // Off: there is no rate to show, only what was spent in the session.
   const apagada = t("gpu.apagada", "GPU off");
   return totalSesion > 0 ? `${apagada} · ${t("gpu.sesion", "session")} ${dinero(totalSesion)} ${signo}` : apagada;
 }
 
-/** Tooltip: de dónde sale cada número. */
+/** Tooltip: where each number comes from. */
 export function detalleCoste(estado: EstadoGpu, totalSesion: number): string {
   const signo = simbolo(estado.moneda);
   const lineas = [
@@ -127,15 +127,15 @@ export function detalleCoste(estado: EstadoGpu, totalSesion: number): string {
   return lineas.join("\n");
 }
 
-/** ¿Está colgado el turno? Sin señales más de `umbralMs`. */
+/** Is the turn stuck? No signals for more than `umbralMs`. */
 export function sinSenales(ultimoEventoMs: number, ahora = Date.now(), umbralMs = 90_000): number {
   const callado = ahora - ultimoEventoMs;
   return callado > umbralMs ? Math.floor(callado / 1000) : 0;
 }
 
 /**
- * El endpoint habla snake_case (`precio_hora`) y a veces camelCase: se normaliza
- * aquí para que un nombre mal escrito no acabe pintando "NaN $/h".
+ * The endpoint speaks snake_case (`precio_hora`) and sometimes camelCase: it is
+ * normalized here so that a misspelled name does not end up painting "NaN $/h".
  */
 export function normalizarEstadoGpu(crudo: unknown): EstadoGpu {
   const datos = (crudo ?? {}) as Record<string, unknown>;

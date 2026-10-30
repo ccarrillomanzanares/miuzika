@@ -1,8 +1,8 @@
 /**
- * Mapeo puro miuzika → openDAW.
+ * Pure miuzika → openDAW mapping.
  *
- * Sin imports del SDK a propósito: se puede testear con node:test y sobrevive
- * a cambios de versión. El adaptador (`adapter.ts`) es quien habla con el SDK.
+ * No SDK imports on purpose: it can be tested with node:test and survives version
+ * changes. The adapter (`adapter.ts`) is what talks to the SDK.
  */
 
 import type { Device, InstrumentType } from "../../core/types.ts";
@@ -18,7 +18,7 @@ type OpenDawEffectFactory =
   | "Revamp";
 
 interface MappedParam {
-  /** Ruta con puntos para parámetros anidados (p. ej. "lowShelf.gain"). */
+  /** Dotted path for nested parameters (e.g. "lowShelf.gain"). */
   name: string;
   value: number | boolean;
 }
@@ -26,7 +26,7 @@ interface MappedParam {
 interface MappedDevice {
   factory: OpenDawEffectFactory | null;
   params: MappedParam[];
-  /** Motivo cuando no hay equivalente en openDAW. */
+  /** Reason when there is no equivalent in openDAW. */
   reason?: string;
 }
 
@@ -35,20 +35,20 @@ const clamp = (value: number, min: number, max: number): number =>
 
 const unit = (value: number | undefined, fallback: number): number => clamp(value ?? fallback, 0, 1);
 
-/** 0..1 → dB, con suelo audible en -60 dB. */
+/** 0..1 → dB, with an audible floor at -60 dB. */
 export function unitToDb(value: number): number {
   return clamp(20 * Math.log10(Math.max(value, 0.001)), -60, 6);
 }
 
-/** dB → 0..1 (inverso de unitToDb). */
+/** dB → 0..1 (inverse of unitToDb). */
 export function dbToUnit(db: number): number {
   return clamp(10 ** (db / 20), 0.001, 2);
 }
 
 /**
- * Los parámetros ya vienen en unidades reales (ver DEVICE_PARAMS); aquí sólo se
- * adaptan a lo que pide cada efecto de openDAW (segundos en vez de ms, wet/dry en
- * dB, width centrado en 0).
+ * The parameters already come in real units (see DEVICE_PARAMS); here they are only
+ * adapted to what each openDAW effect asks for (seconds instead of ms, wet/dry in
+ * dB, width centered at 0).
  */
 export function mapDevice(device: Device): MappedDevice {
   const params = device.params;
@@ -117,11 +117,11 @@ export function mapDevice(device: Device): MappedDevice {
     case "width":
       return {
         factory: "StereoTool",
-        // width 1 = estéreo neutro; openDAW usa -1..1 con 0 neutro.
+        // width 1 = neutral stereo; openDAW uses -1..1 with 0 neutral.
         params: [{ name: "stereo", value: clamp((params.width ?? 1.2) - 1, -1, 1) }],
       };
     case "chorus": {
-      // openDAW no tiene chorus: delay corto modulado (ensemble).
+      // openDAW has no chorus: a short modulated delay (ensemble).
       const wet = unit(params.wet, 0.3);
       return {
         factory: "Delay",
@@ -147,8 +147,8 @@ export function mapDevice(device: Device): MappedDevice {
           { name: "highBell.enabled", value: false },
           { name: "highShelf.enabled", value: false },
           { name: "lowPass.enabled", value: true },
-          // Sin suelo: con Hz explícitos, 400 Hz es lo que se pidió. El suelo de
-          // 1.200 Hz del mapeo viejo se conserva en los proyectos migrados.
+          // No floor: with explicit Hz, 400 Hz is what was requested. The 1,200 Hz
+          // floor from the old mapping is kept in migrated projects.
           { name: "lowPass.frequency", value: clamp(params.cutoffHz ?? 2500, 20, 20000) },
           { name: "lowPass.q", value: clamp(params.q ?? 2.4, 0.5, 10) },
           { name: "lowPass.order", value: 1 },
@@ -175,7 +175,7 @@ export function mapDevice(device: Device): MappedDevice {
       };
     default: {
       const exhaustive: never = device.type;
-      return { factory: null, params: [], reason: `Dispositivo no soportado: ${String(exhaustive)}` };
+      return { factory: null, params: [], reason: `Unsupported device: ${String(exhaustive)}` };
     }
   }
 }
@@ -190,13 +190,13 @@ export function mapInstrument(type: InstrumentType): InstrumentMapping {
   if (type === "soundfont" || type === "sampler") {
     return {
       factory: "Vaporisateur",
-      warning: `${type} necesita un asset (SoundFont/sample); se usa Vaporisateur como sustituto`,
+      warning: `${type} needs an asset (SoundFont/sample); Vaporisateur is used as a substitute`,
     };
   }
   return { factory: "Vaporisateur" };
 }
 
-/** openDAW usa 960 pulsos por negra. */
+/** openDAW uses 960 pulses per quarter note. */
 const PULSES_PER_BEAT = 960;
 
 export function beatsToPulses(beats: number): number {
@@ -216,10 +216,10 @@ export function unitToVelocity(value: number): number {
 }
 
 /**
- * Índice del preset General MIDI en un SoundFont: banco 0 y programa para los
- * instrumentos; banco 128 para los kits de batería (programa = kit: 0 estándar,
- * 8 room, 16 power, 25 electrónico…). openDAW elige el preset por su posición en la
- * lista del fichero, no por banco y programa: de ahí esta traducción.
+ * Index of the General MIDI preset in a SoundFont: bank 0 and program for the
+ * instruments; bank 128 for drum kits (program = kit: 0 standard, 8 room, 16 power,
+ * 25 electronic…). openDAW chooses the preset by its position in the file's list,
+ * not by bank and program: hence this translation.
  */
 export function indicePresetGm(
   presets: ReadonlyArray<{ bank: number; preset: number }>,
@@ -229,7 +229,7 @@ export function indicePresetGm(
   const banco = bateria ? 128 : 0;
   const exacto = presets.findIndex((p) => p.bank === banco && p.preset === programa);
   if (exacto >= 0) return exacto;
-  // Un kit que el fichero no tiene: el estándar; un programa raro: cualquiera del banco 0.
+  // A kit the file does not have: the standard one; an odd program: any from bank 0.
   const estandar = presets.findIndex((p) => p.bank === banco && p.preset === (bateria ? 0 : programa));
   if (estandar >= 0) return estandar;
   const primero = presets.findIndex((p) => p.bank === banco);

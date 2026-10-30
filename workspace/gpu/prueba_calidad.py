@@ -1,15 +1,15 @@
-"""Prueba de calidad: cuanto ruido de aliasing mete cada motor.
+"""Quality test: how much aliasing noise each engine introduces.
 
-Tres versiones de la MISMA nota:
-  A) motor numpy existente (sin sobremuestreo), tal como suena hoy
-  B) motor GPU con el mismo diseno y sin sobremuestreo (veces=1)
-  C) motor GPU con 16x
+Three versions of the SAME note:
+  A) existing numpy engine (no oversampling), as it sounds today
+  B) GPU engine with the same design and no oversampling (veces=1)
+  C) GPU engine with 16x
 
-B contra C aisla el efecto del sobremuestreo: mismo oscilador, mismo filtro,
-mismo drive. A contra C es motor contra motor.
+B against C isolates the effect of oversampling: same oscillator, same filter,
+same drive. A against C is engine against engine.
 
-Metrica: energia NO armonica (aliasing) respecto al fundamental, y energia por
-encima de 15 kHz, que en un bajo no deberia existir.
+Metric: NON-harmonic energy (aliasing) relative to the fundamental, and energy
+above 15 kHz, which should not exist in a bass.
 """
 
 import math
@@ -33,7 +33,7 @@ DUR = 4.0
 
 
 def metricas(x, f0, sr=M.SR):
-    """Aliasing: energia que no cae en armonicos de f0. Mas bajo = mas limpio."""
+    """Aliasing: energy that does not fall on harmonics of f0. Lower = cleaner."""
     v = x.detach().cpu().numpy().astype(np.float64)
     if v.ndim > 1:
         v = v.mean(axis=0)
@@ -58,20 +58,20 @@ def metricas(x, f0, sr=M.SR):
 
 
 def main():
-    print(f"motor GPU: {M.DISPOSITIVO}")
+    print(f"GPU engine: {M.DISPOSITIVO}")
     f0 = V.hz(NOTA)
 
-    # A) motor numpy de verdad
+    # A) the real numpy engine
     import instruments
 
     a_np = instruments.bass_note(NOTA, DUR, vel=0.9, seed=7, squelch=0.5, bright=1.0)
     a = torch.from_numpy(np.asarray(a_np, dtype=np.float32))
 
-    # B y C) el mismo diseno en GPU, sin y con sobremuestreo
+    # B and C) the same design on the GPU, without and with oversampling
     versiones = {}
     for veces in (1, 16):
-        # voz_bajo acepta el sobremuestreo por argumento (sat): mismo diseno,
-        # unica diferencia el factor. Nada de tocar __defaults__.
+        # voz_bajo takes oversampling as an argument (sat): same design,
+        # the only difference is the factor. No touching __defaults__.
         salida, largo = V.voz_bajo([NOTA], [DUR], [0.9], sat=veces)
         versiones[veces] = salida[0]
 
@@ -80,16 +80,16 @@ def main():
         m = metricas(senal, f0)
         resultados[nombre] = m
         print(f"  {nombre:<10} aliasing {m['aliasing_db']:7.1f} dB | >15 kHz {m['agudos_db']:7.1f} dB "
-              f"| pico {m['pico']:.3f}")
+              f"| peak {m['pico']:.3f}")
 
-    # WAV para escuchar
+    # WAV to listen to
     M.escribir_wav(os.path.join(SALIDA, "calidad_A_numpy.wav"), torch.stack([a, a]), pico_db=-1.0)
     M.escribir_wav(os.path.join(SALIDA, "calidad_B_gpu1x.wav"), torch.stack([versiones[1], versiones[1]]), pico_db=-1.0)
     M.escribir_wav(os.path.join(SALIDA, "calidad_C_gpu16x.wav"), torch.stack([versiones[16], versiones[16]]), pico_db=-1.0)
 
-    print(f"\nsobremuestreo (B -> C): {resultados['B GPU 1x']['aliasing_db'] - resultados['C GPU 16x']['aliasing_db']:+.1f} dB menos aliasing")
-    print(f"motor numpy -> GPU 16x: {resultados['A numpy']['aliasing_db'] - resultados['C GPU 16x']['aliasing_db']:+.1f} dB menos aliasing")
-    print(f"WAV en {SALIDA}")
+    print(f"\noversampling (B -> C): {resultados['B GPU 1x']['aliasing_db'] - resultados['C GPU 16x']['aliasing_db']:+.1f} dB less aliasing")
+    print(f"numpy engine -> GPU 16x: {resultados['A numpy']['aliasing_db'] - resultados['C GPU 16x']['aliasing_db']:+.1f} dB less aliasing")
+    print(f"WAV in {SALIDA}")
 
 
 if __name__ == "__main__":

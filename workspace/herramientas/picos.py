@@ -1,9 +1,9 @@
-"""Calcula los picos de un WAV para dibujar la onda sin decodificarlo en el cliente.
+"""Computes the peaks of a WAV to draw the waveform without decoding it on the client.
 
-Uso: python herramientas/picos.py <ruta.wav> [cubos]
+Usage: python herramientas/picos.py <path.wav> [buckets]
 
-Imprime JSON: {"cubos": N, "picos": [0..1, ...]}. Vectorizado con numpy: un stem
-de 6 minutos (99 MB, 24 bit) tarda ~2 s en vez de 40.
+Prints JSON: {"cubos": N, "picos": [0..1, ...]}. Vectorized with numpy: a 6-minute
+stem (99 MB, 24 bit) takes ~2 s instead of 40.
 """
 
 import json
@@ -25,12 +25,12 @@ def leer_muestras(bruto: bytes, ancho: int) -> np.ndarray:
         ent = b[:, 0] | (b[:, 1] << 8) | (b[:, 2] << 16)
         ent = np.where(ent & 0x800000, ent - 0x1000000, ent)
         return ent.astype(np.float32) / 8388608.0
-    raise SystemExit(f"profundidad no soportada: {ancho} bytes")
+    raise SystemExit(f"unsupported bit depth: {ancho} bytes")
 
 
 def main():
     if len(sys.argv) < 2:
-        raise SystemExit("uso: python herramientas/picos.py <ruta.wav> [cubos]")
+        raise SystemExit("usage: python herramientas/picos.py <path.wav> [buckets]")
     ruta = sys.argv[1]
     cubos = max(16, min(8192, int(sys.argv[2]) if len(sys.argv) > 2 else CUBOS_POR_DEFECTO))
 
@@ -47,7 +47,7 @@ def main():
         print(json.dumps({"cubos": 0, "picos": [], "duracionSeg": 0.0, "sr": sr, "canales": canales, "bits": ancho * 8}))
         return
 
-    magnitud = np.abs(muestras)  # entrelazado: el canal da igual para la onda
+    magnitud = np.abs(muestras)  # interleaved: the channel does not matter for the waveform
     cubos = min(cubos, magnitud.size)
     por_cubo = max(1, magnitud.size // cubos)
     recortado = magnitud[: por_cubo * cubos].reshape(cubos, por_cubo)

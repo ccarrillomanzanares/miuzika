@@ -1,14 +1,14 @@
-"""Índice del catálogo de samples: recorre un árbol de WAVs y escribe catalogo.json.
+"""Index of the sample catalogue: walks a tree of WAVs and writes catalogo.json.
 
     python codigo/catalogo.py vcsl --raiz ../catalogo/VCSL-1.2.2-RC
 
-Qué guarda por fichero: ruta relativa, familia (según la carpeta de Hornbostel-Sachs),
-instrumento y articulación deducidos de la ruta, formato real (canales, bits, sr),
-medidas (duración, pico, RMS, crest, centroide) y un hash corto del contenido para
-poder actualizar sin duplicar.
+What it stores per file: relative path, family (according to the Hornbostel-Sachs
+folder), instrument and articulation inferred from the path, actual format (channels,
+bits, sr), measurements (duration, peak, RMS, crest, centroid) and a short content hash
+so it can be updated without duplicates.
 
-No mueve ni copia audio: indexa lo que hay. El deduplicado y el etiquetado fino con
-la taxonomía se hacen después, sobre este índice.
+It does not move or copy audio: it indexes what is there. Deduplication and fine
+tagging with the taxonomy are done later, on top of this index.
 """
 
 import hashlib
@@ -24,11 +24,11 @@ import numpy as np
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
 
-import voces  # noqa: E402  (reutiliza el medidor de perfil)
+import voces  # noqa: E402  (reuses the profile meter)
 
 CATALOGO = os.path.join(AQUI, "..", "catalogo")
 
-# Carpeta de Hornbostel-Sachs -> familia nuestra y categoría BST.
+# Hornbostel-Sachs folder -> our family and BST category.
 FAMILIAS = {
     "Membranophones": ("percusión", "is-p"),
     "Idiophones": ("percusión", "is-p"),
@@ -37,7 +37,7 @@ FAMILIAS = {
     "Electrophones": ("tonal", "is-e"),
 }
 
-# Ruido de nombres: capas, round-robin y mics.
+# Name noise: layers, round-robin and mics.
 RUIDO = re.compile(
     r"(?:_?v[l\d]+|_rr\d+|_mid|_sum|_main|_\d+|\brr\d+\b|\bvl\d+\b|\bmf\b|\bff\b|\bf\d\b)",
     re.IGNORECASE,
@@ -45,7 +45,7 @@ RUIDO = re.compile(
 
 
 def _leer_wav(ruta):
-    """Devuelve (mono float, sr, canales, bits) sin dependencias externas."""
+    """Returns (mono float, sr, channels, bits) with no external dependencies."""
     with wave.open(ruta, "rb") as w:
         canales = w.getnchannels()
         ancho = w.getsampwidth()
@@ -68,7 +68,7 @@ def _leer_wav(ruta):
     return datos, sr, canales, ancho * 8
 
 
-# Niveles de la ruta que son categoría, no instrumento.
+# Path levels that are a category, not an instrument.
 CATEGORIAS = {
     "composite chordophones", "zithers", "struck idiophones", "plucked idiophones",
     "friction idiophones", "struck membranophones", "other membranophones",
@@ -76,7 +76,7 @@ CATEGORIAS = {
     "tx81z", "assets",
 }
 
-# Subcarpetas que son articulación, no instrumento.
+# Subfolders that are an articulation, not an instrument.
 ARTICULACIONES = {
     "normal", "stroke", "sustains", "releases", "non-vibrato", "vibrato", "staccato",
     "gliss", "fx", "individual", "keyswitch", "hard mallet", "soft mallet",
@@ -85,12 +85,12 @@ ARTICULACIONES = {
 
 
 def _nombre(ruta_rel):
-    """Instrumento y articulación a partir de la ruta.
+    """Instrument and articulation from the path.
 
-    La ruta de VCSL es categórica: familia / categoría / [instrumento] / [articulación] /
-    fichero. Se descartan los niveles de categoría y de articulación y el primer nivel
-    que queda es el instrumento. Sin esto, «Grand Piano, Steinway B/Sustains/x.wav»
-    salía como instrumento «Sustains».
+    The VCSL path is categorical: family / category / [instrument] / [articulation] /
+    file. Category and articulation levels are discarded, and the first level left
+    is the instrument. Without this, «Grand Piano, Steinway B/Sustains/x.wav»
+    came out as the instrument «Sustains».
     """
     partes = ruta_rel.replace("\\", "/").split("/")
     fichero = os.path.splitext(partes[-1])[0]
@@ -121,14 +121,14 @@ def indexar(raiz, nombre_catalogo="vcsl"):
             familia_sachs = relativo.split("/")[0]
             familia, bst = FAMILIAS.get(familia_sachs, ("sin clasificar", ""))
             if fichero.lower().endswith(".flac"):
-                # Este índice mide con `wave`: los FLAC se anotan y se miden aparte.
+                # This index measures with `wave`: FLACs are recorded and measured separately.
                 entradas.append(
                     {
                         "archivo": relativo,
                         "familia": familia,
                         "bst": bst,
                         "medido": None,
-                        "aviso": "flac: pendiente de convertir",
+                        "aviso": "flac: pending conversion",
                     }
                 )
                 continue
@@ -139,8 +139,8 @@ def indexar(raiz, nombre_catalogo="vcsl"):
                 continue
             instrumento, articulacion, etiqueta = _nombre(relativo)
             perfil = voces.perfil(datos)
-            # El perfil se mide a 44,1k; si el fichero viene a 48k, la duración real
-            # es la que dice el fichero, no la que sale de asumir 44,1.
+            # The profile is measured at 44.1k; if the file is 48k, the real duration
+            # is what the file says, not what comes from assuming 44.1.
             perfil["duracion_s"] = round(len(datos) / sr, 3)
             huella = hashlib.sha1(open(completo, "rb").read(262144)).hexdigest()[:12]
             entradas.append(
@@ -159,7 +159,7 @@ def indexar(raiz, nombre_catalogo="vcsl"):
                 }
             )
             if len(entradas) % 250 == 0:
-                print(f"  {len(entradas)} ficheros… ({time.perf_counter() - t0:.0f} s)", flush=True)
+                print(f"  {len(entradas)} files… ({time.perf_counter() - t0:.0f} s)", flush=True)
     return entradas
 
 
@@ -168,7 +168,7 @@ def main(argv):
     raiz = os.path.join(CATALOGO, "VCSL-1.2.2-RC")
     if "--raiz" in argv:
         raiz = argv[argv.index("--raiz") + 1]
-    print(f"indexando {raiz} …", flush=True)
+    print(f"indexing {raiz} …", flush=True)
     entradas = indexar(raiz, nombre)
     os.makedirs(CATALOGO, exist_ok=True)
     destino = os.path.join(CATALOGO, f"catalogo-{nombre}.json")
@@ -187,7 +187,7 @@ def main(argv):
             ensure_ascii=False,
         )
     medidos = [e for e in entradas if e.get("medido")]
-    print(f"escrito {destino}: {len(entradas)} entradas ({len(medidos)} medidas)")
+    print(f"wrote {destino}: {len(entradas)} entries ({len(medidos)} measured)")
     return 0
 
 

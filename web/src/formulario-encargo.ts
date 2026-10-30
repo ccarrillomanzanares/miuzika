@@ -1,11 +1,11 @@
 /**
- * El formulario «Encargo» (botón junto al chat). No envía nada: escribe el
- * mensaje en el chat para que la persona lo lea, lo retoque y lo mande.
- * El texto lo arma `encargo.ts`.
+ * The "Brief" form (button next to the chat). It does not send anything: it writes
+ * the message into the chat so the person can read it, tweak it and send it.
+ * The text is built by `encargo.ts`.
  *
- * Dos niveles: lo esencial a la vista y «Más detalles» plegado, para que pedir
- * algo sencillo siga siendo un clic y un campo. Cada modo (nueva, versión,
- * arreglo) enseña sólo lo suyo (`data-modos`).
+ * Two levels: the essentials in sight and "More details" collapsed, so that asking
+ * for something simple is still one click and one field. Each mode (new, cover,
+ * arrangement) shows only its own (`data-modos`).
  */
 
 import type { Project } from "../../src/core/types.ts";
@@ -28,7 +28,7 @@ import {
 
 export interface DepsEncargo {
   proyecto(): Project | null;
-  /** Escribe el texto en el chat (sin enviarlo). */
+  /** Writes the text into the chat (without sending it). */
   escribir(texto: string): void;
 }
 
@@ -48,7 +48,7 @@ export class FormularioEncargo {
     document.body.append(this.dialogo);
   }
 
-  /** Texto según el idioma de la interfaz. */
+  /** Text according to the interface language. */
   private tx(es: string, en: string): string {
     return idioma() === "es" ? es : en;
   }
@@ -255,7 +255,7 @@ export class FormularioEncargo {
         etiquetaEstilo.textContent = tx("Estilo", "Style");
         inputEstilo.placeholder = tx("synthwave oscuro, folk íntimo, deep house…", "dark synthwave, intimate folk, deep house…");
       }
-      // Arreglar: el tempo y la tonalidad del proyecto ya puestos.
+      // Arrange: the project's tempo and key already set.
       if (tipo === "arreglo" && project) {
         form.querySelector<HTMLInputElement>('[name=tempoN][value="bpm"]')!.checked = true;
         campo<HTMLInputElement>("bpmN").value = String(project.bpm);
@@ -269,7 +269,7 @@ export class FormularioEncargo {
     form.querySelectorAll("[name=tipo]").forEach((r) => r.addEventListener("change", alCambiarTipo));
     alCambiarTipo();
 
-    // Escribir un BPM o elegir una tonalidad marca su opción.
+    // Typing a BPM or choosing a key marks its option.
     const marcar = (selector: string): void => {
       const r = form.querySelector<HTMLInputElement>(selector);
       if (r) r.checked = true;
@@ -279,7 +279,7 @@ export class FormularioEncargo {
     for (const n of ["tonicaN", "modoN"]) campo<HTMLSelectElement>(n).addEventListener("change", () => marcar('[name=tonN][value="otra"]'));
     for (const n of ["tonicaV", "modoV"]) campo<HTMLSelectElement>(n).addEventListener("change", () => marcar('[name=tonV][value="otra"]'));
 
-    // Instrumentos en etiquetas; «la melodía la lleva» sugiere los elegidos.
+    // Instruments as tags; "the melody is carried by" suggests the chosen ones.
     const chips = form.querySelector<HTMLElement>("[data-chips]")!;
     const entrada = campo<HTMLInputElement>("instrumento");
     const listaLleva = form.querySelector<HTMLDataListElement>("#encargo-lleva")!;
@@ -314,7 +314,7 @@ export class FormularioEncargo {
         anadir();
       }
     });
-    // Elegir de la lista desplegable también lo añade.
+    // Picking from the drop-down list adds it too.
     entrada.addEventListener("change", () => {
       if (this.biblioteca.includes(entrada.value) || SUGERENCIAS_GM.some((s) => s.es === entrada.value || s.en === entrada.value)) anadir();
     });

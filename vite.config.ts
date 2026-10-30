@@ -1,10 +1,10 @@
 /**
- * Configuración de Vite: el cliente (`web/`) y la API de desarrollo (`server/`),
- * que incluye el proxy del LLM (server/api/proveedores.ts). Las claves sólo las usa
- * este proceso: el navegador llama a `/api/llm/...` y el servidor pone la cabecera.
+ * Vite config: the client (`web/`) and the development API (`server/`),
+ * including the LLM proxy (server/api/proveedores.ts). Keys are used only by
+ * this process: the browser calls `/api/llm/...` and the server adds the header.
  *
- * Editar este fichero o `server/` reinicia el servidor y corta el turno del agente
- * que esté en vuelo (docs/ARCHITECTURE.md §9).
+ * Editing this file or `server/` restarts the server and cuts the agent turn
+ * currently in flight (docs/ARCHITECTURE.md section 9).
  */
 
 import { defineConfig, loadEnv } from "vite";
@@ -16,7 +16,7 @@ const isolationHeaders = {
 };
 
 export default defineConfig(({ mode }) => {
-  // El .env vive en la raiz del proyecto (el root de Vite es "web").
+  // .env lives at the project root (Vite's root is "web").
   const env = loadEnv(mode, process.cwd(), "");
   return {
     root: "web",
@@ -25,8 +25,8 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       host: "localhost",
       headers: isolationHeaders,
-      // El chat del agente y la búsqueda web van por server/api/proveedores.ts:
-      // el proveedor y su clave se eligen en el menú «Modelos», no aquí.
+      // The agent chat and web search go through server/api/proveedores.ts:
+      // the provider and its key are chosen in the "Models" menu, not here.
     },
     preview: {
       port: 4173,

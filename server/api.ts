@@ -1,12 +1,12 @@
 /**
- * La API de miuzika como plugin del servidor de desarrollo de Vite.
+ * The miuzika API as a Vite dev-server plugin.
  *
- * No hay servidor de producción: todo `/api/*` vive aquí (ver docs/ARCHITECTURE.md).
- * Cada área tiene su módulo en `server/api/`; esto sólo los monta en orden.
+ * There is no production server: everything under `/api/*` lives here (see docs/ARCHITECTURE.md).
+ * Each area has its own module in `server/api/`; this file only mounts them in order.
  *
- * OJO con el orden: `middlewares.use("/api/x", …)` casa por PREFIJO, así que una
- * ruta corta montada antes se come las largas que empiezan igual si no hace
- * `next()` (`/api/audio` ↔ `/api/audio/subir`, `/api/voces` ↔ `/api/voces/nueva`).
+ * WATCH OUT for the order: `middlewares.use("/api/x", …)` matches by PREFIX, so a
+ * short route mounted first swallows the longer ones that start the same way if it
+ * does not call `next()` (`/api/audio` ↔ `/api/audio/subir`, `/api/voces` ↔ `/api/voces/nueva`).
  */
 
 import type { Plugin } from "vite";

@@ -1,4 +1,4 @@
-/** Timeline + piano roll en canvas con cabeceras fijas. */
+/** Timeline + piano roll on canvas with fixed headers. */
 
 import type { Clip, Project, Track } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
@@ -21,10 +21,10 @@ const COLORS: Record<string, string> = {
   sampler: "#98c379",
 };
 
-/** Color por PISTA (no por tipo): asi dos WAV o dos MIDI no se confunden. */
+/** Color per TRACK (not per type): so two WAVs or two MIDI tracks are not confused. */
 const COLORES_PISTA = new Map<string, string>();
 
-/** HSL -> #rrggbb, que es lo que entiende withAlpha(). */
+/** HSL -> #rrggbb, which is what withAlpha() understands. */
 function hslAHex(h: number, s: number, l: number): string {
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
@@ -41,10 +41,10 @@ function hslAHex(h: number, s: number, l: number): string {
 }
 
 /**
- * Reparte un color por pista con el angulo aureo (137,5 grados): dos pistas
- * seguidas nunca caen en tonos parecidos, y aun con 20 pistas cada una se
- * distingue. La luminosidad alterna para separar las que se acercan al dar la
- * vuelta al circulo, y las pistas de audio van algo mas apagadas que las MIDI.
+ * Spreads a color per track with the golden angle (137.5 degrees): two consecutive
+ * tracks never land on similar hues, and even with 20 tracks each one is
+ * distinguishable. Lightness alternates to separate the ones that come close when
+ * going around the circle, and audio tracks are somewhat dimmer than MIDI ones.
  */
 function prepararColores(tracks: Track[]): void {
   COLORES_PISTA.clear();
@@ -59,7 +59,7 @@ function prepararColores(tracks: Track[]): void {
 const colorOf = (track: Track): string =>
   COLORES_PISTA.get(track.id) ?? COLORS[track.instrument.type] ?? "#8a8f9c";
 
-/** Un clip que se mueve (o se copia) al soltarlo. */
+/** A clip that moves (or is copied) when released. */
 export interface MovimientoClip {
   trackId: string;
   clipId: string;
@@ -67,9 +67,9 @@ export interface MovimientoClip {
   trackDestinoId?: string;
 }
 
-/** Paso del imán: semicorchea. */
+/** Snap step: sixteenth note. */
 const PASO_IMAN = 0.25;
-/** Cuántos píxeles hay que moverse para que cuente como arrastre y no como clic. */
+/** How many pixels you have to move for it to count as a drag and not a click. */
 const UMBRAL_ARRASTRE = 3;
 
 export class TimelineView {
@@ -119,7 +119,7 @@ export class TimelineView {
     this.staticCanvas = document.createElement("canvas");
     this.staticCtx = this.staticCanvas.getContext("2d")!;
 
-    // Arrastre de clips + seleccion. El seek se hace al pinchar en el vacio o en la regla.
+    // Clip dragging + selection. Seeking is done by clicking on empty space or the ruler.
     this.canvas.addEventListener("pointerdown", (event) => {
       if (!this.project) return;
       const rect = this.canvas.getBoundingClientRect();
@@ -131,7 +131,7 @@ export class TimelineView {
         this.onSeek(Math.max(0, x / this.pxPerBeat));
         return;
       }
-      // Shift anade a la seleccion; Ctrl tambien (para no romper costumbres).
+      // Shift adds to the selection; Ctrl too (so as not to break habits).
       if (event.shiftKey || event.ctrlKey || event.metaKey) {
         if (this.selectedClips.has(golpe.clip.id)) this.selectedClips.delete(golpe.clip.id);
         else this.selectedClips.add(golpe.clip.id);
@@ -142,7 +142,7 @@ export class TimelineView {
       try {
         this.canvas.setPointerCapture(event.pointerId);
       } catch {
-        /* puntero sintetico o ya liberado: el arrastre funciona igual */
+        /* synthetic pointer or already released: dragging still works */
       }
       this.drag = {
         trackIndex: golpe.trackIndex,
@@ -167,7 +167,7 @@ export class TimelineView {
       if (Math.abs(dx) >= UMBRAL_ARRASTRE || Math.abs(dy) >= UMBRAL_ARRASTRE) this.drag.movido = true;
       const bruto = dx / this.pxPerBeat;
       this.drag.deltaBeats = Math.round(bruto / PASO_IMAN) * PASO_IMAN;
-      // Solo se cambia de pista arrastrando un unico clip (con varios no hay destino claro).
+      // The track is only changed by dragging a single clip (with several there is no clear target).
       this.drag.deltaTracks =
         this.selectedClips.size === 1 ? Math.round(dy / ROW) : 0;
       this.renderStatic();
@@ -181,7 +181,7 @@ export class TimelineView {
       try {
         this.canvas.releasePointerCapture(event.pointerId);
       } catch {
-        /* el puntero ya no estaba capturado */
+        /* the pointer was no longer captured */
       }
       if (!arrastre.movido) {
         this.renderStatic();
@@ -269,11 +269,11 @@ export class TimelineView {
       this.draw(this.beat);
     });
 
-    // La columna de nombres no esta dentro del scroller: hay que arrastrarla a mano,
-    // o al bajar se queda fija y cada nombre acaba en la fila equivocada.
+    // The name column is not inside the scroller: it has to be dragged by hand,
+    // or when scrolling down it stays fixed and each name ends up in the wrong row.
     this.wrap.addEventListener("scroll", () => this.aplicarScrollCabeceras(), { passive: true });
 
-    // Y al reves: la rueda sobre los nombres desplaza la lista.
+    // And the other way round: the wheel over the names scrolls the list.
     this.heads.addEventListener(
       "wheel",
       (event) => {
@@ -323,7 +323,7 @@ export class TimelineView {
     this.emitSelection();
   }
 
-  /** Ajusta el zoom para que toda la canción quepa en el viewport. */
+  /** Adjusts the zoom so the whole song fits in the viewport. */
   fitToProject(): void {
     if (!this.project) return;
     const totalBeats = Math.max(1, this.project.lengthBars * beatsPerBar(this.project));
@@ -334,10 +334,10 @@ export class TimelineView {
     this.draw(this.beat);
   }
 
-  /** Actualiza el proyecto sin resetear el playhead ni la selección (mute/solo en vivo). */
+  /** Updates the project without resetting the playhead or the selection (live mute/solo). */
   /**
-   * Reajusta el lienzo al tamaño actual de su contenedor.
-   * Hace falta cuando algo cambia el layout sin tocar la ventana (plegar el chat).
+   * Refits the canvas to its container's current size.
+   * Needed when something changes the layout without touching the window (collapsing the chat).
    */
   relayout(): void {
     this.resize();
@@ -348,7 +348,7 @@ export class TimelineView {
   refresh(project?: Project): void {
     if (project) {
       this.project = project;
-      // una pista nueva (o borrada) cambia el reparto de colores
+      // a new (or deleted) track changes the color distribution
       prepararColores(project.tracks);
     }
     this.pruneSelection();
@@ -404,7 +404,7 @@ export class TimelineView {
     this.onSelectionChange([...this.selected]);
   }
 
-  /** Clip que hay bajo un punto del lienzo (null si es vacio o la regla). */
+  /** Clip under a point on the canvas (null if it is empty space or the ruler). */
   private clipAt(x: number, y: number): { trackIndex: number; clip: Clip; track: Track } | null {
     if (!this.project || y < RULER) return null;
     const index = Math.floor((y - RULER) / ROW);
@@ -442,7 +442,7 @@ export class TimelineView {
     this.draw(this.beat);
   }
 
-  /** Mueve la columna de nombres lo mismo que el lienzo (scroll vertical). */
+  /** Moves the name column by the same amount as the canvas (vertical scroll). */
   private aplicarScrollCabeceras(): void {
     const interior = this.heads.firstElementChild as HTMLElement | null;
     if (!interior) return;
@@ -465,7 +465,7 @@ export class TimelineView {
     } else {
       this.restoreStrip(this.lastPlayheadX);
     }
-    // Limpia también la posición nueva por si el salto es grande.
+    // Clears the new position too in case the jump is large.
     this.restoreStrip(x);
     this.lastPlayheadX = x;
 
@@ -479,7 +479,7 @@ export class TimelineView {
     ctx.fill();
   }
 
-  /** Restaura solo la franja del playhead desde el canvas estático. */
+  /** Restores only the playhead strip from the static canvas. */
   private restoreStrip(x: number): void {
     const left = Math.max(0, x - 10);
     const width = 22;
@@ -544,8 +544,8 @@ export class TimelineView {
       })
       .join("");
     if (this.project.tracks.length === 0) {
-      // Un proyecto sin pistas se veía igual que una app rota: la línea de compases y
-      // nada más. Aquí se dice qué pasa y qué hacer.
+      // A project with no tracks looked the same as a broken app: the bar line and
+      // nothing else. Here it says what is happening and what to do.
       this.heads.innerHTML = `<div class="heads-inner">
         <div class="ruler-spacer"></div>
         <div class="pista-vacia">
@@ -556,8 +556,8 @@ export class TimelineView {
       this.aplicarScrollCabeceras();
       return;
     }
-    // Las filas van en un contenedor propio para poder desplazarlas con transform:
-    // asi no depende de la altura de la barra de scroll horizontal del lienzo.
+    // The rows go in their own container so they can be moved with transform:
+    // so it does not depend on the height of the canvas's horizontal scrollbar.
     this.heads.innerHTML = `<div class="heads-inner"><div class="ruler-spacer"></div>${rows}</div>`;
     this.aplicarScrollCabeceras();
   }
@@ -580,7 +580,7 @@ export class TimelineView {
     const barBeats = beatsPerBar(project);
     const pxPerBar = this.pxPerBeat * barBeats;
 
-    // Filas
+    // Rows
     project.tracks.forEach((track, index) => {
       const top = RULER + index * ROW;
       ctx.fillStyle = this.selected.has(track.id)
@@ -593,7 +593,7 @@ export class TimelineView {
       ctx.fillRect(0, top + ROW - 1, this.width, 1);
     });
 
-    // Rejilla
+    // Grid
     const totalBeats = project.lengthBars * barBeats;
     for (let beat = 0; beat <= totalBeats; beat++) {
       const x = beat * this.pxPerBeat;
@@ -603,7 +603,7 @@ export class TimelineView {
       ctx.fillRect(x, RULER, 1, this.height - RULER);
     }
 
-    // Regla
+    // Ruler
     ctx.fillStyle = "#1a1d26";
     ctx.fillRect(0, 0, this.width, RULER);
     const barStep = pxPerBar >= 64 ? 1 : pxPerBar >= 32 ? 2 : 4;
@@ -616,7 +616,7 @@ export class TimelineView {
       ctx.fillRect(bar * pxPerBar, 0, 1, RULER);
     }
 
-    // Clips y notas
+    // Clips and notes
     project.tracks.forEach((track, index) => {
       const top = RULER + index * ROW;
       const color = colorOf(track);
@@ -690,7 +690,7 @@ export class TimelineView {
       }
     });
 
-    // Fantasma de lo que se esta arrastrando (destino real, con iman aplicado).
+    // Ghost of what is being dragged (real destination, with snapping applied).
     if (this.drag && this.drag.movido) {
       const arrastre = this.drag;
       project.tracks.forEach((track, index) => {

@@ -1,26 +1,26 @@
 /**
- * Reproductor de stems largos por streaming.
+ * Player for long stems via streaming.
  *
- * openDAW necesita el audio entero en memoria (AudioData), asi que con 10 stems
- * de 6 minutos se van ~1,3 GB. Aqui cada stem es un <audio> que el navegador lee
- * del servidor por trozos (Range): la RAM se queda plana y caben muchos stems.
+ * openDAW needs the whole audio in memory (AudioData), so with 10 six-minute
+ * stems that is ~1.3 GB. Here each stem is an <audio> element that the browser
+ * reads from the server in chunks (Range): RAM stays flat and many stems fit.
  *
- * Se usa solo para assets sin AudioBuffer decodificado; los cortos siguen por
- * openDAW. El transporte lo manda main.ts (play/stop/seek).
+ * It is only used for assets without a decoded AudioBuffer; short ones still go
+ * through openDAW. The transport is driven by main.ts (play/stop/seek).
  */
 
 export interface StemDef {
-  /** Clave unica del clip (asset + clip), para no duplicar el elemento. */
+  /** Unique key of the clip (asset + clip), so the element is not duplicated. */
   clave: string;
-  /** URL que sirve el WAV (/api/audio?path=...). */
+  /** URL that serves the WAV (/api/audio?path=...). */
   url: string;
-  /** Inicio del clip en beats. */
+  /** Clip start in beats. */
   startBeat: number;
-  /** Duracion del clip en beats. */
+  /** Clip length in beats. */
   lengthBeat: number;
-  /** Desplazamiento dentro del fichero, en beats. */
+  /** Offset inside the file, in beats. */
   offsetBeat: number;
-  /** Ganancia del clip en dB. */
+  /** Clip gain in dB. */
   gainDb: number;
 }
 
@@ -40,7 +40,7 @@ export class StemPlayer {
 
   constructor() {}
 
-  /** Crea el contexto de audio (hay que llamarlo tras un gesto del usuario). */
+  /** Creates the audio context (must be called after a user gesture). */
   private asegurarContexto(): AudioContext {
     if (!this.ctx) {
       this.ctx = new AudioContext({ latencyHint: "playback" });
@@ -59,7 +59,7 @@ export class StemPlayer {
     this.bpm = bpm;
   }
 
-  /** Reemplaza la lista de stems (se llama al cambiar de proyecto o de assets). */
+  /** Replaces the list of stems (called when changing project or assets). */
   definir(stems: StemDef[]): void {
     for (const id of [...this.voces.keys()]) {
       if (!stems.some((def) => def.clave === id)) {
@@ -75,8 +75,8 @@ export class StemPlayer {
       }
       const ctx = this.asegurarContexto();
       const el = new Audio();
-      // Ojo: crossOrigin DESPUES de src reinicia la carga en modo CORS y el
-      // elemento se queda en readyState 0. Es mismo origen: no hace falta.
+      // Note: crossOrigin AFTER src restarts the load in CORS mode and the
+      // element stays at readyState 0. It is same-origin: not needed.
       el.preload = "auto";
       el.src = def.url;
       const src = ctx.createMediaElementSource(el);
@@ -87,7 +87,7 @@ export class StemPlayer {
     }
   }
 
-  /** Arranca todos los stems en el beat indicado. */
+  /** Starts all the stems at the given beat. */
   async reproducir(beat: number): Promise<void> {
     if (this.voces.size === 0) return;
     this.asegurarContexto();
@@ -107,18 +107,18 @@ export class StemPlayer {
       try {
         voz.el.currentTime = t;
       } catch {
-        /* el navegador aun no tiene metadatos */
+        /* the browser does not have metadata yet */
       }
       if (beat >= startBeat) {
         void voz.el.play().catch(() => {});
       } else {
-        // aun no le toca: se arranca cuando llegue (lo hace el tick de main.ts)
+        // not its turn yet: it starts when it is due (done by main.ts's tick)
         voz.el.pause();
       }
     }
   }
 
-  /** Sincroniza el estado con el beat actual (lo llama el bucle de reproduccion). */
+  /** Syncs the state with the current beat (called by the playback loop). */
   sincronizar(beat: number): void {
     if (!this.sonando) return;
     const spb = 60 / this.bpm;
@@ -130,20 +130,20 @@ export class StemPlayer {
         try {
           voz.el.currentTime = Math.max(0, (beat - startBeat + offsetBeat) * spb);
         } catch {
-          /* sin metadatos todavia */
+          /* no metadata yet */
         }
         void voz.el.play().catch(() => {});
       } else if (!debe && !voz.el.paused) {
         voz.el.pause();
       }
       if (debe && !voz.el.paused) {
-        // corrige deriva si se va mas de 120 ms
+        // corrects drift if it goes over 120 ms
         const esperado = (beat - startBeat + offsetBeat) * spb;
         if (Math.abs(voz.el.currentTime - esperado) > 0.12) {
           try {
             voz.el.currentTime = esperado;
           } catch {
-            /* nada */
+            /* nothing */
           }
         }
       }
@@ -155,7 +155,7 @@ export class StemPlayer {
     for (const voz of this.voces.values()) voz.el.pause();
   }
 
-  /** Cambia la ganancia de un clip (para los faders). */
+  /** Changes a clip's gain (for the faders). */
   setGanancia(clave: string, gainDb: number): void {
     const voz = this.voces.get(clave);
     if (voz) voz.gain.gain.value = Math.pow(10, gainDb / 20);

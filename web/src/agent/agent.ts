@@ -1,8 +1,8 @@
 /**
- * Bucle del agente: piensa, usa herramientas, observa el resultado y repite.
+ * Agent loop: thinks, uses tools, observes the result and repeats.
  *
- * El LLM decide; el codigo (aqui y en el servidor) ejecuta; el resultado vuelve
- * al modelo como mensaje de herramienta hasta que responde sin pedir ninguna.
+ * The LLM decides; the code (here and on the server) executes; the result goes back to
+ * the model as a tool message until it answers without requesting any.
  */
 
 import { chat } from "../llm.ts";
@@ -11,36 +11,35 @@ import { HERRAMIENTAS, ejecutarHerramienta, resumenLlamada } from "./tools.ts";
 import type { PasoHerramienta } from "./actividad.ts";
 
 /**
- * Tope de salida por turno. El modelo razona antes de contestar y ese razonamiento
- * gasta del mismo presupuesto (medido: 8.192 tokens y 22.823 caracteres pensando
- * sin llegar a escribir nada), así que se le deja margen de sobra.
+ * Output cap per turn. The model reasons before answering and that reasoning spends the
+ * same budget (measured: 8,192 tokens and 22,823 characters thinking without writing
+ * anything), so it is given plenty of room.
  */
 const MAX_TOKENS_SALIDA = 32768;
 
 /**
- * Tope de pasos de un turno: sin esto, un bucle no termina nunca. Un paso es una
- * respuesta del modelo (que puede pedir varias herramientas a la vez); los
- * reintentos por respuesta vacía del proveedor NO cuentan. Con las herramientas de
- * composición una sección son 6-10 pasos (leer, progresiones, notas, mezcla); una
- * canción entera, unos 30. No es un tope de gasto (el plan de Ollama es una cuota
- * fija): es el freno por si el modelo entra en bucle. Los cortes por fallos
- * repetidos y por escribir sin ejecutar siguen actuando antes.
- * Subido a 80 el 27-oct: un pase de arreglo sobre una canción de 92 compases
- * (melodía, coro, guitarra y efectos de 6 pistas) gastó 33 pasos en un turno.
+ * Step cap per turn: without this, a loop never ends. A step is one model response
+ * (which may request several tools at once); retries because of an empty provider
+ * response do NOT count. With the composition tools one section is 6-10 steps (read,
+ * progressions, notes, mix); a whole song, about 30. It is not a spending cap (the
+ * Ollama plan is a fixed quota): it is the brake in case the model loops. Cuts for
+ * repeated failures and for writing without executing still act first.
+ * Raised to 80 on Oct 27: one arrangement pass over a 92-bar song (melody, chorus,
+ * guitar and effects across 6 tracks) spent 33 steps in a turn.
  */
 const MAX_PASOS_POR_DEFECTO = 80;
 
-/** Corregir y volver a ejecutar sin éxito: a la cuarta, el turno se corta. */
+/** Fix and run again without success: on the fourth, the turn is cut. */
 const MAX_CICLOS_FALLIDOS = 4;
 
-/** Argumentos de una llamada ya ejecutada por encima de esto se resumen en el historial. */
+/** Arguments of an already executed call above this are summarized in the history. */
 const UMBRAL_ARGUMENTOS = 1200;
 
 export interface EventoAgente {
-  /** "progreso": el modelo está escribiendo; se emite como mucho cada 700 ms. */
+  /** "progreso": the model is writing; emitted at most every 700 ms. */
   tipo: "herramienta" | "aviso" | "progreso";
   texto: string;
-  /** Solo en "aviso": la herramienta que acaba de terminar y lo que tardo. */
+  /** Only in "aviso": the tool that just finished and how long it took. */
   nombre?: string;
   ms?: number;
   ok?: boolean;
@@ -51,18 +50,18 @@ export interface ResultadoAgente {
   pasos: number;
   llamadas: number;
   ms: number;
-  /** Una entrada por llamada, en orden: es lo que desglosa la barra de actividad. */
+  /** One entry per call, in order: it is what the activity bar breaks down. */
   herramientas: PasoHerramienta[];
 }
 
 export interface OpcionesAgente {
   maxPasos?: number;
   alEvento?: (evento: EventoAgente) => void;
-  /** Cancelar el turno (botón «Cancelar»): corta el modelo y la herramienta en vuelo. */
+  /** Cancel the turn ("Cancel" button): cuts the model and the tool in flight. */
   signal?: AbortSignal;
 }
 
-/** Ejecuta el bucle sobre `mensajes` (se modifican: el historial continua). */
+/** Runs the loop over `mensajes` (they are modified: the history continues). */
 export async function ejecutarAgente(
   mensajes: ChatMessage[],
   opciones: OpcionesAgente = {},
@@ -74,24 +73,24 @@ export async function ejecutarAgente(
   let pasos = 0;
   let llamadas = 0;
   let texto = "";
-  /** Tiempo medido de cada llamada: se devuelve para la barra de actividad. */
+  /** Measured time of each call: returned for the activity bar. */
   const herramientas: PasoHerramienta[] = [];
-  /** Escrituras seguidas sin una ejecucion correcta: corta el bucle de parches. */
+  /** Consecutive writes without a successful run: cuts the patching loop. */
   let escriturasSinEjecutar = 0;
-  /** Ejecuciones que fallan después de haber corregido algo. */
+  /** Runs that fail after having fixed something. */
   let ciclosFallidos = 0;
   /**
-   * Fallos identicos seguidos, POR TURNO. Antes vivia fuera de la funcion y un
-   * fallo de una sesion anterior contaba en la siguiente: el segundo intento del
-   * dia cortaba el turno por «tres veces igual».
+   * Identical failures in a row, PER TURN. Before, it lived outside the function and a
+   * failure from a previous session counted in the next one: the day's second attempt
+   * cut the turn for "three times the same".
    */
   const fallosIguales = new Map<string, number>();
-  // Un vacío aislado es un fallo del proveedor, no del modelo: se reintenta una vez
-  // en silencio. Si se repite, se para y se avisa (para no entrar en bucle).
+  // An isolated empty response is a provider failure, not the model's: it is retried once
+  // silently. If it repeats, it stops and warns (so as not to loop).
   let vaciosSeguidos = 0;
   let reanudaciones = 0;
 
-  /** Respuesta de cierre cuando el usuario cancela. */
+  /** Closing answer when the user cancels. */
   const cancelado = (): ResultadoAgente => ({
     texto:
       "Turn cancelled. Whatever was already written to disk stays; if a GPU was running, switch it off " +
@@ -111,8 +110,8 @@ export async function ejecutarAgente(
       temperature: 0.2,
       signal: senal,
       maxTokens: MAX_TOKENS_SALIDA,
-      // Con streaming se puede decir que está trabajando de verdad: cuántos trozos
-      // lleva y cuánto tiempo. Se emite cada 700 ms para no saturar la barra.
+      // With streaming it is possible to honestly say it is working: how many chunks it
+      // has and how long. It is emitted every 700 ms so as not to saturate the bar.
       onProgreso: ({ tokens, ms }) => {
         if (ms - ultimoAviso < 700) return;
         ultimoAviso = ms;
@@ -124,8 +123,9 @@ export async function ejecutarAgente(
     });
     texto = respuesta.content.trim();
 
-    // Si se quedó pensando y no escribió, se repite SIN razonamiento: es más rápido y
-    // la respuesta llega igual. Pensar no es el problema; cortarlo a mitad sí.
+    // If it stayed thinking and wrote nothing, it is repeated WITHOUT reasoning: it is
+    // faster and the answer arrives just the same. Thinking is not the problem; cutting
+    // it off halfway is.
     if (respuesta.finishReason === "sin_salida") {
       respuesta = await chat(mensajes, {
         tools: HERRAMIENTAS,
@@ -134,9 +134,9 @@ export async function ejecutarAgente(
         maxTokens: MAX_TOKENS_SALIDA,
         sinRazonamiento: true,
       });
-      // Se recalcula con la SEGUNDA respuesta: antes se quedaba el texto de la
-      // primera (vacía) y una respuesta buena del reintento se tiraba como si
-      // fuera otro turno en blanco.
+      // It is recalculated with the SECOND response: before, the first (empty) text was
+      // kept and a good answer from the retry was thrown away as if it were another
+      // blank turn.
       texto = respuesta.content.trim();
     }
 
@@ -144,7 +144,7 @@ export async function ejecutarAgente(
     const vacia = !pideHerramientas && texto === "";
     if (!vacia) vaciosSeguidos = 0;
 
-    // Una respuesta vacia y sin herramientas no se guarda: solo ensuciaria el historial.
+    // An empty response without tools is not saved: it would only dirty the history.
     if (!vacia) {
       mensajes.push({
         role: "assistant",
@@ -154,57 +154,56 @@ export async function ejecutarAgente(
     }
 
     if (!pideHerramientas) {
-      // Fallo observado (22-oct-2026): el modelo se va en bucle, agota su salida
-      // (393.216 tokens en 12 minutos) y devuelve un mensaje vacio, sin texto y
-      // sin pedir ninguna herramienta. Aqui solo se DETECTA y se avisa claro:
-      // no se reintenta por su cuenta (la decision es del usuario).
+      // Observed failure (Oct 22, 2026): the model loops, exhausts its output
+      // (393,216 tokens in 12 minutes) and returns an empty message, with no text and
+      // without requesting any tool. Here it is only DETECTED and clearly reported: it is
+      // not retried on its own (the decision is the user's).
       if (vacia) {
         const tokens = respuesta.usage?.completion_tokens ?? 0;
         const segundos = Math.round((Date.now() - t0) / 1000);
         const cortada = respuesta.finishReason === "length" || respuesta.finishReason === "sin_salida";
         const agotada = tokens >= 32768;
-        // 'load' es lo que devuelve el proveedor cuando está saturado: cero tokens y
-        // 250 ms (medido dos veces seguidas el 25-oct). Reintentar al instante no sirve;
-        // se espera y se prueba hasta tres veces.
+        // 'load' is what the provider returns when it is saturated: zero tokens and
+        // 250 ms (measured twice in a row on Oct 25). Retrying instantly does not help;
+        // it waits and tries up to three times.
         if (!cortada && vaciosSeguidos < 5) {
           vaciosSeguidos += 1;
-          // 'load' en Ollama es el modelo cargándose: hace falta esperar de verdad.
+          // 'load' in Ollama means the model is loading: a real wait is needed.
           await new Promise((listo) => setTimeout(listo, 1000 * 2 ** (vaciosSeguidos - 1)));
-          // Un vacío del proveedor no es trabajo del modelo: no gasta paso. Antes seis
-          // 'load' seguidos se comían la mitad del turno.
+          // An empty provider response is not the model's work: it does not spend a step.
+          // Before, six 'load's in a row ate half the turn.
           pasos -= 1;
           continue;
         }
-        // Si el proveedor sigue sin contestar, se retoma el turno solo una vez: lo que
-        // el usuario haría escribiendo «continúa». Si tampoco, se para y se avisa.
+        // If the provider still does not answer, the turn is resumed only once: what the
+        // user would do by typing "continue". If that fails too, it stops and warns.
         if (!cortada && reanudaciones < 1) {
           reanudaciones += 1;
           vaciosSeguidos = 0;
-          mensajes.push({ role: "user", content: "Continúa desde donde lo dejaste." });
+          mensajes.push({ role: "user", content: "Continue from where you left off." });
           pasos -= 1;
           continue;
         }
         return {
           texto: cortada
             ? respuesta.finishReason === "sin_salida"
-              ? "El modelo se ha pasado el turno razonando y no llegó a escribir la respuesta. " +
-                "No es un fallo de la app: se le dio más presupuesto y se reintenta solo. Si vuelve " +
-                "a pasar, pídelo en trozos más pequeños."
-              : "El modelo se ha cortado a mitad de la respuesta (tope de salida) y no ha llegado a " +
-                "terminar. Lo escrito en disco se queda. Dime «continúa» y sigo desde ahí, o pídeme " +
-                "que lo haga en trozos más pequeños."
+              ? "The model spent the turn reasoning and never got to write the answer. " +
+                "It is not an app failure: it was given more budget and is retried automatically. " +
+                "If it keeps happening, ask for it in smaller pieces."
+              : "The model was cut off halfway through the answer (output cap) and did not finish. " +
+                "Whatever was written to disk stays. Tell me “continue” and I will pick up from there, " +
+                "or ask me to do it in smaller pieces."
             : agotada
-            ? "El modelo ha agotado su salida generando en bucle (" +
-              `${tokens.toLocaleString("es-ES")} tokens en ${segundos} s) y no ha devuelto ` +
-              "texto ni herramienta alguna. No se ha tocado nada: dime «continúa» para reintentarlo."
+            ? "The model exhausted its output generating in a loop (" +
+              `${tokens.toLocaleString("es-ES")} tokens in ${segundos} s) and returned ` +
+              "neither text nor any tool. Nothing has been touched: tell me “continue” to retry it."
             : respuesta.finishReason === "load"
-              ? "El proveedor del modelo está saturado (finish_reason 'load': cero tokens en " +
-                "un cuarto de segundo). He reintentado tres veces con espera y sigue igual. " +
-                "Lo escrito en disco se queda. Prueba en un minuto, o cambia de modelo en el " +
-                "selector; si vuelve a pasar siempre después de un fichero grande, es que el " +
-                "turno anterior pidió demasiado."
-              : "El modelo devolvio una respuesta vacia, sin texto y sin pedir ninguna " +
-                "herramienta. No se ha tocado nada: dime «continua» para reintentarlo.",
+              ? "The model provider is saturated (finish_reason 'load': zero tokens in a " +
+                "quarter of a second). I retried three times with a wait and it is still the same. " +
+                "Whatever was written to disk stays. Try again in a minute, or change the model in the " +
+                "selector; if it always happens after a large file, the previous turn asked for too much."
+              : "The model returned an empty response, with no text and without requesting any " +
+                "tool. Nothing has been touched: tell me “continue” to retry it.",
           pasos,
           llamadas,
           ms: Date.now() - t0,
@@ -240,18 +239,18 @@ export async function ejecutarAgente(
         content: resultado.texto.slice(0, 12000),
       });
 
-      // Lo que ya se aplicó no hace falta reenviarlo: los argumentos largos (listas de
-      // notas, scripts) se sustituyen en el historial por un resumen. Medido el 27-oct:
-      // 20 llamadas de un mismo turno reenviaron 389.000 tokens, casi todo notas ya
-      // escritas. Si la llamada FALLÓ se deja entera: el modelo la necesita para corregir.
+      // What was already applied does not need to be sent again: long arguments (note
+      // lists, scripts) are replaced in the history with a summary. Measured on Oct 27:
+      // 20 calls in the same turn resent 389,000 tokens, almost all notes already
+      // written. If the call FAILED it is left whole: the model needs it to correct.
       if (resultado.ok && llamada.function && llamada.function.arguments.length > UMBRAL_ARGUMENTOS) {
         llamada.function.arguments = JSON.stringify({
-          _omitido: `${llamada.function.arguments.length} caracteres ya aplicados; el estado real está en leer_proyecto`,
+          _omitido: `${llamada.function.arguments.length} characters already applied; the real state is in leer_proyecto`,
         });
       }
 
-      // Reintentar exactamente lo que falla igual no arregla nada: corta el turno
-      // (pasó con crear_proyecto devolviendo 12 veces el mismo error).
+      // Retrying exactly what fails the same way fixes nothing: it cuts the turn
+      // (it happened with crear_proyecto returning the same error 12 times).
       if (!resultado.ok) {
         const clave = `${nombre}|${resultado.texto.slice(0, 160)}`;
         const veces = (fallosIguales.get(clave) ?? 0) + 1;
@@ -262,7 +261,7 @@ export async function ejecutarAgente(
             texto:
               `I stopped: “${nombre}” gave the same error three times in a row and retrying won't fix it.\n\n` +
               `> ${resultado.texto.split("\n")[0].slice(0, 300)}\n\n` +
-              "Dime cómo seguir (si es un fallo de la app, recarga la página y repite).",
+              "Tell me how to continue (if it is an app failure, reload the page and try again).",
             pasos,
             llamadas,
             ms: Date.now() - t0,
@@ -273,19 +272,18 @@ export async function ejecutarAgente(
         fallosIguales.clear();
       }
 
-      // Freno de bucles de parches. Medido el 28-oct: el freno viejo (3 escrituras sin
-      // una ejecución correcta) cortó un turno sano: escribir el script, ejecutarlo
-      // (falla), corregir DOS sitios con editar_fichero → cortado antes de reintentar.
-      // Ahora cuentan los CICLOS: una ejecución que falla tras haber escrito. Escribir
-      // varias veces seguidas sólo lleva un aviso.
+      // Patch-loop brake. Measured on Oct 28: the old brake (3 writes without a
+      // successful run) cut a healthy turn: write the script, run it (fails), fix TWO
+      // places with editar_fichero → cut before retrying. Now CYCLES count: a run that
+      // fails after having written. Writing several times in a row only earns a warning.
       if (nombre === "escribir_fichero" || nombre === "editar_fichero") {
         escriturasSinEjecutar += 1;
         if (escriturasSinEjecutar === 4) {
           const ultimo = mensajes[mensajes.length - 1];
           if (ultimo && ultimo.role === "tool") {
             ultimo.content +=
-              "\n\n[AVISO DEL SISTEMA] Llevas 4 escrituras seguidas sin ejecutar nada. " +
-              "Ejecuta AHORA el script con ejecutar_python (o verificar_audio) antes de escribir otra vez.";
+              "\n\n[SYSTEM NOTICE] You have 4 writes in a row without running anything. " +
+              "Run the script NOW with ejecutar_python (or verificar_audio) before writing again.";
           }
         }
       } else if (nombre === "ejecutar_python" || nombre === "verificar_audio") {
@@ -316,16 +314,16 @@ export async function ejecutarAgente(
 
   if (pasos >= maxPasos && texto === "") {
     alEvento?.({ tipo: "aviso", texto: `Safety stop: ${maxPasos} steps; asking for a summary.` });
-    // Se acabaron los pasos con trabajo a medias: una última llamada SIN herramientas
-    // para que el modelo diga qué ha hecho y qué falta. Antes el turno acababa en
-    // «(sin respuesta final)» y la persona no sabía en qué punto estaba.
+    // The steps ran out with work half done: one last call WITHOUT tools so the model
+    // says what it has done and what is missing. Before, the turn ended in
+    // "(no final answer)" and the person did not know where things stood.
     if (!senal?.aborted) {
       mensajes.push({
         role: "user",
         content:
-          "[AVISO DEL SISTEMA] Se ha acabado el presupuesto de pasos de este turno. No llames a " +
-          "ninguna herramienta: resume, en el idioma de la persona, lo que has hecho de verdad " +
-          "(comprobado), lo que falta y el siguiente paso que propones.",
+          "[SYSTEM NOTICE] The step budget for this turn is over. Do not call any " +
+          "tool: summarize, in the person's language, what you have actually done " +
+          "(verified), what is missing and the next step you propose.",
       });
       try {
         const cierre = await chat(mensajes, {
@@ -337,7 +335,7 @@ export async function ejecutarAgente(
         texto = cierre.content.trim();
         if (texto !== "") mensajes.push({ role: "assistant", content: cierre.content });
       } catch {
-        /* sin resumen: se devuelve lo que haya */
+        /* no summary: whatever there is gets returned */
       }
     }
   }

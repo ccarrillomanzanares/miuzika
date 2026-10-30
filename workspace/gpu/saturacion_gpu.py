@@ -1,12 +1,12 @@
-"""Lo que la GPU permite y la CPU no: saturacion sobremuestreada sin aliasing.
+"""What the GPU allows and the CPU does not: oversampled saturation with no aliasing.
 
-Una saturacion (tanh) con drive alto genera armonicos por encima de Nyquist que,
-al no estar filtrados, se pliegan hacia abajo (aliasing): suenan a suciedad y
-dureza justo en los agudos. La solucion es calcular a 8x/16x y filtrar antes de
-bajar. En CPU eso multiplica el coste por 16 y no se hace; en GPU es calderilla.
+A saturation (tanh) with high drive generates harmonics above Nyquist that,
+not being filtered, fold back down (aliasing): they sound like dirt and
+harshness right in the highs. The solution is to compute at 8x/16x and filter before
+downsampling. On CPU that multiplies the cost by 16 and is not done; on GPU it is pocket change.
 
-Mide: energia no armonica (aliasing) a 1x, 8x y 16x, y el tiempo de cada version.
-Escribe los WAV para poder escucharlos.
+Measures: non-harmonic energy (aliasing) at 1x, 8x and 16x, and the time of each version.
+Writes the WAVs so they can be listened to.
 """
 
 import os
@@ -23,14 +23,14 @@ TAPS = 127
 
 
 def fir_antialias(corte_relativo: float, dispositivo, dtype=torch.float64):
-    """Filtro FIR paso bajo (sinc con ventana de Hann). corte_relativo en (0, 1)."""
+    """Low-pass FIR filter (sinc with Hann window). corte_relativo in (0, 1)."""
     n = torch.arange(TAPS, dtype=dtype, device=dispositivo) - (TAPS - 1) / 2
     h = torch.sinc(2 * corte_relativo * n) * torch.hann_window(TAPS, periodic=False, dtype=dtype, device=dispositivo)
     return h / h.sum()
 
 
 def filtrar(x, h):
-    """Convolucion 1-D con el mismo tamano (relleno simetrico)."""
+    """1-D convolution with the same size (symmetric padding)."""
     pad = (h.numel() - 1) // 2
     return F.conv1d(F.pad(x.view(1, 1, -1), (pad, pad), mode="replicate"), h.view(1, 1, -1)).view(-1)
 
@@ -50,12 +50,13 @@ def submuestrear(y, factor, h):
 
 
 def saturar(x, factor, h):
-    """tanh con drive alto, calculada a 'factor' x y devuelta a la frecuencia original."""
+    """High-drive tanh, computed at 'factor' x and returned to the original rate."""
     return submuestrear(torch.tanh(DRIVE * sobremuestrear(x, factor, h)) / np.tanh(DRIVE), factor, h)
 
 
 def medir_aliasing(senal, f0):
-    """Energia NO armonica respecto a f0, en dB relativo al fundamental (mas bajo = mejor)."""    x = senal.detach().cpu().numpy().astype(np.float64)
+    """NON-harmonic energy relative to f0, in dB relative to the fundamental (lower = better)."""
+    x = senal.detach().cpu().numpy().astype(np.float64)
     n = 1 << int(np.ceil(np.log2(len(x))))
     X = np.abs(np.fft.rfft(x * np.hanning(len(x)), n)) ** 2
     f = np.fft.rfftfreq(n, 1 / SR)
@@ -73,7 +74,7 @@ def guardar(ruta, senal, pico_objetivo=0.89):
     x = senal.detach().cpu().numpy().astype(np.float64)
     x = x / (np.max(np.abs(x)) or 1.0) * pico_objetivo
     os.makedirs(os.path.dirname(ruta) or ".", exist_ok=True)
-    # WAV 24 bits sin scipy
+    # 24-bit WAV without scipy
     import struct
     pcm = (np.clip(x, -1, 1) * 8388607).astype(np.int32)
     datos = bytearray()
@@ -87,14 +88,14 @@ def guardar(ruta, senal, pico_objetivo=0.89):
 
 
 def main():
-    print(f"dispositivo: {DISPOSITIVO}" + (f" | {torch.cuda.get_device_name(0)}" if DISPOSITIVO == "cuda" else ""))
+    print(f"device: {DISPOSITIVO}" + (f" | {torch.cuda.get_device_name(0)}" if DISPOSITIVO == "cuda" else ""))
 
-    # --- 1. tono puro: mide aliasing puro, sin musica de por medio
+    # --- 1. pure tone: measures pure aliasing, with no music in between
     f0 = 1000.0
     t = torch.arange(int(2.0 * SR), dtype=torch.float64, device=DISPOSITIVO) / SR
     tono = 0.9 * torch.sin(2 * torch.pi * f0 * t)
 
-    print("\nA. Tono de 1 kHz saturado (drive 8). Energia no armonica vs fundamental:")
+    print("\nA. Saturated 1 kHz tone (drive 8). Non-harmonic energy vs fundamental:")
     resultados = {}
     for factor in (1, 8, 16):
         h = fir_antialias(0.5 / factor * 0.95, DISPOSITIVO)
@@ -110,13 +111,13 @@ def main():
         if factor != 1:
             guardar(f"salida/tono_{factor}x.wav", y)
     guardar("salida/tono_1x.wav", saturar(tono, 1, fir_antialias(0.5, DISPOSITIVO)))
-    print(f"   mejora 1x -> 16x: {resultados[1] - resultados[16]:+.1f} dB menos de aliasing")
+    print(f"   improvement 1x -> 16x: {resultados[1] - resultados[16]:+.1f} dB less aliasing")
 
-    # --- 2. musica: un bajo del motor, saturado igual
+    # --- 2. music: a bass from the engine, saturated the same way
     import instruments
     note = instruments.bass_note(33, 4.0, vel=0.9, seed=7, squelch=0.5, bright=1.0)
     bajo = torch.from_numpy(np.asarray(note, dtype=np.float64)).to(DISPOSITIVO) * 2.0
-    print("\nB. Bajo del motor (A1, 4 s) con la misma saturacion:")
+    print("\nB. Engine bass (A1, 4 s) with the same saturation:")
     for factor in (1, 16):
         h = fir_antialias(0.5 / factor * 0.95, DISPOSITIVO)
         if DISPOSITIVO == "cuda":
@@ -130,7 +131,7 @@ def main():
         F_ = np.abs(np.fft.rfft(x)) ** 2
         freq = np.fft.rfftfreq(len(x), 1 / SR)
         agudos = 10 * np.log10(F_[(freq > 6000)].sum() / (F_.sum() or 1e-20))
-        print(f"   {factor:>2}x: {ms:6.1f} ms | energia >6 kHz: {agudos:6.1f} dB del total")
+        print(f"   {factor:>2}x: {ms:6.1f} ms | energy >6 kHz: {agudos:6.1f} dB of the total")
         guardar(f"salida/bajo_{factor}x.wav", y)
 
     # --- 3. coste a escala de cancion: 6 minutos mono a 16x
@@ -146,7 +147,7 @@ def main():
     saturar(x, 16, h16)
     if DISPOSITIVO == "cuda":
         torch.cuda.synchronize()
-    print(f"   16x sobre 6 min: {(time.time() - t0) * 1000:.0f} ms")
+    print(f"   16x on 6 min: {(time.time() - t0) * 1000:.0f} ms")
 
 
 if __name__ == "__main__":

@@ -1,22 +1,22 @@
-"""Mide una canción de referencia: tempo, tonalidad, forma y carácter.
+"""Measures a reference song: tempo, key, form and character.
 
-    python codigo/analizar_referencia.py "<url de YouTube | ruta de un audio>"
+    python codigo/analizar_referencia.py "<YouTube URL | path to an audio file>"
 
-Devuelve un JSON con lo que se puede medir de oído ajeno:
+Returns a JSON with what can be measured by someone else's ear:
 
-  tempo_bpm        pulsos por minuto (autocorrelación de la envolvente de energía)
-  tonalidad        tónica y modo, por correlación del croma con perfiles mayores/menores
-  duracion_s       segundos
-  compases         compases estimados a 4/4
-  forma[]          por bloques: compás inicial, compás final, energía relativa (0-1)
-  registros        reparto de energía en graves / medios / agudos y centroide medio
-  palabras         el carácter en palabras, derivado de las medidas
+  tempo_bpm        beats per minute (autocorrelation of the energy envelope)
+  tonalidad        tonic and mode, by correlating the chroma with major/minor profiles
+  duracion_s       seconds
+  compases         estimated bars in 4/4
+  forma[]          per block: first bar, last bar, relative energy (0-1)
+  registros        energy distribution across lows / mids / highs and mean centroid
+  palabras         the character in words, derived from the measurements
 
-Lo que NO hace: sacar la melodía ni los acordes. Eso no sale de aquí; si el usuario
-quiere tocar el tema, la melodía tiene que venir de otro sitio (MIDI o que la sepa
-el agente de memoria).
+What it does NOT do: extract the melody or the chords. That doesn't come from here; if the user
+wants to play the song, the melody has to come from somewhere else (MIDI, or the agent
+knowing it from memory).
 
-Con una URL descarga el audio a `_referencias/` con yt-dlp y trabaja sobre el fichero.
+With a URL it downloads the audio to `_referencias/` using yt-dlp and works on the file.
 """
 
 import json
@@ -33,7 +33,7 @@ SR = 22050
 
 
 def descargar(url: str, carpeta: str) -> str:
-    """Baja el audio de una URL a WAV mono. Devuelve la ruta."""
+    """Downloads the audio from a URL to mono WAV. Returns the path."""
     os.makedirs(carpeta, exist_ok=True)
     plantilla = os.path.join(carpeta, "%(id)s.%(ext)s")
     comando = [
@@ -50,12 +50,12 @@ def descargar(url: str, carpeta: str) -> str:
         key=os.path.getmtime,
     )
     if not ficheros:
-        raise SystemExit(json.dumps({"ok": False, "error": "la descarga no dejó ningún wav"}))
+        raise SystemExit(json.dumps({"ok": False, "error": "the download left no wav file"}))
     return ficheros[-1]
 
 
 def decodificar(ruta: str) -> np.ndarray:
-    """Cualquier audio a mono 22050 Hz con ffmpeg (el que ya usa el proyecto)."""
+    """Any audio to mono 22050 Hz with ffmpeg (the one the project already uses)."""
     from shutil import which
 
     ffmpeg = which("ffmpeg") or "ffmpeg"
@@ -66,7 +66,7 @@ def decodificar(ruta: str) -> np.ndarray:
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if proceso.returncode != 0 or not os.path.exists(salida):
-        raise SystemExit(json.dumps({"ok": False, "error": "ffmpeg no pudo decodificar: " + proceso.stderr[-300:]}))
+        raise SystemExit(json.dumps({"ok": False, "error": "ffmpeg could not decode: " + proceso.stderr[-300:]}))
     with wave.open(salida, "rb") as w:
         datos = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype(np.float64) / 32768.0
     os.unlink(salida)
@@ -74,25 +74,25 @@ def decodificar(ruta: str) -> np.ndarray:
 
 
 def envolvente(x: np.ndarray) -> tuple[np.ndarray, float]:
-    """Energía por trama (para el tempo) y su frecuencia de muestreo."""
+    """Energy per frame (for the tempo) and its sampling rate."""
     hop = 512
     tramas = len(x) // hop
     if tramas < 8:
-        raise SystemExit(json.dumps({"ok": False, "error": "audio demasiado corto"}))
+        raise SystemExit(json.dumps({"ok": False, "error": "audio too short"}))
     trozos = x[: tramas * hop].reshape(tramas, hop)
     energia = np.sqrt((trozos ** 2).mean(axis=1) + 1e-12)
-    # Derivada positiva: los ataques, no el volumen sostenido.
+    # Positive derivative: the attacks, not the sustained volume.
     ataques = np.maximum(0.0, np.diff(energia, prepend=energia[0]))
     return ataques, SR / hop
 
 
 def tempo(ataques: np.ndarray, fps: float) -> tuple[float, float]:
-    """BPM y confianza, con peine de armónicos y preferencia por 90-150.
+    """BPM and confidence, with a harmonic comb and a preference for 90-150.
 
-    Coger el máximo de la autocorrelación a secas daba 132,5 BPM en un patrón de
-    100 (medido): el pico más alto era un subdivisión. Se puntúa cada candidato
-    sumando la autocorrelación en el pulso y en sus múltiplos, y se pondera con una
-    curva alrededor de 120 BPM, que es donde está la mayoría de la música.
+    Taking the plain autocorrelation maximum gave 132.5 BPM on a pattern of
+    100 (measured): the highest peak was a subdivision. Each candidate is scored
+    by adding the autocorrelation at the beat and at its multiples, and weighted with a
+    curve around 120 BPM, which is where most music sits.
     """
     señal = ataques - ataques.mean()
     if np.allclose(señal, 0):
@@ -108,7 +108,7 @@ def tempo(ataques: np.ndarray, fps: float) -> tuple[float, float]:
             if lag < len(autocorr):
                 puntos += peso * float(autocorr[lag])
             peso *= 0.6
-        # Preferencia logarítmica centrada en 120 BPM (desviación de una quinta).
+        # Logarithmic preference centred on 120 BPM (a fifth's deviation).
         prior = float(np.exp(-0.5 * (np.log2(bpm / 120.0) / 0.6) ** 2))
         puntos *= prior
         if puntos > mejor_puntos:
@@ -122,7 +122,7 @@ NOTAS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 
 def croma(x: np.ndarray) -> np.ndarray:
-    """Energía por clase de altura, sumando tramas."""
+    """Energy per pitch class, summing frames."""
     ventana = 8192
     salto = ventana // 2
     acumulado = np.zeros(12)
@@ -140,11 +140,11 @@ def croma(x: np.ndarray) -> np.ndarray:
 
 
 def tonalidad(chroma: np.ndarray) -> dict:
-    # Un patrón de batería no tiene altura: si el croma es plano, no hay tonalidad
-    # que medir y decirlo es más útil que devolver una tónica inventada.
+    # A drum pattern has no pitch: if the chroma is flat there is no key
+    # to measure, and saying so is more useful than returning a made-up tonic.
     plano = float(np.max(chroma) / (np.mean(chroma) + 1e-12))
     if plano < 1.6:
-        return {"tonica": None, "modo": None, "correlacion": 0.0, "aviso": "sin contenido tonal (percusión o ruido)"}
+        return {"tonica": None, "modo": None, "correlacion": 0.0, "aviso": "no tonal content (percussion or noise)"}
     mejor = (-2.0, "C", "mayor")
     for i in range(12):
         for perfil, modo in ((PERFILES_MAYOR, "mayor"), (PERFILES_MENOR, "menor")):
@@ -154,12 +154,12 @@ def tonalidad(chroma: np.ndarray) -> dict:
                 mejor = (r, NOTAS[i], modo)
     salida = {"tonica": mejor[1], "modo": mejor[2], "correlacion": round(mejor[0], 3)}
     if mejor[0] < 0.65:
-        salida["aviso"] = "tonalidad poco clara (poca armonía o mucha percusión)"
+        salida["aviso"] = "unclear key (little harmony or a lot of percussion)"
     return salida
 
 
 def forma(x: np.ndarray, bpm: float) -> dict:
-    """Energía por compás y bloques de 4 compases (la forma se oye ahí)."""
+    """Energy per bar and 4-bar blocks (that's where the form is heard)."""
     seg_compas = 4 * 60.0 / bpm if bpm > 0 else 2.0
     compases = max(1, int(len(x) / SR / seg_compas))
     energia = []
@@ -182,7 +182,7 @@ def forma(x: np.ndarray, bpm: float) -> dict:
 
 
 def registros(x: np.ndarray) -> dict:
-    """Reparto de energía graves/medios/agudos y brillo medio."""
+    """Low/mid/high energy distribution and average brightness."""
     ventana = 8192
     graves = medios = agudos = 0.0
     centroides = []
@@ -208,22 +208,22 @@ def registros(x: np.ndarray) -> dict:
 
 def palabras(tempo_bpm: float, tono: dict, reg: dict, forma_: dict) -> list[str]:
     salida = []
-    salida.append("lento" if tempo_bpm < 85 else ("medio" if tempo_bpm < 125 else "rápido"))
-    salida.append("graves por delante" if reg["graves"] > 0.55 else ("equilibrado" if reg["graves"] > 0.3 else "fino"))
-    salida.append("brillante" if reg["centroide_hz"] > 2200 else ("oscuro" if reg["centroide_hz"] < 1200 else "cálido"))
+    salida.append("slow" if tempo_bpm < 85 else ("medium" if tempo_bpm < 125 else "fast"))
+    salida.append("bass-forward" if reg["graves"] > 0.55 else ("balanced" if reg["graves"] > 0.3 else "thin"))
+    salida.append("bright" if reg["centroide_hz"] > 2200 else ("dark" if reg["centroide_hz"] < 1200 else "warm"))
     energias = [b["energia"] for b in forma_["bloques"]]
     if energias:
-        salida.append("con contraste" if (max(energias) - min(energias)) > 0.35 else "uniforme")
+        salida.append("with contrast" if (max(energias) - min(energias)) > 0.35 else "uniform")
     if tono.get("tonica"):
-        salida.append("en " + tono["tonica"] + " " + tono["modo"])
+        salida.append("in " + tono["tonica"] + " " + tono["modo"])
     else:
-        salida.append("sin tonalidad clara")
+        salida.append("no clear key")
     return salida
 
 
 def main(argv):
     if not argv:
-        print(json.dumps({"ok": False, "error": "uso: analizar_referencia.py <url|ruta>"}))
+        print(json.dumps({"ok": False, "error": "usage: analizar_referencia.py <url|path>"}))
         return 1
     origen = argv[0]
     try:
@@ -232,7 +232,7 @@ def main(argv):
         else:
             ruta = origen
         if not os.path.exists(ruta):
-            raise SystemExit(json.dumps({"ok": False, "error": f"no existe: {ruta}"}))
+            raise SystemExit(json.dumps({"ok": False, "error": f"does not exist: {ruta}"}))
         x = decodificar(ruta)
         ataques, fps = envolvente(x)
         bpm, confianza = tempo(ataques, fps)

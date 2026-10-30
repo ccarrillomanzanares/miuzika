@@ -1,134 +1,134 @@
-# LEGAL — notas de trabajo (BORRADOR)
+# LEGAL — working notes (DRAFT)
 
-> **Aviso.** Esto es un registro técnico de decisiones y su encaje legal, **no asesoría
-> jurídica**. Antes de comercializar cualquier servicio hay que revisarlo con un abogado de
-> propiedad intelectual. Lo que sí es firme: qué datos entran y qué actos se hacen, porque
-> eso lo decidimos nosotros y queda registrado aquí.
+> **Notice.** This is a technical record of decisions and how they fit legally, **not legal
+> advice**. Before commercializing any service it must be reviewed by an intellectual
+> property lawyer. What is firm: which data goes in and which acts are performed, because
+> we decide that and it is recorded here.
 
-Última revisión: 2026-10-23.
+Last review: 2026-10-23.
 
 ---
 
-## 1. Licencia del proyecto
+## 1. Project license
 
-Miuzika se distribuye bajo **MIT**. Obliga a incluir el aviso de copyright y el texto de la
-licencia en las copias o partes sustanciales del software. En la práctica:
+Miuzika is distributed under **MIT**. It requires including the copyright notice and the
+license text in copies or substantial portions of the software. In practice:
 
-- `LICENSE` en la raíz, sin modificar.
-- Los ficheros derivados de terceros conservan su aviso (ver §6).
-- Un `CREDITS.md` con la atribución de modelos, datasets y samples (pendiente de crear).
+- `LICENSE` at the root, unmodified.
+- Files derived from third parties keep their notice (see §6).
+- A `CREDITS.md` with attribution for models, datasets and samples (still to be created).
 
-## 2. Qué no es obra: ideas, métodos y estilos
+## 2. What is not a work: ideas, methods and styles
 
-Este es el punto que más se repite y el que más se malinterpreta. **Las ideas, los
-procedimientos, los métodos y los sistemas no son objeto de derecho de autor**: lo protegido
-es la *expresión*, no el contenido abstracto.
+This is the point that comes up most often and is most often misunderstood. **Ideas,
+procedures, methods and systems are not subject to copyright**: what is protected is the
+*expression*, not the abstract content.
 
-Referencias correctas:
+Correct references:
 
-- **TRLPI art. 1**: protege «las creaciones originales literarias, artísticas o científicas
-  expresadas por cualquier medio o soporte». Lo que no está *expresado* no está protegido.
-- **TRLPI art. 96.1** (programas de ordenador): «No serán objeto de protección las ideas y
-  principios en los que se basan cualesquiera de los elementos de un programa de ordenador,
-  incluidos los que sirven de fundamento a sus interfaces.»
-- **ADPIC/TRIPS art. 9.2**: «la protección del derecho de autor se extenderá a las
-  expresiones, no a las ideas, procedimientos, métodos de operación o conceptos matemáticos».
-- **Convenio de Berna art. 2.8**: la protección no se extiende a las noticias del día ni a
-  los hechos diversos.
+- **TRLPI art. 1**: protects "original literary, artistic or scientific creations expressed
+  by any means or medium". What is not *expressed* is not protected.
+- **TRLPI art. 96.1** (computer programs): "The ideas and principles on which any of the
+  elements of a computer program are based shall not be protected, including those that
+  underlie its interfaces."
+- **TRIPS art. 9.2**: "copyright protection shall extend to expressions and not to ideas,
+  procedures, methods of operation or mathematical concepts".
+- **Berne Convention art. 2.8**: protection does not extend to news of the day or to
+  miscellaneous facts.
 
-> **Corrección de una afirmación anterior.** En una conversación previa se citó el art. 13
-> TRLPI como el que excluye las ideas. **Es incorrecto**: el art. 13 TRLPI se refiere a las
-> disposiciones legales, resoluciones judiciales y actos de organismos públicos. La exclusión
-> de ideas está en las referencias del párrafo anterior. Queda corregido aquí para que no se
-> propague a ningún texto público.
+> **Correction of an earlier statement.** In a previous conversation, art. 13
+> TRLPI was cited as the one excluding ideas. **That is incorrect**: art. 13 TRLPI refers to
+> legal provisions, judicial decisions and acts of public bodies. The exclusion
+> of ideas is in the references of the previous paragraph. It is corrected here so that it
+> does not spread into any public text.
 
-### Consecuencias prácticas para Miuzika
+### Practical consequences for Miuzika
 
-Son **conocimiento técnico libre** y podemos usarlos sin licencia:
+They are **free technical knowledge** and we can use them without a license:
 
-- Medidas de una mezcla: crest factor, LUFS, RMS, correlación estéreo, balance espectral,
-  ancho de banda, predelay de reverb, tiempo de ataque de un compresor.
-- Reglas de producción: «grave centrado», «20 ms de predelay», «crest 12-14 dB».
-- Estilos y géneros: «rock industrial de los 90», «capas que se acumulan».
-- Algoritmos: filtros, envolventes, síntesis, separación de fuentes como *técnica*.
+- Mix measurements: crest factor, LUFS, RMS, stereo correlation, spectral balance,
+  bandwidth, reverb predelay, compressor attack time.
+- Production rules: "centered bass", "20 ms of predelay", "crest 12-14 dB".
+- Styles and genres: "90s industrial rock", "layers that pile up".
+- Algorithms: filters, envelopes, synthesis, source separation as a *technique*.
 
-## 3. Qué sí está protegido (y por tanto condiciona el uso)
+## 3. What is protected (and therefore conditions use)
 
-| Objeto | Qué protege | Consecuencia |
+| Object | What it protects | Consequence |
 |---|---|---|
-| Obra musical (composición) | melodía, armonía, letra | Escribir «en estilo» es libre; copiar la melodía no |
-| **Fonograma** (la grabación) | el audio concreto de un disco | Muestrear, separar en stems o reentrenar con él es reproducir/transformar (arts. 18 y 20 TRLPI) |
-| Muestra/sample de una librería | según su licencia | Sólo se usa si su licencia lo permite para uso comercial |
-| Dataset | licencia propia | Ver §5 |
-| Pesos de un modelo | licencia propia | Ver §6 |
+| Musical work (composition) | melody, harmony, lyrics | Writing "in the style of" is free; copying the melody is not |
+| **Phonogram** (the recording) | the specific audio of a record | Sampling, separating into stems or retraining with it is reproduction/transformation (arts. 18 and 20 TRLPI) |
+| Sample from a library | according to its license | Only used if its license allows commercial use |
+| Dataset | its own license | See §5 |
+| Model weights | their own license | See §6 |
 
-**El estilo no está protegido; la grabación que lo demuestra sí.** Por eso medir «cómo suena
-*Closer*» exige fabricar copias de *Closer*, y ahí se acaba el camino limpio para un producto
-de pago.
+**The style is not protected; the recording that demonstrates it is.** That is why measuring
+"how *Closer* sounds" requires making copies of *Closer*, and that ends the clean path for a
+paid product.
 
-## 4. Actos y su encaje
+## 4. Acts and how they fit
 
-| Acto | Encaje | Decisión para el producto |
+| Act | Fit | Decision for the product |
 |---|---|---|
-| Medir nuestro propio render | libre | ✅ |
-| Medir una mezcla **CC0/CC-BY** | libre con atribución | ✅ |
-| Separar en stems un tema comercial (Demucs) | reproducción + transformación (arts. 18, 20) | ❌ |
-| Entrenar con fonogramas comerciales | no amparado por la excepción de minería si hay reserva de derechos (art. 67 bis TRLPI, del art. 4 DSM) | ❌ |
-| Entrenar con datasets CC0/CC-BY o con pares generados por nosotros | libre con atribución | ✅ |
-| Vender inferencia de un modelo entrenado así | libre | ✅ |
+| Measuring our own render | free | ✅ |
+| Measuring a **CC0/CC-BY** mix | free with attribution | ✅ |
+| Separating a commercial track into stems (Demucs) | reproduction + transformation (arts. 18, 20) | ❌ |
+| Training with commercial phonograms | not covered by the mining exception if rights are reserved (art. 67 bis TRLPI, from art. 4 DSM) | ❌ |
+| Training with CC0/CC-BY datasets or with pairs generated by us | free with attribution | ✅ |
+| Selling inference from a model trained that way | free | ✅ |
 
-Copia privada (art. 31 TRLPI): no cubre un uso comercial ni la explotación del resultado.
+Private copying (art. 31 TRLPI): does not cover commercial use or exploitation of the result.
 
-## 5. Fuentes de datos: admitidas y vetadas
+## 5. Data sources: allowed and banned
 
-Admitidas para el producto:
+Allowed for the product:
 
-| Fuente | Licencia | Uso |
+| Source | License | Use |
 |---|---|---|
-| VSCO 2 Community Edition | CC0 | instrumentos para pares MIDI→audio |
-| Salamander Grand Piano | CC-BY 3.0 | ídem (atribución) |
-| NSynth | CC-BY 4.0 | entrenamiento de timbres |
-| Jamendo / Free Music Archive (subconjunto CC) | por pista: CC0/CC-BY | mezclas de referencia |
-| MIDI de dominio público / CC | según fichero | partituras para generar pares |
+| VSCO 2 Community Edition | CC0 | instruments for MIDI→audio pairs |
+| Salamander Grand Piano | CC-BY 3.0 | same (attribution) |
+| NSynth | CC-BY 4.0 | timbre training |
+| Jamendo / Free Music Archive (CC subset) | per track: CC0/CC-BY | reference mixes |
+| Public-domain / CC MIDI | according to file | scores for generating pairs |
 
-Vetadas para el producto:
+Banned for the product:
 
-| Fuente | Motivo |
+| Source | Reason |
 |---|---|
-| Fonogramas comerciales (cualquier disco) | §3 y §4 |
-| MUSDB18 / MUSDB18-HQ | licencia de investigación; no comercial |
-| Mixing Secrets multitracks | uso educativo |
-| Slakh2100 | dataset CC-BY 4.0, pero su audio viene de librerías de samples con licencias propias: **verificar antes de usar** |
-| Cualquier cosa **CC-BY-NC** o **CC-BY-SA** | no comercial / copyleft incompatible con MIT |
+| Commercial phonograms (any record) | §3 and §4 |
+| MUSDB18 / MUSDB18-HQ | research license; not commercial |
+| Mixing Secrets multitracks | educational use |
+| Slakh2100 | CC-BY 4.0 dataset, but its audio comes from sample libraries with their own licenses: **verify before use** |
+| Anything **CC-BY-NC** or **CC-BY-SA** | non-commercial / copyleft incompatible with MIT |
 
-## 6. Modelos y sus licencias
+## 6. Models and their licenses
 
-| Modelo | Licencia | ¿Comercial? |
+| Model | License | Commercial? |
 |---|---|---|
-| DDSP (Magenta) | Apache-2.0 (código) | ✅ el código; los pesos que entrenemos son nuestros |
-| Demucs | MIT (código) | ✅ la herramienta; ❌ separar música ajena para el producto |
-| CLAP (`laion/larger_clap_music_and_speech`) | **Apache-2.0** (verificado 2026-10-23) | ✅ |
-| MusicGen (Meta) | pesos **CC-BY-NC 4.0** | ❌ |
-| Stable Audio | licencia de Stability, no abierta | ❌ |
+| DDSP (Magenta) | Apache-2.0 (code) | ✅ the code; the weights we train are ours |
+| Demucs | MIT (code) | ✅ the tool; ❌ separating other people's music for the product |
+| CLAP (`laion/larger_clap_music_and_speech`) | **Apache-2.0** (verified 2026-10-23) | ✅ |
+| MusicGen (Meta) | weights **CC-BY-NC 4.0** | ❌ |
+| Stable Audio | Stability license, not open | ❌ |
 
-Regla: **antes de meter un modelo en el producto, se anota aquí su licencia y la fecha de
-consulta.** Si no está claro, no entra.
+Rule: **before putting a model into the product, its license and the date it was
+checked are noted here.** If it is not clear, it does not go in.
 
-## 7. Registro de decisiones
+## 7. Decision log
 
-| Fecha | Decisión | Motivo |
+| Date | Decision | Reason |
 |---|---|---|
-| 2026-10-23 | No analizar ni entrenar con fonogramas comerciales | §3, §4 |
-| 2026-10-23 | El conocimiento de mezcla se extrae de material CC y de nuestros propios renders | §2 |
-| 2026-10-23 | No usar MusicGen/Stable Audio en el producto | §6 |
-| 2026-10-23 | CLAP admitido: Apache-2.0 verificado | §6 |
-| 2026-10-23 | El piloto de puntuación usa **sólo audio propio** (sin fonogramas ajenos) | §3, §4 |
+| 2026-10-23 | Do not analyze or train with commercial phonograms | §3, §4 |
+| 2026-10-23 | Mixing knowledge is extracted from CC material and from our own renders | §2 |
+| 2026-10-23 | Do not use MusicGen/Stable Audio in the product | §6 |
+| 2026-10-23 | CLAP allowed: Apache-2.0 verified | §6 |
+| 2026-10-23 | The scoring pilot uses **only our own audio** (no third-party phonograms) | §3, §4 |
 
-## 8. Pendiente
+## 8. Pending
 
-- [ ] Revisión por abogado de PI antes de cobrar por el servicio Pro.
-- [ ] `CREDITS.md` con atribuciones (modelos, datasets, samples).
-- [x] Confirmar licencia de CLAP: Apache-2.0.
-- [ ] Confirmar licencia de cada modelo que se integre (DDSP: Apache-2.0, comprobar).
-- [ ] Revisar si el servicio Pro requiere condiciones de uso y política de datos
-      (sube audio del usuario: hay que decir qué se guarda y cuánto tiempo).
+- [ ] IP lawyer review before charging for the Pro service.
+- [ ] `CREDITS.md` with attributions (models, datasets, samples).
+- [x] Confirm CLAP license: Apache-2.0.
+- [ ] Confirm the license of every model that is integrated (DDSP: Apache-2.0, check).
+- [ ] Review whether the Pro service requires terms of use and a data policy
+      (it uploads the user's audio: we must state what is stored and for how long).

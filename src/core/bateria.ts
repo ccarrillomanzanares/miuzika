@@ -1,17 +1,17 @@
 /**
- * Batería en rejilla: como en una caja de ritmos, una fila por pieza.
+ * Grid drums: as in a drum machine, one row per piece.
  *
  *     { kick: "x...x...x...x...", snare: "....x.......x...", hat: "x.x.x.x.x.x.x.x." }
  *
- * Cada carácter es un paso (16 por compás por defecto: semicorcheas en 4/4):
- *   `x` golpe normal · `X` acento · `o` medio · `g` nota fantasma · `.` o `-` nada.
- *   `|` se ignora (sirve para separar compases o tiempos al leer).
- * Una fila más larga que un compás ocupa varios; las filas se repiten hasta llenar
- * los compases pedidos. `final` cambia el último compás (el redoble): las piezas
- * que trae se sustituyen ahí; las demás siguen su patrón.
+ * Each character is a step (16 per bar by default: sixteenth notes in 4/4):
+ *   `x` normal hit · `X` accent · `o` medium · `g` ghost note · `.` or `-` nothing.
+ *   `|` is ignored (it helps separate bars or beats when reading).
+ * A row longer than one bar spans several; rows repeat until they fill the
+ * requested bars. `final` changes the last bar (the fill): the pieces it contains
+ * are replaced there; the rest keep their pattern.
  *
- * Las piezas tienen nombre en varios idiomas (el modelo traduce, pero así falla
- * menos) y siempre se puede dar la nota General MIDI directamente ("36").
+ * The pieces have names in several languages (the model translates, but this way
+ * it fails less) and you can always give the General MIDI note directly ("36").
  */
 
 import type { Note } from "./types.ts";
@@ -19,7 +19,7 @@ import { hashString } from "./rng.ts";
 
 export class ErrorBateria extends Error {}
 
-/** Mapa de percusión General MIDI (canal 10). */
+/** General MIDI percussion map (channel 10). */
 const PIEZAS: Record<number, string[]> = {
   35: ["bombo2", "kick2", "acoustickick"],
   36: ["kick", "bombo", "bd", "bassdrum", "kickdrum"],
@@ -48,7 +48,7 @@ const POR_NOMBRE = new Map<string, number>(
   Object.entries(PIEZAS).flatMap(([nota, nombres]) => nombres.map((n) => [n, Number(nota)] as const)),
 );
 
-/** «Caja», «hi-hat», «Tom alto» o «38» → nota General MIDI. */
+/** "Caja", "hi-hat", "Tom alto" or "38" → General MIDI note. */
 export function notaDePieza(nombre: string): number {
   const limpio = nombre
     .normalize("NFD")
@@ -59,7 +59,7 @@ export function notaDePieza(nombre: string): number {
   const nota = POR_NOMBRE.get(limpio);
   if (nota === undefined) {
     const nombres = Object.values(PIEZAS).map((n) => n[0]).join(", ");
-    throw new ErrorBateria(`no conozco la pieza «${nombre}». Usa: ${nombres}, o la nota GM (36…81)`);
+    throw new ErrorBateria(`I don't know the piece "${nombre}". Use: ${nombres}, or the GM note (36…81)`);
   }
   return nota;
 }
@@ -67,17 +67,17 @@ export function notaDePieza(nombre: string): number {
 const GOLPES: Record<string, number> = { x: 100, X: 124, o: 76, g: 42 };
 
 export interface PeticionBateria {
-  /** pieza → fila de pasos. */
+  /** piece → row of steps. */
   patrones: Record<string, string>;
-  /** Compases que hay que llenar (por defecto, lo que dure la fila más larga). */
+  /** Bars to fill (by default, however long the longest row is). */
   compases?: number;
-  /** Pasos por compás (16 = semicorcheas en 4/4; 12 = tresillos de corchea). */
+  /** Steps per bar (16 = sixteenth notes in 4/4; 12 = eighth-note triplets). */
   pasosPorCompas?: number;
-  /** Filas para el ÚLTIMO compás (redoble): sustituyen a las de esas piezas. */
+  /** Rows for the LAST bar (fill): they replace those of those pieces. */
   final?: Record<string, string>;
-  /** 0..0.5: retrasa los pasos pares (swing). */
+  /** 0..0.5: delays the even steps (swing). */
   swing?: number;
-  /** Pequeña variación determinista de velocidad, para que no suene a máquina. */
+  /** Small deterministic velocity variation, so it does not sound like a machine. */
   humanizar?: boolean;
 }
 
@@ -85,7 +85,7 @@ function pasosDe(fila: string): string[] {
   const pasos = fila.replace(/[|\s]/g, "").split("");
   for (const p of pasos) {
     if (!(p in GOLPES) && p !== "." && p !== "-") {
-      throw new ErrorBateria(`carácter «${p}» no válido en «${fila}»: usa x X o g . -`);
+      throw new ErrorBateria(`invalid character "${p}" in "${fila}": use x X o g . -`);
     }
   }
   return pasos;
@@ -93,10 +93,10 @@ function pasosDe(fila: string): string[] {
 
 export function notasDeBateria(peticion: PeticionBateria, beatsPorCompas = 4): { notas: Note[]; beats: number } {
   const pasosPorCompas = Math.round(peticion.pasosPorCompas ?? 16);
-  if (pasosPorCompas < 1 || pasosPorCompas > 64) throw new ErrorBateria("pasosPorCompas va de 1 a 64");
+  if (pasosPorCompas < 1 || pasosPorCompas > 64) throw new ErrorBateria("pasosPorCompas ranges from 1 to 64");
   const paso = beatsPorCompas / pasosPorCompas;
   const filas = Object.entries(peticion.patrones ?? {});
-  if (filas.length === 0) throw new ErrorBateria("faltan los patrones (pieza → fila de pasos)");
+  if (filas.length === 0) throw new ErrorBateria("missing patterns (piece → row of steps)");
   const leidas = filas.map(([pieza, fila]) => ({ pieza, nota: notaDePieza(pieza), pasos: pasosDe(fila) }));
   const maxPasos = Math.max(...leidas.map((f) => f.pasos.length));
   const compases = Math.max(1, Math.round(peticion.compases ?? Math.ceil(maxPasos / pasosPorCompas)));

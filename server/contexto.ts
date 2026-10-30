@@ -1,10 +1,10 @@
 /**
- * Contexto compartido de la API del servidor de desarrollo.
+ * Shared context for the dev-server API.
  *
- * Todo lo que antes vivía suelto dentro de `defineConfig` en `vite.config.ts`
- * (1.863 líneas): dónde está el workspace, cómo se resuelve una ruta del agente,
- * cómo se lanza Python, cómo se lee un cuerpo con tope y cómo se escribe un log.
- * Las rutas (`server/api/*.ts`) reciben este objeto y no comparten nada más.
+ * Everything that used to live loose inside `defineConfig` in `vite.config.ts`
+ * (1,863 lines): where the workspace is, how an agent path is resolved, how Python
+ * is launched, how a body is read with a size limit, and how a log is written.
+ * The routes (`server/api/*.ts`) receive this object and share nothing else.
  */
 
 import { spawn } from "node:child_process";
@@ -18,17 +18,17 @@ import { configDesdeEnv } from "./lambda.ts";
 export function crearContexto(env: Record<string, string>) {
   const { cfg: cfgLambda, faltan: faltanLambda } = configDesdeEnv(env as Record<string, string>);
   if (cfgLambda === null) {
-    console.warn(`[miuzika] Lambda sin configurar: falta ${faltanLambda.join(", ")}. Se usara la CPU.`);
+    console.warn(`[miuzika] Lambda not configured: missing ${faltanLambda.join(", ")}. The CPU will be used.`);
   }
 
   const carpetaTmp = resolve(process.cwd(), "tmp");
   const ficheroLog = resolve(carpetaTmp, "llm.log");
 
-  /** Tope de cada log: al pasarse se guarda una copia .1 y se empieza otro. */
+  /** Size limit for each log: when exceeded, a .1 copy is kept and a new one is started. */
   const TOPE_LOG = 5 * 1024 * 1024;
   const TOPE_LOG_HERRAMIENTAS = 2 * 1024 * 1024;
 
-  /** Anade una linea a un log, rotando por tamano (nunca debe romper la app). */
+  /** Appends a line to a log, rotating by size (it must never break the app). */
   const anotar = (fichero: string, linea: string, tope?: number): void => {
     try {
       mkdirSync(carpetaTmp, { recursive: true });
@@ -38,15 +38,15 @@ export function crearContexto(env: Record<string, string>) {
       }
       appendFileSync(fichero, linea + "\n", "utf8");
     } catch {
-      /* sin log */
+      /* no log */
     }
   };
 
   /**
-   * Sin MIUZIKA_LOG_COMPLETO=1 el log guarda el turno sin los mensajes enteros:
-   * con el manifiesto dentro eran ~40 KB por vuelta y acababa conteniendo todo el
-   * codigo del proyecto. Se guarda la forma (rol, tamano, primeras 200 letras) y,
-   * aparte, la peticion y la respuesta. Con el flag, entero (para depurar).
+   * Without MIUZIKA_LOG_COMPLETO=1 the log stores the turn without the full messages:
+   * with the manifest inside it was ~40 KB per round and ended up containing the whole
+   * project code. It stores the shape (role, size, first 200 characters) and,
+   * separately, the request and the response. With the flag, the whole thing (for debugging).
    */
   const compactarTurno = (linea: string): string => {
     if (process.env.MIUZIKA_LOG_COMPLETO === "1") return linea;
@@ -75,7 +75,7 @@ export function crearContexto(env: Record<string, string>) {
   const registrarTurno = (linea: string): void => anotar(ficheroLog, compactarTurno(linea));
 
   const ficheroHerramientas = resolve(carpetaTmp, "herramientas.log");
-  /** Todo lo que escribe o ejecuta el agente vive aqui, y no puede salir de aqui. */
+  /** Everything the agent writes or runs lives here, and cannot leave it. */
   const carpetaTrabajo = resolve(process.cwd(), "workspace");
   const interprete = env.MIUZIKA_PYTHON || "python";
 
@@ -86,7 +86,7 @@ export function crearContexto(env: Record<string, string>) {
     res.end(JSON.stringify(cuerpo));
   };
 
-  /** Cuerpo de texto en crudo; devuelve null si pasa del tope. */
+  /** Raw text body; returns null if it exceeds the limit. */
   const leerCuerpoCrudo = (
     req: IncomingMessage,
     alTerminar: (cuerpo: string | null) => void,
@@ -108,7 +108,7 @@ export function crearContexto(env: Record<string, string>) {
     req.on("error", () => alTerminar(null));
   };
 
-  /** Cuerpo de texto de una API: contestar 413 es mejor que quedarse sin memoria. */
+  /** Text body of an API request: answering 413 is better than running out of memory. */
   const leerCuerpo = (
     req: IncomingMessage,
     res: ServerResponse,
@@ -119,7 +119,7 @@ export function crearContexto(env: Record<string, string>) {
       req,
       (cuerpo) => {
         if (cuerpo === null) {
-          responderJson(res, 413, { error: "cuerpo demasiado grande (máx. 8 MB)" });
+          responderJson(res, 413, { error: "body too large (max. 8 MB)" });
           return;
         }
         alTerminar(cuerpo);
@@ -127,7 +127,7 @@ export function crearContexto(env: Record<string, string>) {
       limite,
     );
 
-  /** Cuerpo binario (WAV subido desde el navegador), con tope de tamaño. */
+  /** Binary body (WAV uploaded from the browser), with a size limit. */
   const leerCuerpoBinario = (
     req: IncomingMessage,
     limite: number,
@@ -156,9 +156,9 @@ export function crearContexto(env: Record<string, string>) {
   };
 
   /**
-   * Identificador del código servido: la marca de tiempo más nueva de web/ y de
-   * esta config. Si cambia, la pestaña abierta está corriendo un bundle viejo
-   * (el HMR se desconecta cuando el servidor se reinicia) y hay que recargar.
+   * Identifier of the served code: the newest timestamp from web/ and from
+   * this config. If it changes, the open tab is running an old bundle
+   * (HMR disconnects when the server restarts) and has to reload.
    */
   const idDeBuild = (): string => {
     let max = 0;
@@ -180,42 +180,42 @@ export function crearContexto(env: Record<string, string>) {
   const arranqueServidor = new Date().toISOString();
 
   /**
-   * Slug seguro del proyecto activo ("" -> "sin-proyecto"). Es la MISMA regla que
-   * usa el navegador (src/core/nombres.ts), y admite cualquier alfabeto: la copia
-   * vieja quitaba todo lo que no fuera [a-z0-9_-] y una carpeta «夜の歌» llegaba
-   * aquí como «sin-proyecto».
+   * Safe slug of the active project ("" -> "sin-proyecto"). It is the SAME rule the
+   * browser uses (src/core/nombres.ts), and it accepts any alphabet: the old copy
+   * stripped everything that was not [a-z0-9_-] and a folder "夜の歌" arrived
+   * here as "sin-proyecto".
    */
   const slugProyecto = (valor: unknown): string => {
-    // La cabecera llega codificada (cabeceraDeProyecto en el navegador): HTTP sólo
-    // transporta Latin-1 en las cabeceras.
+    // The header arrives encoded (cabeceraDeProyecto in the browser): HTTP only
+    // transports Latin-1 in headers.
     let texto = String(valor ?? "");
     try {
       texto = decodeURIComponent(texto);
     } catch {
-      /* no estaba codificada: se usa tal cual */
+      /* it was not encoded: use it as is */
     }
     return slugDe(texto, { defecto: "sin-proyecto" });
   };
 
-  /** Carpeta del proyecto activo (se crea al usarla). */
+  /** Folder of the active project (created on first use). */
   const carpetaProyecto = (slug: string): string => {
     mkdirSync(resolve(carpetaTrabajo, "proyectos", slug), { recursive: true });
     return resolve(carpetaTrabajo, "proyectos", slug);
   };
 
   /**
-   * Ruta real a partir de una relativa. Lo que empieza por una carpeta
-   * compartida se resuelve en workspace/; el resto, en la carpeta del proyecto.
+   * Real path from a relative one. What starts with a shared folder
+   * is resolved in workspace/; the rest, in the project folder.
    */
   const resolverEnTrabajo = (relativo: string, slug = "sin-proyecto"): string | null => {
     if (relativo.includes("\\") || relativo.includes("..")) return null;
-    // La regla de qué es compartido vive en src/core/rutas.ts (la usa también el navegador).
+    // The rule for what is shared lives in src/core/rutas.ts (the browser uses it too).
     const destino = resolve(carpetaTrabajo, rutaEnWorkspace(relativo.replace(/^\/+/, ""), slug));
     const dentro = destino === carpetaTrabajo || destino.startsWith(carpetaTrabajo + sep);
     return dentro ? destino : null;
   };
 
-  /** Inventario de los proyectos del disco: los que tienen proyecto.json. */
+  /** Inventory of the projects on disk: those that have proyecto.json. */
   const listarProyectosDisco = (): Record<string, unknown>[] => {
     const carpeta = resolve(carpetaTrabajo, "proyectos");
     if (!existsSync(carpeta)) return [];
@@ -228,7 +228,7 @@ export function crearContexto(env: Record<string, string>) {
       const bytes = statSync(maestro).size;
       const actualizado = statSync(maestro).mtime.toISOString();
       try {
-        // Sólo se lee la cabecera: el fichero con todas las notas puede ser grande.
+        // Only the header is read: the file with all the notes can be large.
         const datos = JSON.parse(readFileSync(maestro, "utf8")) as {
           guardadoEn?: string;
           proyecto?: { name?: string; bpm?: number; lengthBars?: number; tracks?: unknown[] };
@@ -256,7 +256,7 @@ export function crearContexto(env: Record<string, string>) {
           guardadoEn: "",
           actualizado,
           bytes,
-          error: error instanceof Error ? error.message : "proyecto.json ilegible",
+          error: error instanceof Error ? error.message : "unreadable proyecto.json",
         });
       }
     }
@@ -264,13 +264,13 @@ export function crearContexto(env: Record<string, string>) {
   };
 
   /**
-   * Inventario de ficheros del espacio de trabajo.
+   * Inventory of files in the workspace.
    *
-   * `carpeta` opcional: "" = la raíz (sin las carpetas ocultas), "proyectos/<slug>",
-   * "codigo"… Las carpetas de CARPETAS_OCULTAS no se recorren nunca: `catalogo/`
-   * son 4.231 ficheros y metía 573 KB en el contexto del modelo, que llega
-   * recortado a cabeza y cola (o sea: el agente no veía el medio, que es donde
-   * estaban sus ficheros). Se consulta con `buscar_sonido`, no listando.
+   * Optional `carpeta`: "" = the root (without hidden folders), "proyectos/<slug>",
+   * "codigo"… CARPETAS_OCULTAS folders are never traversed: `catalogo/`
+   * is 4,231 files and put 573 KB into the model context, which arrives
+   * trimmed to head and tail (that is: the agent did not see the middle, which is where
+   * its files were). It is queried with `buscar_sonido`, not by listing.
    */
   const MAX_LISTADO = 2000;
   const listarTrabajo = (
@@ -302,7 +302,7 @@ export function crearContexto(env: Record<string, string>) {
     return salida;
   };
 
-  /** Ficheros de la carpeta del proyecto que cambiaron desde `desde` (ms). */
+  /** Files in the project folder that changed since `desde` (ms). */
   const escritosDesde = (slug: string, desde: number): string[] => {
     const carpeta = resolve(carpetaTrabajo, "proyectos", slug);
     if (!existsSync(carpeta)) return [];
@@ -317,7 +317,7 @@ export function crearContexto(env: Record<string, string>) {
       .map((f) => f.path.slice(`proyectos/${slug}/`.length));
   };
 
-  /** Lanza un script de workspace/ y devuelve salida, errores y codigo. */
+  /** Launches a script from workspace/ and returns output, errors and exit code. */
   const correr = (
     scriptRel: string,
     argumentos: string[] = [],
@@ -361,19 +361,19 @@ export function crearContexto(env: Record<string, string>) {
       });
     });
 
-  /** Ficheros que forman el motor: reescribirlos exige pasar el smoke test. */
+  /** Files that make up the engine: rewriting them requires passing the smoke test. */
   const MOTOR = new Set(["dsp.py", "instruments.py", "render.py", "midi.py"]);
 
-  /** ¿Es codigo del motor? Valen los dos: el numpy de codigo/ y el de GPU en gpu/. */
+  /** Is it engine code? Both count: the numpy one in codigo/ and the GPU one in gpu/. */
   const esDeCodigo = (ruta: string): boolean => {
     const limpia = ruta.replace(/\\/g, "/");
     return limpia.startsWith("codigo/") || limpia.startsWith("gpu/");
   };
 
-  /** ¿Es el motor de GPU? Ese no se puede validar aqui: no hay torch en el portatil. */
+  /** Is it the GPU engine? That one cannot be validated here: there is no torch on the laptop. */
   const esDeGpu = (ruta: string): boolean => ruta.replace(/\\/g, "/").startsWith("gpu/");
 
-  /** Tras tocar el motor: smoke test y, si falla, se revierte. */
+  /** After touching the engine: smoke test and, if it fails, revert. */
   const smokeOTeReverto = async (
     destino: string,
     previo: string | null,

@@ -1,38 +1,39 @@
 /**
- * Instrumentos tocables de la biblioteca de samples (los .sfz de VCSL).
+ * Playable instruments from the sample library (VCSL's .sfz files).
  *
- * Medido el 27-oct: la biblioteca tiene dos pianos de cola reales (Steinway B y
- * Kawai), órganos, clavecines, arpas, saxo y láminas, pero el agente sólo veía la
- * lista General MIDI y nunca los usaba. Aquí se arma la lista que ve (agrupada y
- * sin variantes técnicas) y se resuelve el nombre que pida a su .sfz.
+ * Measured on Oct 27: the library has two real grand pianos (Steinway B and
+ * Kawai), organs, harpsichords, harps, saxophone, and mallets, but the agent only
+ * saw the General MIDI list and never used them. This builds the list it sees
+ * (grouped and without technical variants) and resolves the name it asks for to
+ * its .sfz file.
  *
- * Sin DOM y sin red: se prueba con `node --test`.
+ * No DOM and no network: tested with `node --test`.
  */
 
 import { normalizarTexto } from "./nombres.ts";
 
 export interface InstrumentoBiblioteca {
-  /** «Grand Piano, Steinway B» o «Pipe Organ - Quiet»: lo que pide el agente. */
+  /** "Grand Piano, Steinway B" or "Pipe Organ - Quiet": what the agent asks for. */
   nombre: string;
-  /** Ruta desde workspace/: «catalogo/VCSL-1.2.2-RC/…/Grand Piano, Steinway B.sfz». */
+  /** Path from workspace/: "catalogo/VCSL-1.2.2-RC/…/Grand Piano, Steinway B.sfz". */
   ruta: string;
   familia: string;
 }
 
-/** Familias en el orden en que se enseñan (la primera regla que encaja gana). */
+/** Families in the order they are shown (the first matching rule wins). */
 const FAMILIAS: [string, RegExp][] = [
-  ["Pianos y teclados", /piano|harpsichord|tx81z|clavisynth/i],
-  ["Órganos", /organ/i],
-  ["Cuerda pulsada", /harp|strumstick|dan tranh|psaltery|kalimba|mbira|nyunga/i],
-  ["Viento", /recorder|ocarina|harmonica|saxello|saxophone|didgeridoo|whistle|siren/i],
-  ["Láminas y campanas", /glockenspiel|marimba|vibraphone|xylophone|tubular bells|hand bells|hand chimes|balafon|wine glasses|mark trees/i],
-  ["Percusión", /./],
+  ["Pianos and keyboards", /piano|harpsichord|tx81z|clavisynth/i],
+  ["Organs", /organ/i],
+  ["Plucked strings", /harp|strumstick|dan tranh|psaltery|kalimba|mbira|nyunga/i],
+  ["Winds", /recorder|ocarina|harmonica|saxello|saxophone|didgeridoo|whistle|siren/i],
+  ["Mallets and bells", /glockenspiel|marimba|vibraphone|xylophone|tubular bells|hand bells|hand chimes|balafon|wine glasses|mark trees/i],
+  ["Percussion", /./],
 ];
 
-/** Variantes que no sirven tocando desde el piano roll. */
+/** Variants that are not useful when playing from the piano roll. */
 const DESCARTE = /keyswitch|legacy/i;
 
-/** Rutas de .sfz (desde workspace/) → instrumentos que se pueden usar. */
+/** .sfz paths (from workspace/) → instruments that can be used. */
 export function instrumentosDeSfz(rutas: readonly string[]): InstrumentoBiblioteca[] {
   return rutas
     .filter((ruta) => ruta.toLowerCase().endsWith(".sfz"))
@@ -46,15 +47,15 @@ export function instrumentosDeSfz(rutas: readonly string[]): InstrumentoBibliote
 }
 
 /**
- * Lista compacta para el modelo: por familia, y las variantes de un mismo
- * instrumento juntas («Pipe Organ - Loud/Quiet/…»).
+ * Compact list for the model: by family, with the variants of the same
+ * instrument together ("Pipe Organ - Loud/Quiet/…").
  */
 export function textoDeBiblioteca(instrumentos: readonly InstrumentoBiblioteca[]): string {
   if (instrumentos.length === 0) return "";
   const lineas = [
-    `BIBLIOTECA DE SAMPLES (${instrumentos.length} instrumentos grabados de verdad, VCSL). Suenan mejor que ` +
-      "General MIDI en piano, órgano, clavecín, arpa, saxo y láminas. Úsalos con " +
-      "usar_instrumento(sfz = el nombre tal cual, p. ej. «Grand Piano, Steinway B»):",
+    `SAMPLE LIBRARY (${instrumentos.length} real recorded instruments, VCSL). They sound better than ` +
+      "General MIDI on piano, organ, harpsichord, harp, saxophone, and mallets. Use them with " +
+      "usar_instrumento(sfz = the exact name, e.g. \"Grand Piano, Steinway B\"):",
   ];
   for (const [familia] of FAMILIAS) {
     const deFamilia = instrumentos.filter((i) => i.familia === familia);
@@ -74,20 +75,20 @@ export function textoDeBiblioteca(instrumentos: readonly InstrumentoBiblioteca[]
   return lineas.join("\n");
 }
 
-/** Variante preferida cuando se pide sólo la base («Pipe Organ» → «… - Quiet»). */
+/** Preferred variant when only the base is requested ("Pipe Organ" → "… - Quiet"). */
 const PREFERIDAS = ["normal", "sustain", "sus", "non-vibrato", "quiet", "pluck", "soft mallets", "hit"];
 
 /**
- * Nombre (o ruta) que pide el modelo → el instrumento. Admite el nombre exacto, sin
- * tildes ni mayúsculas, sólo la base de un instrumento con variantes, o una parte
- * del nombre si sólo hay uno que la contenga.
+ * Name (or path) requested by the model → the instrument. Accepts the exact name,
+ * without accents or capitalization, just the base of an instrument with variants,
+ * or part of the name if only one instrument contains it.
  */
 export function resolverInstrumento(
   pedido: string,
   instrumentos: readonly InstrumentoBiblioteca[],
 ): { instrumento?: InstrumentoBiblioteca; error?: string } {
   const limpio = normalizarTexto(pedido.replace(/\\/g, "/").split("/").pop()!.replace(/\.sfz$/i, ""));
-  if (limpio === "") return { error: "falta el nombre del instrumento" };
+  if (limpio === "") return { error: "missing the instrument name" };
   const exacto = instrumentos.find((i) => normalizarTexto(i.nombre) === limpio);
   if (exacto) return { instrumento: exacto };
   const variantes = instrumentos.filter((i) => normalizarTexto(i.nombre).startsWith(`${limpio} - `));
@@ -106,7 +107,7 @@ export function resolverInstrumento(
   return {
     error:
       contienen.length > 1
-        ? `«${pedido}» encaja con varios: ${sugerencias}. Elige uno.`
-        : `No hay ningún instrumento «${pedido}» en la biblioteca. Mira la lista con listar_instrumentos.`,
+        ? `"${pedido}" matches several: ${sugerencias}. Pick one.`
+        : `There is no instrument "${pedido}" in the library. See the list with listar_instrumentos.`,
   };
 }

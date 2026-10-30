@@ -1,4 +1,4 @@
-"""Mide CPU vs GPU en el motor real, con presupuesto de tiempo por caso."""
+"""Measures CPU vs GPU on the real engine, with a time budget per case."""
 
 import sys
 import time
@@ -8,7 +8,7 @@ import torch
 
 import render_gpu as R
 
-PRESUPUESTO = 240.0  # segundos para todo el banco
+PRESUPUESTO = 240.0  # seconds for the whole benchmark
 
 
 def lote(device, notas, n, hop, dur):
@@ -29,17 +29,17 @@ def main():
     print(f"SR={R.SR:.0f} Hz | {torch.cuda.get_device_name(0)}", flush=True)
 
     casos = [
-        ("20 notas x 4 s   n=1024 hop=256 (ajustes del motor)", 20, 1024, 256, 4.0),
-        ("20 notas x 4 s   n=4096 hop=128 (4x resolucion)", 20, 4096, 128, 4.0),
-        ("4 notas  x 30 s  n=4096 hop=128", 4, 4096, 128, 30.0),
-        ("1 nota   x 10 s  n=8192 hop=64  (resolucion extrema)", 1, 8192, 64, 10.0),
+        ("20 notes x 4 s   n=1024 hop=256 (engine settings)", 20, 1024, 256, 4.0),
+        ("20 notes x 4 s   n=4096 hop=128 (4x resolution)", 20, 4096, 128, 4.0),
+        ("4 notes  x 30 s  n=4096 hop=128", 4, 4096, 128, 30.0),
+        ("1 note   x 10 s  n=8192 hop=64  (extreme resolution)", 1, 8192, 64, 10.0),
     ]
 
-    print(f"\n{'caso':<52}{'CPU':>9}{'GPU':>9}{'CPU/GPU':>9}", flush=True)
+    print(f"\n{'case':<52}{'CPU':>9}{'GPU':>9}{'CPU/GPU':>9}", flush=True)
     t_inicio = time.time()
     for etiqueta, notas, n, hop, dur in casos:
         if time.time() - t_inicio > PRESUPUESTO:
-            print(f"{etiqueta:<52}   (sin tiempo, se omite)", flush=True)
+            print(f"{etiqueta:<52}   (out of time, skipped)", flush=True)
             continue
         tc = lote("cpu", notas, n, hop, dur)
         tg = lote("cuda", notas, n, hop, dur)

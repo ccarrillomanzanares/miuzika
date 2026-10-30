@@ -1,26 +1,27 @@
 /**
- * Contador de gasto de la GPU.
+ * GPU spending counter.
  *
- * No sabe de qué proveedor se trata: pide `/api/gpu/estado` y espera la tarifa
- * real de la instancia, la fase (apagada / arrancando / activa / apagándose) y
- * desde cuándo cuenta. El texto se compone en `gpu-texto.ts`, que sí tiene tests.
+ * It does not know which provider it is: it requests `/api/gpu/estado` and expects
+ * the instance's real rate, the phase (off / starting / active / shutting down) and
+ * since when it has been counting. The text is composed in `gpu-texto.ts`, which
+ * does have tests.
  *
- * Muestra dos números porque los dos importan:
- *   - lo que lleva gastado ESTA instancia (a la tarifa que da el proveedor)
- *   - lo acumulado en la sesión del navegador (suma de los tramos, sobrevive a
- *     recargas y no se pierde al apagar la máquina)
+ * It shows two numbers because both matter:
+ *   - what THIS instance has spent so far (at the rate the provider gives)
+ *   - what has accumulated in the browser session (sum of the segments, survives
+ *     reloads and is not lost when the machine is shut down)
  */
 
 import { detalleCoste, normalizarEstadoGpu, textoCoste, type EstadoGpu } from "./gpu-texto.ts";
 
-// v3: la v2 guardaba un total con la tarifa del .env (podía no ser la real).
+// v3: v2 stored a total using the rate from .env (which might not be the real one).
 const CLAVE_SESION = "miuzika.gpu.sesion.v3";
 const CADA_POLVO_MS = 10_000;
 
 export interface CosteGpu {
-  /** Fuerza una lectura del estado (lo usa el botón de encender/apagar). */
+  /** Forces a read of the state (used by the on/off button). */
   refrescar(): Promise<void>;
-  /** Última lectura, para que la barra de actividad sepa en qué fase está. */
+  /** Last read, so the activity bar knows which phase it is in. */
   estado(): EstadoGpu | null;
 }
 
@@ -36,14 +37,14 @@ export function initCosteGpu(elemento: HTMLElement | null): CosteGpu {
     const guardado = JSON.parse(localStorage.getItem(CLAVE_SESION) ?? "{}") as { total?: number };
     totalSesion = Number(guardado.total) || 0;
   } catch {
-    /* sin persistencia */
+    /* no persistence */
   }
 
   const guardarSesion = (): void => {
     try {
       localStorage.setItem(CLAVE_SESION, JSON.stringify({ total: totalSesion }));
     } catch {
-      /* sin persistencia */
+      /* no persistence */
     }
   };
 
@@ -67,8 +68,8 @@ export function initCosteGpu(elemento: HTMLElement | null): CosteGpu {
       const datos = normalizarEstadoGpu(await res.json());
       estado = datos;
 
-      // Instancia nueva -> el contador del proveedor vuelve a cero y el tramo
-      // anterior ya está sumado a la sesión.
+      // New instance -> the provider counter goes back to zero and the previous
+      // segment is already added to the session.
       const viva = datos.instancias?.find((i) => i.status === "active") ?? datos.instancias?.[0];
       const id = viva?.id ?? "";
       if (id !== instanciaActual) {
@@ -83,14 +84,14 @@ export function initCosteGpu(elemento: HTMLElement | null): CosteGpu {
       }
       pintar();
     } catch {
-      // Sin servidor no hay dato: se queda lo último pintado.
+      // Without a server there is no data: the last painted value stays.
       if (estado === null) elemento.hidden = true;
     }
   };
 
   void refrescar();
   window.setInterval(() => void refrescar(), CADA_POLVO_MS);
-  // El reloj del tiempo transcurrido se mueve solo, sin volver a preguntar.
+  // The elapsed-time clock moves on its own, without asking again.
   window.setInterval(pintar, 1000);
 
   return { refrescar, estado: () => estado };

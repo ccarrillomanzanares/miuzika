@@ -13,28 +13,28 @@ import {
   type TurnoAgente,
 } from "./contexto.ts";
 
-test("una salida corta pasa tal cual", () => {
-  const texto = "exit=0 en 400 ms\n14 stems escritos";
+test("a short output passes through as is", () => {
+  const texto = "exit=0 in 400 ms\n14 stems written";
   assert.equal(recortarSalida(texto), texto);
 });
 
-test("una salida larga se recorta por líneas y dice cuántas faltan", () => {
-  const lineas = Array.from({ length: 200 }, (_, i) => `[${i}] línea de un render`);
+test("a long output is trimmed by lines and says how many are missing", () => {
+  const lineas = Array.from({ length: 200 }, (_, i) => `[${i}] line from a render`);
   const recortado = recortarSalida(lineas.join("\n"));
   assert.ok(recortado.length < lineas.join("\n").length);
-  assert.match(recortado, /\[0\] línea de un render/); // cabeza
-  assert.match(recortado, /\[199\] línea de un render/); // cola
-  assert.match(recortado, /…160 línea\(s\) omitida\(s\) …/);
+  assert.match(recortado, /\[0\] line from a render/); // head
+  assert.match(recortado, /\[199\] line from a render/); // tail
+  assert.match(recortado, /…160 line\(s\) omitted …/);
 });
 
-test("una salida con pocas líneas pero enorme se corta por caracteres", () => {
+test("an output with few lines but enormous is cut by characters", () => {
   const texto = "x".repeat(5000);
   const recortado = recortarSalida(texto);
   assert.ok(recortado.length < UMBRAL_SALIDA * 2);
   assert.match(recortado, /…/);
 });
 
-test("los primeros turnos caben enteros", () => {
+test("the first turns fit whole", () => {
   let estado = { resumen: "", turnos: [] as TurnoAgente[] };
   for (let i = 0; i < MAX_TURNOS; i++) {
     estado = agregarTurno(estado.resumen, estado.turnos, { usuario: `petición ${i}`, asistente: `hecho ${i}` });
@@ -44,24 +44,24 @@ test("los primeros turnos caben enteros", () => {
   assert.equal(estado.turnos[0]!.usuario, "petición 0");
 });
 
-test("al pasar del tope, el turno viejo pasa al resumen en una línea", () => {
+test("past the cap, the old turn goes into the summary in one line", () => {
   let estado = { resumen: "", turnos: [] as TurnoAgente[] };
   for (let i = 0; i <= MAX_TURNOS; i++) {
     estado = agregarTurno(estado.resumen, estado.turnos, { usuario: `petición ${i}`, asistente: `hecho ${i}` });
   }
   assert.equal(estado.turnos.length, MAX_TURNOS);
   assert.match(estado.resumen, /«petición 0»/);
-  assert.doesNotMatch(estado.resumen, /petición 1/); // sólo se resume lo que se cae
+  assert.doesNotMatch(estado.resumen, /petición 1/); // only what falls off is summarized
   assert.equal(estado.turnos[0]!.usuario, "petición 1");
 });
 
-test("los turnos se recortan: una respuesta de 4000 caracteres no se guarda entera", () => {
+test("turns are trimmed: a 4000-character answer is not saved whole", () => {
   const estado = agregarTurno("", [], { usuario: "hola", asistente: "y".repeat(4000) });
   assert.ok(estado.turnos[0]!.asistente.length <= 700);
   assert.match(estado.turnos[0]!.asistente, /…$/);
 });
 
-test("el resumen no crece sin fin", () => {
+test("the summary does not grow without end", () => {
   let estado = { resumen: "", turnos: [] as TurnoAgente[] };
   for (let i = 0; i < 80; i++) {
     estado = agregarTurno(estado.resumen, estado.turnos, {
@@ -69,21 +69,21 @@ test("el resumen no crece sin fin", () => {
       asistente: `respuesta número ${i}`,
     });
   }
-  assert.ok(estado.resumen.length <= 1800, `resumen de ${estado.resumen.length}`);
-  // Lo último siempre está en el resumen o en los turnos.
+  assert.ok(estado.resumen.length <= 1800, `summary of ${estado.resumen.length}`);
+  // The last one is always in the summary or in the turns.
   assert.match(estado.turnos.at(-1)!.usuario, /petición número 79/);
 });
 
-test("el bloque de contexto no ensucia el prompt si no hay nada", () => {
+test("the context block does not dirty the prompt if there is nothing", () => {
   assert.equal(bloqueContexto("", []), "");
   const bloque = bloqueContexto("- «crea vitrina» → hecho", [{ usuario: "¿cómo va?", asistente: "va bien" }]);
-  assert.match(bloque, /CONVERSACIÓN ANTERIOR DE ESTE PROYECTO/);
-  assert.match(bloque, /Resumen:\n- «crea vitrina»/);
-  assert.match(bloque, /usuario: ¿cómo va\?/);
-  assert.match(bloque, /el estado real es proyecto\.json/);
+  assert.match(bloque, /PREVIOUS CONVERSATION IN THIS PROJECT/);
+  assert.match(bloque, /Summary:\n- «crea vitrina»/);
+  assert.match(bloque, /user: ¿cómo va\?/);
+  assert.match(bloque, /the real state is proyecto\.json/);
 });
 
-test("agente.json se escribe y se vuelve a leer", () => {
+test("agente.json is written and read back", () => {
   const texto = JSON.stringify(
     serializarAgente("- «x» → y", [{ usuario: "a", asistente: "b" }], "modelo-1", new Date("2026-10-24T08:00:00Z")),
   );
@@ -92,7 +92,7 @@ test("agente.json se escribe y se vuelve a leer", () => {
   assert.deepEqual(leido.turnos, [{ usuario: "a", asistente: "b" }]);
 });
 
-test("un agente.json roto o vacío no rompe la carga", () => {
+test("a broken or empty agente.json does not break loading", () => {
   assert.deepEqual(interpretarAgente("{roto"), { resumen: "", turnos: [] });
   assert.deepEqual(interpretarAgente("null"), { resumen: "", turnos: [] });
   assert.deepEqual(interpretarAgente('{"turnos":[{"usuario":3},{"usuario":"ok","asistente":"b"}]}'), {
@@ -101,7 +101,7 @@ test("un agente.json roto o vacío no rompe la carga", () => {
   });
 });
 
-test("recortar la conversación nunca deja un resultado de herramienta huérfano", () => {
+test("trimming the conversation never leaves an orphaned tool result", () => {
   const conversacion = [{ role: "system" }];
   for (let turno = 0; turno < 6; turno += 1) {
     conversacion.push({ role: "user" }, { role: "assistant" }, { role: "tool" }, { role: "tool" }, { role: "assistant" });
@@ -112,7 +112,7 @@ test("recortar la conversación nunca deja un resultado de herramienta huérfano
   assert.ok(conversacion.length - 1 <= 12);
 });
 
-test("un turno más largo que el tope se conserva entero desde su petición", () => {
+test("a turn longer than the cap is kept whole from its request", () => {
   const conversacion = [{ role: "system" }, { role: "user" }, { role: "assistant" }, { role: "user" }];
   for (let i = 0; i < 20; i += 1) conversacion.push({ role: i % 2 ? "tool" : "assistant" });
   recortarConversacion(conversacion, 5);

@@ -28,42 +28,42 @@ const METAL: VozSonido = {
   ],
 };
 
-test("el vocabulario cubre las palabras que se acordaron", () => {
+test("the vocabulary covers the agreed words", () => {
   for (const clave of [
     "seco", "gordo", "corto", "largo", "agudo", "grave", "brillante", "oscuro",
     "metalico", "sucio", "limpio", "agresivo", "redondo", "hueco", "chillon", "apagado",
   ]) {
-    assert.ok(buscarPalabra(clave), `falta ${clave}`);
+    assert.ok(buscarPalabra(clave), `missing ${clave}`);
   }
-  assert.equal(buscarPalabra("metálico")?.clave, "metalico", "con tilde también");
+  assert.equal(buscarPalabra("metálico")?.clave, "metalico", "with an accent too");
   assert.equal(buscarPalabra("Chillón")?.clave, "chillon");
 });
 
-test("las palabras mueven la receta: corto y sucio cambian el post", () => {
+test("the words move the recipe: corto and sucio change the post", () => {
   const base = recetaNueva("x", "kick", [KICK]);
   const { receta, aplicadas } = aplicarPalabras(base, ["corto", "sucio"], KICK);
   assert.deepEqual(aplicadas, ["corto", "sucio"]);
-  assert.ok(receta.post.cola < POST_POR_DEFECTO.cola, "corto acorta la cola");
-  assert.ok(receta.post.suciedad > 0, "sucio satura");
-  assert.equal(receta.post.brillo, 0, "ni corto ni sucio tocan el brillo");
+  assert.ok(receta.post.cola < POST_POR_DEFECTO.cola, "corto shortens the tail");
+  assert.ok(receta.post.suciedad > 0, "sucio saturates");
+  assert.equal(receta.post.brillo, 0, "neither corto nor sucio touches the brightness");
   const brillante = aplicarPalabras(base, ["brillante"], KICK).receta;
-  assert.ok(brillante.post.brillo > 0, "brillante sí sube los agudos");
+  assert.ok(brillante.post.brillo > 0, "brillante does raise the highs");
   assert.deepEqual(receta.palabras, ["corto", "sucio"]);
 });
 
-test("una palabra mueve el parámetro de la voz si existe y el post si no", () => {
+test("a word moves the voice parameter if it exists and the post if not", () => {
   const metal = aplicarPalabras(recetaNueva("m", "metal_hit", [METAL]), ["corto", "gordo"], METAL).receta;
-  assert.ok((metal.args.dur as number) < 0.9, "el metálico sí tiene duración");
-  assert.ok((metal.args.pitch as number) < 1, "gordo baja el tono");
+  assert.ok((metal.args.dur as number) < 0.9, "the metallic one does have duration");
+  assert.ok((metal.args.pitch as number) < 1, "gordo lowers the pitch");
   assert.ok(metal.post.cuerpo > 0);
 
   const kick = aplicarPalabras(recetaNueva("k", "kick", [KICK]), ["corto", "gordo"], KICK).receta;
-  assert.equal(kick.args.dur, undefined, "el bombo no tiene duración: no se inventa");
-  assert.ok(kick.post.cola < 1, "pero la palabra se cumple en el post");
+  assert.equal(kick.args.dur, undefined, "the kick has no duration: it is not invented");
+  assert.ok(kick.post.cola < 1, "but the word is honored in the post");
   assert.ok(kick.post.cuerpo > 0);
 });
 
-test("dos palabras del mismo eje: gana la última y se dice por qué", () => {
+test("two words on the same axis: the last one wins and it says why", () => {
   const { receta, descartadas, aplicadas } = aplicarPalabras(
     recetaNueva("x", "kick", [KICK]),
     ["corto", "largo"],
@@ -72,19 +72,19 @@ test("dos palabras del mismo eje: gana la última y se dice por qué", () => {
   assert.deepEqual(aplicadas, ["largo"]);
   assert.equal(descartadas.length, 1);
   assert.equal(descartadas[0].palabra, "corto");
-  assert.match(descartadas[0].motivo, /se contradicen/);
-  assert.ok(receta.post.cola > 1, "ganó largo");
+  assert.match(descartadas[0].motivo, /contradict/);
+  assert.ok(receta.post.cola > 1, "largo won");
 });
 
-test("una palabra que no existe avisa y no rompe", () => {
+test("a word that does not exist warns and does not break", () => {
   const { aplicadas, avisos, receta } = aplicarPalabras(recetaNueva("x", "kick", [KICK]), ["bombástico"], KICK);
   assert.deepEqual(aplicadas, []);
   assert.equal(avisos.length, 1);
-  assert.match(avisos[0], /No conozco/);
+  assert.match(avisos[0], /I don't know/);
   assert.deepEqual(receta.post, POST_POR_DEFECTO);
 });
 
-test("sumar palabras no se pasa nunca de los límites", () => {
+test("adding words never goes past the limits", () => {
   const { receta } = aplicarPalabras(
     recetaNueva("x", "kick", [KICK]),
     ["sucio", "agresivo", "metalico"],

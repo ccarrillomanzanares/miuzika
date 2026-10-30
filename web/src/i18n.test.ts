@@ -3,34 +3,34 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { fijarIdioma, idioma, idiomaDe, olvidarIdioma, t } from "./i18n.ts";
 
-test("inglés para todo el mundo, diga lo que diga el navegador", () => {
+test("English for everyone, whatever the browser says", () => {
   olvidarIdioma();
-  // El navegador en español ya no cambia nada: es el fallo que se corrigió.
+  // A browser in Spanish no longer changes anything: that was the bug that got fixed.
   assert.equal(idiomaDe(["es-ES", "en"]), "en");
   assert.equal(idiomaDe(["es-MX"]), "en");
   assert.equal(idiomaDe(["fr-FR"]), "en");
   assert.equal(idiomaDe([]), "en");
 });
 
-test("sólo cambia si se fuerza", () => {
+test("it only changes if it is forced", () => {
   fijarIdioma("es");
   assert.equal(idiomaDe(["en-GB"]), "es");
   olvidarIdioma();
   assert.equal(idiomaDe(["es-ES"]), "en");
 });
 
-test("sin traducción se usa el texto de reserva", () => {
+test("without a translation the fallback text is used", () => {
   assert.equal(t("no-existe", "Hola"), "Hola");
 });
 
-test("el inglés es el idioma de partida y la reserva", () => {
+test("English is the starting language and the fallback", () => {
   fijarIdioma("en");
   assert.equal(idioma(), "en");
-  // La reserva que se pasa es el texto inglés: no se traduce a sí mismo.
+  // The fallback passed in is the English text: it does not translate itself.
   assert.equal(t("abrir", "Open"), "Open");
 });
 
-test("se puede forzar español, y entonces sí traduce", () => {
+test("Spanish can be forced, and then it does translate", () => {
   fijarIdioma("es");
   assert.equal(idioma(), "es");
   assert.equal(t("abrir", "Open"), "Abrir");
@@ -38,28 +38,28 @@ test("se puede forzar español, y entonces sí traduce", () => {
   fijarIdioma("en");
 });
 
-test("todas las claves del HTML tienen traducción al español", () => {
-  // Si alguien añade un botón con data-i18n y no lo traduce, esto lo caza: con el
-  // idioma en español la clave se quedaría en inglés, a la vista.
+test("all the HTML keys have a Spanish translation", () => {
+  // If someone adds a button with data-i18n and does not translate it, this catches it:
+  // with the language in Spanish the key would stay in English, in plain sight.
   fijarIdioma("es");
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const claves = [
     ...new Set([...html.matchAll(/data-i18n(?:-title|-placeholder)?="([^"]+)"/g)].map((m) => m[1])),
   ];
-  assert.ok(claves.length >= 40, `esperaba las claves del HTML, hay ${claves.length}`);
+  assert.ok(claves.length >= 40, `expected the HTML keys, there are ${claves.length}`);
   const sinTraducir = claves.filter((clave) => t(clave, "__SIN_TRADUCIR__") === "__SIN_TRADUCIR__");
-  assert.deepEqual(sinTraducir, [], "claves del HTML sin traducción al español");
+  assert.deepEqual(sinTraducir, [], "HTML keys without a Spanish translation");
   fijarIdioma("en");
 });
 
-test("el HTML está en inglés: es la fuente, no la traducción", () => {
+test("the HTML is in English: it is the source, not the translation", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /<html lang="en">/);
   assert.match(html, />Open</);
   assert.match(html, /placeholder="Ask the agent anything/);
-  // Nada de español suelto en los textos visibles (los comentarios del código no
-  // cuentan: van fuera de las etiquetas).
+  // No loose Spanish in the visible texts (code comments do not count: they are
+  // outside the tags).
   for (const palabra of ["Abrir<", "Guardar<", "Proyectos<", "Sonidos<", "Encargo<"]) {
-    assert.ok(!html.includes(palabra), `queda español en la interfaz: ${palabra}`);
+    assert.ok(!html.includes(palabra), `Spanish is left in the interface: ${palabra}`);
   }
 });

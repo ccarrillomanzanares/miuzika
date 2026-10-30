@@ -1,4 +1,4 @@
-/** Acceso HTTP al fichero maestro del proyecto (sólo existe en el servidor de dev). */
+/** HTTP access to the project's master file (only exists in the dev server). */
 
 export interface ProyectoListado {
   slug: string;
@@ -19,7 +19,7 @@ async function pedirJson(ruta: string, init?: RequestInit): Promise<Record<strin
   try {
     datos = (await res.json()) as Record<string, unknown>;
   } catch {
-    /* respuesta sin JSON: se usa el código de estado */
+    /* response without JSON: the status code is used */
   }
   if (!res.ok) {
     throw new Error(String(datos.error ?? `${res.status} ${res.statusText}`));
@@ -27,19 +27,19 @@ async function pedirJson(ruta: string, init?: RequestInit): Promise<Record<strin
   return datos;
 }
 
-/** Proyectos con proyecto.json en workspace/proyectos/, el más reciente primero. */
+/** Projects with a proyecto.json in workspace/proyectos/, most recent first. */
 export async function listarProyectos(): Promise<ProyectoListado[]> {
   const datos = await pedirJson("/api/proyectos");
   return (datos.proyectos ?? []) as ProyectoListado[];
 }
 
-/** Contenido completo del fichero maestro (sin el recorte de 20 KB de /api/fs/read). */
+/** Full contents of the master file (without the 20 KB truncation of /api/fs/read). */
 export async function leerProyectoDeDisco(ruta: string): Promise<string> {
   const datos = await pedirJson(`/api/proyectos?path=${encodeURIComponent(ruta)}`);
   return String(datos.contenido ?? "");
 }
 
-/** Escribe el fichero maestro (crea la carpeta del proyecto si no existe). */
+/** Writes the master file (creates the project folder if it does not exist). */
 export async function guardarProyectoEnDisco(ruta: string, contenido: string): Promise<void> {
   await pedirJson("/api/proyectos", {
     method: "POST",
@@ -49,8 +49,8 @@ export async function guardarProyectoEnDisco(ruta: string, contenido: string): P
 }
 
 /**
- * Copia un audio del navegador a `proyectos/<slug>/entrada/`. Devuelve la ruta
- * relativa ("entrada/kick.wav") con la que el fichero maestro lo referencia.
+ * Copies an audio file from the browser to `proyectos/<slug>/entrada/`. Returns the
+ * relative path ("entrada/kick.wav") that the master file references it by.
  */
 export async function subirAudio(
   file: File,

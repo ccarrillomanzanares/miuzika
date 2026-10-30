@@ -1,15 +1,15 @@
-"""La puerta de las voces de GPU. Se ejecuta EN LAMBDA (hay torch allí).
+"""The gate for GPU voices. It runs IN LAMBDA (there is torch there).
 
     python gpu/gate_voz_gpu.py _candidata_campana.py
 
-Renderiza la función candidata (importada de `gpu/`), la mide con el mismo
-`perfil()` que las de CPU y escribe el veredicto en la salida del proyecto, que
-vuelve sola al portátil:
+Renders the candidate function (imported from `gpu/`), measures it with the same
+`perfil()` as the CPU ones and writes the verdict to the project output, which
+comes back to the laptop on its own:
 
-    salida/voz_<nombre>.json   veredicto + perfil + params
-    salida/voz_<nombre>.wav    el rendimiento, para escucharlo
+    salida/voz_<nombre>.json   verdict + profile + params
+    salida/voz_<nombre>.wav    the render, to listen to it
 
-Mismos umbrales que `codigo/gate_voz.py`: si no cumple, no entra.
+Same thresholds as `codigo/gate_voz.py`: if it does not pass, it does not get in.
 """
 
 import hashlib
@@ -41,12 +41,12 @@ PARAMS_MAX = 12
 def _cargar(ruta, nombre):
     spec = importlib.util.spec_from_file_location(f"candidata_gpu_{nombre}", ruta)
     if spec is None or spec.loader is None:
-        raise RuntimeError("no se pudo cargar el fichero")
+        raise RuntimeError("could not load the file")
     modulo = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(modulo)
     fn = getattr(modulo, nombre, None)
     if fn is None or not callable(fn):
-        raise RuntimeError(f"el fichero no define una funcion llamada '{nombre}'")
+        raise RuntimeError(f"the file does not define a function called '{nombre}'")
     return fn
 
 
@@ -59,17 +59,17 @@ def _docstring(fn):
     doc = inspect.getdoc(fn) or ""
     lineas = [l.strip() for l in doc.splitlines() if l.strip()]
     if not lineas:
-        return ["sin docstring: hace falta una descripcion y la familia"], {}
+        return ["no docstring: a description and the family are required"], {}
     if len(lineas[0]) < 8:
-        problemas.append("la primera linea del docstring debe describir el sonido")
+        problemas.append("the first docstring line must describe the sound")
     familia = None
     for linea in lineas[1:]:
         if linea.lower().startswith("familia:"):
             familia = linea.split(":", 1)[1].strip().lower()
     if familia is None:
-        problemas.append("falta 'familia: percusion|tonal|ruido|textura'")
+        problemas.append("missing 'familia: percusion|tonal|ruido|textura'")
     elif familia not in voces.FAMILIAS:
-        problemas.append(f"familia '{familia}' no valida")
+        problemas.append(f"family '{familia}' is not valid")
     documentados = {}
     for linea in lineas[1:]:
         m = voces.LINEA_PARAM.match(linea)
@@ -82,12 +82,12 @@ def _docstring(fn):
     params = inspect.signature(fn).parameters
     for clave in params:
         if clave not in documentados:
-            problemas.append(f"el parametro '{clave}' no esta documentado")
+            problemas.append(f"parameter '{clave}' is not documented")
     for clave, meta in documentados.items():
         if clave not in params:
-            problemas.append(f"documentas '{clave}' pero la funcion no lo tiene")
+            problemas.append(f"you document '{clave}' but the function does not have it")
         elif meta.get("tipo") != "bool" and meta["min"] >= meta["max"]:
-            problemas.append(f"rango vacio en '{clave}'")
+            problemas.append(f"empty range in '{clave}'")
     return problemas, documentados
 
 
@@ -110,7 +110,7 @@ def _escribir_wav(ruta, x, sr=44100):
 
 def main(argv):
     if not argv:
-        print(json.dumps({"ok": False, "motivos": ["falta la ruta del candidato"]}))
+        print(json.dumps({"ok": False, "motivos": ["missing candidate path"]}))
         return 1
     base = os.path.basename(argv[0])
     nombre = base.replace("_candidata_", "").replace(".py", "")
@@ -122,17 +122,17 @@ def main(argv):
     try:
         fn = _cargar(ruta, nombre)
     except Exception as error:
-        print(json.dumps({"ok": False, "motivos": [f"no carga: {error}"], "traza": traceback.format_exc()[-1200:]}))
+        print(json.dumps({"ok": False, "motivos": [f"does not load: {error}"], "traza": traceback.format_exc()[-1200:]}))
         return 1
 
     problemas_doc, documentados = _docstring(fn)
     motivos.extend(problemas_doc)
     firma = inspect.signature(fn)
     if len(firma.parameters) > PARAMS_MAX:
-        motivos.append(f"demasiados parametros ({len(firma.parameters)} > {PARAMS_MAX})")
+        motivos.append(f"too many parameters ({len(firma.parameters)} > {PARAMS_MAX})")
     obligatorios = [c for c, p in firma.parameters.items() if p.default is inspect.Parameter.empty]
     if obligatorios:
-        motivos.append(f"parametros sin valor por defecto: {', '.join(obligatorios)}")
+        motivos.append(f"parameters without a default value: {', '.join(obligatorios)}")
 
     args = {
         clave: param.default
@@ -148,31 +148,31 @@ def main(argv):
                 x = x.mean(axis=1)
             ms = (time.perf_counter() - t0) * 1000.0
             if x.size == 0:
-                motivos.append("devuelve un array vacio")
+                motivos.append("returns an empty array")
                 break
             if not np.all(np.isfinite(x)):
-                motivos.append("devuelve NaN o infinitos")
+                motivos.append("returns NaN or infinities")
                 break
             huellas.append(_huella(x))
             if ms > RENDER_MAX_MS:
-                motivos.append(f"tarda {ms:.0f} ms (maximo {RENDER_MAX_MS:.0f})")
+                motivos.append(f"takes {ms:.0f} ms (maximum {RENDER_MAX_MS:.0f})")
             perfil = voces.perfil(x)
             perfil["render_ms"] = round(ms, 1)
     except Exception as error:
-        print(json.dumps({"ok": False, "motivos": [f"falla al renderizar: {error}"], "traza": traceback.format_exc()[-1200:]}))
+        print(json.dumps({"ok": False, "motivos": [f"fails when rendering: {error}"], "traza": traceback.format_exc()[-1200:]}))
         return 1
 
     if len(huellas) == 2 and huellas[0] != huellas[1]:
-        motivos.append("no es reproducible: dos renders dan muestras distintas (usa 'seed')")
+        motivos.append("not reproducible: two renders give different samples (use 'seed')")
     if perfil:
         if not DURACION_MIN <= perfil["duracion_s"] <= DURACION_MAX:
-            motivos.append(f"dura {perfil['duracion_s']} s (entre {DURACION_MIN} y {DURACION_MAX})")
+            motivos.append(f"lasts {perfil['duracion_s']} s (between {DURACION_MIN} and {DURACION_MAX})")
         if perfil["rms_dbfs"] < RMS_MIN:
-            motivos.append(f"es silencio: RMS {perfil['rms_dbfs']} dBFS")
+            motivos.append(f"it is silence: RMS {perfil['rms_dbfs']} dBFS")
         if not CREST_MIN <= perfil["crest_db"] <= CREST_MAX:
-            motivos.append(f"crest {perfil['crest_db']} dB fuera de {CREST_MIN}-{CREST_MAX}")
+            motivos.append(f"crest {perfil['crest_db']} dB outside {CREST_MIN}-{CREST_MAX}")
         if abs(perfil["dc"]) > DC_MAX:
-            motivos.append(f"tiene continua: DC {perfil['dc']}")
+            motivos.append(f"has DC offset: DC {perfil['dc']}")
 
     if len(motivos) == 0 and perfil:
         try:

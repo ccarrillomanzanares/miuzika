@@ -3,25 +3,25 @@ import test from "node:test";
 import { AGENTE_SISTEMA, HUELLA_PROMPT, huellaDe, promptDelSistema } from "./agente-prompt.ts";
 
 /**
- * El prompt del agente no se toca sin querer: cambiarlo cambia todo su
- * comportamiento. Esta prueba obliga a que el cambio sea deliberado — hay que
- * actualizar HUELLA_PROMPT, y eso se ve en el diff y en la revisión.
+ * The agent prompt is not touched by accident: changing it changes all of its
+ * behaviour. This test forces the change to be deliberate — HUELLA_PROMPT has to be
+ * updated, and that shows up in the diff and in the review.
  */
-test("el prompt del agente no cambia sin actualizar su huella", () => {
+test("the agent prompt does not change without updating its fingerprint", () => {
   assert.equal(
     huellaDe(AGENTE_SISTEMA),
     HUELLA_PROMPT,
-    "ha cambiado el prompt del agente: si es intencionado, actualiza HUELLA_PROMPT en web/src/agente-prompt.ts",
+    "the agent prompt has changed: if it is intentional, update HUELLA_PROMPT in web/src/agente-prompt.ts",
   );
 });
 
-test("el prompt se entrega tal cual, sin sustituciones", () => {
+test("the prompt is delivered as is, without substitutions", () => {
   const texto = promptDelSistema();
   assert.equal(texto, AGENTE_SISTEMA);
-  assert.ok(!texto.includes("{{"), "no debe quedar ningún marcador por sustituir");
+  assert.ok(!texto.includes("{{"), "no placeholder may be left to substitute");
 });
 
-test("las reglas duras siguen en el texto", () => {
+test("the hard rules are still in the text", () => {
   const texto = promptDelSistema();
   for (const regla of [
     "compases=N",
@@ -35,19 +35,19 @@ test("las reglas duras siguen en el texto", () => {
     "150 lineas",
     "No inventes resultados",
     "buscar_sonido",
-    // 27-oct: el agente compone en el proyecto, por secciones y en el idioma de cada uno.
+    // Oct 27: the agent composes in the project, by sections and in each person's language.
     "leer_proyecto",
     "escribir_progresion",
-    // 28-oct (v4): termina la canción en el turno y no pregunta el formato de entrega.
+    // Oct 28 (v4): it finishes the song in the turn and does not ask for the delivery format.
     "Termina la canción entera en el turno",
     "IDIOMA",
-    // 27-oct (v3): arranca construyendo, compone con sentido y en notación compacta.
+    // Oct 27 (v3): it starts building, composes with meaning and in compact notation.
     "HAZ, NO PREGUNTES",
     "UNA CANCIÓN CON SENTIDO",
     "escribir_notas",
     "listar_instrumentos",
     "No copies letras",
   ]) {
-    assert.ok(texto.includes(regla), `falta la regla: ${regla}`);
+    assert.ok(texto.includes(regla), `missing the rule: ${regla}`);
   }
 });

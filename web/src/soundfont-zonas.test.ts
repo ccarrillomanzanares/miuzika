@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 
 import { repartirZonasGlobales } from "./soundfont-zonas.ts";
 
-test("la zona global llega a las zonas que no tienen ese generador; la propia manda", () => {
+test("the global zone reaches the zones that do not have that generator; the zone's own wins", () => {
   const instrumento = {
     globalZone: { generators: { 54: { value: 1 }, 38: { value: 0 }, 53: { value: 7 } } },
     zones: [{ generators: { 53: { value: 0 } } }, { generators: { 53: { value: 1 }, 54: { value: 0 } } }],
@@ -22,17 +22,17 @@ test("la zona global llega a las zonas que no tienen ese generador; la propia ma
   };
   repartirZonasGlobales(sf);
   assert.deepEqual(instrumento.zones[0]!.generators, { 53: { value: 0 }, 54: { value: 1 }, 38: { value: 0 } });
-  assert.deepEqual(instrumento.zones[1]!.generators[54], { value: 0 }, "la zona propia no se pisa");
-  assert.deepEqual(sf.presets[0]!.zones[0]!.generators, { 41: { value: 0 }, 37: { value: 50 } }, "ni instrumento ni muestra se heredan");
-  assert.equal(repartirZonasGlobales(sf), 0, "repetirlo no cambia nada");
+  assert.deepEqual(instrumento.zones[1]!.generators[54], { value: 0 }, "the zone's own is not overwritten");
+  assert.deepEqual(sf.presets[0]!.zones[0]!.generators, { 41: { value: 0 }, 37: { value: 50 } }, "neither instrument nor sample is inherited");
+  assert.equal(repartirZonasGlobales(sf), 0, "repeating it changes nothing");
 });
 
-// Con el General MIDI de verdad y el mismo código del motor de openDAW que convierte
-// el SF2 para el wasm. El catálogo está fuera de git: sin él, la prueba se salta.
+// With the real General MIDI and the same openDAW engine code that converts the SF2 for
+// the wasm. The catalog is outside git: without it, the test is skipped.
 const GM = resolve(process.cwd(), "workspace", "catalogo", "gm", "GeneralUser-GS.sf2");
 
-test("con GeneralUser GS, «Saw Lead» (81) suena en bucle en el motor de openDAW", { skip: !existsSync(GM) && "falta el GM" }, async () => {
-  // En Node el paquete llega como CommonJS (la clase va en `default`); en Vite, con nombre.
+test("with GeneralUser GS, “Saw Lead” (81) loops in the openDAW engine", { skip: !existsSync(GM) && "missing the GM" }, async () => {
+  // In Node the package arrives as CommonJS (the class is in `default`); in Vite, by name.
   const modulo = (await import("soundfont2")) as unknown as { SoundFont2?: unknown; default?: { SoundFont2?: unknown } };
   const SoundFont2 = (modulo.SoundFont2 ?? modulo.default?.SoundFont2 ?? modulo.default) as new (b: Uint8Array) => never;
   const { simplifySoundfont } = (await import(
@@ -54,9 +54,9 @@ test("con GeneralUser GS, «Saw Lead» (81) suena en bucle en el motor de openDA
 
   const tal_cual = bucles(new SoundFont2(bytes));
   assert.ok(tal_cual.length > 0);
-  assert.ok(tal_cual.every((modo) => modo === 0), "sin repartir, el motor no ve el bucle (el fallo medido)");
+  assert.ok(tal_cual.every((modo) => modo === 0), "without spreading, the engine does not see the loop (the measured failure)");
 
   const repartido = new SoundFont2(bytes) as never;
   repartirZonasGlobales(repartido);
-  assert.ok(bucles(repartido).every((modo) => modo === 1), "repartido, todas las regiones van en bucle");
+  assert.ok(bucles(repartido).every((modo) => modo === 1), "once spread, all regions loop");
 });

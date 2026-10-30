@@ -1,18 +1,18 @@
 /**
- * Proveedores de modelos: configuración y proxy del agente.
+ * Model providers: configuration and agent proxy.
  *
- *   GET  /api/proveedores              lista, cuál está activo y con qué modelo (SIN claves)
+ *   GET  /api/proveedores              list, which one is active and with which model (WITHOUT keys)
  *   POST /api/proveedores              {accion: "guardar" | "activar" | "borrarClave", id, apiKey?, base?, modelo?}
- *   GET  /api/proveedores/modelos?id=  modelos que ofrece ese proveedor
- *   POST /api/proveedores/probar       {id, modelo}: una llamada mínima, para saber si funciona
- *   *    /api/llm/v1/…                 el chat del agente → proveedor activo (con su clave)
- *   *    /api/llm/api/…                servicios propios de Ollama (búsqueda web, tags) → Ollama Cloud
+ *   GET  /api/proveedores/modelos?id=  models offered by that provider
+ *   POST /api/proveedores/probar       {id, modelo}: a minimal call, to know whether it works
+ *   *    /api/llm/v1/…                 the agent chat → active provider (with its key)
+ *   *    /api/llm/api/…                Ollama's own services (web search, tags) → Ollama Cloud
  *
- * Las claves viven en `.miuzika/proveedores.json` (fuera de git y fuera de
- * workspace/, donde el agente lee y escribe) o en el .env. Nunca se devuelven al
- * navegador: sólo «hay clave» y sus últimas cifras.
+ * The keys live in `.miuzika/proveedores.json` (outside git and outside
+ * workspace/, where the agent reads and writes) or in the .env. They are never returned to the
+ * browser: only "there is a key" and its last digits.
  *
- * Antes esto era un proxy fijo de Vite a Ollama Cloud (vite.config.ts).
+ * This used to be a fixed Vite proxy to Ollama Cloud (vite.config.ts).
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -55,7 +55,7 @@ function guardarConfig(config: ConfigProveedores): void {
   writeFileSync(FICHERO, JSON.stringify(config, null, 2), { encoding: "utf8", mode: 0o600 });
 }
 
-/** Cabeceras de autenticación de un proveedor (Anthropic acepta también Bearer en su API compatible). */
+/** Authentication headers for a provider (Anthropic also accepts Bearer in its compatible API). */
 function cabeceras(clave: string): Record<string, string> {
   return clave ? { Authorization: `Bearer ${clave}` } : {};
 }
@@ -97,13 +97,13 @@ export function rutasProveedores(server: ViteDevServer, ctx: Contexto, env: Reco
 
   async function listarModelos(id: string): Promise<string[]> {
     const p = proveedorPorId(id);
-    if (!p) throw new Error(`proveedor desconocido: ${id}`);
+    if (!p) throw new Error(`unknown provider: ${id}`);
     const ajustes = leerConfig().proveedores[id];
     const base = baseDe(p, ajustes);
-    if (!base) throw new Error("falta la URL base");
+    if (!base) throw new Error("missing the base URL");
     const clave = claveDe(p, ajustes, env);
-    if (p.necesitaClave && !clave) throw new Error("falta la clave");
-    // Ollama lista en /api/tags (fuera de /v1); los demás en /models.
+    if (p.necesitaClave && !clave) throw new Error("missing the key");
+    // Ollama lists at /api/tags (outside /v1); the others at /models.
     const url = p.listado === "ollama" ? `${base.replace(/\/v1$/, "")}/api/tags` : `${base}/models`;
     const res = await fetch(url, {
       headers: { ...cabeceras(clave), ...(p.id === "anthropic" ? { "x-api-key": clave, "anthropic-version": "2023-06-01" } : {}) },
@@ -125,11 +125,11 @@ export function rutasProveedores(server: ViteDevServer, ctx: Contexto, env: Reco
       try {
         const { id, modelo } = JSON.parse(cuerpo) as { id?: string; modelo?: string };
         const p = proveedorPorId(String(id));
-        if (!p) throw new Error("proveedor desconocido");
+        if (!p) throw new Error("unknown provider");
         const ajustes = leerConfig().proveedores[p.id];
         const base = baseDe(p, ajustes);
         const clave = claveDe(p, ajustes, env);
-        if (p.necesitaClave && !clave) throw new Error("falta la clave");
+        if (p.necesitaClave && !clave) throw new Error("missing the key");
         const t0 = Date.now();
         const r = await fetch(`${base}/chat/completions`, {
           method: "POST",
@@ -137,7 +137,7 @@ export function rutasProveedores(server: ViteDevServer, ctx: Contexto, env: Reco
           body: JSON.stringify(
             adaptarCuerpo(p, {
               model: modelo || ajustes?.modelo || p.modeloPorDefecto,
-              messages: [{ role: "user", content: "Responde sólo: ok" }],
+              messages: [{ role: "user", content: "Answer only: ok" }],
               max_tokens: 16,
               stream: false,
             }),
@@ -160,7 +160,7 @@ export function rutasProveedores(server: ViteDevServer, ctx: Contexto, env: Reco
   });
 
   server.middlewares.use("/api/proveedores", (req, res, next) => {
-    // Montado después de /modelos y /probar: aquí sólo llega la raíz.
+    // Mounted after /modelos and /probar: only the root reaches here.
     if ((req.url ?? "/").replace(/\?.*$/, "") !== "/") {
       next();
       return;
@@ -174,7 +174,7 @@ export function rutasProveedores(server: ViteDevServer, ctx: Contexto, env: Reco
         const d = JSON.parse(cuerpo) as { accion?: string; id?: string; apiKey?: string; base?: string; modelo?: string };
         const p = proveedorPorId(String(d.id));
         if (!p) {
-          responderJson(res, 400, { error: `proveedor desconocido: ${d.id}` });
+          responderJson(res, 400, { error: `unknown provider: ${d.id}` });
           return;
         }
         const config = leerConfig();
@@ -196,7 +196,7 @@ export function rutasProveedores(server: ViteDevServer, ctx: Contexto, env: Reco
     });
   });
 
-  /** Reenvía una petición con su cuerpo y devuelve la respuesta tal cual (streaming incluido). */
+  /** Forwards a request with its body and returns the response as is (streaming included). */
   async function reenviar(
     req: IncomingMessage,
     res: ServerResponse,
@@ -216,7 +216,7 @@ export function rutasProveedores(server: ViteDevServer, ctx: Contexto, env: Reco
         try {
           cuerpo = JSON.stringify(adaptar(JSON.parse(cuerpoCrudo) as Record<string, unknown>));
         } catch {
-          /* no es JSON: se reenvía tal cual */
+          /* not JSON: forwarded as is */
         }
       }
     }
@@ -235,7 +235,7 @@ export function rutasProveedores(server: ViteDevServer, ctx: Contexto, env: Reco
       const tipo = r.headers.get("content-type");
       if (tipo) res.setHeader("Content-Type", tipo);
       res.setHeader("Cache-Control", "no-cache");
-      console.log(`[llm] ${etiqueta} ${req.method} ${url.replace(/^https?:\/\/[^/]+/, "")} -> ${r.status} en ${Date.now() - t0} ms`);
+      console.log(`[llm] ${etiqueta} ${req.method} ${url.replace(/^https?:\/\/[^/]+/, "")} -> ${r.status} in ${Date.now() - t0} ms`);
       if (!r.body) {
         res.end();
         return;
@@ -244,27 +244,27 @@ export function rutasProveedores(server: ViteDevServer, ctx: Contexto, env: Reco
     } catch (error) {
       if (control.signal.aborted) return;
       console.error(`[llm] ${etiqueta} ${url} -> ERROR ${error instanceof Error ? error.message : String(error)}`);
-      responderJson(res, 502, { error: `no se pudo hablar con ${etiqueta}: ${error instanceof Error ? error.message : String(error)}` });
+      responderJson(res, 502, { error: `could not talk to ${etiqueta}: ${error instanceof Error ? error.message : String(error)}` });
     }
   }
 
-  // Servicios propios de Ollama (búsqueda web, lectura de páginas, lista de modelos):
-  // siempre a Ollama Cloud con su clave, sea cual sea el proveedor del agente.
+  // Ollama's own services (web search, page reading, model list):
+  // always to Ollama Cloud with its key, whatever the agent's provider is.
   server.middlewares.use("/api/llm/api", (req, res) => {
     const p = proveedorPorId("ollama-cloud")!;
     const clave = claveDe(p, leerConfig().proveedores[p.id], env);
     void reenviar(req, res, `https://ollama.com/api${req.url ?? ""}`, clave, null, "ollama");
   });
 
-  // El chat del agente: al proveedor activo.
+  // The agent chat: to the active provider.
   server.middlewares.use("/api/llm/v1", (req, res) => {
     const { p, base, clave } = activo();
     if (!base) {
-      responderJson(res, 400, { error: `el proveedor «${p.nombre}» no tiene URL base: ponla en Modelos` });
+      responderJson(res, 400, { error: `provider "${p.nombre}" has no base URL: set it in Modelos` });
       return;
     }
     if (p.necesitaClave && !clave) {
-      responderJson(res, 401, { error: `falta la clave de «${p.nombre}»: ponla en Modelos` });
+      responderJson(res, 401, { error: `missing the key for "${p.nombre}": set it in Modelos` });
       return;
     }
     void reenviar(req, res, `${base}${req.url ?? ""}`, clave, (cuerpo) => adaptarCuerpo(p, cuerpo), p.nombre);

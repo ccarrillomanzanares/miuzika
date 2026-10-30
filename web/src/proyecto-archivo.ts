@@ -1,14 +1,13 @@
 /**
- * El fichero maestro del proyecto: `workspace/proyectos/<slug>/proyecto.json`.
+ * The project's master file: `workspace/proyectos/<slug>/proyecto.json`.
  *
- * Es la fuente de verdad, la única: el estado del proyecto (pistas, clips,
- * notas, faders, mute/solo, BPM y tonalidad) y, dentro de cada asset, la
- * **ruta relativa a la carpeta del proyecto** de su WAV. El audio nunca se
- * incrusta: los stems de un tema pesan ~95 MB cada uno y en base64 un máster
- * de 6 stems serían ~760 MB de JSON.
+ * It is the source of truth, the only one: the project state (tracks, clips, notes,
+ * faders, mute/solo, BPM and key) and, inside each asset, the **path relative to the
+ * project folder** of its WAV. Audio is never embedded: a song's stems weigh ~95 MB
+ * each and in base64 a 6-stem master would be ~760 MB of JSON.
  *
- * Este módulo no toca la red ni el DOM: sólo construye y valida el JSON, para
- * poder probarlo con `node --test`.
+ * This module touches neither the network nor the DOM: it only builds and validates the
+ * JSON, so it can be tested with `node --test`.
  */
 
 import type { AudioAsset, Project } from "../../src/core/types.ts";
@@ -24,26 +23,26 @@ export interface ProyectoEnDisco {
   proyecto: Project;
 }
 
-/** Lo que el módulo necesita de un asset cargado (audio-store lo cumple). */
+/** What the module needs from a loaded asset (audio-store satisfies it). */
 interface AssetVivo {
   name: string;
   durationBeats: number;
-  /** Ruta en el servidor, relativa a la carpeta del proyecto. */
+  /** Path on the server, relative to the project folder. */
   src?: string;
 }
 
 export interface ResultadoGuardado {
   datos: ProyectoEnDisco;
-  /** Assets sin ruta en disco: sólo existían en el navegador. */
+  /** Assets with no path on disk: they only existed in the browser. */
   sinRuta: string[];
 }
 
-/** Carpeta del proyecto en `workspace/proyectos/`. Mismo slug que usa la app. */
+/** Project folder in `workspace/proyectos/`. Same slug the app uses. */
 export function slugDeNombre(nombre: string): string {
   return carpetaDeNombre(nombre);
 }
 
-/** Ruta del fichero maestro para un slug ("vitrina" -> proyectos/vitrina/proyecto.json). */
+/** Path of the master file for a slug ("vitrina" -> proyectos/vitrina/proyecto.json). */
 export function rutaDeProyecto(slug: string): string {
   return `proyectos/${slug}/proyecto.json`;
 }
@@ -55,14 +54,14 @@ export function carpetaDeRuta(ruta: string): string {
   return trozos.length >= 2 ? trozos[trozos.length - 2]! : "";
 }
 
-/** Normaliza la ruta de un asset: sin barra inicial, sin "..", sin "proyectos/<slug>/". */
+/** Normalizes an asset path: no leading slash, no "..", no "proyectos/<slug>/". */
 export function rutaRelativa(src: string): string {
   const limpia = src
     .replace(/\\/g, "/")
     .split("/")
     .filter((trozo) => trozo !== "" && trozo !== "." && trozo !== "..");
 
-  // Un asset puede venir ya con la carpeta del proyecto delante.
+  // An asset may already come with the project folder in front.
   if (limpia[0] === "proyectos" && limpia.length > 2) return limpia.slice(2).join("/");
   return limpia.join("/");
 }
@@ -70,9 +69,9 @@ export function rutaRelativa(src: string): string {
 export { idsDeAssets };
 
 /**
- * Construye el contenido del fichero maestro. A cada asset referenciado se le
- * escribe su `ruta` (de la ruta viva si la hay, si no la que ya tuviera); los
- * que no tienen ninguna se listan en `sinRuta` para avisar al usuario.
+ * Builds the master file's contents. Each referenced asset is given its `ruta` (from
+ * the live path if there is one, otherwise the one it already had); the ones that have
+ * none are listed in `sinRuta` to warn the user.
  */
 export function serializarProyecto(
   project: Project,
@@ -104,7 +103,7 @@ export function serializarProyecto(
   };
 }
 
-/** Ruta antigua (formato previo): el master llevaba la lista de WAV aparte. */
+/** Old path (previous format): the master carried the WAV list separately. */
 interface AssetsAntiguos {
   id: string;
   nombre?: string;
@@ -114,9 +113,9 @@ interface AssetsAntiguos {
 }
 
 /**
- * Lee y valida el fichero maestro. Admite también un `Project` suelto (un .json
- * exportado a mano) y los ficheros del formato anterior, que llevaban la lista
- * de WAV en `assets[]` en vez de `proyecto.audioAssets[].ruta`.
+ * Reads and validates the master file. It also accepts a loose `Project` (a .json
+ * exported by hand) and files from the previous format, which carried the WAV list in
+ * `assets[]` instead of `proyecto.audioAssets[].ruta`.
  */
 export function interpretarProyectoEnDisco(texto: string): ProyectoEnDisco {
   let crudo: unknown;
@@ -130,20 +129,20 @@ export function interpretarProyectoEnDisco(texto: string): ProyectoEnDisco {
   }
   const datos = crudo as Partial<ProyectoEnDisco> & Partial<Project> & { assets?: AssetsAntiguos[] };
 
-  // Proyecto suelto: lo que se importaba antes desde «Abrir».
+  // Loose project: what used to be imported from "Open".
   if (datos.schemaVersion === 1) {
     return { formato: FORMATO, version: VERSION, guardadoEn: "", proyecto: migrarProyecto(datos as Project) };
   }
 
   if (datos.formato !== FORMATO) {
-    throw new Error(`no es un proyecto de miuzika (falta "formato": "${FORMATO}").`);
+    throw new Error(`not a miuzika project (missing "formato": "${FORMATO}").`);
   }
   const proyecto = datos.proyecto;
   if (!proyecto || proyecto.schemaVersion !== 1 || !Array.isArray(proyecto.tracks)) {
     throw new Error("the project in the file is not valid (schemaVersion 1 and tracks are required).");
   }
 
-  // Ruta escrita donde toque: primero la del formato nuevo, si no la lista vieja.
+  // Path written where it belongs: first the new format's, otherwise the old list.
   if (Array.isArray(proyecto.audioAssets)) {
     for (const asset of proyecto.audioAssets) {
       if (!asset || typeof asset.id !== "string") continue;
@@ -166,14 +165,14 @@ export function interpretarProyectoEnDisco(texto: string): ProyectoEnDisco {
   };
 }
 
-/** Carpetas de salida típicas: su nombre no sirve como nombre de proyecto. */
+/** Typical output folders: their name is no good as a project name. */
 const GENERICAS = /^(salida|output|audio|stems?|wav|wavs|midi|export|exports|mix|mezcla|master)$/;
 
 /**
- * Nombre para un proyecto nuevo a partir de los ficheros elegidos. Usa la
- * carpeta del selector («Abrir carpeta» deja `proyectos/vitrina/salida/x.wav`
- * en `webkitRelativePath`); si sólo vienen ficheros sueltos, el nombre del
- * primero. Nunca devuelve "salida": eso sería una carpeta, no un tema.
+ * Name for a new project from the chosen files. It uses the picker's folder ("Open
+ * folder" leaves `proyectos/vitrina/salida/x.wav` in `webkitRelativePath`); if only loose
+ * files come, the first one's name. It never returns "salida": that would be a folder,
+ * not a song.
  */
 export function nombreDeProyectoDesdeFicheros(
   files: { name: string; webkitRelativePath?: string }[],
@@ -182,11 +181,11 @@ export function nombreDeProyectoDesdeFicheros(
   if (!primero) return "proyecto";
 
   const trozos = (primero.webkitRelativePath ?? "").replace(/\\/g, "/").split("/").filter(Boolean);
-  const carpetas = trozos.slice(0, -1); // fuera el nombre del fichero
+  const carpetas = trozos.slice(0, -1); // drop the file name
   let elegida = carpetas[carpetas.length - 1] ?? "";
   if (elegida && GENERICAS.test(elegida.toLowerCase())) {
-    // "salida" nunca es un nombre de tema: se usa la carpeta padre y, si no la
-    // hay (el usuario eligió la carpeta salida/ directamente), el fichero.
+    // "salida" is never a song name: the parent folder is used and, if there is none
+    // (the user chose the salida/ folder directly), the file.
     elegida = carpetas.length > 1 ? carpetas[carpetas.length - 2]! : "";
   }
   if (!elegida) elegida = primero.name.replace(/\.[^.]+$/, "");

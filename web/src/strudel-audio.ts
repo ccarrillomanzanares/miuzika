@@ -1,6 +1,6 @@
 /**
- * Render offline con el motor real de Strudel (superdough + sample packs).
- * No usa las notas MIDI: produce un WAV para insertarlo como pista de audio.
+ * Offline rendering with the real Strudel engine (superdough + sample packs).
+ * It does not use the MIDI notes: it produces a WAV to insert as an audio track.
  */
 
 import { expandLabeledPatterns, stripVisualMethods } from "./strudel-source.ts";
@@ -29,8 +29,8 @@ export async function renderStrudelAudio(
   beatsPerBar: number,
 ): Promise<RenderedStrudelAudio> {
   const source = stripVisualMethods(expandLabeledPatterns(code.trim()));
-  if (!source) throw new Error("El código Strudel está vacío.");
-  if (!(bars >= 1 && bars <= 64)) throw new Error("Los compases deben estar entre 1 y 64.");
+  if (!source) throw new Error("The Strudel code is empty.");
+  if (!(bars >= 1 && bars <= 64)) throw new Error("The number of bars must be between 1 and 64.");
 
   const core: any = await import("@strudel/core");
   const mini: any = await import("@strudel/mini");
@@ -42,7 +42,7 @@ export async function renderStrudelAudio(
   await core.evalScope(core, mini, tonal, webaudio);
   const warnings: string[] = [];
 
-  // Mismos sample maps por defecto que el REPL de Strudel.
+  // Same default sample maps as the Strudel REPL.
   if (!dirtySamplesLoaded) {
     const maps: Array<[string, string]> = [
       [`${CDN}/tidal-drum-machines.json`, `${CDN}/tidal-drum-machines/machines/`],
@@ -57,7 +57,7 @@ export async function renderStrudelAudio(
     for (const result of results) {
       if (result.status === "rejected") {
         warnings.push(
-          `No se cargó un sample map por defecto: ${String(result.reason)}`,
+          `A default sample map failed to load: ${String(result.reason)}`,
         );
       }
     }
@@ -75,8 +75,8 @@ export async function renderStrudelAudio(
     }
   }
 
-  // El transpiler trata las URLs de samples() como mini-notation y falla.
-  // Extraemos las llamadas de URL simple, las precargamos y las quitamos.
+  // The transpiler treats samples() URLs as mini-notation and fails.
+  // We extract the plain URL calls, preload them and remove them.
   const sampleCalls = [
     ...source.matchAll(/samples\s*\(\s*(['"])([^'"]+)\1\s*\)/g),
   ];
@@ -96,7 +96,7 @@ export async function renderStrudelAudio(
   const evaluated = await transpiler.evaluate(renderSource, transpiler.transpiler);
   const pattern = evaluated?.pattern;
   if (!pattern || typeof pattern.queryArc !== "function") {
-    throw new Error("El código no devuelve un patrón Strudel.");
+    throw new Error("The code does not return a Strudel pattern.");
   }
 
   const cps = bpm / (60 * beatsPerBar);
@@ -128,7 +128,7 @@ export async function renderStrudelAudio(
         );
       } catch (error) {
         warnings.push(
-          `Evento Strudel omitido: ${error instanceof Error ? error.message : String(error)}`,
+          `Strudel event skipped: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }

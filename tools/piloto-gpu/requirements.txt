@@ -1,5 +1,5 @@
-# Fijado: transformers 5.x rompe CLAP (processor sin tokenizer; get_text_features
-# devuelve un objeto). Con 4.46.3 funciona.
+# Pinned: transformers 5.x breaks CLAP (processor without tokenizer; get_text_features
+# returns an object). With 4.46.3 it works.
 torch
 transformers==4.46.3
 soundfile

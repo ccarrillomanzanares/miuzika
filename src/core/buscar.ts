@@ -1,10 +1,10 @@
 /**
- * Búsqueda en el catálogo a partir de lenguaje natural.
+ * Catalog search from natural language.
  *
- * El modelo no tiene que saberse el catálogo de memoria: convierte la petición en
- * **etiquetas** (taxonomia.ts) y esta búsqueda la resuelve contra lo que hay. Además
- * de por texto, filtra por carácter medido (corto, brillante, grave…), que es lo que
- * distingue dos bombos del mismo nombre.
+ * The model does not have to memorize the catalog: it turns the request into
+ * **tags** (taxonomia.ts) and this search resolves it against what exists. Besides
+ * text, it filters by measured character (short, bright, low…), which is what
+ * distinguishes two kicks with the same name.
  */
 
 import { etiquetasEnFrase, normalizar } from "./taxonomia.ts";
@@ -24,20 +24,20 @@ export interface EntradaCatalogo {
   descripcion: string;
   destino?: "cpu" | "gpu";
   params?: { clave: string; min?: number; max?: number; defecto?: unknown }[];
-  /** Id de la etiqueta de la taxonomía, si el catálogo la declara. */
+  /** Taxonomy tag id, if the catalog declares one. */
   taxonomia?: string;
   perfil?: Perfil;
-  /** Ruta del WAV si es un sample ya renderizado. */
+  /** WAV path if it is an already-rendered sample. */
   ruta?: string;
-  /** Texto ya normalizado (lo rellena quien indexa: 4.231 entradas × N consultas
-   *  es demasiado trabajo para normalizar en cada búsqueda). */
+  /** Already-normalized text (filled in by the indexer: 4,231 entries × N queries
+   *  is too much work to normalize on every search). */
   normTexto?: string;
   normClave?: string;
 }
 
 export interface OpcionesBusqueda {
   familia?: string;
-  /** Solo voces que se puedan renderizar (sin material de entrada). */
+  /** Only voices that can be rendered (with no input material). */
   usables?: boolean;
   limite?: number;
 }
@@ -46,11 +46,11 @@ export interface Resultado {
   entrada: EntradaCatalogo;
   puntuacion: number;
   motivos: string[];
-  /** Si ha coincidido con una etiqueta de la taxonomía (no sólo con la familia). */
+  /** Whether it matched a taxonomy tag (not just the family). */
   etiqueta: boolean;
 }
 
-/** Umbrales de carácter: son los mismos para voces y para samples. */
+/** Character thresholds: the same for voices and for samples. */
 const CARACTER: Record<string, (p: Perfil) => boolean> = {
   corto: (p) => (p.duracion_s ?? 99) <= 0.8,
   largo: (p) => (p.duracion_s ?? 0) >= 1.5,
@@ -63,7 +63,7 @@ const CARACTER: Record<string, (p: Perfil) => boolean> = {
   limpio: (p) => (p.crest_db ?? 0) >= 14,
 };
 
-/** Las mismas palabras de carácter en inglés: la consulta llega en español o en inglés. */
+/** The same character words in English: the query arrives in Spanish or English. */
 const CARACTER_EN: Record<string, string> = {
   short: "corto",
   long: "largo",
@@ -77,7 +77,7 @@ const CARACTER_EN: Record<string, string> = {
   clean: "limpio",
 };
 
-/** Palabras de carácter de una consulta ya normalizada, sin repetir. */
+/** Character words from an already-normalized query, without duplicates. */
 function caracteresDe(texto: string): string[] {
   const palabras = new Set(texto.split(" "));
   const encontrados = Object.keys(CARACTER).filter((c) => texto.includes(c));
@@ -88,11 +88,11 @@ function caracteresDe(texto: string): string[] {
 }
 
 /**
- * Resuelve una consulta en lenguaje natural contra un catálogo.
+ * Resolves a natural-language query against a catalog.
  *
- * Puntuación: coincidir con la etiqueta de taxonomía vale más que coincidir con el
- * nombre, y el carácter medido suma. Devuelve también **por qué** puntúa, para que
- * el agente pueda explicar su elección en vez de inventarla.
+ * Scoring: matching the taxonomy tag is worth more than matching the name, and the
+ * measured character adds points. It also returns **why** it scored, so the agent
+ * can explain its choice instead of making it up.
  */
 export function buscarEnCatalogo(
   catalogo: EntradaCatalogo[],
@@ -105,11 +105,11 @@ export function buscarEnCatalogo(
   const caracteres = caracteresDe(texto);
   const resultados: Resultado[] = [];
 
-  // El catálogo grande (4.231 entradas) se consulta con `includes` sobre un texto ya
-  // normalizado con espacios en los bordes: comparar por palabra sin construir una
-  // expresión regular por alias y por entrada (eso tardaba segundos).
+  // The large catalog (4,231 entries) is queried with `includes` on already
+  // normalized text with spaces at the edges: comparing by word without building a
+  // regular expression per alias and per entry (that took seconds).
   const espacios = (texto: string): string => ` ${normalizar(texto)} `;
-  // Lo que no cambia por entrada se calcula una vez, no 4.231 veces.
+  // What does not change per entry is computed once, not 4,231 times.
   const objetivos = etiquetas.map((etiqueta) => ({
     etiqueta,
     nombres: [etiqueta.es, etiqueta.en, ...etiqueta.alias].map(espacios),
@@ -141,10 +141,10 @@ export function buscarEnCatalogo(
       if (coincideId) {
         puntuacion += 10;
         coincideEtiqueta = true;
-        motivos.push(`es «${etiqueta.es}»`);
+        motivos.push(`is "${etiqueta.es}"`);
       } else if (familiaEntrada === familiaBuscada.get(etiqueta.id)) {
         puntuacion += 2;
-        motivos.push(`misma familia (${etiqueta.familia})`);
+        motivos.push(`same family (${etiqueta.familia})`);
       }
     }
 
@@ -152,7 +152,7 @@ export function buscarEnCatalogo(
       const palabra = palabras[i] as string;
       if (claveNormalizada.includes(palabra) || nombre.includes(palabrasConEspacio[i] as string)) {
         puntuacion += 4;
-        if (!motivos.includes(`dice «${palabra}»`)) motivos.push(`dice «${palabra}»`);
+        if (!motivos.includes(`says "${palabra}"`)) motivos.push(`says "${palabra}"`);
       }
     }
 
@@ -160,7 +160,7 @@ export function buscarEnCatalogo(
       for (const caracter of caracteres) {
         if (CARACTER[caracter](entrada.perfil)) {
           puntuacion += 6;
-          motivos.push(`suena ${caracter}`);
+          motivos.push(`sounds ${caracter}`);
         }
       }
     }
@@ -169,8 +169,8 @@ export function buscarEnCatalogo(
   }
 
   resultados.sort((a, b) => b.puntuacion - a.puntuacion || a.entrada.clave.localeCompare(b.entrada.clave));
-  // Si el usuario nombró algo concreto («china»), no queremos de vuelta todo lo que
-  // suena sucio: sólo lo que es ese instrumento.
+  // If the user named something specific ("china"), we do not want back everything
+  // that sounds dirty: only what is that instrument.
   const conEtiqueta = resultados.filter((r) => r.etiqueta);
   const utiles = conEtiqueta.length > 0 ? conEtiqueta : resultados;
   return utiles.slice(0, opciones.limite ?? 8);

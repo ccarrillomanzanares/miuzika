@@ -1,26 +1,26 @@
-"""El touchpad como instrumento de miuzika: proceso hijo del servidor.
+"""The touchpad as a miuzika instrument: the server's child process.
 
     python herramientas/touchpad/principal.py
 
-Lo arranca el servidor de la app (server/api/pad.ts) y habla por líneas JSON:
+The app server (server/api/pad.ts) starts it and it talks over JSON lines:
 
-  salida (stdout), una línea por cosa:
-    {"listo": true}                       la captura está en marcha
+  output (stdout), one line per thing:
+    {"listo": true}                       capture is running
     {"e": "down"|"move"|"up", "id": 0, "x": 0.41, "y": 0.77}
-    {"aviso": "texto"}                    para el registro
-    {"error": "texto"}                    y el proceso termina
+    {"aviso": "text"}                     for the log
+    {"error": "text"}                     and the process ends
 
-  entrada (stdin), una orden por línea:
-    armar       el pad toca: se mandan los dedos y el cursor se congela mientras
-                hay un dedo apoyado (si no, el pad arrastra el puntero fuera)
-    desarmar    el pad vuelve a ser un ratón normal; se sueltan los dedos
-    salir       termina
+  input (stdin), one command per line:
+    armar       the pad plays: fingers are sent and the cursor freezes while
+                a finger is resting (otherwise the pad drags the pointer away)
+    desarmar    the pad becomes a normal mouse again; fingers are released
+    salir       exits
 
-Si se cierra la entrada (el servidor se ha ido), el proceso termina solo: así no
-queda una captura huérfana enganchada al ratón.
+If the input is closed (the server has gone), the process ends by itself: that way
+no orphaned capture is left hooked to the mouse.
 
-El mapeo a notas (teclas, pads, deslizar) NO está aquí: vive en la página
-(src/core/pad.ts), que es la que sabe la tonalidad y la pista del proyecto.
+The mapping to notes (keys, pads, swipe) is NOT here: it lives in the page
+(src/core/pad.ts), which is the one that knows the key and the project track.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ def emitir(datos: dict) -> None:
 
 def main() -> int:
     if not sys.platform.startswith("win"):
-        emitir({"error": "el touchpad como instrumento sólo funciona en Windows (Precision Touchpad)"})
+        emitir({"error": "the touchpad as an instrument only works on Windows (Precision Touchpad)"})
         return 2
 
     from modelo import Seguidor
@@ -65,8 +65,8 @@ def main() -> int:
             seguidor.informe(id_, x, y, tip)
 
     def al_latido():
-        # soltar_todo se pide desde el hilo de la entrada, pero se hace aquí, en el
-        # de la captura, que es el único que toca el seguidor.
+        # soltar_todo is requested from the input thread, but it is done here, in the
+        # capture one, which is the only one that touches the tracker.
         if estado["soltar"]:
             estado["soltar"] = False
             seguidor.soltar_todo()
@@ -78,8 +78,8 @@ def main() -> int:
         al_aviso=lambda texto: emitir({"aviso": texto}),
     )
     def desarmar_por_tecla() -> bool:
-        # Ctrl+Alt+T: la salida de emergencia si la página no responde y el
-        # cursor se ha quedado congelado.
+        # Ctrl+Alt+T: the emergency exit if the page does not respond and the
+        # cursor has got stuck.
         estado["armado"] = False
         captura.bloquear_cursor = False
         estado["soltar"] = True
@@ -88,7 +88,7 @@ def main() -> int:
 
     captura.alternar_bloquear_cursor = desarmar_por_tecla
     if not captura.iniciar():
-        emitir({"error": "no se pudo leer el touchpad (¿es un Precision Touchpad?)"})
+        emitir({"error": "could not read the touchpad (is it a Precision Touchpad?)"})
         return 1
     emitir({"listo": True})
 

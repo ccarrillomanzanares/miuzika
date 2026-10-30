@@ -8,7 +8,7 @@ function texto(bytes: Uint8Array, desde: number, n: number): string {
   return String.fromCharCode(...bytes.slice(desde, desde + n));
 }
 
-test("el MIDI lleva cabecera, tempo, una pista por pista MIDI y la batería en el canal 10", () => {
+test("the MIDI carries a header, tempo, one track per MIDI track, and drums on channel 10", () => {
   const base = createProject({ name: "Prueba", bpm: 120 });
   const { project } = applyOps(base, [
     { op: "add_track", id: "trk_bajo", name: "Bajo", instrument: { type: "bass", program: 33 } },
@@ -23,12 +23,12 @@ test("el MIDI lleva cabecera, tempo, una pista por pista MIDI y la batería en e
   assert.equal((midi[12]! << 8) | midi[13]!, PPQ);
   const crudo = Array.from(midi);
   const contiene = (seq: number[]): boolean => crudo.some((_, i) => seq.every((b, j) => crudo[i + j] === b));
-  // Tempo: 500.000 µs por negra a 120 BPM.
+  // Tempo: 500,000 µs per quarter note at 120 BPM.
   assert.ok(contiene([0xff, 0x51, 0x03, 0x07, 0xa1, 0x20]));
-  // Bajo: programa 33 en el canal 1 y su nota (E2 = 40) a 100.
+  // Bass: program 33 on channel 1 and its note (E2 = 40) at 100.
   assert.ok(contiene([0xc0, 33]));
   assert.ok(contiene([0x90, 40, 100]));
-  // Batería en el canal 10 (0x99).
+  // Drums on channel 10 (0x99).
   assert.ok(contiene([0x99, 36, 110]));
   assert.ok(contiene([0x89, 36, 0]));
 });

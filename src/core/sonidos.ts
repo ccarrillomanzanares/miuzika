@@ -1,12 +1,12 @@
 /**
- * Sonidos: recetas y post-proceso.
+ * Sounds: recipes and post-processing.
  *
- * Un sonido es **una receta**, no un sintetizador: qué voz, con qué argumentos y
- * qué post-proceso. La lista de voces NO está aquí: la dicta el motor
- * (`/api/voces`, leída de `instruments.py`), para no tener dos verdades.
+ * A sound is **a recipe**, not a synthesizer: which voice, with which arguments, and
+ * which post-processing. The voice list is NOT here: the engine defines it
+ * (`/api/voces`, read from `instruments.py`), so there are not two sources of truth.
  *
- * El post-proceso es lo que hace que las palabras («más corto», «más brillante»)
- * funcionen en cualquier voz, incluso en las que no tienen ese parámetro.
+ * Post-processing is what makes the words ("shorter", "brighter") work on any voice,
+ * even those that do not have that parameter.
  */
 
 import { slugDe } from "./nombres.ts";
@@ -35,26 +35,26 @@ export interface VozSonido {
   descripcion: string;
   documentada?: boolean;
   params: ParametroSonido[];
-  /** Si está, la voz no se puede usar con números sueltos (patrón, sílabas…). */
+  /** If present, the voice cannot be used with bare numbers (pattern, syllables…). */
   excluida?: string | null;
   aviso?: string;
 }
 
-/** Post-proceso universal: va después del timbre y funciona en todas las voces. */
+/** Universal post-processing: it comes after the timbre and works on all voices. */
 export interface PostSonido {
-  /** Pico al que se normaliza el render (dBFS). */
+  /** Peak the render is normalized to (dBFS). */
   peakDbfs: number;
-  /** Fundido de salida, en ms. */
+  /** Fade-out, in ms. */
   fadeMs: number;
-  /** Cuántas veces se repite el buffer. */
+  /** How many times the buffer is repeated. */
   repeticiones: number;
-  /** Inclinación tonal: -1 oscuro … +1 brillante. */
+  /** Tonal tilt: -1 dark … +1 bright. */
   brillo: number;
-  /** Saturación y ruido: 0 limpio … 1 sucio. */
+  /** Saturation and noise: 0 clean … 1 dirty. */
   suciedad: number;
-  /** Multiplicador de la cola: 0,5 la mitad … 2 el doble. */
+  /** Tail multiplier: 0.5 half … 2 double. */
   cola: number;
-  /** Realce de graves: -1 hueco … +1 gordo. */
+  /** Bass emphasis: -1 hollow … +1 fat. */
   cuerpo: number;
 }
 
@@ -67,9 +67,9 @@ export interface RecetaSonido {
   voz: string;
   args: ArgsSonido;
   post: PostSonido;
-  /** Palabras con las que se pidió, para poder repetirlo en lenguaje humano. */
+  /** Words it was requested with, so it can be repeated in human language. */
   palabras?: string[];
-  /** Dónde se renderiza: en el portátil (cpu) o en Lambda (gpu). */
+  /** Where it is rendered: on the laptop (cpu) or on Lambda (gpu). */
   destino?: "cpu" | "gpu";
 }
 
@@ -87,7 +87,7 @@ function acotar(valor: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, valor));
 }
 
-/** Nombre de fichero seguro a partir del nombre que escribe el usuario. */
+/** Safe file name from the name the user writes. */
 export function nombreDeSonido(texto: string): string {
   return slugDe(texto, { max: 40, defecto: "sonido" });
 }
@@ -96,7 +96,7 @@ export function vozPorClave(voces: VozSonido[], clave: string): VozSonido | unde
   return voces.find((voz) => voz.clave === clave);
 }
 
-/** Valores por defecto de una voz, tal como los declara el motor. */
+/** Default values of a voice, as declared by the engine. */
 export function argsPorDefecto(voz: VozSonido | undefined): ArgsSonido {
   if (!voz) return {};
   const args: ArgsSonido = {};
@@ -111,7 +111,7 @@ export function recetaNueva(nombre: string, vozClave: string, voces: VozSonido[]
   return {
     formato: FORMATO_SONIDO,
     version: VERSION_SONIDO,
-    // El nombre es también el del fichero: se limpia aquí y no en cada uso.
+    // The name is also the file name: it is cleaned here and not on every use.
     nombre: nombreDeSonido(nombre),
     voz: vozClave,
     args: argsPorDefecto(vozPorClave(voces, vozClave)),
@@ -126,22 +126,22 @@ function recortarNumero(valor: number, param: ParametroSonido): number {
 }
 
 /**
- * Normaliza una receta contra el catálogo del motor: rellena lo que falte con los
- * valores declarados, recorta a rango y avisa. Lanza si la voz no existe o si la
- * voz necesita material de entrada (un patrón, sílabas…).
+ * Normalizes a recipe against the engine catalog: fills in what is missing with the
+ * declared values, clamps to range, and warns. It throws if the voice does not exist
+ * or if the voice needs input material (a pattern, syllables…).
  */
 export function normalizarReceta(
   datos: unknown,
   voces: VozSonido[],
 ): { receta: RecetaSonido; avisos: string[] } {
-  if (typeof datos !== "object" || datos === null) throw new Error("La receta no es un objeto.");
+  if (typeof datos !== "object" || datos === null) throw new Error("The recipe is not an object.");
   const bruto = datos as Partial<RecetaSonido>;
   const clave = String(bruto.voz ?? "");
   const voz = vozPorClave(voces, clave);
   if (!voz) {
-    throw new Error(`Voz desconocida: "${clave}". Válidas: ${voces.map((v) => v.clave).join(", ")}`);
+    throw new Error(`Unknown voice: "${clave}". Valid: ${voces.map((v) => v.clave).join(", ")}`);
   }
-  if (voz.excluida) throw new Error(`La voz "${clave}" no se puede usar así: ${voz.excluida}`);
+  if (voz.excluida) throw new Error(`The voice "${clave}" cannot be used like this: ${voz.excluida}`);
 
   const avisos: string[] = [];
   const args: ArgsSonido = argsPorDefecto(voz);
@@ -161,19 +161,19 @@ export function normalizarReceta(
         .filter((n) => Number.isFinite(n))
         .map((n) => recortarNumero(n, param));
       const tope = param.maximo_elementos ?? 8;
-      if (notas.length === 0) avisos.push(`${param.etiqueta}: sin notas, se deja el valor por defecto.`);
+      if (notas.length === 0) avisos.push(`${param.etiqueta}: no notes, the default value is kept.`);
       else args[param.clave] = notas.slice(0, tope);
       continue;
     }
     const numero = Number(valor);
     if (!Number.isFinite(numero)) {
-      avisos.push(`${param.etiqueta}: "${String(valor)}" no es un número, se deja el valor por defecto.`);
+      avisos.push(`${param.etiqueta}: "${String(valor)}" is not a number, the default value is kept.`);
       continue;
     }
     const dentro = recortarNumero(numero, param);
     if (Math.abs(dentro - numero) > 1e-9) {
       avisos.push(
-        `${param.etiqueta}: ${numero} fuera de rango, se ajusta a ${dentro}${param.unidad ? " " + param.unidad : ""}.`,
+        `${param.etiqueta}: ${numero} out of range, adjusted to ${dentro}${param.unidad ? " " + param.unidad : ""}.`,
       );
     }
     args[param.clave] = dentro;
@@ -204,7 +204,7 @@ export function normalizarReceta(
   };
 }
 
-/** Literal de Python para un valor de JS (true → True, lista → [...]). */
+/** Python literal for a JS value (true → True, list → [...]). */
 export function literalPython(valor: number | boolean | number[] | string): string {
   if (typeof valor === "boolean") return valor ? "True" : "False";
   if (typeof valor === "number") return Number.isFinite(valor) ? String(valor) : "0.0";
@@ -213,34 +213,34 @@ export function literalPython(valor: number | boolean | number[] | string): stri
 }
 
 /**
- * Ruta del script generado, relativa a la carpeta del proyecto: junto a su WAV y su
- * ficha. Antes iba a `codigo/experimental/`, dentro del motor COMPARTIDO: cada
- * sonido de cada proyecto ensuciaba la biblioteca y regeneraba el manifiesto.
+ * Path of the generated script, relative to the project folder: next to its WAV and
+ * its metadata. It used to go to `codigo/experimental/`, inside the SHARED engine:
+ * every sound of every project dirtied the library and regenerated the manifest.
  */
 export function rutaScriptDeSonido(receta: RecetaSonido): string {
   return `sonidos/${receta.nombre}.py`;
 }
 
-/** Ruta del WAV, relativa a la carpeta del proyecto. */
+/** WAV path, relative to the project folder. */
 export function rutaWavDeSonido(receta: RecetaSonido): string {
   return `sonidos/${receta.nombre}.wav`;
 }
 
 /**
- * Script de Python que renderiza la receta. Se ejecuta tal cual con
- * `/api/run/python` y escribe el WAV en la carpeta de sonidos del proyecto.
+ * Python script that renders the recipe. It runs as-is with `/api/run/python` and
+ * writes the WAV into the project's sounds folder.
  *
- * El post-proceso va después del timbre para que las palabras («brillante»,
- * «sucio», «corto») funcionen igual en cualquier voz.
+ * Post-processing comes after the timbre so the words ("bright", "dirty", "short")
+ * work the same on any voice.
  */
 export function scriptDeSonido(receta: RecetaSonido, opciones: { slug: string }): string {
   const args = Object.entries(receta.args)
     .map(([clave, valor]) => `    ${JSON.stringify(clave)}: ${literalPython(valor)},`)
     .join("\n");
-  return `"""Sonido «${receta.nombre}» — generado por miuzika desde una receta.
+  return `"""Sound "${receta.nombre}" — generated by miuzika from a recipe.
 
-No editar a mano: se regenera desde proyectos/${opciones.slug}/sonidos/${receta.nombre}.json
-Voz: ${receta.voz} (${receta.destino ?? "cpu"})${receta.palabras?.length ? ` · palabras: ${receta.palabras.join(", ")}` : ""}
+Do not edit by hand: it is regenerated from proyectos/${opciones.slug}/sonidos/${receta.nombre}.json
+Voice: ${receta.voz} (${receta.destino ?? "cpu"})${receta.palabras?.length ? ` · words: ${receta.palabras.join(", ")}` : ""}
 """
 import os
 import sys
@@ -248,7 +248,7 @@ import wave
 
 import numpy as np
 
-# El script vive en proyectos/<slug>/sonidos/: workspace/ está tres niveles arriba.
+# The script lives in proyectos/<slug>/sonidos/: workspace/ is three levels up.
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.abspath(os.path.join(AQUI, "..", "..", ".."))
 sys.path.insert(0, os.path.join(RAIZ, "codigo"))
@@ -272,7 +272,7 @@ CUERPO = ${literalPython(receta.post.cuerpo)}
 
 
 def postproceso(x):
-    """Lo que piden las palabras: cuerpo, brillo, cola y suciedad."""
+    """What the words ask for: body, brightness, tail, and dirt."""
     x = np.asarray(x, dtype=float)
     if x.ndim > 1:
         x = x.mean(axis=1)
@@ -280,22 +280,22 @@ def postproceso(x):
         x = np.tile(x, REPETICIONES)
     x = x - x.mean()
     n = len(x)
-    # Cuerpo: realce (o corte) de graves.
+    # Body: bass boost (or cut).
     if abs(CUERPO) > 1e-6:
         x = x + CUERPO * 1.2 * dsp.lp(x, 180.0, 0.7)
-    # Brillo: agudos arriba (brillante) o abajo (oscuro).
+    # Brightness: highs up (bright) or down (dark).
     if abs(BRILLO) > 1e-6:
         x = x + BRILLO * 1.1 * dsp.hp(x, 2200.0, 0.7)
-    # Cola: alarga o acorta el decaimiento siguiendo la envolvente.
+    # Tail: lengthens or shortens the decay following the envelope.
     if abs(COLA - 1.0) > 1e-6 and n > 2:
         ventana = max(int(0.005 * dsp.SR), 1)
         suave = np.convolve(np.abs(x), np.ones(ventana) / ventana, mode="same")
         referencia = max(float(np.max(suave)), 1e-9)
         factor = (np.maximum(suave, 1e-9) / referencia) ** ((1.0 / COLA) - 1.0)
         x = x * np.clip(factor, 0.0, 4.0)
-    # Suciedad: saturación EN PARALELO (no aplasta el transitorio) más un poco de
-    # ruido con semilla fija. Mezclar en seco conserva el crest: medido, saturar en
-    # serie bajaba el bombo de 6,9 a 1,4 dB de crest y sonaba a caja de ritmos rota.
+    # Dirt: IN-PARALLEL saturation (it does not squash the transient) plus a little
+    # noise with a fixed seed. Dry mixing preserves the crest: measured, saturating in
+    # series lowered the kick from 6.9 to 1.4 dB crest and sounded like a broken drum machine.
     if SUCIEDAD > 1e-6:
         pico_seco = max(float(np.max(np.abs(x))), 1e-9)
         seco = x / pico_seco
@@ -312,15 +312,15 @@ def postproceso(x):
 
 
 def main():
-    # Las voces de GPU viven en gpu/voces_gpu.py y sólo corren allí (torch). El import
-    # explícito es también la señal con la que el servidor permite usar la GPU.
+    # GPU voices live in gpu/voces_gpu.py and only run there (torch). The explicit
+    # import is also the signal the server uses to allow the GPU.
     if DESTINO == "gpu":
         import voces_gpu as modulo
     else:
         import instruments as modulo
     fn = getattr(modulo, VOZ, None)
     if fn is None:
-        raise SystemExit(f"VOZ desconocida: {VOZ} ({DESTINO})")
+        raise SystemExit(f"Unknown VOICE: {VOZ} ({DESTINO})")
     x = postproceso(fn(**ARGS))
     est = np.stack([x, x], axis=1)
     pcm = np.clip(est * 32767.0, -32768, 32767).astype("<i2")
@@ -332,8 +332,8 @@ def main():
         w.writeframes(pcm.tobytes())
     p = 20 * np.log10(max(float(np.max(np.abs(x))), 1e-12))
     r = 20 * np.log10(max(float(np.sqrt(np.mean(x ** 2))), 1e-12))
-    print(f"escrito {SALIDA}")
-    print(f"voz={VOZ}  dur={len(x) / dsp.SR:.3f}s  pico={p:.2f} dBFS  rms={r:.2f} dBFS  crest={p - r:.2f} dB")
+    print(f"wrote {SALIDA}")
+    print(f"voice={VOZ}  dur={len(x) / dsp.SR:.3f}s  peak={p:.2f} dBFS  rms={r:.2f} dBFS  crest={p - r:.2f} dB")
 
 
 if __name__ == "__main__":

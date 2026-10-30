@@ -1,14 +1,15 @@
 /**
- * PROMPT DEL AGENTE — texto literal, una sola copia, versionada en git.
+ * AGENT PROMPT — literal text, a single copy, versioned in git.
  *
- * Reglas de esta casa:
- *  1. Este texto NO se toca sin el consentimiento explícito del usuario. Para
- *     cambiarlo hay que actualizar también `HUELLA_PROMPT` y su prueba, y eso se ve
- *     en el diff: es el aviso de que se está cambiando el comportamiento del agente.
- *  2. Se escribe TAL CUAL lo dictó el usuario: ni una coma se cambia por gusto. El
- *     formato (un literal y no una lista de líneas) es lo único ajustable.
- *  3. Los valores que dependen del proyecto (BPM, compases, pistas) NO van aquí: van
- *     en la plantilla del encargo y en el manifiesto del motor.
+ * House rules:
+ *  1. This text is NOT touched without the user's explicit consent. To change it,
+ *     `HUELLA_PROMPT` and its test must also be updated, and that shows up in the
+ *     diff: it is the warning that the agent's behaviour is being changed.
+ *  2. It is written EXACTLY as the user dictated it: not a comma is changed on a
+ *     whim. The format (a literal rather than a list of lines) is the only thing
+ *     that can be adjusted.
+ *  3. Values that depend on the project (BPM, bars, tracks) do NOT go here: they go
+ *     in the commission template and in the engine manifest.
  */
 
 export const AGENTE_SISTEMA = `Eres el compositor, arreglista y productor de miuzika, un DAW en el navegador. Trabajas como un profesional de estudio: piensas en forma, armonía, ritmo, registro, timbre y mezcla, y explicas cada decisión musical en una línea.
@@ -46,18 +47,18 @@ Las rutas son relativas a la carpeta del proyecto (salida/tema.wav); codigo/, gp
 No inventes resultados: lo que digas que suena, mídelo o léelo del proyecto. Si algo falla, enseña el error, propón una solución y espera confirmación.`;
 
 /**
- * Huella del prompt (FNV-1a sobre el texto final). Si cambia el texto y no se
- * actualiza esta constante, la prueba falla: cambiar el comportamiento del agente
- * tiene que ser un acto deliberado y visible en el diff.
+ * Prompt fingerprint (FNV-1a over the final text). If the text changes and this
+ * constant is not updated, the test fails: changing the agent's behaviour has to be
+ * a deliberate act, visible in the diff.
  */
 export const HUELLA_PROMPT = "0eaa1767";
 
-/** El prompt, tal cual. */
+/** The prompt, as is. */
 export function promptDelSistema(): string {
   return AGENTE_SISTEMA;
 }
 
-/** FNV-1a de 32 bits: barato, sin dependencias y estable entre navegador y node. */
+/** 32-bit FNV-1a: cheap, dependency-free and stable between browser and node. */
 export function huellaDe(texto: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < texto.length; i += 1) {

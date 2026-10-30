@@ -1,12 +1,12 @@
 /**
- * Panel de chat del agente (columna derecha).
+ * Agent chat panel (right column).
  *
- * Cabecera, historial, caja de texto, envío y botón para plegarlo.
+ * Header, history, text box, send and button to collapse it.
  *
- * Aquí NO se guarda nada: el panel se pinta con lo que hay en memoria y arranca
- * vacío. La memoria del agente es del proyecto (`proyectos/<slug>/agente.json`) y
- * la carga main.ts al abrirlo. Lo único que persiste es si el panel estaba
- * plegado y dónde ejecuta Python (cpu o GPU). `onSend` es el enganche del agente.
+ * Nothing is stored HERE: the panel is painted from what is in memory and starts
+ * empty. The agent's memory belongs to the project (`proyectos/<slug>/agente.json`)
+ * and main.ts loads it when opening it. The only thing that persists is whether the
+ * panel was collapsed and where Python runs (cpu or GPU). `onSend` is the agent hook.
  */
 
 import { escapeHtml } from "./timeline.ts";
@@ -15,27 +15,27 @@ import { setDestino, type Destino } from "./agent/tools.ts";
 export type ChatRole = "user" | "assistant" | "system" | "meta";
 
 export interface ChatApi {
-  /** Añade un mensaje al historial y devuelve su burbuja (para poder reescribirla). */
+  /** Adds a message to the history and returns its bubble (so it can be rewritten). */
   add(role: ChatRole, text: string): HTMLDivElement;
-  /** Reemplaza el contenido de una burbuja creada con add(). */
+  /** Replaces the content of a bubble created with add(). */
   update(element: HTMLDivElement, text: string): void;
-  /** Burbuja viva de «está trabajando»: se llama muchas veces y se reutiliza. */
+  /** Live "working" bubble: called many times and reused. */
   mostrarProgreso(texto: string): void;
-  /** La quita (al terminar, al cancelar o al abrir otro proyecto). */
+  /** Removes it (on finish, on cancel or when opening another project). */
   ocultarProgreso(): void;
-  /** Bloquea el envio mientras el agente esta trabajando. */
+  /** Blocks sending while the agent is working. */
   setBusy(busy: boolean): void;
-  /** Vacía el historial (canción nueva). */
+  /** Empties the history (new song). */
   clear(): void;
-  /** ¿Está visible el panel? */
+  /** Is the panel visible? */
   isOpen(): boolean;
-  /** Muestra u oculta el panel. */
+  /** Shows or hides the panel. */
   setOpen(open: boolean, focus?: boolean): void;
-  /** Alterna visible/oculto. */
+  /** Toggles visible/hidden. */
   toggle(): void;
-  /** Registra quién recibe el texto que escribe el usuario. */
+  /** Registers who receives the text the user types. */
   onSend(handler: (text: string) => void): void;
-  /** Avisa cuando el panel se pliega o despliega (para reajustar el layout). */
+  /** Notifies when the panel collapses or expands (to readjust the layout). */
   onLayout(handler: () => void): void;
 }
 
@@ -45,13 +45,13 @@ interface Entrada {
 }
 
 const COLLAPSE_KEY = "miuzika.chat.collapsed";
-/** Donde ejecuta Python el agente: "cpu" (este portatil) o "lambda" (GPU). */
+/** Where the agent runs Python: "cpu" (this laptop) or "lambda" (GPU). */
 const DESTINO_KEY = "miuzika.destino";
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 /**
- * Qué hace el botón «Encargo» (main.ts abre el formulario). Sin registro, el
- * botón no hace nada en vez de mentir.
+ * What the "Encargo" button does (main.ts opens the form). Without a registered
+ * handler, the button does nothing instead of lying.
  */
 let abrirEncargo: (() => void) | null = null;
 
@@ -59,7 +59,7 @@ export function setAbrirEncargo(fn: (() => void) | null): void {
   abrirEncargo = fn;
 }
 
-/** Escribe `texto` en el compositor del chat, sin enviarlo (detrás de lo que hubiera). */
+/** Writes `texto` into the chat composer without sending it (after whatever was there). */
 export function escribirEnCompositor(texto: string): void {
   const input = document.getElementById("chat-input") as HTMLTextAreaElement | null;
   if (!input || texto.trim() === "") return;
@@ -97,9 +97,9 @@ export function initChat(): ChatApi {
   };
 
   /**
-   * Burbuja de «está trabajando» al final del chat. Se actualiza mientras el turno
-   * corre y desaparece al terminar: así se ve que hay algo en marcha sin tener que
-   * mirar la barra de estado, que es pequeña y está abajo.
+   * "Working" bubble at the end of the chat. It updates while the turn runs and
+   * disappears when it finishes: that way you can see something is going on without
+   * having to look at the status bar, which is small and at the bottom.
    */
   let burbujaProgreso: HTMLDivElement | null = null;
 
@@ -152,7 +152,7 @@ export function initChat(): ChatApi {
     try {
       localStorage.setItem(COLLAPSE_KEY, open ? "0" : "1");
     } catch {
-      /* sin persistencia */
+      /* no persistence */
     }
     if (open && focus) {
       autosize();
@@ -165,14 +165,14 @@ export function initChat(): ChatApi {
 
   input.addEventListener("input", () => autosize());
   input.addEventListener("keydown", (event) => {
-    // Enter envía; Shift+Enter escribe un salto de línea.
+    // Enter sends; Shift+Enter types a line break.
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       form.requestSubmit();
     }
   });
 
-  // Encargo: un formulario que escribe el mensaje en el chat (formulario-encargo.ts).
+  // Encargo: a form that writes the message into the chat (formulario-encargo.ts).
   document.getElementById("chat-plantilla")?.addEventListener("click", () => abrirEncargo?.());
 
   form.addEventListener("submit", (event) => {
@@ -192,7 +192,7 @@ export function initChat(): ChatApi {
     }
   });
 
-  // Destino de ejecucion: se recuerda entre recargas y manda en las herramientas.
+  // Execution target: remembered across reloads and it rules in the tools.
   const selectorDestino = document.getElementById("chat-destino") as HTMLSelectElement | null;
   const aplicarDestino = (valor: string): Destino => {
     const destino: Destino = valor === "lambda" ? "lambda" : "cpu";
@@ -205,7 +205,7 @@ export function initChat(): ChatApi {
     try {
       guardado = localStorage.getItem(DESTINO_KEY) ?? "cpu";
     } catch {
-      /* sin persistencia */
+      /* no persistence */
     }
     selectorDestino.value = aplicarDestino(guardado);
     selectorDestino.addEventListener("change", () => {
@@ -213,19 +213,20 @@ export function initChat(): ChatApi {
       try {
         localStorage.setItem(DESTINO_KEY, destino);
       } catch {
-        /* sin persistencia */
+        /* no persistence */
       }
     });
   }
 
-  // Estado guardado: sólo si el chat está plegado. El historial y el borrador NO se
-  // restauran: al abrir la aplicación no debe haber nada de la sesión anterior. La
-  // conversación de cada proyecto vive en su agente.json y se carga al abrirlo.
+  // Saved state: only whether the chat is collapsed. The history and the draft are
+  // NOT restored: when opening the application there must be nothing from the
+  // previous session. Each project's conversation lives in its agente.json and is
+  // loaded when it is opened.
   let startOpen = true;
   try {
     startOpen = localStorage.getItem(COLLAPSE_KEY) !== "1";
   } catch {
-    /* sin persistencia */
+    /* no persistence */
   }
   log.scrollTop = log.scrollHeight;
   autosize();
@@ -239,8 +240,8 @@ export function initChat(): ChatApi {
     setBusy,
     clear: () => {
       historial.length = 0;
-      // OJO: sin esto, la burbuja de «está trabajando» se queda huérfana en un
-      // panel vacío (parecía que el agente seguía en un proyecto que no era).
+      // WARNING: without this, the "working" bubble is left orphaned in an empty
+      // panel (it looked like the agent was still on a project that was not this one).
       ocultarProgreso();
       log.innerHTML = "";
     },

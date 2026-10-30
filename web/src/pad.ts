@@ -1,14 +1,14 @@
 /**
- * Panel «Pad»: tocar el touchpad del portátil como instrumento.
+ * "Pad" panel: play the laptop touchpad as an instrument.
  *
- * La captura nativa la arranca el servidor (server/api/pad.ts) y llega por SSE;
- * el mapeo a notas es `src/core/pad.ts`; el sonido es el instrumento de la pista
- * elegida en el motor de openDAW (noteSignal), y lo grabado entra en el proyecto
- * como un clip normal (se deshace con Ctrl+Z).
+ * Native capture is started by the server (server/api/pad.ts) and arrives over SSE;
+ * the mapping to notes is `src/core/pad.ts`; the sound is the chosen track's
+ * instrument in the openDAW engine (noteSignal), and what is recorded enters the
+ * project as a normal clip (undoable with Ctrl+Z).
  *
- * Armar y soltar: con el pad armado, el cursor se congela mientras hay un dedo
- * apoyado (si no, tocar arrastra el puntero fuera). Se arma pulsando en el dibujo
- * del pad y se suelta con Esc (o Ctrl+Alt+T si la página no responde).
+ * Arm and release: with the pad armed, the cursor freezes while a finger is resting
+ * (otherwise touching drags the pointer away). It is armed by pressing on the pad
+ * drawing and released with Esc (or Ctrl+Alt+T if the page does not respond).
  */
 
 import type { Note, Project, Track } from "../../src/core/types.ts";
@@ -18,23 +18,23 @@ import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 
 export interface DepsPad {
   proyecto(): Project | null;
-  /** El motor cargado ahora mismo (o null): cambia cuando se toca Play o el proyecto. */
+  /** The engine loaded right now (or null): it changes when Play is pressed or the project changes. */
   motorActual(): OpenDawPlaybackHandle | null;
-  /** El motor con el proyecto cargado; si no está, lo arranca SIN reproducir. */
+  /** The engine with the project loaded; if not loaded, it starts it WITHOUT playing. */
   motor(): Promise<OpenDawPlaybackHandle | null>;
-  /** Para el transporte y descarga el motor. */
+  /** Stops the transport and unloads the engine. */
   parar(): void;
-  /** Dónde está el cursor de la timeline, en negras. */
+  /** Where the timeline cursor is, in quarter notes. */
   cursor(): number;
-  /** Mete lo grabado como clip de la pista (con historial). */
+  /** Puts what was recorded in as a clip of the track (with history). */
   guardarClip(trackId: string, startBeat: number, notas: Note[]): void;
   avisar(texto: string): void;
-  /** Mueve el cabezal de la timeline durante la grabación. */
+  /** Moves the timeline playhead during recording. */
   dibujar(beat: number): void;
 }
 
 const ETIQUETAS_MODO: Record<ModoPad, string> = { teclas: "Keys", pads: "Pads", deslizar: "Slide" };
-/** Proporción del ELAN0712 (3520 × 1784). */
+/** ELAN0712 ratio (3520 × 1784). */
 const PROPORCION = 1784 / 3520;
 
 interface Dedo {
@@ -63,7 +63,7 @@ export class PanelPad {
     trackId: string;
     ctx: AudioContext;
     inicioBeat: number;
-    /** Hora del contexto en que arranca el transporte (tras la cuenta atrás). */
+    /** Context time at which the transport starts (after the count-in). */
     t0: number;
     bpm: number;
     clic: number;
@@ -98,9 +98,9 @@ export class PanelPad {
 
     q<HTMLButtonElement>("[data-cerrar]").addEventListener("click", () => this.cerrar());
     this.dialogo.addEventListener("close", () => this.alCerrar());
-    // El panel no es modal (se sigue viendo la timeline), así que Esc no llega como
-    // «cancel» del diálogo: se escucha en la página. Con el pad armado lo suelta;
-    // sin armar, cierra el panel.
+    // The panel is not modal (the timeline remains visible), so Esc does not arrive as
+    // the dialog's "cancel": it is listened for on the page. With the pad armed it releases
+    // it; without arming, it closes the panel.
     document.addEventListener("keydown", (evento) => {
       if (evento.key !== "Escape" || !this.dialogo.open) return;
       evento.preventDefault();
@@ -137,7 +137,7 @@ export class PanelPad {
     void this.conectar();
   }
 
-  /** El proyecto ha cambiado (otra pista, otra tonalidad): se rehace el mapeo. */
+  /** The project has changed (another track, another key): the mapping is redone. */
   proyectoCambiado(): void {
     if (!this.dialogo.open) return;
     const project = this.deps.proyecto();
@@ -188,7 +188,7 @@ export class PanelPad {
     const track = this.pista();
     const project = this.deps.proyecto();
     if (!project) return;
-    // Una batería se toca con pads; lo demás, con teclas o deslizando.
+    // A drumkit is played with pads; everything else, with keys or sliding.
     if (track?.instrument.type === "drumkit") this.selModo.value = "pads";
     else if (this.selModo.value === "pads" || this.selModo.value === "") this.selModo.value = "teclas";
     this.soltarTodo();
@@ -298,7 +298,7 @@ export class PanelPad {
       if (motor) motor.nota(track.name, nota.nota, nota.accion === "on" ? nota.velocidad : 0);
       else if (nota.accion === "on") void this.asegurarMotor();
     } catch {
-      /* el motor se estaba descargando: la siguiente nota lo vuelve a pedir */
+      /* the engine was unloading: the next note requests it again */
     }
     if (this.grabacion) this.grabacion.grabador.registrar(nota, this.beatGrabacion());
   }
@@ -310,9 +310,9 @@ export class PanelPad {
     this.dibujar();
   }
 
-  // ---------------------------------------------------------------- grabación
+  // ---------------------------------------------------------------- recording
 
-  /** Negras desde el inicio de la grabación (negativas en la cuenta atrás). */
+  /** Quarter notes since the start of the recording (negative during the count-in). */
   private beatGrabacion(): number {
     const g = this.grabacion;
     if (!g) return 0;
@@ -332,11 +332,11 @@ export class PanelPad {
       return;
     }
     const porCompas = beatsPerBar(project);
-    // Desde el principio del compás donde está el cursor.
+    // From the start of the bar where the cursor is.
     const inicioBeat = Math.floor(this.deps.cursor() / porCompas) * porCompas;
     const segundosPorBeat = 60 / project.bpm;
     const ahora = motor.context.currentTime + 0.1;
-    // Un compás de cuenta atrás con el metrónomo; después arranca el transporte.
+    // One bar of count-in with the metronome; then the transport starts.
     const t0 = ahora + porCompas * segundosPorBeat;
     this.grabacion = {
       grabador: new GrabadorPad(),
@@ -366,7 +366,7 @@ export class PanelPad {
     if (!this.armado) void this.armar(true);
   }
 
-  /** Metrónomo en el reloj del motor: la cuenta atrás y luego cada tiempo. */
+  /** Metronome on the engine clock: the count-in and then every beat. */
   private programarClics(desde: number, porCompas: number, segundosPorBeat: number): void {
     const g = this.grabacion;
     if (!g) return;
@@ -391,7 +391,7 @@ export class PanelPad {
     this.grabacion = null;
     window.clearInterval(g.clic);
     cancelAnimationFrame(g.marco);
-    this.botonGrabar.textContent = "● Grabar";
+    this.botonGrabar.textContent = "● Record";
     this.botonGrabar.classList.remove("grabando");
     if (this.mapeo) {
       for (const nota of this.mapeo.soltarTodo()) {
@@ -409,7 +409,7 @@ export class PanelPad {
     this.estado(`Recorded ${notas.length} notes. Ctrl+Z removes them.`);
   }
 
-  // ----------------------------------------------------------------- dibujo
+  // ----------------------------------------------------------------- drawing
 
   private estado(texto: string): void {
     this.estadoEl.textContent = texto;
@@ -461,7 +461,7 @@ export class PanelPad {
   }
 }
 
-/** Un clic de metrónomo: más agudo en el primer tiempo. */
+/** A metronome click: higher on the first beat. */
 function clic(ctx: AudioContext, cuando: number, fuerte: boolean): void {
   const osc = ctx.createOscillator();
   const gan = ctx.createGain();

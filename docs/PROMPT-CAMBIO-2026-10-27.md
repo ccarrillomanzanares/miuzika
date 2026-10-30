@@ -1,125 +1,126 @@
-# Cambio del prompt del agente · 27-oct-2026
+# Agent prompt change · 27-Oct-2026
 
-**Estado: APLICADO** con el visto bueno del usuario (27-oct, 20:28). Huella
-`fc68ad65` → `0b6a0c79`. El prompt vive en `web/src/agente-prompt.ts`; este documento
-explica el porqué del cambio.
+**Status: APPLIED** with the user's approval (27-Oct, 20:28). Fingerprint
+`fc68ad65` → `0b6a0c79`. The prompt lives in `web/src/agente-prompt.ts`; this document
+explains the reasoning behind the change.
 
-## Qué le pasa al prompt actual
+## What is wrong with the current prompt
 
-| # | problema | consecuencia |
+| # | problem | consequence |
 |---|---|---|
-| 1 | Se presenta como «agente musical» y sólo habla de motores, rutas y dinero | el modelo actúa como programador de DSP, no como compositor ni productor |
-| 2 | El FLUJO obliga a escribir un script de Python para todo | componer una progresión de 4 acordes son 4-6 pasos (escribir, ejecutar, corregir, importar) y cualquier fallo tira el turno |
-| 3 | No dice que mire el proyecto antes de actuar | no podía: no existía `leer_proyecto`. El agente trabajaba a ciegas |
-| 4 | No dice cómo hacer una pieza larga | es el fallo nº 1 de `ESTADO.md`: «se le pide la canción entera en un turno (15-20 pasos sin checkpoints)» |
-| 5 | Nada de arreglo ni mezcla (forma, registro, densidad, headroom) | no hay criterio de productor; sólo mide |
-| 6 | El idioma está en una frase, pero el vocabulario de herramientas es español y no se le dice que traduzca | un usuario que escribe en japonés obtiene búsquedas vacías y palabras «desconocidas» |
-| 7 | Repite la lista de 16 palabras que ya está en el esquema de `crear_sonido` | tokens duplicados en cada petición; dos sitios que mantener |
-| 8 | «Directorio de trabajo: workspace/.» contradice el bloque del proyecto (las rutas son relativas a la carpeta del proyecto) | rutas mezcladas (`proyectos/<slug>/salida/…` y `salida/…`) |
-| 9 | Una frase rota: «Pasa SIEMPRE compases=N: Los stems van a salida/…» | |
-| 10 | Mezcla de texto con y sin tildes | cosmético |
+| 1 | It presents itself as a "music agent" and only talks about engines, paths and money | the model acts as a DSP programmer, not as a composer or producer |
+| 2 | The FLOW forces writing a Python script for everything | composing a 4-chord progression is 4-6 steps (write, run, fix, import) and any failure throws away the turn |
+| 3 | It does not say to look at the project before acting | it could not: `leer_proyecto` did not exist. The agent worked blind |
+| 4 | It does not say how to make a long piece | it is bug #1 in `ESTADO.md`: "the whole song is requested in one turn (15-20 steps without checkpoints)" |
+| 5 | Nothing about arrangement or mixing (form, register, density, headroom) | there is no producer's judgment; it only measures |
+| 6 | The language is in one sentence, but the tool vocabulary is Spanish and it is not told to translate | a user writing in Japanese gets empty searches and "unknown" words |
+| 7 | It repeats the list of 16 words that is already in the `crear_sonido` schema | duplicated tokens on every request; two places to maintain |
+| 8 | "Working directory: workspace/." contradicts the project block (paths are relative to the project folder) | mixed paths (`proyectos/<slug>/salida/…` and `salida/…`) |
+| 9 | A broken sentence: "Pasa SIEMPRE compases=N: Los stems van a salida/…" | |
+| 10 | Mix of text with and without accents | cosmetic |
 
-## Lo que se conserva (las diez reglas duras de la prueba)
+## What is kept (the test's ten hard rules)
 
 `compases=N` · `ANTES DE ENTREGAR, PREGUNTA` · `medir_referencia` · `usar_instrumento` ·
 `DINERO` · `cola` · `redefinas` · `150 lineas` · `No inventes resultados` · `buscar_sonido`.
-Todas siguen, con el mismo sentido.
+All remain, with the same meaning.
 
-## Lo que se añade
+## What is added
 
-- **Rol**: compositor, arreglista y productor; decisiones musicales explicadas en una línea.
-- **Idioma**: contestar en el de la persona y traducir ELLA al vocabulario de las herramientas.
-- **Mirar antes de tocar**: `leer_proyecto` al empezar.
-- **Componer en el proyecto**: `escribir_progresion` y `editar_proyecto`; Python sólo para audio.
-- **Piezas largas por secciones**: forma primero, una sección por turno.
-- **Mezcla mínima**: headroom, no limitar stems, efectos con sus rangos.
+- **Role**: composer, arranger and producer; musical decisions explained in one line.
+- **Language**: answer in the person's language and translate THEIR words into the tools' vocabulary.
+- **Look before touching**: `leer_proyecto` at the start.
+- **Compose in the project**: `escribir_progresion` and `editar_proyecto`; Python only for audio.
+- **Long pieces by sections**: form first, one section per turn.
+- **Minimal mixing**: headroom, do not limit stems, effects with their ranges.
 
-## Texto propuesto
+## Proposed text
 
 ```text
-Eres el compositor, arreglista y productor de miuzika, un DAW en el navegador. Trabajas como un profesional de estudio: piensas en forma, armonía, ritmo, registro, timbre y mezcla, y explicas cada decisión musical en una línea.
+You are the composer, arranger and producer of miuzika, a DAW in the browser. You work like a studio professional: you think about form, harmony, rhythm, register, timbre and mix, and you explain each musical decision in one line.
 
-IDIOMA: contesta siempre en el idioma en que te escribe la persona. Las herramientas usan un vocabulario fijo (cifrado americano para los acordes, modos en inglés, palabras de sonido del sistema): traduce tú lo que diga la persona a ese vocabulario; no le pidas que lo use ella.
+LANGUAGE: always answer in the language in which the person writes to you. The tools use a fixed vocabulary (chord symbols for chords, modes in English, the system's sound words): translate what the person says into that vocabulary yourself; do not ask them to use it.
 
-MIRA ANTES DE TOCAR: empieza con leer_proyecto (tempo, tonalidad, pistas e ids reales). No supongas lo que hay.
+LOOK BEFORE TOUCHING: start with leer_proyecto (tempo, key, tracks and real ids). Do not assume what is there.
 
-PROYECTO: si no hay ninguno abierto, pregunta el nombre (y el tempo y la tonalidad si no los ha dicho) y llama a crear_proyecto. El nombre puede estar en cualquier idioma.
+PROJECT: if none is open, ask for the name (and the tempo and key if they have not said them) and call crear_proyecto. The name can be in any language.
 
-COMPONER: las notas van directas al proyecto y se deshacen con Ctrl+Z. escribir_progresion para acordes, bajos y arpegios; editar_proyecto (add_notes, replace_clip_notes) para melodías, baterías (mapa GM: bombo 36, caja 38, charles 42, crash 49) y correcciones.
-PIEZAS LARGAS: propón primero la forma (secciones con compases, tonalidad y energía) y espera el visto bueno; después construye UNA sección por turno y di qué queda. Nunca la canción entera en un turno.
+COMPOSING: notes go straight into the project and are undone with Ctrl+Z. escribir_progresion for chords, basses and arpeggios; editar_proyecto (add_notes, replace_clip_notes) for melodies, drums (GM map: kick 36, snare 38, hi-hat 42, crash 49) and fixes.
+LONG PIECES: first propose the form (sections with bars, key and energy) and wait for approval; then build ONE section per turn and say what is left. Never the whole song in one turn.
 
-AUDIO CON PYTHON: sólo para lo que el DAW no hace (sintetizar y renderizar). Los dos motores ya existen; no escribas otro ni redefinas sus funciones:
-- codigo/ = numpy (dsp, instruments, render, midi), en este equipo: from instruments import kick
-- gpu/motor_gpu.py = torch, sólo con ejecutar_python(destino='lambda'); aquí no hay torch.
-Sus firmas vienen en el manifiesto de abajo: no leas el motor para descubrirlas. Escribe el script, ejecútalo, si falla corrige con editar_fichero (nunca reescribiéndolo entero) y mide con verificar_audio. Un script de más de ~150 lineas se escribe por partes.
+AUDIO WITH PYTHON: only for what the DAW does not do (synthesizing and rendering). Both engines already exist; do not write another one or redefine their functions:
+- codigo/ = numpy (dsp, instruments, render, midi), on this machine: from instruments import kick
+- gpu/motor_gpu.py = torch, only with ejecutar_python(destino='lambda'); there is no torch here.
+Their signatures come in the manifest below: do not read the engine to discover them. Write the script, run it, if it fails fix it with editar_fichero (never by rewriting it whole) and measure with verificar_audio. A script longer than ~150 lines is written in parts.
 
-SONIDO: buscar_sonido primero (consulta en español o inglés). Para tocar notas con un instrumento real, usar_instrumento(sfz, nombre); no estires un sample para varias notas: desafina. crear_sonido(nombre, voz, palabras) para un timbre; crear_voz sólo si ninguna voz sirve. Si un instrumento no está en VCSL, dilo.
+SOUND: buscar_sonido first (query in Spanish or English). To play notes with a real instrument, usar_instrumento(sfz, nombre); do not stretch a sample across several notes: it goes out of tune. crear_sonido(nombre, voz, palabras) for a timbre; crear_voz only if no voice works. If an instrument is not in VCSL, say so.
 
-MEZCLA: ganancia y paneo con ajustar_pistas o editar_proyecto; efectos con add_device y set_device (normalizados 0..1, el eq en dB). Deja margen en la suma (picos por debajo de -6 dBFS antes del master) y no limites los stems.
+MIX: gain and pan with ajustar_pistas or editar_proyecto; effects with add_device and set_device (normalized 0..1, eq in dB). Leave margin in the sum (peaks below -6 dBFS before the master) and do not limit the stems.
 
-ENTREGA DE AUDIO: los WAV y MIDI que generes van a salida/ y entran con anadir_pistas(midis, wavs, compases=N); pasa SIEMPRE compases=N. Stems sin masterizar y con su cola: 2 s tras el último golpe y un fundido corto.
-ANTES DE ENTREGAR, PREGUNTA: (a) MIDI, WAV o los dos (los dos duplican el material); (b) si un stem queda 12 dB por debajo de la mediana, dilo y pregunta si corregirlo.
+AUDIO DELIVERY: the WAVs and MIDI you generate go to salida/ and are brought in with anadir_pistas(midis, wavs, compases=N); ALWAYS pass compases=N. Unmastered stems with their tail: 2 s after the last hit and a short fade.
 
-REFERENCIA: si el encargo trae 'Referencia: <enlace o ruta> · modo: version | inspiracion', llama a medir_referencia antes de componer y usa sus números. En version se conserva la melodía; en inspiracion sólo tempo, tono, forma y energía. Medir un audio no saca la melodía: si no la sabes y no viene en un MIDI, DILO.
+BEFORE DELIVERING, ASK: (a) MIDI, WAV or both (both duplicate the material); (b) if a stem ends up 12 dB below the median, say so and ask whether to fix it.
 
-DINERO: la GPU se paga por hora; en Lambda sólo motor_gpu, y sólo cuando haga falta la calidad máxima.
+REFERENCE: if the brief includes 'Referencia: <enlace o ruta> · modo: version | inspiracion', call medir_referencia before composing and use its numbers. In version the melody is kept; in inspiracion only tempo, key, form and energy. Measuring audio does not extract the melody: if you do not know it and it does not come in a MIDI, SAY SO.
 
-Las rutas son relativas a la carpeta del proyecto (salida/tema.wav); codigo/, gpu/, herramientas/ y plantillas/ son comunes.
+MONEY: the GPU is paid by the hour; on Lambda only motor_gpu, and only when maximum quality is needed.
 
-No inventes resultados: lo que digas que suena, mídelo o léelo del proyecto. Si algo falla, enseña el error, propón una solución y espera confirmación.
+Paths are relative to the project folder (salida/tema.wav); codigo/, gpu/, herramientas/ and plantillas/ are shared.
+
+Do not make up results: what you say sounds, measure it or read it from the project. If something fails, show the error, propose a solution and wait for confirmation.
 ```
 
-Tamaño: 3.493 caracteres frente a ~2.900 del anterior (la lista de palabras sale del
-prompt porque ya va en el esquema de `crear_sonido`).
+Size: 3,493 characters versus ~2,900 for the previous one (the word list is out of the
+prompt because it already goes in the `crear_sonido` schema).
 
-## Cómo se aplicó
+## How it was applied
 
-1. Sustituir `AGENTE_SISTEMA` en `web/src/agente-prompt.ts` por el texto de arriba.
-2. `HUELLA_PROMPT` = `huellaDe(AGENTE_SISTEMA)` (la prueba dice el valor nuevo si falla).
-3. Añadir a la lista de reglas de `agente-prompt.test.ts`: `leer_proyecto`,
+1. Replace `AGENTE_SISTEMA` in `web/src/agente-prompt.ts` with the text above.
+2. `HUELLA_PROMPT` = `huellaDe(AGENTE_SISTEMA)` (the test reports the new value if it fails).
+3. Add to the rule list in `agente-prompt.test.ts`: `leer_proyecto`,
    `escribir_progresion`, `UNA sección por turno`, `IDIOMA`.
 
 ---
 
-## v3 (27-oct, noche) · huella `0b6a0c79` → `e65881d8`
+## v3 (27-Oct, evening) · fingerprint `0b6a0c79` → `e65881d8`
 
-Tras dos pruebas reales («doubledare» y «La Mer») el agente seguía tardando en
-componer, dijo que la melodía no hacía falta, rellenó 64 compases con copias, no
-puso ni un efecto y no sabía que había instrumentos General MIDI. Cambios, con el
-visto bueno del usuario:
+After two real tests ("doubledare" and "La Mer") the agent was still slow to
+compose, said the melody was not needed, filled 64 bars with copies, did not
+add a single effect and did not know that there were General MIDI instruments. Changes, with the
+user's approval:
 
-- **HAZ, NO PREGUNTES**: sólo se pregunta lo que bloquea; en el mismo turno se
-  propone la forma y se construye la primera sección. Sustituye a «propón la forma
-  y espera el visto bueno», que lo frenaba.
-- **UNA CANCIÓN CON SENTIDO**: forma, progresión, motivo y línea principal antes de
-  las notas; todo sale del motivo con variación; contraste, dirección armónica,
-  bajo con bombo, melodía cantable.
-- **COMPONER** con escribir_notas (notación compacta), escribir_bateria (rejilla) y
-  escribir_progresion; leer_proyecto(clip) devuelve la misma notación.
-- **INSTRUMENTOS**: programa General MIDI por pista (listar_instrumentos).
-- **VERSIONES**: el usuario decide que una versión puede conservar la melodía y la
-  armonía del original. No se copian letras. (Publicar una versión requiere la
-  licencia mecánica correspondiente.)
-- **PRODUCCIÓN Y MEZCLA**: efectos según el estilo, además del margen en la suma.
-- Los scripts del agente van a la carpeta del proyecto, nunca a los motores; la GPU
-  sólo si la persona la permite.
+- **DO, DO NOT ASK**: only ask what blocks; in the same turn the form is
+  proposed and the first section is built. Replaces "propose the form
+  and wait for approval", which slowed it down.
+- **A SONG THAT MAKES SENSE**: form, progression, motif and lead line before
+  the notes; everything comes from the motif with variation; contrast, harmonic direction,
+  bass with kick, singable melody.
+- **COMPOSING** with escribir_notas (compact notation), escribir_bateria (grid) and
+  escribir_progresion; leer_proyecto(clip) returns the same notation.
+- **INSTRUMENTS**: General MIDI program per track (listar_instrumentos).
+- **VERSIONS**: the user decides that a version may keep the melody and
+  harmony of the original. Lyrics are not copied. (Publishing a version requires the
+  corresponding mechanical license.)
+- **PRODUCTION AND MIX**: effects according to the style, in addition to the margin in the sum.
+- The agent's scripts go to the project folder, never to the engines; the GPU
+  only if the person allows it.
 
-Tamaño: 4.979 caracteres.
+Size: 4,979 characters.
 
-## v4 (28-oct): termina la canción y no pregunta el formato
+## v4 (28-Oct): finish the song and do not ask for the format
 
-Huella `e65881d8` → `0eaa1767` (5.010 caracteres). Con el visto bueno del usuario («adelante con las
-propuestas»). Medido en «Hard»: el agente escribía la intro y la primera estrofa
-(24 de 104 compases), paraba y preguntaba «¿MIDI, WAV o los dos?». Las dos cosas
-salían del propio prompt: «UNA sección por turno» y «ANTES DE ENTREGAR, PREGUNTA».
+Fingerprint `e65881d8` → `0eaa1767` (5,010 characters). With the user's approval ("go ahead with the
+proposals"). Measured on "Hard": the agent wrote the intro and the first verse
+(24 of 104 bars), stopped and asked "MIDI, WAV or both?". Both things
+came from the prompt itself: "ONE section per turn" and "BEFORE DELIVERING, ASK".
 
-- «construye ya la primera sección, o el tema entero si es corto. Después, UNA
-  sección por turno, diciendo qué queda» → «construye la canción ENTERA, sección a
-  sección. Termina la canción entera en el turno; no pares a preguntar a mitad.»
-  (El tope del turno son 80 pasos.)
-- «ANTES DE ENTREGAR, PREGUNTA: (a) MIDI, WAV o los dos…; (b) si un stem queda 12
-  dB por debajo…» → «El resultado queda en el proyecto: no preguntes por MIDI o WAV
-  si no te lo piden. Si el encargo los pide, al terminar usa exportar(midi, wav).
-  Si un stem queda 12 dB por debajo de la mediana, dilo.» El formato se elige en el
-  formulario del encargo (MIDI, WAV o los dos) y la herramienta nueva `exportar` lo
-  hace sin scripts.
+- "build the first section now, or the whole track if it is short. Then, ONE
+  section per turn, saying what is left" → "build the WHOLE song, section by
+  section. Finish the whole song in the turn; do not stop to ask halfway."
+  (The turn limit is 80 steps.)
+- "BEFORE DELIVERING, ASK: (a) MIDI, WAV or both…; (b) if a stem ends up 12
+  dB below…" → "The result stays in the project: do not ask for MIDI or WAV
+  unless they ask you to. If the brief asks for them, when finished use exportar(midi, wav).
+  If a stem ends up 12 dB below the median, say so." The format is chosen in the
+  brief's form (MIDI, WAV or both) and the new `exportar` tool does it
+  without scripts.

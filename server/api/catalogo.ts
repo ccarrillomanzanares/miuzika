@@ -1,4 +1,4 @@
-/** La biblioteca CC0 (VCSL): buscar, escuchar, importar samples e instrumentos SFZ → SF2. */
+/** The CC0 library (VCSL): search, listen, import samples and SFZ → SF2 instruments. */
 
 import { createReadStream, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, resolve, sep } from "node:path";
@@ -13,11 +13,11 @@ import type { Contexto } from "../contexto.ts";
 export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
   const { anotar, ficheroHerramientas, carpetaTrabajo, responderJson, leerCuerpo, slugProyecto, resolverEnTrabajo, correr } = ctx;
 
-  // Un instrumento de la biblioteca, convertido a .sf2 dentro del proyecto.
-  // Es la forma de tocar 46 regiones en vez de estirar un sample (que suena
-  // a armónica y desafina: medido, +1054 cents en el saxo).
-  // Los .sfz de catalogo/ (183 en VCSL), leídos una vez: el catálogo no cambia
-  // mientras corre el servidor (si se añade un pack, se reinicia).
+  // A library instrument, converted to .sf2 inside the project.
+  // It is the way to play 46 regions instead of stretching a sample (which sounds
+  // like a harmonica and goes out of tune: measured, +1054 cents on the sax).
+  // The .sfz files in catalogo/ (183 in VCSL), read once: the catalog does not change
+  // while the server runs (if a pack is added, it is restarted).
   let bibliotecaSfz: InstrumentoBiblioteca[] | null = null;
   const biblioteca = (): InstrumentoBiblioteca[] => {
     if (bibliotecaSfz) return bibliotecaSfz;
@@ -39,7 +39,7 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
 
   server.middlewares.use("/api/instrumentos/crear", (req, res) => {
     if (req.method !== "POST") {
-      responderJson(res, 405, { error: "usa POST" });
+      responderJson(res, 405, { error: "use POST" });
       return;
     }
     leerCuerpo(req, res, async (cuerpo) => {
@@ -49,16 +49,16 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
         let sfzRel = String(datos.sfz ?? "").trim();
         let sfz = sfzRel ? resolverEnTrabajo(sfzRel, slug) : null;
         if (!sfz || !existsSync(sfz)) {
-          // También por nombre, como sale en listar_instrumentos: «Grand Piano, Steinway B».
+          // Also by name, as shown in listar_instrumentos: "Grand Piano, Steinway B".
           const { instrumento, error } = resolverInstrumento(sfzRel, biblioteca());
           if (!instrumento) {
-            responderJson(res, 404, { error: error ?? `no existe el SFZ: ${sfzRel}` });
+            responderJson(res, 404, { error: error ?? `SFZ does not exist: ${sfzRel}` });
             return;
           }
           sfzRel = instrumento.ruta;
           sfz = resolverEnTrabajo(sfzRel, slug);
           if (!sfz || !existsSync(sfz)) {
-            responderJson(res, 404, { error: `no existe el SFZ: ${sfzRel}` });
+            responderJson(res, 404, { error: `SFZ does not exist: ${sfzRel}` });
             return;
           }
         }
@@ -80,9 +80,9 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
     });
   });
 
-  // ---------------------------------------------------------- Catálogo de samples
-  // Índice de la biblioteca CC0 (codigo/catalogo.py). Se busca en el servidor
-  // para no mandar 4.231 entradas al navegador en cada consulta.
+  // ---------------------------------------------------------- Sample catalog
+  // Index of the CC0 library (codigo/catalogo.py). It is searched on the server
+  // to avoid sending 4,231 entries to the browser on every query.
   const cacheCatalogo = {
     json: null as null | Record<string, unknown>,
     entradas: null as null | EntradaCatalogo[],
@@ -106,14 +106,14 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
       };
     }
     const datos = cacheCatalogo.json as { entradas?: Record<string, unknown>[] };
-    // Nombres de Strudel: su mapa apunta a los mismos ficheros de VCSL, así que
-    // un sample puede tener nombre corto allí (`s("bassdrum1")`).
+    // Strudel names: its map points to the same VCSL files, so
+    // a sample can have a short name there (`s("bassdrum1")`).
     const strudel = new Map<string, string>();
     if (existsSync(rutaStrudel)) {
       const mapa = JSON.parse(readFileSync(rutaStrudel, "utf8")) as Record<string, unknown>;
       for (const [nombre, valor] of Object.entries(mapa)) {
         if (nombre === "_base") continue;
-        // En el mapa de Strudel cada nombre lleva una lista de ficheros.
+        // In Strudel's map each name carries a list of files.
         const destinos = Array.isArray(valor) ? valor : [valor];
         for (const destino of destinos) {
           if (typeof destino !== "string") continue;
@@ -149,8 +149,8 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
           },
           ruta: archivo,
           strudel: strudel.get(archivo) ?? null,
-          // Normalizado una vez, no en cada búsqueda: con 4.231 entradas,
-          // normalizar en caliente costaba ~800 ms por consulta.
+          // Normalized once, not on every search: with 4,231 entries,
+          // normalizing on the fly cost ~800 ms per query.
           normTexto: `${archivo} ${String(x.instrumento ?? "")} ${String(x.articulacion ?? "")}`
             .normalize("NFD")
             .replace(/[\u0300-\u036f]/g, "")
@@ -165,14 +165,14 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
     return { entradas, total: entradas.length, raiz };
   };
 
-  // Escuchar un sample de la biblioteca sin traerlo al proyecto.
+  // Listen to a sample from the library without bringing it into the project.
   server.middlewares.use("/api/catalogo/audio", (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const rel = url.searchParams.get("path") ?? "";
     const raiz = resolve(carpetaTrabajo, "catalogo");
     const destino = resolve(carpetaTrabajo, rel);
     if (rel === "" || !destino.startsWith(raiz + sep) || !existsSync(destino)) {
-      responderJson(res, 404, { error: "no existe" });
+      responderJson(res, 404, { error: "does not exist" });
       return;
     }
     const total = statSync(destino).size;
@@ -189,7 +189,7 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
 
   server.middlewares.use("/api/catalogo/buscar", (req, res) => {
     if (req.method !== "POST") {
-      responderJson(res, 405, { error: "usa POST" });
+      responderJson(res, 405, { error: "use POST" });
       return;
     }
     leerCuerpo(req, res, (cuerpo) => {
@@ -205,7 +205,7 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
           total,
           resultados: encontrados.map((r) => ({
             archivo: r.entrada.ruta,
-            // Para el <audio>: ruta relativa a workspace/.
+            // For the <audio> element: path relative to workspace/.
             rutaAudio: `catalogo/${raiz}/${String(r.entrada.ruta ?? "")}`,
             instrumento: r.entrada.etiqueta,
             familia: r.entrada.familia,
@@ -221,10 +221,10 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
     });
   });
 
-  // Un sample del catálogo entra en el proyecto convertido y normalizado.
+  // A sample from the catalog enters the project converted and normalized.
   server.middlewares.use("/api/catalogo/importar", (req, res) => {
     if (req.method !== "POST") {
-      responderJson(res, 405, { error: "usa POST" });
+      responderJson(res, 405, { error: "use POST" });
       return;
     }
     leerCuerpo(req, res, async (cuerpo) => {
@@ -233,12 +233,12 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
         const archivo = String(datos.archivo ?? "");
         const nombre = String(datos.nombre ?? "").replace(/[^a-z0-9_-]+/gi, "-").toLowerCase();
         if (archivo === "" || nombre === "") {
-          responderJson(res, 400, { ok: false, error: "faltan 'archivo' o 'nombre'" });
+          responderJson(res, 400, { ok: false, error: "missing 'archivo' or 'nombre'" });
           return;
         }
         const completo = resolve(carpetaTrabajo, "catalogo");
-        // El índice guarda la ruta relativa a la raíz de la biblioteca
-        // ("Idiophones/…"), así que se prueba con y sin esa raíz.
+        // The index stores the path relative to the library root
+        // ("Idiophones/…"), so it is tried with and without that root.
         const indice = resolve(carpetaTrabajo, "catalogo", "catalogo-vcsl.json");
         let raiz = "";
         if (existsSync(indice)) {
@@ -251,7 +251,7 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
         ];
         const origen = candidatos.find((c) => c.startsWith(completo + sep) && existsSync(c));
         if (!origen) {
-          responderJson(res, 404, { ok: false, error: `no existe ${archivo}` });
+          responderJson(res, 404, { ok: false, error: `${archivo} does not exist` });
           return;
         }
         const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
@@ -278,8 +278,8 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
 
   let presetsGm: { clave: string; texto: string } | null = null;
 
-  // El SoundFont General MIDI de la instalación: el primer .sf2 de catalogo/gm/.
-  // Con él, cualquier pista MIDI con programa suena con un instrumento real.
+  // The installation's General MIDI SoundFont: the first .sf2 in catalogo/gm/.
+  // With it, any MIDI track with a program sounds with a real instrument.
   server.middlewares.use("/api/gm", (_req, res) => {
     const carpeta = resolve(carpetaTrabajo, "catalogo", "gm");
     const fichero = existsSync(carpeta)
@@ -289,7 +289,7 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
       responderJson(res, 200, {
         ok: true,
         ruta: null,
-        aviso: "no hay ningún .sf2 en workspace/catalogo/gm/",
+        aviso: "there is no .sf2 in workspace/catalogo/gm/",
         biblioteca: textoDeBiblioteca(biblioteca()),
         bibliotecaNombres: biblioteca().map((i) => i.nombre),
       });
@@ -297,13 +297,13 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
     }
     const completo = resolve(carpeta, fichero);
     const estado = statSync(completo);
-    // La lista de presets se lee una vez por versión del fichero (son ~30 MB).
+    // The preset list is read once per file version (they are ~30 MB).
     const clave = `${completo}|${estado.mtimeMs}`;
     if (presetsGm?.clave !== clave) {
       try {
         presetsGm = { clave, texto: textoDePresets(presetsDeSf2(readFileSync(completo))) };
       } catch (error) {
-        presetsGm = { clave, texto: `No se pudo leer la lista de presets: ${String(error)}` };
+        presetsGm = { clave, texto: `Could not read the preset list: ${String(error)}` };
       }
     }
     responderJson(res, 200, {

@@ -1,16 +1,16 @@
-"""Valida y renderiza el kit de batería EN LAMBDA, en un solo viaje.
+"""Validates and renders the drum kit IN LAMBDA, in a single trip.
 
     python gpu/gate_lote.py
 
-Para cada voz de la lista: renderiza, mide con el mismo `perfil()` del catálogo,
-comprueba los umbrales de la puerta y, si pasa, escribe el sample en la salida del
-proyecto con el post-proceso aplicado y normalizado a -1 dBFS.
+For each voice in the list: renders, measures with the same `perfil()` as the catalogue,
+checks the gate thresholds and, if it passes, writes the sample to the project output
+with post-processing applied and normalized to -1 dBFS.
 
-Deja en `salida/`:
-    kit_<voz>.wav        el sample, listo para la timeline
-    kit_<voz>.json       veredicto + perfil + argumentos usados
+Leaves in `salida/`:
+    kit_<voz>.wav        the sample, ready for the timeline
+    kit_<voz>.json       verdict + profile + arguments used
 
-Imprime un JSON con todo (la app lo lee del stdout).
+Prints a JSON with everything (the app reads it from stdout).
 """
 
 import json
@@ -21,7 +21,7 @@ import traceback
 import wave
 
 import numpy as np
-import torch  # el trabajo se hace en la GPU: por eso corre en Lambda
+import torch  # the work is done on the GPU: that is why it runs in Lambda
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.dirname(AQUI)
@@ -39,7 +39,7 @@ RMS_MIN = -60.0
 CREST_MIN, CREST_MAX = 2.0, 30.0
 DC_MAX = 0.01
 
-# voz: argumentos con los que se genera el sample del kit
+# voice: arguments used to generate the kit sample
 KIT = {
     "kit_bombo": {"vel": 1.0, "pitch": 1.0, "dur": 0.75, "seed": 1},
     "kit_caja": {"vel": 0.95, "pitch": 1.0, "dur": 0.5, "seed": 2},
@@ -52,7 +52,7 @@ KIT = {
 
 
 def _post(x, cuerpo=0.0, brillo=0.0, cola=1.0):
-    """El mismo post-proceso que las recetas: cuerpo, brillo y cola."""
+    """The same post-processing as the recipes: body, brightness and tail."""
     x = np.asarray(x, dtype=float)
     if x.ndim > 1:
         x = x.mean(axis=1)
@@ -90,7 +90,7 @@ def main():
     for nombre, args in KIT.items():
         fn = getattr(V, nombre, None)
         if fn is None:
-            resultados.append({"voz": nombre, "ok": False, "motivos": ["no existe"]})
+            resultados.append({"voz": nombre, "ok": False, "motivos": ["does not exist"]})
             continue
         motivos = []
         try:
@@ -102,9 +102,9 @@ def main():
             perfil = voces.perfil(x)
             perfil["render_ms"] = round(ms, 1)
             if not DURACION_MIN <= perfil["duracion_s"] <= DURACION_MAX:
-                motivos.append(f"duracion {perfil['duracion_s']}")
+                motivos.append(f"duration {perfil['duracion_s']}")
             if perfil["rms_dbfs"] < RMS_MIN:
-                motivos.append("es silencio")
+                motivos.append("it is silence")
             if not CREST_MIN <= perfil["crest_db"] <= CREST_MAX:
                 motivos.append(f"crest {perfil['crest_db']}")
             if abs(perfil["dc"]) > DC_MAX:
@@ -123,7 +123,7 @@ def main():
         json.dumps(
             {
                 "ok": all(r["ok"] for r in resultados),
-                "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "sin CUDA",
+                "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "no CUDA",
                 "cuda": torch.cuda.is_available(),
                 "resultados": resultados,
             },

@@ -1,8 +1,8 @@
 /**
- * Menú «Modelos»: con qué proveedor y qué modelo trabaja el agente.
+ * "Models" menu: which provider and which model the agent works with.
  *
- * La clave se escribe aquí, pero se guarda en el servidor y no vuelve nunca al
- * navegador: el menú sólo sabe si hay clave y sus últimas cifras.
+ * The key is typed here, but it is stored on the server and never returns to the
+ * browser: the menu only knows whether a key exists and its last digits.
  */
 
 import { fijarActivo } from "./llm.ts";

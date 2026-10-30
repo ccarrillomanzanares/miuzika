@@ -1,9 +1,9 @@
 /**
- * Contabilidad del turno para la barra de actividad: tiempo POR herramienta.
+ * Turn accounting for the activity bar: time PER tool.
  *
- * Un turno del agente dura minutos y lo unico que el usuario necesita saber es
- * DONDE se ha ido ese tiempo. El bucle (`agent.ts`) mide cada llamada y aqui
- * solo se agrupa y se formatea: sin DOM, para poder probarlo con tests.
+ * An agent turn lasts minutes and the only thing the user needs to know is WHERE that
+ * time went. The loop (`agent.ts`) times each call and here it is only grouped and
+ * formatted: no DOM, so it can be tested with tests.
  */
 
 export interface PasoHerramienta {
@@ -25,9 +25,9 @@ export function segundos(ms: number): string {
 }
 
 /**
- * Agrupa por nombre y ordena por tiempo descendente: primero lo que se comio el
- * turno. Los empates conservan el orden de aparicion (el orden de insercion del
- * Map), para que un turno de llamadas iguales salga siempre igual.
+ * Groups by name and sorts by descending time: first what ate the turn. Ties keep the
+ * order of appearance (the Map's insertion order), so a turn of equal calls always
+ * comes out the same.
  */
 export function agrupar(pasos: readonly PasoHerramienta[]): HerramientaAgrupada[] {
   const porNombre = new Map<string, HerramientaAgrupada>();
@@ -56,15 +56,15 @@ export interface ResumenTurno {
   herramientas: readonly PasoHerramienta[];
 }
 
-/** Cuantas herramientas se nombran antes de resumir el resto con "+N mas". */
+/** How many tools are named before summarizing the rest as "+N more". */
 const MAX_LISTADAS = 4;
 
 /**
- * Linea discreta para el final del historial:
+ * Discreet line for the end of the history:
  *
  *     2 step(s) · 4 tool(s) · 42.1 s — ejecutar_python 38.5 s ×2 · leer_fichero 0.3 s
  *
- * Sin herramientas (el modelo solo hablo) devuelve solo la cabecera, sin raya.
+ * With no tools (the model only talked) it returns just the header, without a dash.
  */
 export function lineaResumen(turno: ResumenTurno): string {
   const cabecera = `${turno.pasos} step(s) · ${turno.llamadas} tool(s) · ${segundos(turno.ms)}`;
@@ -81,8 +81,8 @@ export function lineaResumen(turno: ResumenTurno): string {
 }
 
 /**
- * Texto de la barra mientras corre el turno. `msPaso` es lo que lleva la
- * herramienta actual (null si el modelo esta pensando, sin herramienta en curso).
+ * Bar text while the turn runs. `msPaso` is how long the current tool has been going
+ * (null if the model is thinking, with no tool in progress).
  */
 export function fraseBarra(
   pasoActual: string,
@@ -94,7 +94,7 @@ export function fraseBarra(
   return `${pasoActual} · ${reloj(msPaso)} · ${turno}`;
 }
 
-/** «8 s» por debajo del minuto; «1:20» desde el minuto (un render largo se lee mejor). */
+/** "8 s" below a minute; "1:20" from a minute on (a long render reads better). */
 export function reloj(ms: number): string {
   const total = Math.round(Math.max(0, ms) / 1000);
   if (total < 60) return `${total} s`;
@@ -102,9 +102,9 @@ export function reloj(ms: number): string {
 }
 
 /**
- * Frase de una herramienta YA terminada. El ✓ es la unica diferencia con la
- * herramienta en curso: sin el, "leer_fichero 0,0 s" parece seguir corriendo
- * mientras el modelo redacta.
+ * Phrase for a tool that has ALREADY finished. The ✓ is the only difference from the
+ * tool in progress: without it, "leer_fichero 0.0 s" looks like it is still running
+ * while the model writes.
  */
 export function pasoTerminado(nombre: string, ms: number): string {
   return `✓ ${nombre} ${segundos(ms)}`;

@@ -1,4 +1,4 @@
-/** Ficheros del workspace: leer, escribir, editar y listar (las manos del agente), más el log de turnos, el manifiesto del motor y el id del código servido. */
+/** Workspace files: read, write, edit and list (the agent's hands), plus the turn log, the engine manifest and the served-code id. */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
@@ -6,8 +6,8 @@ import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 import { CARPETA_VERSIONES, versionesSobrantes } from "../../src/core/versiones.ts";
 
-/** Módulos que un script del proyecto no puede tapar: los de la biblioteca estándar
- * que se usan de verdad, numpy/scipy y los del motor. */
+/** Modules that a project script cannot shadow: the standard-library ones
+ * actually used, numpy/scipy and the engine's own. */
 const MODULOS_PROTEGIDOS = new Set(
   (
     "abc argparse array ast asyncio base64 bisect builtins bz2 calendar cmath code codecs collections colorsys " +
@@ -30,8 +30,8 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
       res.end();
       return;
     }
-    // Con tope, como todos los cuerpos: un turno con el prompt entero eran ~40 KB y
-    // sin límite un cliente roto podía llenar la memoria.
+    // With a limit, like all bodies: a turn with the whole prompt was ~40 KB and
+    // without a limit a broken client could fill memory.
     leerCuerpo(req, res, (cuerpo) => {
       registrarTurno(cuerpo.trim());
       res.statusCode = 204;
@@ -41,89 +41,89 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
 
   server.middlewares.use("/api/fs/write", (req, res) => {
     if (req.method !== "POST") {
-      responderJson(res, 405, { error: "usa POST" });
+      responderJson(res, 405, { error: "use POST" });
       return;
     }
     leerCuerpo(req, res, async (cuerpo) => {
       try {
         const datos = JSON.parse(cuerpo) as { path?: string; contenido?: string };
         if (!datos.path || typeof datos.contenido !== "string") {
-          responderJson(res, 400, { error: "faltan 'path' o 'contenido'" });
+          responderJson(res, 400, { error: "missing 'path' or 'contenido'" });
           return;
         }
         const destino = resolverEnTrabajo(datos.path, slugProyecto(req.headers["x-miuzika-proyecto"]));
         if (!destino) {
-          responderJson(res, 403, { error: "ruta fuera de workspace/" });
+          responderJson(res, 403, { error: "path outside workspace/" });
           return;
         }
         if (datos.contenido.trim().length === 0) {
           responderJson(res, 400, {
             error:
-              "contenido vacio: escribe el script completo en una sola llamada (no lo dejes para despues).",
+              "empty content: write the whole script in a single call (do not leave it for later).",
           });
           return;
         }
         const nombre = basename(destino);
         const nuevo = !existsSync(destino);
 
-        // (1) prohibido parchear codigo ajeno con scripts de reemplazo
+        // (1) forbidden to patch someone else's code with replacement scripts
         if (/^(patch|parche)/i.test(nombre) && nombre.endsWith(".py")) {
-          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "script de parche" }));
+          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "patch script" }));
           responderJson(res, 409, {
             error:
-              "No se permiten scripts de parche (patch*/parche*). Usa editar_fichero(path, busca, reemplaza): reemplazo exacto, atomico y verificado.",
+              "Patch scripts are not allowed (patch*/parche*). Use editar_fichero(path, busca, reemplaza): exact, atomic and verified replacement.",
           });
           return;
         }
 
-        // (1c) un script con nombre de módulo tapa ese módulo para todo lo que se
-        // ejecute en su carpeta (Python pone la carpeta del script la primera en
-        // sys.path). Medido el 28-oct: un inspect.py de diagnóstico rompió numpy.
+        // (1c) a script named like a module shadows that module for everything that
+        // runs in its folder (Python puts the script's folder first in
+        // sys.path). Measured on Oct 28: a diagnostic inspect.py broke numpy.
         if (nuevo && nombre.endsWith(".py") && !esDeCodigo(datos.path) && MODULOS_PROTEGIDOS.has(nombre.slice(0, -3).toLowerCase())) {
-          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "nombre de módulo" }));
+          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "module name" }));
           responderJson(res, 409, {
             error:
-              `«${nombre}» se llama como un módulo de Python o del motor y lo taparía (numpy, el motor y tus ` +
-              `scripts dejarían de importarlo). Ponle otro nombre: p. ej. «mi_${nombre}».`,
+              `"${nombre}" is named like a Python or engine module and would shadow it (numpy, the engine and your ` +
+              `scripts would stop importing it). Give it another name: e.g. "my_${nombre}".`,
           });
           return;
         }
 
-        // (1b) los motores no crecen con scripts sueltos: un fichero NUEVO en codigo/ o gpu/
-        // se rechaza. Antes el agente dejaba ahí sus pruebas (buscar_sfz.py, info_saxo*.py…)
-        // y pasaban a parecer biblioteca. Editar lo que ya existe sigue pasando por el smoke.
+        // (1b) the engines do not grow with loose scripts: a NEW file in codigo/ or gpu/
+        // is rejected. Previously the agent left its tests there (buscar_sfz.py, info_saxo*.py…)
+        // and they started to look like library code. Editing what already exists still goes through smoke.
         if (nuevo && esDeCodigo(datos.path)) {
-          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "fichero nuevo en el motor" }));
+          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "new file in the engine" }));
           responderJson(res, 409, {
             error:
-              "codigo/ y gpu/ son los motores compartidos: no se añaden ficheros desde el chat. Escribe el " +
-              "script en la carpeta del proyecto (p. ej. 'scripts/mi_script.py'); desde ahí puede importar el " +
-              "motor igual. Para un timbre nuevo usa crear_voz.",
+              "codigo/ and gpu/ are the shared engines: files are not added from the chat. Write the " +
+              "script in the project folder (e.g. 'scripts/my_script.py'); from there it can import the " +
+              "engine just the same. For a new timbre use crear_voz.",
           });
           return;
         }
 
-        // (3) escribir; si es el motor, smoke test con rollback
+        // (3) write; if it is the engine, smoke test with rollback
         const esMotor = MOTOR.has(nombre) && esDeCodigo(datos.path);
         const previo = esMotor && !nuevo ? readFileSync(destino, "utf8") : null;
         mkdirSync(dirname(destino), { recursive: true });
         writeFileSync(destino, datos.contenido, "utf8");
-        // Fotos de versiones (una por turno del agente): se guardan las últimas.
+        // Version snapshots (one per agent turn): the last ones are kept.
         if (basename(dirname(destino)) === CARPETA_VERSIONES && nombre.endsWith(".json")) {
           for (const viejo of versionesSobrantes(readdirSync(dirname(destino)))) {
             try {
               unlinkSync(resolve(dirname(destino), viejo));
             } catch {
-              /* otra escritura lo borró antes */
+              /* another write deleted it first */
             }
           }
         }
 
         let nota = "";
         if (esDeGpu(datos.path)) {
-          // En gpu/ no hay smoke posible: el portatil no tiene torch. Lo
-          // minimo es que el fichero parsea; la validacion real se hace en
-          // la instancia con destino="lambda".
+          // In gpu/ there is no possible smoke test: the laptop has no torch. The
+          // minimum is that the file parses; real validation is done on the
+          // instance with destino="lambda".
           const comprobacion = await correr(
             "-c",
             [
@@ -136,18 +136,18 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
             writeFileSync(destino, previo ?? "", "utf8");
             if (previo === null && existsSync(destino)) unlinkSync(destino);
             responderJson(res, 400, {
-              error: `El fichero de GPU no parsea; no se ha escrito.\n${(comprobacion.errores || comprobacion.salida).slice(-1200)}`,
+              error: `The GPU file does not parse; it has not been written.\n${(comprobacion.errores || comprobacion.salida).slice(-1200)}`,
             });
             return;
           }
-          nota = "gpu: sintaxis ok (validar ejecutando con destino=lambda)";
+          nota = "gpu: syntax ok (validate by running with destino=lambda)";
         }
         if (esMotor) {
           const smoke = await smokeOTeReverto(destino, previo);
           if (!smoke.ok) {
             anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "smoke" }));
             responderJson(res, 400, {
-              error: `El motor no pasa el smoke test; cambios revertidos.\n${smoke.detalle}`,
+              error: `The engine does not pass the smoke test; changes reverted.\n${smoke.detalle}`,
             });
             return;
           }
@@ -178,7 +178,7 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
 
   server.middlewares.use("/api/fs/read", (req, res) => {
     if (req.method !== "POST") {
-      responderJson(res, 405, { error: "usa POST" });
+      responderJson(res, 405, { error: "use POST" });
       return;
     }
     leerCuerpo(req, res, (cuerpo) => {
@@ -186,20 +186,20 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
         const datos = JSON.parse(cuerpo) as { path?: string; desde?: number };
         const destino = datos.path ? resolverEnTrabajo(datos.path, slugProyecto(req.headers["x-miuzika-proyecto"])) : null;
         if (!destino) {
-          responderJson(res, 403, { error: "ruta fuera de workspace/" });
+          responderJson(res, 403, { error: "path outside workspace/" });
           return;
         }
         if (!existsSync(destino)) {
-          responderJson(res, 404, { error: "no existe" });
+          responderJson(res, 404, { error: "does not exist" });
           return;
         }
         responderJson(res, 200, {
           ok: true,
           path: datos.path,
-          // Por páginas: el agente pide `desde` para seguir leyendo. Antes se cortaba a
-          // 20.000 caracteres y la salida larga se guardaba en otro fichero, que al
-          // releerse se volvía a cortar y guardar: el agente leía en círculo.
-          // Sin `desde` (la app leyendo agente.json, por ejemplo) se devuelve entero.
+          // By pages: the agent asks for `desde` to keep reading. Before, it was cut at
+          // 20,000 characters and the long output was saved to another file, which on
+          // re-reading was cut and saved again: the agent read in circles.
+          // Without `desde` (the app reading agente.json, for example) the whole thing is returned.
           ...(datos.desde === undefined
             ? { contenido: readFileSync(destino, "utf8") }
             : pagina(readFileSync(destino, "utf8"), Number(datos.desde) || 0)),
@@ -212,19 +212,19 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
     });
   });
 
-  // Identificador del código servido: la pestaña lo compara cada 20 s y
-  // avisa si está corriendo un bundle viejo (HMR desconectado).
+  // Identifier of the served code: the tab compares it every 20 s and
+  // warns if it is running an old bundle (HMR disconnected).
   server.middlewares.use("/api/build", (_req, res) => {
     responderJson(res, 200, { ok: true, id: idDeBuild(), arrancado: arranqueServidor });
   });
 
   server.middlewares.use("/api/fs/list", (req, res) => {
     if (req.method !== "GET") {
-      responderJson(res, 405, { error: "usa GET" });
+      responderJson(res, 405, { error: "use GET" });
       return;
     }
-    // Sin `carpeta`: el proyecto activo (lo que el agente necesita ver).
-    // Con `carpeta=codigo` o `carpeta=` se pide otra zona del espacio.
+    // Without `carpeta`: the active project (what the agent needs to see).
+    // With `carpeta=codigo` or `carpeta=` another zone of the space is requested.
     const url = new URL(req.url ?? "/", "http://localhost");
     const pedida = url.searchParams.get("carpeta");
     const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
@@ -236,29 +236,29 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
       raiz: "workspace/",
       carpeta: carpeta === "" ? "." : carpeta,
       ficheros,
-      // Sin este aviso, un listado cortado se lee como «aquí no está».
+      // Without this warning, a truncated listing reads as "it is not here".
       truncado: ficheros.length >= MAX_LISTADO,
     });
   });
 
-  // El manifiesto del motor, regenerado al pedirlo (lo inyecta el prompt).
+  // The engine manifest, regenerated when requested (injected into the prompt).
   server.middlewares.use("/api/manifiesto", async (req, res) => {
     if (req.method !== "GET") {
-      responderJson(res, 405, { error: "usa GET" });
+      responderJson(res, 405, { error: "use GET" });
       return;
     }
     await correr("herramientas/manifiesto.py", [], 60);
     const rutaMd = resolve(carpetaTrabajo, "MANIFEST.md");
     const texto = existsSync(rutaMd)
       ? readFileSync(rutaMd, "utf8")
-      : "(sin manifiesto: ejecuta herramientas/manifiesto.py)";
+      : "(no manifest: run herramientas/manifiesto.py)";
     responderJson(res, 200, { ok: true, manifiesto: texto, bytes: texto.length });
   });
 
-  // editar_fichero: reemplazo exacto, con smoke test si toca el motor.
+  // editar_fichero: exact replacement, with a smoke test if it touches the engine.
   server.middlewares.use("/api/fs/edit", (req, res) => {
     if (req.method !== "POST") {
-      responderJson(res, 405, { error: "usa POST" });
+      responderJson(res, 405, { error: "use POST" });
       return;
     }
     leerCuerpo(req, res, async (cuerpo) => {
@@ -270,16 +270,16 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
           todas?: boolean;
         };
         if (!d.path || typeof d.busca !== "string" || typeof d.reemplaza !== "string") {
-          responderJson(res, 400, { error: "faltan 'path', 'busca' o 'reemplaza'" });
+          responderJson(res, 400, { error: "missing 'path', 'busca' or 'reemplaza'" });
           return;
         }
         const destino = resolverEnTrabajo(d.path, slugProyecto(req.headers["x-miuzika-proyecto"]));
         if (!destino) {
-          responderJson(res, 403, { error: "ruta fuera de workspace/" });
+          responderJson(res, 403, { error: "path outside workspace/" });
           return;
         }
         if (!existsSync(destino)) {
-          responderJson(res, 404, { error: "no existe" });
+          responderJson(res, 404, { error: "does not exist" });
           return;
         }
         const antes = readFileSync(destino, "utf8");
@@ -288,7 +288,7 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
         if (total === 0) {
           responderJson(res, 409, {
             error:
-              "ese texto no aparece en el fichero: copia el fragmento EXACTO (con su indentacion) o usa leer_fichero.",
+              "that text does not appear in the file: copy the EXACT fragment (with its indentation) or use leer_fichero.",
           });
           return;
         }
@@ -300,7 +300,7 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
           const smoke = await smokeOTeReverto(destino, antes);
           if (!smoke.ok) {
             responderJson(res, 400, {
-              error: `El motor no pasa el smoke test; cambio revertido.\n${smoke.detalle}`,
+              error: `The engine does not pass the smoke test; change reverted.\n${smoke.detalle}`,
             });
             return;
           }
@@ -323,7 +323,7 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
   });
 }
 
-/** Una página de un texto largo: contenido, dónde sigue y cuánto mide. */
+/** One page of a long text: content, where it continues and how long it is. */
 const PAGINA = 6000;
 function pagina(texto: string, desde: number): { contenido: string; desde: number; siguiente: number | null; total: number } {
   const inicio = Math.max(0, Math.min(Math.trunc(desde), texto.length));

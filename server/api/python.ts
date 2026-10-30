@@ -1,4 +1,4 @@
-/** Ejecutar un script de Python en este equipo, con tope de tiempo y cancelación, dentro de la caja. */
+/** Run a Python script on this machine, with a time limit and cancellation, inside the sandbox. */
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -6,13 +6,13 @@ import { delimiter, resolve } from "node:path";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 
-/** El lanzador que vigila los scripts del agente (ver su cabecera). Fuera de workspace/: el agente no lo puede editar. */
+/** The launcher that watches the agent's scripts (see its header). Outside workspace/: the agent cannot edit it. */
 export const CAJA = resolve(process.cwd(), "server", "python", "caja.py");
 
 /**
- * Variables que necesita Python para arrancar en Windows y en el resto; nada más.
- * Antes el script heredaba todo `process.env` del servidor, con lo que hubiera en
- * él (tokens, claves de proveedores…).
+ * Variables that Python needs to start on Windows and elsewhere; nothing more.
+ * Before, the script inherited all of the server's `process.env`, with whatever was in
+ * it (tokens, provider keys…).
  */
 const VARIABLES_DE_SISTEMA = [
   "PATH",
@@ -42,15 +42,15 @@ export function entornoDeCaja(
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const clave of Object.keys(base)) {
-    // En Windows las variables no distinguen mayúsculas («Path», «SystemRoot»).
+    // On Windows variables are case-insensitive ("Path", "SystemRoot").
     if (VARIABLES_DE_SISTEMA.includes(clave.toUpperCase())) env[clave] = base[clave];
   }
   return {
     ...env,
     PYTHONIOENCODING: "utf-8",
     PYTHONUNBUFFERED: "1",
-    // `delimiter` (";" en Windows, ":" en el resto), no `sep`: con un PYTHONPATH
-    // previo, unirlo con "\\" o "/" dejaba una sola ruta rota.
+    // `delimiter` (";" on Windows, ":" elsewhere), not `sep`: with a previous
+    // PYTHONPATH, joining it with "\\" or "/" left a single broken path.
     PYTHONPATH: [rutas.motor, base.PYTHONPATH].filter(Boolean).join(delimiter),
     MIUZIKA_ESCRIBIR: rutas.proyecto,
     MIUZIKA_REPO: rutas.repo,
@@ -63,7 +63,7 @@ export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
 
   server.middlewares.use("/api/run/python", (req, res) => {
     if (req.method !== "POST") {
-      responderJson(res, 405, { error: "usa POST" });
+      responderJson(res, 405, { error: "use POST" });
       return;
     }
     leerCuerpo(req, res, (cuerpo) => {
@@ -72,22 +72,22 @@ export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
         datos = JSON.parse(cuerpo) as typeof datos;
       } catch (error) {
         responderJson(res, 400, {
-          error: `JSON invalido: ${error instanceof Error ? error.message : String(error)}`,
+          error: `invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
         });
         return;
       }
       if (!datos.path) {
-        responderJson(res, 400, { error: "falta 'path'" });
+        responderJson(res, 400, { error: "missing 'path'" });
         return;
       }
       const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
       const script = resolverEnTrabajo(datos.path, slug);
       if (!script) {
-        responderJson(res, 403, { error: "ruta fuera de workspace/" });
+        responderJson(res, 403, { error: "path outside workspace/" });
         return;
       }
       if (!existsSync(script)) {
-        responderJson(res, 404, { error: `no existe ${datos.path}` });
+        responderJson(res, 404, { error: `${datos.path} does not exist` });
         return;
       }
 
@@ -95,7 +95,7 @@ export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
       const argumentos = Array.isArray(datos.argumentos)
         ? datos.argumentos.map((a) => String(a))
         : [];
-      // cwd = carpeta del proyecto: los scripts escriben 'salida/...' ahi.
+      // cwd = project folder: the scripts write 'salida/...' there.
       const cwdProyecto = carpetaProyecto(slug);
       const motor = resolve(carpetaTrabajo, "codigo");
 
@@ -108,7 +108,7 @@ export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
           repo: process.cwd(),
           workspace: carpetaTrabajo,
         }),
-        // Grupo propio fuera de Windows: así `kill(-pid)` mata también a los nietos.
+        // Own group outside Windows: this way `kill(-pid)` also kills the grandchildren.
         detached: process.platform !== "win32",
       });
       let salida = "";
@@ -124,7 +124,7 @@ export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
       let porTiempo = false;
       let temporizador: NodeJS.Timeout | null = null;
 
-      /** Responde UNA sola vez (exit y close pueden llegar los dos). */
+      /** Answers ONCE only (exit and close may both arrive). */
       const terminar = (codigo: number | null, senal: string | null): void => {
         if (avisado) return;
         avisado = true;
@@ -157,8 +157,8 @@ export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
         });
       };
 
-      /** Mata el proceso Y su descendencia: en Windows 'python' es un lanzador
-       *  que deja un nieto con los pipes abiertos (si no, quedan huerfanos). */
+      /** Kills the process AND its descendants: on Windows 'python' is a launcher
+       *  that leaves a grandchild with the pipes open (otherwise they are orphaned). */
       const matarArbol = (): void => {
         const pid = hijo.pid;
         if (!pid) return;
@@ -173,8 +173,8 @@ export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
         }
       };
 
-      // «Cancelar» en la app aborta el fetch: la conexión se cierra y el proceso
-      // tiene que morir con ella. Antes seguía renderizando hasta su propio tope.
+      // "Cancel" in the app aborts the fetch: the connection closes and the process
+      // has to die with it. Before, it kept rendering until its own limit.
       res.on("close", () => {
         if (!avisado) {
           avisado = true;
@@ -190,11 +190,11 @@ export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
       temporizador = setTimeout(() => {
         porTiempo = true;
         matarArbol();
-        // Red de seguridad: si el arbol no muere, la peticion no queda colgada.
+        // Safety net: if the tree does not die, the request does not hang.
         setTimeout(() => terminar(null, "timeout"), 5000);
       }, segundos * 1000);
 
-      // 'exit' llega aunque un nieto mantenga los pipes; 'close' solo si se cierran.
+      // 'exit' arrives even if a grandchild keeps the pipes; 'close' only if they close.
       hijo.on("exit", (codigo, senal) => {
         setTimeout(() => terminar(codigo, senal), 150);
       });
@@ -204,7 +204,7 @@ export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
         avisado = true;
         if (temporizador) clearTimeout(temporizador);
         responderJson(res, 500, {
-          error: `no se pudo lanzar '${interprete}': ${error.message}`,
+          error: `could not launch '${interprete}': ${error.message}`,
         });
       });
     });

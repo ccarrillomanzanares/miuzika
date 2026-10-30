@@ -1,26 +1,26 @@
-"""Caja para los scripts que escribe el agente (ejecutar_python, crear_sonido).
+"""Sandbox for the scripts the agent writes (ejecutar_python, crear_sonido).
 
-Uso (lo lanza server/api/python.ts):
-    python -u server/python/caja.py <script.py> [argumentos...]
+Usage (launched by server/api/python.ts):
+    python -u server/python/caja.py <script.py> [arguments...]
 
-Variables que pone el servidor:
-    MIUZIKA_ESCRIBIR   carpetas donde se puede escribir (os.pathsep entre ellas)
-    MIUZIKA_REPO       raíz del repositorio
-    MIUZIKA_WORKSPACE  workspace/ (lo único del repositorio que se puede leer)
+Variables set by the server:
+    MIUZIKA_ESCRIBIR   folders where writing is allowed (os.pathsep between them)
+    MIUZIKA_REPO       repository root
+    MIUZIKA_WORKSPACE  workspace/ (the only part of the repository that can be read)
 
-Por qué (ESTADO 28-oct, pendiente 5): el Python del agente corría con los permisos
-de Carlos y con todo el entorno del servidor. Un script equivocado podía borrar
-fuera del proyecto, leer .env o .miuzika/proveedores.json (las claves), lanzar
-procesos o sacar datos por la red.
+Why (STATUS Oct 28, pending item 5): the agent's Python ran with Carlos's permissions
+and the server's whole environment. A wrong script could delete things
+outside the project, read .env or .miuzika/proveedores.json (the keys), launch
+processes or leak data over the network.
 
-Qué es y qué no: un guardarraíl con audit hooks (PEP 578). Frena los errores del
-modelo, que llegan por las puertas normales (open, os.remove, subprocess, socket).
-NO es una jaula del sistema operativo: un código escrito para escaparse puede
-hacerlo (por ejemplo, con ctypes ya cargado por otra librería). Para eso haría
-falta otro usuario de Windows o un contenedor.
+What it is and what it is not: a guardrail with audit hooks (PEP 578). It stops the model's
+mistakes, which arrive through the normal doors (open, os.remove, subprocess, socket).
+It is NOT an operating-system jail: code written to escape can
+do it (for example, with ctypes already loaded by another library). That would need
+another Windows user or a container.
 
-Vive en server/ y no en workspace/ a propósito: el agente sólo escribe en workspace/,
-así que no puede editar su propia caja.
+It lives in server/ and not in workspace/ on purpose: the agent only writes to workspace/,
+so it cannot edit its own sandbox.
 """
 
 import atexit
@@ -32,20 +32,20 @@ import tempfile
 
 
 def _norm(ruta):
-    # fsdecode: open() también acepta rutas en bytes, y commonpath no mezcla bytes y str.
+    # fsdecode: open() also accepts byte paths, and commonpath does not mix bytes and str.
     return os.path.normcase(os.path.realpath(os.fsdecode(os.fspath(ruta))))
 
 
 def _dentro(ruta, raiz):
     try:
         return os.path.commonpath([ruta, raiz]) == raiz
-    except ValueError:  # otra unidad en Windows
+    except ValueError:  # another drive on Windows
         return False
 
 
 ESCRIBIBLES = [_norm(p) for p in os.environ.get("MIUZIKA_ESCRIBIR", "").split(os.pathsep) if p]
-# El temp del script vive dentro del proyecto (y se borra al acabar): abrir el temp
-# del sistema entero dejaba escribir en cualquier cosa que colgara de él.
+# The script's temp lives inside the project (and is deleted when it finishes): opening the whole
+# system temp allowed writing to anything hanging from it.
 TEMPORAL = os.path.join(ESCRIBIBLES[0] if ESCRIBIBLES else os.getcwd(), ".tmp-caja")
 REPO = _norm(os.environ.get("MIUZIKA_REPO") or os.getcwd())
 WORKSPACE = _norm(os.environ.get("MIUZIKA_WORKSPACE") or os.path.join(REPO, "workspace"))
@@ -71,7 +71,7 @@ SECRETOS = [
     )
 ]
 
-AYUDA = "Los scripts del agente sólo escriben en la carpeta del proyecto y no tocan nada fuera de workspace/."
+AYUDA = "Agent scripts only write inside the project folder and do not touch anything outside workspace/."
 
 
 class Prohibido(PermissionError):
@@ -100,13 +100,13 @@ def _comprobar_escritura(objetivo, que):
         return
     ruta = _norm(objetivo)
     if not _escribir_permitido(ruta):
-        _prohibir(f"{que} {objetivo} está fuera de la carpeta del proyecto")
+        _prohibir(f"{que} {objetivo} is outside the project folder")
 
 
 _ESCRIBE = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
 _PROCESOS = ("subprocess.Popen", "os.system", "os.exec", "os.spawn", "os.posix_spawn", "os.startfile", "os.fork", "os.forkpty")
-# Cosas que sólo se cierran cuando arranca el script: las librerías (numpy) usan
-# ctypes al importarse, y se importan antes.
+# Things that are only closed once the script starts: libraries (numpy) use
+# ctypes while being imported, and they are imported earlier.
 _SOLO_SCRIPT = ("ctypes.dlopen", "ctypes.dlsym", "ctypes.cdata")
 
 _fase_script = False
@@ -119,35 +119,35 @@ def _vigilante(evento, args):
             return
         escribe = (isinstance(modo, str) and any(c in modo for c in "wax+")) or bool((flags or 0) & _ESCRIBE)
         if escribe:
-            _comprobar_escritura(ruta, "escribir")
+            _comprobar_escritura(ruta, "write")
         elif not _leer_permitido(_norm(ruta)):
-            _prohibir(f"leer {ruta} no está permitido (claves o código de la app)")
+            _prohibir(f"reading {ruta} is not allowed (app keys or code)")
     elif evento in ("os.remove", "os.rmdir", "os.mkdir", "os.truncate", "os.chmod", "os.utime", "shutil.rmtree"):
-        _comprobar_escritura(args[0], "tocar")
+        _comprobar_escritura(args[0], "touch")
     elif evento in ("os.rename", "os.link", "os.symlink", "shutil.copyfile", "shutil.move"):
-        _comprobar_escritura(args[0], "mover")
-        _comprobar_escritura(args[1], "mover a")
+        _comprobar_escritura(args[0], "move")
+        _comprobar_escritura(args[1], "move to")
     elif evento.startswith(_PROCESOS):
-        _prohibir("los scripts del agente no lanzan otros programas")
+        _prohibir("agent scripts do not launch other programs")
     elif evento in ("socket.connect", "socket.bind", "socket.getaddrinfo"):
-        _prohibir("los scripts del agente no abren conexiones de red (para la web están buscar_web y leer_web)")
+        _prohibir("agent scripts do not open network connections (for the web use buscar_web and leer_web)")
     elif _fase_script and evento in _SOLO_SCRIPT:
-        _prohibir("ctypes no está permitido en los scripts del agente")
+        _prohibir("ctypes is not allowed in agent scripts")
 
 
 def main():
     global _fase_script
     if len(sys.argv) < 2:
-        raise SystemExit("uso: caja.py <script.py> [argumentos...]")
+        raise SystemExit("usage: caja.py <script.py> [arguments...]")
     script = os.path.abspath(sys.argv[1])
-    sys.dont_write_bytecode = True  # los .pyc del motor caerían fuera del proyecto
+    sys.dont_write_bytecode = True  # engine .pyc files would end up outside the project
     os.makedirs(TEMPORAL, exist_ok=True)
     for variable in ("TMP", "TEMP", "TMPDIR"):
         os.environ[variable] = TEMPORAL
     tempfile.tempdir = TEMPORAL
     atexit.register(shutil.rmtree, TEMPORAL, True)
     sys.addaudithook(_vigilante)
-    # numpy carga sus DLL con ctypes al importarse: se importa antes de cerrar ctypes.
+    # numpy loads its DLLs with ctypes while importing: it is imported before closing ctypes.
     try:
         import numpy  # noqa: F401
     except ImportError:

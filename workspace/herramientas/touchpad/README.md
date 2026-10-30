@@ -1,65 +1,65 @@
-# Touchpad como instrumento
+# Touchpad as an instrument
 
-Tocar el touchpad del portátil como un teclado o unos pads, sin hardware MIDI.
-Viene de humseed (spike 001 y `cliente_touchpad/`), donde se validó en el
-portátil de Carlos (HP 15s-fq, touchpad ELAN0712).
+Playing the laptop touchpad like a keyboard or pads, with no MIDI hardware.
+It comes from humseed (spike 001 and `cliente_touchpad/`), where it was validated on
+Carlos's laptop (HP 15s-fq, ELAN0712 touchpad).
 
-## Piezas
+## Pieces
 
-| Fichero | Qué hace |
+| File | What it does |
 |---|---|
-| `captura_win32.py` | Lee el Precision Touchpad con Raw Input (multitáctil, posición absoluta, ~140 informes/s) y congela el cursor mientras hay un dedo apoyado |
-| `modelo.py` | Convierte informes sueltos en `down` / `move` / `up` por dedo |
-| `principal.py` | Proceso hijo del servidor: órdenes por stdin, dedos por stdout (líneas JSON) |
+| `captura_win32.py` | Reads the Precision Touchpad with Raw Input (multitouch, absolute position, ~140 reports/s) and freezes the cursor while a finger is resting |
+| `modelo.py` | Turns individual reports into `down` / `move` / `up` per finger |
+| `principal.py` | The server's child process: commands over stdin, fingers over stdout (JSON lines) |
 
-El servidor lo arranca y lo para (`server/api/pad.ts`) y reenvía los dedos a la
-página por SSE. El mapeo a notas vive en `src/core/pad.ts`, porque es la página
-la que conoce la tonalidad, la pista y el instrumento.
+The server starts and stops it (`server/api/pad.ts`) and forwards the fingers to the
+page over SSE. The mapping to notes lives in `src/core/pad.ts`, because it is the page
+that knows the key, the track and the instrument.
 
-## Por qué hay un proceso nativo
+## Why there is a native process
 
-Un navegador no recibe el multitáctil del touchpad: sólo ve un ratón. El Raw
-Input de Windows sí da cada dedo con su id y su posición.
+A browser does not receive the touchpad's multitouch: it only sees a mouse. Windows
+Raw Input does give each finger with its id and position.
 
-## Lo que hay que saber
+## What you need to know
 
-- **Sólo Windows con Precision Touchpad.** Sin PTP no hay nada que leer.
-- **No hay presión**: el descriptor no trae Tip Pressure. La dinámica sale de la
-  posición vertical (abajo = fuerte).
-- **El cursor se congela con el pad armado** (mientras hay un dedo apoyado): si
-  no, tocar arrastra el puntero fuera de la app. Se arma pulsando en el pad de la
-  página y se suelta con **Esc** (o **Ctrl+Alt+T** si la página no responde).
-- El rango lógico (3520 × 1784) es el del ELAN0712; otro pad puede tener otro.
+- **Windows with Precision Touchpad only.** Without PTP there is nothing to read.
+- **No pressure**: the descriptor does not bring Tip Pressure. The dynamics come from
+  the vertical position (bottom = loud).
+- **The cursor freezes with the pad armed** (while a finger is resting): otherwise,
+  playing drags the pointer off the app. It is armed by pressing on the page's pad and
+  released with **Esc** (or **Ctrl+Alt+T** if the page does not respond).
+- The logical range (3520 × 1784) is that of the ELAN0712; another pad may have another.
 
-## Layout del informe (ELAN0712, report ID 4, un informe por dedo)
+## Report layout (ELAN0712, report ID 4, one report per finger)
 
-| Bits | Campo |
+| Bits | Field |
 |---|---|
 | 0-1 | Confidence, Tip Switch |
 | 4-7 | Contact Identifier |
-| 8-23 | X, lógico 0..3520 |
-| 24-39 | Y, lógico 0..1784 |
+| 8-23 | X, logical 0..3520 |
+| 24-39 | Y, logical 0..1784 |
 | 40-55 | Scan Time |
 | 56-63 | Contact Count |
 | 64 | Button 1 |
 
-Con dos dedos llegan dos informes por cuadro, ids 0 y 1, con el mismo Scan Time.
+With two fingers, two reports arrive per frame, ids 0 and 1, with the same Scan Time.
 
-## No volver a intentar (medido en humseed)
+## Do not try again (measured in humseed)
 
-- Apagar el touchpad en Ajustes de Windows: mata el HID, cero informes.
-- Deshabilitar la colección de ratón del pad: el driver sigue moviendo el puntero.
-- Recolocar el cursor a posteriori: Windows aplica el movimiento después de
-  nuestro informe y el cursor se escapa. El gancho `WH_MOUSE_LL` gana la carrera.
-- Bloquear el puntero con el gancho sin la condición de dedo apoyado.
+- Turning the touchpad off in Windows Settings: it kills the HID, zero reports.
+- Disabling the pad's mouse collection: the driver keeps moving the pointer.
+- Repositioning the cursor afterwards: Windows applies the movement after
+  our report and the cursor escapes. The `WH_MOUSE_LL` hook wins the race.
+- Locking the pointer with the hook without the finger-down condition.
 
-## Trampas ya pagadas
+## Traps already paid for
 
-- La clase de ventana se registra UNA vez por proceso; si no, access violation al
-  rearrancar la captura.
-- `bRawData` está declarado como `c_ubyte * 1`: se lee con
-  `ctypes.string_at(addressof + offset, n)`, no indexando.
-- Sin `argtypes` en `DefWindowProcW`, ctypes pasa los `LRESULT` como `c_int` y
-  revienta con `OverflowError`.
-- Con el handle que llega en `WM_INPUT`, pedir primero el tamaño del nombre del
-  dispositivo devuelve 0: hay que pasar un buffer fijo.
+- The window class is registered ONCE per process; otherwise, access violation when
+  restarting the capture.
+- `bRawData` is declared as `c_ubyte * 1`: it is read with
+  `ctypes.string_at(addressof + offset, n)`, not by indexing.
+- Without `argtypes` in `DefWindowProcW`, ctypes passes the `LRESULT`s as `c_int` and
+  blows up with `OverflowError`.
+- With the handle that arrives in `WM_INPUT`, asking first for the size of the device
+  name returns 0: a fixed buffer has to be passed.

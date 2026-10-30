@@ -1,21 +1,22 @@
 /**
- * «Escuchar» la mezcla con números: nivel por tramos de compases de lo que sale del
- * motor de openDAW, pista a pista, frente a dónde hay notas.
+ * "Listening" to the mix with numbers: level per bar span of what comes out of the
+ * openDAW engine, track by track, compared with where there are notes.
  *
- * Por qué existe (ESTADO 28-oct, pendiente 7): el agente diagnosticaba «de oído» con
- * su propio render numpy, que no es lo que suena en openDAW. En «Hard» dijo que el
- * piano sonaba mientras Carlos no lo oía, y acabó añadiendo 2 compases de silencio
- * como parche. Aquí se mide el render del motor real y se cruza con las notas: una
- * pista con notas en un tramo y sin señal es un fallo que se ve sin oírlo.
+ * Why it exists (STATUS Oct 28, pending item 7): the agent diagnosed "by ear" with
+ * its own numpy render, which is not what plays in openDAW. On "Hard" it said the
+ * piano was sounding while Carlos could not hear it, and ended up adding 2 bars of
+ * silence as a patch. Here the real engine's render is measured and cross-checked
+ * with the notes: a track with notes in a span and no signal is a bug you can see
+ * without hearing it.
  */
 
 import type { Track } from "./types.ts";
 
-/** Por debajo de este pico (dBFS) un tramo cuenta como silencio. Un pad flojo a −40 dB sí suena; un SF2 que no carga da −∞. */
+/** Below this peak (dBFS) a span counts as silence. A quiet pad at −40 dB still plays; an SF2 that fails to load gives −∞. */
 export const UMBRAL_SILENCIO_DB = -70;
 
 export interface NivelTramo {
-  /** RMS en dBFS (−Infinity si es cero digital). */
+  /** RMS in dBFS (−Infinity if it is digital zero). */
   rmsDb: number;
   picoDb: number;
 }
@@ -23,7 +24,7 @@ export interface NivelTramo {
 export interface PistaEscuchada {
   nombre: string;
   muted: boolean;
-  /** Notas (o clips de audio) que suenan en cada tramo. */
+  /** Notes (or audio clips) that play in each span. */
   notas: number[];
   niveles: NivelTramo[];
 }
@@ -33,15 +34,15 @@ function db(valor: number): number {
 }
 
 /**
- * Cuántas notas suenan en cada tramo [i·tamaño, (i+1)·tamaño) en tiempos. Una nota
- * cuenta en todos los tramos que pisa (un pad de 8 compases cuenta en dos). Un clip
- * de audio cuenta como 1 en cada tramo que cubre.
+ * How many notes play in each span [i·size, (i+1)·size) in beats. A note counts in
+ * every span it crosses (an 8-bar pad counts in two). An audio clip counts as 1 in
+ * each span it covers.
  */
 export function notasPorTramo(pista: Pick<Track, "clips">, tiemposPorTramo: number, tramos: number): number[] {
   const cuenta = new Array<number>(tramos).fill(0);
   const sumar = (inicio: number, fin: number): void => {
     const primero = Math.max(0, Math.floor(inicio / tiemposPorTramo));
-    // `fin` es exclusivo: una nota que acaba justo en el borde no pisa el tramo siguiente.
+    // `fin` is exclusive: a note that ends exactly on the edge does not cross into the next span.
     const ultimo = Math.min(tramos - 1, Math.ceil(fin / tiemposPorTramo) - 1);
     for (let i = primero; i <= ultimo; i += 1) cuenta[i]! += 1;
   };
@@ -51,7 +52,7 @@ export function notasPorTramo(pista: Pick<Track, "clips">, tiemposPorTramo: numb
       continue;
     }
     for (const nota of clip.notes) {
-      // Lo que cae fuera del clip no suena: el clip recorta.
+      // What falls outside the clip does not play: the clip trims it.
       if (nota.start >= clip.length) continue;
       const fin = Math.min(nota.start + nota.duration, clip.length);
       sumar(clip.start + nota.start, clip.start + fin);
@@ -60,7 +61,7 @@ export function notasPorTramo(pista: Pick<Track, "clips">, tiemposPorTramo: numb
   return cuenta;
 }
 
-/** RMS y pico de cada tramo, con los canales mezclados a mono para el RMS. */
+/** RMS and peak of each span, with channels mixed to mono for the RMS. */
 export function nivelesPorTramo(
   canales: readonly Float32Array[],
   sampleRate: number,
@@ -95,14 +96,14 @@ export function nivelesPorTramo(
 
 function celda(nivel: NivelTramo, notas: number): string {
   const mudo = nivel.picoDb < UMBRAL_SILENCIO_DB;
-  if (mudo) return notas > 0 ? "MUDO" : "·";
+  if (mudo) return notas > 0 ? "SILENT" : "·";
   return String(Math.round(nivel.rmsDb));
 }
 
 /**
- * El informe para el agente: una tabla (filas = mezcla y pistas, columnas = tramos)
- * con el RMS en dBFS, y debajo los problemas en palabras. «MUDO» = hay notas y no
- * sale nada; «·» = ni notas ni sonido.
+ * The report for the agent: a table (rows = mix and tracks, columns = spans) with
+ * the RMS in dBFS, and the problems in words below. "SILENT" = there are notes and
+ * nothing comes out; "·" = neither notes nor sound.
  */
 export function informeEscucha(datos: {
   compasesPorTramo: number;
@@ -113,16 +114,16 @@ export function informeEscucha(datos: {
   const tramos = datos.mezcla.length;
   const rotulos = Array.from({ length: tramos }, (_, i) => `${i * datos.compasesPorTramo + 1}-${(i + 1) * datos.compasesPorTramo}`);
   const ancho = Math.max(5, ...rotulos.map((r) => r.length));
-  const nombres = ["compases", "MEZCLA", ...datos.pistas.map((p) => p.nombre + (p.muted ? " (muted)" : ""))];
+  const nombres = ["bars", "MIX", ...datos.pistas.map((p) => p.nombre + (p.muted ? " (muted)" : ""))];
   const anchoNombre = Math.min(24, Math.max(...nombres.map((n) => n.length)));
   const fila = (nombre: string, celdas: string[]): string =>
     `${nombre.slice(0, anchoNombre).padEnd(anchoNombre)} ${celdas.map((c) => c.padStart(ancho)).join(" ")}`;
 
   const lineas = [
-    `Escucha con el motor de openDAW (el mismo que el Play). RMS en dBFS por tramos de ${datos.compasesPorTramo} compases; ` +
-      `MUDO = hay notas y no sale sonido; · = ni notas ni sonido.`,
-    fila("compases", rotulos),
-    fila("MEZCLA", datos.mezcla.map((n) => celda(n, 1))),
+    `Listening through the openDAW engine (the same one as Play). RMS in dBFS per span of ${datos.compasesPorTramo} bars; ` +
+      `SILENT = there are notes and no sound comes out; · = neither notes nor sound.`,
+    fila("bars", rotulos),
+    fila("MIX", datos.mezcla.map((n) => celda(n, 1))),
     ...datos.pistas.map((p) => fila(nombres[datos.pistas.indexOf(p) + 2]!, p.niveles.map((n, i) => celda(n, p.notas[i] ?? 0)))),
   ];
 
@@ -131,15 +132,15 @@ export function informeEscucha(datos: {
     const mudos = pista.niveles.flatMap((n, i) => ((pista.notas[i] ?? 0) > 0 && n.picoDb < UMBRAL_SILENCIO_DB ? [rotulos[i]!] : []));
     const conNotas = pista.notas.filter((n) => n > 0).length;
     if (mudos.length > 0 && mudos.length === conNotas) {
-      problemas.push(`«${pista.nombre}» no suena en NINGÚN tramo con notas: el instrumento no carga o no produce señal (no es cuestión de volumen).`);
+      problemas.push(`"${pista.nombre}" does not play in ANY span with notes: the instrument does not load or produces no signal (it is not a volume issue).`);
     } else if (mudos.length > 0) {
-      problemas.push(`«${pista.nombre}» tiene notas y no suena en los compases ${mudos.join(", ")}.`);
+      problemas.push(`"${pista.nombre}" has notes and does not play in bars ${mudos.join(", ")}.`);
     }
   }
   const picoMezcla = Math.max(...datos.mezcla.map((n) => n.picoDb));
-  if (picoMezcla > 0) problemas.push(`La mezcla pasa de 0 dBFS (pico ${picoMezcla.toFixed(1)} dB): recorta. Baja el master o las pistas más fuertes.`);
-  for (const archivo of datos.sinCargar ?? []) problemas.push(`No se pudo cargar ${archivo}: esa pista no tiene su instrumento en el render.`);
+  if (picoMezcla > 0) problemas.push(`The mix goes above 0 dBFS (peak ${picoMezcla.toFixed(1)} dB): it clips. Lower the master or the loudest tracks.`);
+  for (const archivo of datos.sinCargar ?? []) problemas.push(`Could not load ${archivo}: that track does not have its instrument in the render.`);
 
-  lineas.push(problemas.length > 0 ? `PROBLEMAS:\n- ${problemas.join("\n- ")}` : "Sin problemas: cada pista suena donde tiene notas.");
+  lineas.push(problemas.length > 0 ? `PROBLEMS:\n- ${problemas.join("\n- ")}` : "No problems: every track plays where it has notes.");
   return lineas.join("\n");
 }

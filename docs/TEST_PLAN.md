@@ -1,41 +1,41 @@
-# Plan de pruebas de miuzika
+# miuzika test plan
 
-Versión objetivo: **0.11.0**. Alcance: GUI/openDAW + Strudel → WAV.
+Target version: **0.11.0**. Scope: GUI/openDAW + Strudel → WAV.
 
-Se ejecuta en `http://localhost:5173`. Evidencia por caso: resultado, mensajes de
-la UI, errores de consola y estado de `window.__miuzika`.
+Runs at `http://localhost:5173`. Evidence per case: result, UI messages,
+console errors and the state of `window.__miuzika`.
 
-## P0 — humo
+## P0 — smoke
 
-- [ ] **A1. Arranque limpio**: `npm run dev`; la UI carga sin errores no
-  controlados; `crossOriginIsolated === true`.
-- [ ] **A2. Origen único**: `127.0.0.1:5173` no sirve la app.
-- [ ] **A3. Persistencia**: crear proyecto, recargar; proyecto e historial vuelven.
-- [ ] **A4. Nuevo proyecto**: **Nueva** limpia la timeline.
+- [ ] **A1. Clean start**: `npm run dev`; the UI loads with no uncaught
+  errors; `crossOriginIsolated === true`.
+- [ ] **A2. Single origin**: `127.0.0.1:5173` does not serve the app.
+- [ ] **A3. Persistence**: create a project, reload; project and history come back.
+- [ ] **A4. New project**: **New** clears the timeline.
 
 ## GUI / openDAW
 
-- [ ] **D1. Playback MIDI**: la posición avanza y hay señal.
-- [ ] **D2. Playfield**: batería con peak/RMS distinto de cero.
-- [ ] **D3. Mute/solo en caliente**: no se reinicia el playhead.
+- [ ] **D1. MIDI playback**: the position advances and there is signal.
+- [ ] **D2. Playfield**: drums with a non-zero peak/RMS.
+- [ ] **D3. Mute/solo on the fly**: the playhead is not restarted.
 - [ ] **D4. Stop/seek**.
-- [ ] **D5. WAV**: importar audio, colocarlo y reproducirlo.
+- [ ] **D5. WAV**: import audio, place it and play it back.
 - [ ] **C1. Timeline**: zoom, seek.
-- [ ] **C2. Piano roll**: añadir/mover/borrar notas.
-- [ ] **C3. Selección y borrado**.
+- [ ] **C2. Piano roll**: add/move/delete notes.
+- [ ] **C3. Selection and deletion**.
 
 ## Strudel → WAV
 
-- [ ] **F1. Synth**: `note("c3 e3 g3").s("sawtooth")`; WAV y pista de audio.
-- [ ] **F2. Samples**: `s("bd sd hh")`; WAV con señal.
-- [ ] **F3. Bloques `$:`**: patrón con varios bloques; renderiza sin errores.
-- [ ] **F4. Re-render**: reemplaza la pista; no duplica.
-- [ ] **F5. Reproducción**: el WAV suena vía openDAW.
-- [ ] **F6. Sin red**: error/warnings claros; no se cuelga.
+- [ ] **F1. Synth**: `note("c3 e3 g3").s("sawtooth")`; WAV and audio track.
+- [ ] **F2. Samples**: `s("bd sd hh")`; WAV with signal.
+- [ ] **F3. `$:` blocks**: pattern with several blocks; renders without errors.
+- [ ] **F4. Re-render**: replaces the track; does not duplicate it.
+- [ ] **F5. Playback**: the WAV plays through openDAW.
+- [ ] **F6. No network**: clear error/warnings; does not hang.
 
-## Persistencia
+## Persistence
 
-- [ ] **J1. Recarga** con proyecto y audio.
-- [ ] **J2. Asset ausente**: aviso, sin crash.
-- [ ] **J3. Abrir JSON** existente.
-- [ ] **J4. Abrir bundle `.miuzika.zip`** existente.
+- [ ] **J1. Reload** with a project and audio.
+- [ ] **J2. Missing asset**: warning, no crash.
+- [ ] **J3. Open** an existing **JSON**.
+- [ ] **J4. Open** an existing **`.miuzika.zip` bundle**.

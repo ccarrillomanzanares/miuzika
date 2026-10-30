@@ -1,8 +1,8 @@
-# Motores disponibles: workspace/codigo/ (numpy) y workspace/gpu/ (torch)
+# Available engines: workspace/codigo/ (numpy) and workspace/gpu/ (torch)
 
-Reutiliza estos simbolos; NO los redefinas.
+Reuse these symbols; do NOT redefine them.
 
-- **codigo/dsp.py**  (importa de: -)
+- **codigo/dsp.py**  (imports from: -)
     - `db2lin(db)`
     - `lin2db(x)`
     - `note_hz(m)`
@@ -16,14 +16,14 @@ Reutiliza estos simbolos; NO los redefinas.
     - `bp(x, f, Q=1.0)`
     - `stft(x, n=1024, hop=256)`
     - `istft(X, w, pad, length, n=1024, hop=256)`
-    - `tv_filter(x, env_func, n=1024, hop=256, chunk=1024)`  -- Filtro variante en el tiempo: env_func(times, freqs) -> (nframes, nbins).
-    - `pan(x, p)`  -- Mono -> estéreo con ley de potencia constante. Si ya es estéreo (N, 2),
+    - `tv_filter(x, env_func, n=1024, hop=256, chunk=1024)`  -- Time-varying filter: env_func(times, freqs) -> (nframes, nbins).
+    - `pan(x, p)`  -- Mono -> stereo with a constant-power law. If it is already stereo (N, 2),
     - `soft_clip(x, drive=2.0)`
     - `moving_avg(x, ms=50.0)`
     - `moving_rms(x, ms=50.0)`
     - `compress(x, thresh_db=-18.0, ratio=2.0, win_ms=40.0, makeup_db=0.0)`
     - `reverb_ir(dur=2.5, decay=0.55, seed=1, lp_hz=6000.0)`
-    - `reverb(x, ir)`  -- Convolución con la respuesta `ir`. Acepta mono o estéreo (N, 2): cada canal
+    - `reverb(x, ir)`  -- Convolution with the `ir` response. Accepts mono or stereo (N, 2): each channel
     - `delay(x, time_s, fb=0.35, mix=0.3, taps=5, lp_hz=4000.0)`
     - `vinyl_noise(n, seed=0, hiss=0.02, crackle=0.6)`
     - `tape_hiss(n, seed=0, level=0.01)`
@@ -32,87 +32,87 @@ Reutiliza estos simbolos; NO los redefinas.
     - `rms_db(x)`
     - `crest_db(x)`
     - `normalize_peak(x, target_db=-1.0)`
-- **codigo/instruments.py**  (importa de: dsp, instruments)
-    - `kick(vel=1.0, seed=0)`  -- Bombo sintético: seno con caída de tono rápida y golpe de aire.
-    - `snare(vel=1.0, seed=0)`  -- Caja: cuerpo tonal corto y ruido filtrado con cola.
-    - `hat(vel=1.0, seed=0, open_=False)`  -- Charles de ruido metálico filtrado, cerrado o abierto.
-    - `metal_hit(vel=1.0, seed=0, pitch=1.0, dur=0.9)`  -- Chapa metálica con parciales inarmónicos: el golpe industrial.
-    - `shaker(vel=1.0, seed=0)`  -- Cascabel: ruido corto con envolvente suave.
-    - `bass_note(midi=40, dur=0.5, vel=1.0, seed=0, squelch=0.0, bright=1.0)`  -- Bajo sintético con filtro: del seno limpio al squelch ácido.
-    - `drone_note(midi=40, dur=4.0, vel=1.0, seed=0, cutoff=320.0)`  -- Zumbido sostenido de dientes de sierra filtrados.
-    - `organ_chord(midis=(40, 47, 52), dur=2.0, vel=1.0, seed=0)`  -- Acorde de órgano con registro de dientes y vibrato.
-    - `guitar_loop(beats, bpm, pattern, vel=1.0, seed=0, drive=7.0)`  -- Riff de guitarra completo: no es un one-shot, pide patrón y tempo.
-    - `piano_note(midi=60, dur=1.0, vel=1.0, seed=0, detune=0.0)`  -- Piano sintético con parciales y desafinado ajustable.
-    - `reverse_swell(src, dur=None)`  -- Inversión de un sonido dado: pide material de origen.
-    - `squelch(vel=1.0, seed=0, dur=0.35, f_lo=180.0, f_hi=1800.0)`  -- Barrido de resonancia con subida de tono: el blip del techno.
-    - `feedback_growl(vel=1.0, seed=0, dur=1.6, f0=196.0)`  -- Rugido de realimentación con formantes: cola industrial.
-    - `voice(syllables, seed=0, f0_base=98.0, breath=0.1, drive=1.0, whisper=False, jitter=0.35, tail=0.35, tilt=1.0)`  -- Voz sintética por sílabas: pide una lista de sílabas.
-    - `cowbell(vel=1.0, pitch=1.0, dur=0.45, seed=0)`  -- Cencerro metálico de dos tonos, tipo industrial.
-    - `palmada(vel=1.0, pitch=1.0, dur=0.3, seed=0)`  -- Palmada de manos: tres golpes de ruido muy juntos y cola corta.
-- **codigo/midi.py**  (importa de: -)
-    - `write_midi(path, tracks, bpm=90.0, ppq=480, name='miuzika')`  -- tracks: lista de dicts {name, channel, program, notes=[(start_beats, dur_beats, pitch, vel)]}
-- **codigo/render.py**  (importa de: dsp)
+- **codigo/instruments.py**  (imports from: dsp, instruments)
+    - `kick(vel=1.0, seed=0)`  -- Synthetic kick drum: sine with a fast pitch drop and a burst of air.
+    - `snare(vel=1.0, seed=0)`  -- Snare: short tonal body and filtered noise with a tail.
+    - `hat(vel=1.0, seed=0, open_=False)`  -- Hi-hat of filtered metallic noise, closed or open.
+    - `metal_hit(vel=1.0, seed=0, pitch=1.0, dur=0.9)`  -- Metal sheet with inharmonic partials: the industrial hit.
+    - `shaker(vel=1.0, seed=0)`  -- Shaker: short noise with a soft envelope.
+    - `bass_note(midi=40, dur=0.5, vel=1.0, seed=0, squelch=0.0, bright=1.0)`  -- Synthetic bass with a filter: from clean sine to acid squelch.
+    - `drone_note(midi=40, dur=4.0, vel=1.0, seed=0, cutoff=320.0)`  -- Sustained buzz of filtered sawtooths.
+    - `organ_chord(midis=(40, 47, 52), dur=2.0, vel=1.0, seed=0)`  -- Organ chord with drawbar registration and vibrato.
+    - `guitar_loop(beats, bpm, pattern, vel=1.0, seed=0, drive=7.0)`  -- Full guitar riff: it is not a one-shot, it needs a pattern and a tempo.
+    - `piano_note(midi=60, dur=1.0, vel=1.0, seed=0, detune=0.0)`  -- Synthetic piano with partials and adjustable detuning.
+    - `reverse_swell(src, dur=None)`  -- Reversal of a given sound: needs source material.
+    - `squelch(vel=1.0, seed=0, dur=0.35, f_lo=180.0, f_hi=1800.0)`  -- Resonance sweep with a rising pitch: the techno blip.
+    - `feedback_growl(vel=1.0, seed=0, dur=1.6, f0=196.0)`  -- Feedback growl with formants: industrial tail.
+    - `voice(syllables, seed=0, f0_base=98.0, breath=0.1, drive=1.0, whisper=False, jitter=0.35, tail=0.35, tilt=1.0)`  -- Synthetic voice by syllables: needs a list of syllables.
+    - `cowbell(vel=1.0, pitch=1.0, dur=0.45, seed=0)`  -- Two-tone metallic cowbell, industrial style.
+    - `palmada(vel=1.0, pitch=1.0, dur=0.3, seed=0)`  -- Handclap: three bursts of noise very close together and a short tail.
+- **codigo/midi.py**  (imports from: -)
+    - `write_midi(path, tracks, bpm=90.0, ppq=480, name='miuzika')`  -- tracks: list of dicts {name, channel, program, notes=[(start_beats, dur_beats, pitch, vel)]}
+- **codigo/render.py**  (imports from: dsp)
     - `log(msg)`
     - `pcm_bytes(x, width=3)`
     - `riff_header(sr, ch, width, data_size)`
-    - clase `StemWriter`: write_at(self, start, x), close(self)
-    - `write_wav(path, x, width=3, pico_db=-1.0)`  -- Escribe un WAV estéreo. Si la señal pasa de 0 dBFS, la baja a `pico_db`
-    - `a_nivel(x, pico_db=-6.0)`  -- La señal con su pico en `pico_db` (por defecto -6 dBFS: margen para sumar).
-    - `stem(ruta, fn, *claves, pico_db=None)`  -- Renderiza un stem SOLO si ha cambiado: si `ruta` existe y la huella del
+    - class `StemWriter`: write_at(self, start, x), close(self)
+    - `write_wav(path, x, width=3, pico_db=-1.0)`  -- Writes a stereo WAV. If the signal goes above 0 dBFS, it brings it down to `pico_db`
+    - `a_nivel(x, pico_db=-6.0)`  -- The signal with its peak at `pico_db` (default -6 dBFS: headroom for summing).
+    - `stem(ruta, fn, *claves, pico_db=None)`  -- Renders a stem ONLY if it has changed: if `ruta` exists and the fingerprint of
     - `env_fn(pts)`
-    - `place(dst, sig, t, gain=1.0, panp=0.0)`  -- Suma `sig` (mono o estéreo) en `dst` a partir de `t` segundos. `dst` puede
+    - `place(dst, sig, t, gain=1.0, panp=0.0)`  -- Adds `sig` (mono or stereo) into `dst` starting at `t` seconds. `dst` can be
     - `reverb_st(x, ir_l, ir_r, mix=0.2)`
     - `actividad(sil, n)`
     - `midi_add(track, start_beat, dur_beat, pitch, vel)`
-- **codigo/voces.py**  (importa de: -)
-    - `voces(excluidas=None)`  -- Lista de voces del motor, con sus parámetros tal como están en el código.
-    - `voces_gpu(ruta=None)`  -- Voces del motor de GPU, leídas del código con `ast` (sin torch).
-    - `perfil(x)`  -- Perfil acústico medible de un render: lo que no admite opinión.
-    - `medir_voz(nombre, args=None, timeout_s=10.0)`  -- Renderiza una voz con sus valores por defecto y devuelve su perfil.
-    - `catalogo(con_perfil=False)`  -- Catálogo completo: voces (las excluidas, marcadas) y su perfil si se pide.
-- **gpu/motor_gpu.py**  (importa de: -)
+- **codigo/voces.py**  (imports from: -)
+    - `voces(excluidas=None)`  -- List of engine voices, with their parameters as they are in the code.
+    - `voces_gpu(ruta=None)`  -- GPU engine voices, read from the code with `ast` (no torch).
+    - `perfil(x)`  -- Measurable acoustic profile of a render: what admits no opinion.
+    - `medir_voz(nombre, args=None, timeout_s=10.0)`  -- Renders a voice with its default values and returns its profile.
+    - `catalogo(con_perfil=False)`  -- Full catalogue: voices (the excluded ones, marked) and their profile if requested.
+- **gpu/motor_gpu.py**  (imports from: -)
     - `t_(x, dispositivo=None)`
     - `segundos(n)`
     - `db(x)`
-    - `fir_sinc(corte_hz, taps=127, dispositivo=None, ventana='hann')`  -- FIR paso bajo (sinc con ventana de Hann), corte en Hz.
-    - `filtrar(x, h)`  -- Convolucion 1-D de (..., L) con un FIR, mismo tamano.
-    - `eq_fft(x, forma)`  -- Filtro estatico en el dominio de la frecuencia: exacto y sin diseno de FIR.
+    - `fir_sinc(corte_hz, taps=127, dispositivo=None, ventana='hann')`  -- Low-pass FIR (sinc with Hann window), cutoff in Hz.
+    - `filtrar(x, h)`  -- 1-D convolution of (..., L) with a FIR, same size.
+    - `eq_fft(x, forma)`  -- Static filter in the frequency domain: exact and with no FIR design.
     - `paso_alto(x, corte_hz, orden=4)`
     - `paso_bajo(x, corte_hz, orden=4)`
-    - `pasa_banda(x, f_lo, f_hi, taps=127)`  -- Paso banda por diferencia de dos pasos bajo (suficiente y barato).
+    - `pasa_banda(x, f_lo, f_hi, taps=127)`  -- Band-pass as the difference of two low-passes (good enough and cheap).
     - `normalizar_pico(x, objetivo_db=-1.0)`
-    - `osc(f0, n, tipo='sierra', fase_ini=0.0, vibrato=0.0)`  -- Oscilador batcheado: f0 de forma (V,) -> (V, n).
-    - `percusion(f0, n, modos, taus, ruido=0.0, ruido_tau=0.02, ruido_corte=6000.0, ataque=0.001)`  -- Sintesis modal: (V, n) sumando sinusoides con decaimiento + ruido opcional.
+    - `osc(f0, n, tipo='sierra', fase_ini=0.0, vibrato=0.0)`  -- Batched oscillator: f0 of shape (V,) -> (V, n).
+    - `percusion(f0, n, modos, taus, ruido=0.0, ruido_tau=0.02, ruido_corte=6000.0, ataque=0.001)`  -- Modal synthesis: (V, n) summing decaying sinusoids + optional noise.
     - `bombo(n=None, vel=1.0)`
     - `caja(n=None, vel=1.0)`
     - `charles(n=None, vel=1.0, abierto=False)`
-    - `metal(n=None, vel=1.0, pitch=1.0)`  -- Golpe metalico inarmonico: los 'clangs' del industrial.
+    - `metal(n=None, vel=1.0, pitch=1.0)`  -- Inharmonic metallic hit: the 'clangs' of industrial.
     - `shaker(n=None, vel=1.0)`
-    - `stft(x, n=1024, hop=256)`  -- STFT batcheada: (V, L) -> (V, F, T).
+    - `stft(x, n=1024, hop=256)`  -- Batched STFT: (V, L) -> (V, F, T).
     - `istft(X, largo, n=1024, hop=256)`
-    - `tv_filter(x, forma, n=2048, hop=256)`  -- Filtro variable en el tiempo, batcheado.
-    - `saturar(x, drive=6.0, veces=4, asimetrico=True)`  -- tanh con drive alto calculada a 'veces' x y filtrada al bajar. Sin aliasing.
-    - `ir_estereo(dur=3.5, decay=0.6, corte_ini=9000.0, corte_fin=1800.0, predelay=0.02, seed=1)`  -- IR por bandas con damping progresivo y decorrelacion estereo.
-    - `convolucion(x, ir)`  -- Convolucion FFT con IR estereo: x (2, L) -> (2, L).
-    - `reverb(x, ir, mix=0.25)`  -- x (2, L); devuelve seco+humedo recortado al largo original.
-    - `shimmer(x, ir, mix=0.18, feedback=0.35, vueltas=3)`  -- +12 semitonos realimentado en la reverb: el 'casi psicodelico'.
-    - `congelar(x, inicio, dur, ventana=0.25)`  -- Congelado espectral: toma un tramo, fija la magnitud y hace derivar la fase.
-    - `granular(x, tam=0.06, densidad=60.0, dur=None, jitter=0.4)`  -- Nube granular batcheada: miles de granos de una vez (index_add).
-    - `compresor(x, umbral_db=-18.0, ratio=2.5, ataque_ms=12.0, salida_ms=90.0)`  -- Compresor con envolvente paralela y suavizado exponencial aproximado.
-    - `compresor_multibanda(x, cortes=(180.0, 1800.0), umbrales=(-20.0, -18.0, -16.0), ratio=2.2)`  -- 3 bandas complementarias por FFT; cada una con su compresor.
-    - `limitador(x, techo_db=-1.0, lookahead_ms=3.0)`  -- Limitador con lookahead: max-pool centrado + suavizado de la ganancia.
-    - `master(x, crest_objetivo=13.0, comprimir=True, tilt_db=0.0, bajo_db=0.0)`  -- Cadena final: HP, tilt, compresion multibanda suave y limitador.
-    - `escribir_wav(ruta, x, pico_db=-1.0, sr=SR)`  -- WAV 24 bits entrelazado. Vectorizado: 208 s de audio se escriben en ~0,2 s
-    - `sumar(bus, senales, inicios)`  -- Deposita (V, L) en un bus 1-D en las posiciones dadas. Una sola operacion.
-    - `panear(mono, p, ganancia=1.0)`  -- (L,) mono -> (2, L) con paneo constante potencia.
-    - `mezclar(pistas, largo)`  -- pistas: lista de (2, L) o (L,). Devuelve (2, largo).
-    - `prueba()`  -- Autotest rapido de cada primitiva (se lanza antes del render).
-- **gpu/voces_gpu.py**  (importa de: -)
-    - `kit_bombo(vel=1.0, pitch=1.0, dur=0.9, seed=0)`  -- Bombo de batería: cuerpo con caída de tono, click y saturación.
-    - `kit_caja(vel=1.0, pitch=1.0, dur=0.55, seed=0)`  -- Caja de batería: dos cuerpos tonales, bordona y cola corta.
-    - `kit_tom(vel=1.0, pitch=1.0, dur=1.3, seed=0)`  -- Tom de batería: parche grande con caída de tono lenta y algo de aire.
-    - `kit_charles(vel=1.0, pitch=1.0, dur=0.35, seed=0)`  -- Charles cerrado: ruido muy agudo y corto con un toque metálico.
-    - `kit_crash(vel=1.0, pitch=1.0, dur=2.5, seed=0)`  -- Plato crash: parciales inarmónicos y cola larga con aire.
-    - `kit_china(vel=1.0, pitch=1.0, dur=2.0, seed=0)`  -- Plato china: más sucio y agresivo que el crash, con cola gated.
-    - `kit_ride(vel=1.0, pitch=1.0, dur=2.0, seed=0)`  -- Plato ride: campana definida (ping) y cola metálica limpia.
-    - `campana_fm(note=69, dur=4.0, ratio=3.5, index=2.0, seed=0)`  -- Campana FM grande con cola larga y parciales inarmónicos.
+    - `tv_filter(x, forma, n=2048, hop=256)`  -- Time-varying filter, batched.
+    - `saturar(x, drive=6.0, veces=4, asimetrico=True)`  -- tanh with high drive computed at 'veces' x and filtered on the way down. No aliasing.
+    - `ir_estereo(dur=3.5, decay=0.6, corte_ini=9000.0, corte_fin=1800.0, predelay=0.02, seed=1)`  -- Band IR with progressive damping and stereo decorrelation.
+    - `convolucion(x, ir)`  -- FFT convolution with a stereo IR: x (2, L) -> (2, L).
+    - `reverb(x, ir, mix=0.25)`  -- x (2, L); returns dry+wet trimmed to the original length.
+    - `shimmer(x, ir, mix=0.18, feedback=0.35, vueltas=3)`  -- +12 semitones fed back into the reverb: the 'almost psychedelic'.
+    - `congelar(x, inicio, dur, ventana=0.25)`  -- Spectral freeze: takes a stretch, fixes the magnitude and lets the phase drift.
+    - `granular(x, tam=0.06, densidad=60.0, dur=None, jitter=0.4)`  -- Batched granular cloud: thousands of grains at once (index_add).
+    - `compresor(x, umbral_db=-18.0, ratio=2.5, ataque_ms=12.0, salida_ms=90.0)`  -- Compressor with a parallel envelope and approximate exponential smoothing.
+    - `compresor_multibanda(x, cortes=(180.0, 1800.0), umbrales=(-20.0, -18.0, -16.0), ratio=2.2)`  -- 3 complementary bands via FFT; each one with its own compressor.
+    - `limitador(x, techo_db=-1.0, lookahead_ms=3.0)`  -- Limiter with lookahead: centred max-pool + gain smoothing.
+    - `master(x, crest_objetivo=13.0, comprimir=True, tilt_db=0.0, bajo_db=0.0)`  -- Final chain: HP, tilt, gentle multiband compression and limiter.
+    - `escribir_wav(ruta, x, pico_db=-1.0, sr=SR)`  -- 24-bit interleaved WAV. Vectorized: 208 s of audio are written in ~0.2 s
+    - `sumar(bus, senales, inicios)`  -- Deposits (V, L) into a 1-D bus at the given positions. A single operation.
+    - `panear(mono, p, ganancia=1.0)`  -- (L,) mono -> (2, L) with constant-power panning.
+    - `mezclar(pistas, largo)`  -- pistas: list of (2, L) or (L,). Returns (2, largo).
+    - `prueba()`  -- Quick self-test of each primitive (run before the render).
+- **gpu/voces_gpu.py**  (imports from: -)
+    - `kit_bombo(vel=1.0, pitch=1.0, dur=0.9, seed=0)`  -- Bass drum: body with pitch drop, click and saturation.
+    - `kit_caja(vel=1.0, pitch=1.0, dur=0.55, seed=0)`  -- Snare drum: two tonal bodies, snare wires and short tail.
+    - `kit_tom(vel=1.0, pitch=1.0, dur=1.3, seed=0)`  -- Tom drum: large head with a slow pitch drop and some air.
+    - `kit_charles(vel=1.0, pitch=1.0, dur=0.35, seed=0)`  -- Closed hi-hat: very bright, short noise with a metallic touch.
+    - `kit_crash(vel=1.0, pitch=1.0, dur=2.5, seed=0)`  -- Crash cymbal: inharmonic partials and a long tail with air.
+    - `kit_china(vel=1.0, pitch=1.0, dur=2.0, seed=0)`  -- China cymbal: dirtier and more aggressive than the crash, with a gated tail.
+    - `kit_ride(vel=1.0, pitch=1.0, dur=2.0, seed=0)`  -- Ride cymbal: defined bell (ping) and a clean metallic tail.
+    - `campana_fm(note=69, dur=4.0, ratio=3.5, index=2.0, seed=0)`  -- Large FM bell with a long tail and inharmonic partials.

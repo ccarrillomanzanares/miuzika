@@ -1,14 +1,14 @@
 /**
- * Carpetas del espacio de trabajo.
+ * Workspace folders.
  *
- * Una sola lista para los dos lados: el servidor de desarrollo (`vite.config.ts`)
- * resuelve ahí las rutas que le llegan del agente, y el navegador (`audio-store.ts`)
- * construye con la misma regla la ruta que le pide al servidor. Antes eran dos
- * listas copiadas y ya se habían desincronizado: faltaba `catalogo/`.
+ * A single list for both sides: the dev server (`vite.config.ts`) resolves the
+ * paths coming from the agent there, and the browser (`audio-store.ts`) builds
+ * the path it asks the server for using the same rule. There used to be two copied
+ * lists that had already drifted apart: `catalogo/` was missing.
  *
- * `compartidas`: viven en la raíz de `workspace/` y las usan todos los proyectos.
- * Todo lo demás (salida/, entrada/, sonidos/, instrumentos/, samples/) vive dentro
- * de la carpeta del proyecto abierto.
+ * `compartidas`: they live at the root of `workspace/` and are used by all projects.
+ * Everything else (salida/, entrada/, sonidos/, instrumentos/, samples/) lives
+ * inside the open project's folder.
  */
 
 export const CARPETAS_COMPARTIDAS = [
@@ -24,16 +24,16 @@ export const CARPETAS_COMPARTIDAS = [
 ] as const;
 
 /**
- * Carpetas que NO se listan al agente: son grandes y no son su trabajo.
+ * Folders that are NOT listed to the agent: they are large and not its job.
  *
- * `catalogo/` son 9,6 GB y 4.231 ficheros; listarlo entero metía 573 KB en el
- * contexto del modelo (recortados a cabeza y cola, así que el medio —que es donde
- * están sus ficheros— no lo veía). Se consulta con `buscar_sonido`, no listando.
+ * `catalogo/` is 9.6 GB and 4,231 files; listing it all put 573 KB into the
+ * model's context (trimmed to head and tail, so the middle—where its files
+ * are—was not visible). It is queried with `buscar_sonido`, not by listing.
  */
-// «versiones»: las fotos por turno (src/core/versiones.ts) se ven con la herramienta `versiones`.
+// "versiones": the per-turn snapshots (src/core/versiones.ts) are viewed with the `versiones` tool.
 export const CARPETAS_OCULTAS = ["catalogo", "node_modules", ".git", "__pycache__", "dist-web", "_referencias", "versiones"] as const;
 
-/** ¿La ruta empieza por una carpeta compartida? */
+/** Does the path start with a shared folder? */
 export function esRutaCompartida(ruta: string): boolean {
   const limpia = ruta.replace(/\\/g, "/").replace(/^\/+/, "");
   return CARPETAS_COMPARTIDAS.some(
@@ -41,7 +41,7 @@ export function esRutaCompartida(ruta: string): boolean {
   );
 }
 
-/** Ruta que entiende el servidor: lo compartido tal cual, el resto dentro del proyecto. */
+/** Path the server understands: shared paths as-is, everything else inside the project. */
 export function rutaEnWorkspace(ruta: string, slugProyecto: string): string {
   return esRutaCompartida(ruta) ? ruta : `proyectos/${slugProyecto}/${ruta}`;
 }

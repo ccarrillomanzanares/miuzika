@@ -1,6 +1,6 @@
-# Finales de línea: LF en el repositorio para todo el texto. En este equipo
-# convivían ficheros con CRLF y con LF (tiempo.ts, picos.py…), y cualquier
-# herramienta que no fuera la de Windows los veía «modificados» sin serlo.
+# Line endings: LF in the repository for all text. This machine had a mix
+# of CRLF and LF files (tiempo.ts, picos.py...), and any non-Windows tool
+# saw them as "modified" when they were not.
 * text=auto eol=lf
 
 *.wav binary

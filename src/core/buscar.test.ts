@@ -50,26 +50,26 @@ const CATALOGO: EntradaCatalogo[] = [
   },
 ];
 
-test("la taxonomía cubre la percusión del mapa GM", () => {
+test("the taxonomy covers the percussion of the GM map", () => {
   const gm = ETIQUETAS.filter((e) => e.gm !== undefined).map((e) => e.gm as number);
   for (const nota of [36, 38, 39, 42, 46, 49, 51, 52, 55, 56, 60, 70, 75, 81]) {
-    assert.ok(gm.includes(nota), `falta la nota GM ${nota}`);
+    assert.ok(gm.includes(nota), `missing GM note ${nota}`);
   }
-  // Ninguna nota repetida: un número, un nombre.
+  // No repeated note: one number, one name.
   assert.equal(new Set(gm).size, gm.length);
 });
 
-test("cada etiqueta tiene nombre en inglés, BST válida y al menos un alias", () => {
+test("every tag has an English name, a valid BST, and at least one alias", () => {
   const bstValidas = new Set(ETIQUETAS.map((e) => e.bst));
   for (const etiqueta of ETIQUETAS) {
-    assert.ok(etiqueta.en.length > 1, `sin nombre en inglés: ${etiqueta.id}`);
-    assert.ok(bstValidas.has(etiqueta.bst), `BST rara en ${etiqueta.id}`);
-    assert.ok(etiqueta.alias.length > 0, `sin alias: ${etiqueta.id}`);
+    assert.ok(etiqueta.en.length > 1, `no English name: ${etiqueta.id}`);
+    assert.ok(bstValidas.has(etiqueta.bst), `odd BST in ${etiqueta.id}`);
+    assert.ok(etiqueta.alias.length > 0, `no alias: ${etiqueta.id}`);
   }
-  for (const clave of bstValidas) assert.ok(BST[clave], `BST sin describir: ${clave}`);
+  for (const clave of bstValidas) assert.ok(BST[clave], `undescribed BST: ${clave}`);
 });
 
-test("los regionalismos encuentran la etiqueta correcta", () => {
+test("regionalisms find the right tag", () => {
   assert.equal(etiquetasDeTexto("tarola")[0]?.id, "caja");
   assert.equal(etiquetasDeTexto("redoblante")[0]?.id, "caja");
   assert.equal(etiquetasDeTexto("hi-hat")[0]?.id, "charles");
@@ -77,16 +77,16 @@ test("los regionalismos encuentran la etiqueta correcta", () => {
   assert.equal(etiquetaPorId("bombo")?.gm, 36);
 });
 
-test("de una frase salen las etiquetas que aparecen", () => {
+test("the tags that appear come out of a phrase", () => {
   const ids = etiquetasEnFrase("quiero un china sucio y un bombo corto").map((e) => e.id);
   assert.ok(ids.includes("china"));
   assert.ok(ids.includes("bombo"));
-  // «charles abierto» no debe resolverse también como «charles» y «abierto».
+  // "charles abierto" must not also resolve as "charles" and "abierto".
   const abierto = etiquetasEnFrase("charles abierto").map((e) => e.id);
   assert.ok(abierto.includes("charles-abierto"), abierto.join(","));
 });
 
-test("buscar «bombo» devuelve los bombos, no el piano", () => {
+test('searching "bombo" returns the kicks, not the piano', () => {
   const r = buscarEnCatalogo(CATALOGO, "un bombo");
   assert.ok(r.length >= 2);
   assert.ok(r.every((x) => x.entrada.familia === "percusión"));
@@ -94,23 +94,23 @@ test("buscar «bombo» devuelve los bombos, no el piano", () => {
   assert.ok(r[0].motivos.some((m) => m.includes("bombo")));
 });
 
-test("el carácter filtra: «un bombo corto» prefiere el de 0,6 s", () => {
+test('character filters: "un bombo corto" prefers the 0.6 s one', () => {
   const r = buscarEnCatalogo(CATALOGO, "bombo corto");
   assert.equal(r[0].entrada.clave, "kick", r.map((x) => `${x.entrada.clave}:${x.puntuacion}`).join(" "));
   assert.ok(r[0].motivos.some((m) => m.includes("corto")));
 });
 
-test("«china brillante» no saca el piano aunque sea brillante", () => {
+test('"china brillante" does not bring up the piano even if it is bright', () => {
   const r = buscarEnCatalogo(CATALOGO, "un china brillante");
   assert.equal(r[0].entrada.clave, "kit_china");
   assert.ok(!r.some((x) => x.entrada.clave === "piano_note" && x.puntuacion > 10));
 });
 
-test("buscar algo que no existe devuelve vacío, no basura", () => {
+test("searching for something that does not exist returns empty, not junk", () => {
   assert.deepEqual(buscarEnCatalogo(CATALOGO, "theremin"), []);
 });
 
-test("las opciones acotan por familia y por número", () => {
+test("the options narrow by family and by number", () => {
   const r = buscarEnCatalogo(CATALOGO, "algo", { familia: "percusión", limite: 1 });
   assert.ok(r.length <= 1);
   assert.ok(r.every((x) => x.entrada.familia === "percusión"));

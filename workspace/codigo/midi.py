@@ -1,4 +1,4 @@
-"""midi.py - escritor de Standard MIDI File (tipo 1) sin dependencias."""
+"""midi.py - Standard MIDI File (type 1) writer with no dependencies."""
 import struct
 
 
@@ -29,7 +29,7 @@ def _meta_text(kind, text):
 
 
 def write_midi(path, tracks, bpm=90.0, ppq=480, name='miuzika'):
-    """tracks: lista de dicts {name, channel, program, notes=[(start_beats, dur_beats, pitch, vel)]}"""
+    """tracks: list of dicts {name, channel, program, notes=[(start_beats, dur_beats, pitch, vel)]}"""
     header = b'MThd' + struct.pack('>IHHH', 6, 1, len(tracks) + 1, ppq)
     chunks = []
 

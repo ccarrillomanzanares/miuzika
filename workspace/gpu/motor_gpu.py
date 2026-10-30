@@ -1,18 +1,18 @@
-"""Motor DSP nativo de GPU (torch). Nada se calcula nota a nota.
+"""Native GPU DSP engine (torch). Nothing is computed note by note.
 
-El motor numpy existente recorre las notas en un bucle de Python: 735 notas de
-bajo son 735 llamadas y ~63 s. Aqui cada familia de voces se renderiza entera de
-una vez como un tensor (voces x muestras) y se deposita en el bus con index_add.
-Eso es lo que la GPU hace bien y la CPU no.
+The existing numpy engine walks the notes in a Python loop: 735 bass notes are
+735 calls and ~63 s. Here each family of voices is rendered all at once
+as a tensor (voices x samples) and deposited into the bus with index_add.
+That is what the GPU does well and the CPU does not.
 
-Piezas:
-  - osciladores por tabla con mipmaps (band-limited, sin aliasing por construccion)
-  - percusion por sintesis modal (suma de sinusoides con decaimiento)
-  - filtros: FIR en conv1d para estaticos; STFT batcheado para variables en el tiempo
-  - saturacion a 16x con filtro antialias (lo que en CPU no se paga)
-  - reverb por convolucion FFT con IR estereo de decaimiento por bandas
-  - shimmer (+12 semitonos realimentado), congelado espectral y nube granular
-  - compresor multibanda y limitador con lookahead, ambos vectorizados
+Pieces:
+  - table oscillators with mipmaps (band-limited, no aliasing by construction)
+  - percussion by modal synthesis (sum of decaying sinusoids)
+  - filters: FIR in conv1d for static ones; batched STFT for time-varying ones
+  - 16x saturation with an anti-alias filter (what the CPU cannot afford)
+  - reverb by FFT convolution with a stereo IR with per-band decay
+  - shimmer (+12 semitones fed back), spectral freeze and granular cloud
+  - multiband compressor and lookahead limiter, both vectorized
 """
 
 import math
@@ -25,7 +25,7 @@ SR = 48000
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
 DT = torch.float32
 
-# --------------------------------------------------------------------- utilidades
+# --------------------------------------------------------------------- utilities
 
 
 def t_(x, dispositivo=None):
@@ -45,17 +45,17 @@ def db(x):
 
 
 def fir_sinc(corte_hz, taps=127, dispositivo=None, ventana="hann"):
-    """FIR paso bajo (sinc con ventana de Hann), corte en Hz.
+    """Low-pass FIR (sinc with Hann window), cutoff in Hz.
 
-    La formula correcta lleva el factor 2*fc: h[n] = 2*fc*sinc(2*fc*n)*ventana.
-    Sin el (usando sinc(fc_rel*n)) el filtro degenera en una ventana suave y, con
-    cortes bajos, se come TODO lo que hay por encima de unos cientos de Hz: eso
-    dejo el master a -107 dB en 2-4 kHz. Para cortes muy bajos (quitar subsonico)
-    no sirve ningun FIR corto: ahi va eq_fft.
+    The correct formula carries the 2*fc factor: h[n] = 2*fc*sinc(2*fc*n)*window.
+    Without it (using sinc(fc_rel*n)) the filter degenerates into a soft window and, with
+    low cutoffs, eats EVERYTHING above a few hundred Hz: that left the master at
+    -107 dB at 2-4 kHz. For very low cutoffs (removing subsonic content)
+    no short FIR works: use eq_fft there.
     """
     dispositivo = dispositivo or DISPOSITIVO
     n = torch.arange(taps, dtype=DT, device=dispositivo) - (taps - 1) / 2
-    fc = corte_hz / SR                      # normalizado a la frecuencia de muestreo
+    fc = corte_hz / SR                      # normalized to the sampling rate
     if ventana == "blackman":
         w = torch.blackman_window(taps, periodic=False, device=dispositivo)
     else:
@@ -65,7 +65,7 @@ def fir_sinc(corte_hz, taps=127, dispositivo=None, ventana="hann"):
 
 
 def filtrar(x, h):
-    """Convolucion 1-D de (..., L) con un FIR, mismo tamano."""
+    """1-D convolution of (..., L) with a FIR, same size."""
     forma = x.shape
     plano = x.reshape(-1, 1, forma[-1])
     pad = (h.numel() - 1) // 2
@@ -76,10 +76,10 @@ def filtrar(x, h):
 
 
 def eq_fft(x, forma):
-    """Filtro estatico en el dominio de la frecuencia: exacto y sin diseno de FIR.
+    """Static filter in the frequency domain: exact and with no FIR design.
 
-    forma(frecuencias) -> respuesta en amplitud. Se usa para el paso alto del
-    master y para partir bandas, donde un FIR corto no llega.
+    forma(frequencies) -> amplitude response. It is used for the master's high-pass
+    and for splitting bands, where a short FIR is not enough.
     """
     largo = x.shape[-1]
     n = 1 << (largo - 1).bit_length()
@@ -97,7 +97,7 @@ def paso_bajo(x, corte_hz, orden=4):
 
 
 def _bandas_fft(x, cortes):
-    """Parte en bandas complementarias (suman exactamente la senal original)."""
+    """Splits into complementary bands (they sum exactly to the original signal)."""
     largo = x.shape[-1]
     n = 1 << (largo - 1).bit_length()
     X = torch.fft.rfft(x, n=n, dim=-1)
@@ -113,7 +113,7 @@ def _bandas_fft(x, cortes):
 
 
 def pasa_banda(x, f_lo, f_hi, taps=127):
-    """Paso banda por diferencia de dos pasos bajo (suficiente y barato)."""
+    """Band-pass as the difference of two low-passes (good enough and cheap)."""
     return filtrar(filtrar(x, fir_sinc(f_hi, taps)), fir_sinc(f_lo, taps))
 
 
@@ -127,13 +127,13 @@ _TABLAS = {}
 
 
 def _tabla_mipmap(tipo, octavas=9, largo=4096):
-    """Tabla por octava, limitada a Nyquist: sin aliasing por construccion."""
+    """Table per octave, limited to Nyquist: no aliasing by construction."""
     clave = (tipo, octavas, largo)
     if clave in _TABLAS:
         return _TABLAS[clave]
     tablas = []
     for o in range(octavas):
-        # frecuencia normalizada mas alta de esta octava: 2^(-o) ciclos/muestra * 2
+        # highest normalized frequency of this octave: 2^(-o) cycles/sample * 2
         f_max = 0.5 * (2.0 ** (-o))
         k_max = max(int(1.0 / (2 * f_max)), 1)
         fase = torch.arange(largo, dtype=torch.float64, device=DISPOSITIVO) / largo
@@ -143,7 +143,7 @@ def _tabla_mipmap(tipo, octavas=9, largo=4096):
                 amp = 1.0 / k
             elif tipo == "pulso":
                 amp = (1.0 / k) * (1.0 if k % 2 else 0.0)
-            else:  # seno
+            else:  # sine
                 amp = 1.0 if k == 1 else 0.0
             onda += amp * torch.sin(2 * torch.pi * k * fase)
         onda = onda / torch.clamp(onda.abs().max(), min=1e-9)
@@ -154,7 +154,7 @@ def _tabla_mipmap(tipo, octavas=9, largo=4096):
 
 
 def osc(f0, n, tipo="sierra", fase_ini=0.0, vibrato=0.0):
-    """Oscilador batcheado: f0 de forma (V,) -> (V, n)."""
+    """Batched oscillator: f0 of shape (V,) -> (V, n)."""
     f0 = t_(f0).reshape(-1)
     voces = f0.numel()
     t = segundos(n)
@@ -176,19 +176,19 @@ def osc(f0, n, tipo="sierra", fase_ini=0.0, vibrato=0.0):
     return a * (1 - fr) + b * fr
 
 
-# ----------------------------------------------------------------------- percusion
+# ----------------------------------------------------------------------- percussion
 def _env_exp(n, tau):
     return torch.exp(-segundos(n) / max(tau, 1e-4))
 
 
 def percusion(f0, n, modos, taus, ruido=0.0, ruido_tau=0.02, ruido_corte=6000.0, ataque=0.001):
-    """Sintesis modal: (V, n) sumando sinusoides con decaimiento + ruido opcional."""
+    """Modal synthesis: (V, n) summing decaying sinusoids + optional noise."""
     f0 = t_(f0).reshape(-1)
     voces = f0.numel()
     t = segundos(n)
     salida = torch.zeros(voces, n, device=DISPOSITIVO)
     for m, tau in zip(modos, taus):
-        # pequeño barrido descendente de tono, como un parche de percusion real
+        # small downward pitch sweep, like a real percussion patch
         f = f0[:, None] * m * (1.0 + 0.6 * torch.exp(-t[None, :] / 0.02))
         fase = 2 * torch.pi * torch.cumsum(f, dim=1) / SR
         salida += torch.sin(fase) * torch.exp(-t[None, :] / tau)
@@ -221,7 +221,7 @@ def charles(n=None, vel=1.0, abierto=False):
 
 
 def metal(n=None, vel=1.0, pitch=1.0):
-    """Golpe metalico inarmonico: los 'clangs' del industrial."""
+    """Inharmonic metallic hit: the 'clangs' of industrial."""
     n = n or int(1.1 * SR)
     f = 190.0 * pitch
     x = percusion([f], n, [1.0, 1.37, 2.09, 2.56, 3.31, 4.17], [0.9, 0.7, 0.5, 0.42, 0.3, 0.22],
@@ -235,7 +235,7 @@ def shaker(n=None, vel=1.0):
     return r * _env_exp(n, 0.03) * vel
 
 
-# ------------------------------------------------------------------------- filtros
+# ------------------------------------------------------------------------- filters
 def stft(x, n=1024, hop=256):
     """STFT batcheada: (V, L) -> (V, F, T)."""
     ventana = torch.hann_window(n, device=DISPOSITIVO)
@@ -249,10 +249,10 @@ def istft(X, largo, n=1024, hop=256):
 
 
 def tv_filter(x, forma, n=2048, hop=256):
-    """Filtro variable en el tiempo, batcheado.
+    """Time-varying filter, batched.
 
-    forma(frecuencias, tiempos) debe devolver (F, T) o (F,) si no depende del
-    tiempo; aqui se ajusta a (F, T) antes de multiplicar.
+    forma(freqs, times) must return (F, T) or (F,) if it does not depend on
+    time; here it is adjusted to (F, T) before multiplying.
     """
     X = stft(x, n, hop)
     freqs = torch.fft.rfftfreq(n, 1.0 / SR).to(DISPOSITIVO)
@@ -261,26 +261,26 @@ def tv_filter(x, forma, n=2048, hop=256):
     if E.dim() == 1:
         E = E[:, None]
     if E.shape[0] != freqs.numel() and E.shape[-1] == freqs.numel():
-        E = E.transpose(0, 1)          # acepta tambien (T, F)
+        E = E.transpose(0, 1)          # also accepts (T, F)
     if E.shape[-1] == 1:
         E = E.expand(-1, X.shape[-1])
     return istft(X * E.unsqueeze(0), x.shape[-1], n, hop)
 
 
-# ---------------------------------------------------------------------- saturacion
+# ---------------------------------------------------------------------- saturation
 def saturar(x, drive=6.0, veces=4, asimetrico=True):
-    """tanh con drive alto calculada a 'veces' x y filtrada al bajar. Sin aliasing.
+    """tanh with high drive computed at 'veces' x and filtered on the way down. No aliasing.
 
-    Medido con un seno de 997 Hz a drive 8: 1x deja el aliasing en -44,4 dB,
-    4x en -65,3 dB y 16x en -64,4 dB. O sea que 4x da todo lo que da 16x con la
-    cuarta parte de calculo: el limite no es el factor, es el filtro antialias
-    (Blackman de 255 taps). No subas a 16x sin medir.
+    Measured with a 997 Hz sine at drive 8: 1x leaves aliasing at -44.4 dB,
+    4x at -65.3 dB and 16x at -64.4 dB. So 4x gives everything 16x gives with a
+    quarter of the computation: the limit is not the factor, it is the anti-alias filter
+    (255-tap Blackman). Do not go up to 16x without measuring.
     """
     if veces > 1:
         arriba = torch.zeros(*x.shape[:-1], x.shape[-1] * veces, device=DISPOSITIVO)
         arriba[..., ::veces] = x * veces
-        # Blackman de 255 taps: el Hann de 127 dejaba el stopband en -44 dB y eso
-        # era el limite del aliasing (-61 dB), no el sobremuestreo.
+        # 255-tap Blackman: the 127-tap Hann left the stopband at -44 dB and that
+        # was the aliasing limit (-61 dB), not the oversampling.
         x = filtrar(arriba, fir_sinc(SR / 2 / veces * 0.9, taps=255, ventana="blackman"))
     if asimetrico:
         y = torch.tanh(drive * x) + 0.12 * torch.tanh(2 * drive * x) ** 2
@@ -292,9 +292,9 @@ def saturar(x, drive=6.0, veces=4, asimetrico=True):
     return y
 
 
-# ------------------------------------------------------------------- espacio / fx
+# ------------------------------------------------------------------- space / fx
 def ir_estereo(dur=3.5, decay=0.6, corte_ini=9000.0, corte_fin=1800.0, predelay=0.02, seed=1):
-    """IR por bandas con damping progresivo y decorrelacion estereo."""
+    """Band IR with progressive damping and stereo decorrelation."""
     gen = torch.Generator(device=DISPOSITIVO).manual_seed(seed)
     n = int(dur * SR)
     t = segundos(n)
@@ -314,14 +314,14 @@ def ir_estereo(dur=3.5, decay=0.6, corte_ini=9000.0, corte_fin=1800.0, predelay=
     pre = int(predelay * SR)
     if pre > 0:
         ir = torch.cat([torch.zeros(2, pre, device=DISPOSITIVO), ir[..., :-pre]], dim=-1)
-    # Normalizar por ENERGIA, no por pico: asi la convolucion conserva el nivel
-    # (normalizar por pico daba ganancias de x84 y el shimmer se descontrolaba).
+    # Normalize by ENERGY, not by peak: that way the convolution keeps the level
+    # (normalizing by peak gave gains of x84 and the shimmer went out of control).
     energia = torch.sqrt(torch.clamp((ir ** 2).sum(dim=-1, keepdim=True), min=1e-12))
     return ir / energia
 
 
 def convolucion(x, ir):
-    """Convolucion FFT con IR estereo: x (2, L) -> (2, L)."""
+    """FFT convolution with a stereo IR: x (2, L) -> (2, L)."""
     largo = x.shape[-1] + ir.shape[-1] - 1
     n = 1 << (largo - 1).bit_length()
     X = torch.fft.rfft(x, n=n)
@@ -330,7 +330,7 @@ def convolucion(x, ir):
 
 
 def reverb(x, ir, mix=0.25):
-    """x (2, L); devuelve seco+humedo recortado al largo original."""
+    """x (2, L); returns dry+wet trimmed to the original length."""
     if x.dim() == 1:
         x = torch.stack([x, x])
     h = convolucion(x, ir)[..., : x.shape[-1]]
@@ -338,7 +338,7 @@ def reverb(x, ir, mix=0.25):
 
 
 def shimmer(x, ir, mix=0.18, feedback=0.35, vueltas=3):
-    """+12 semitonos realimentado en la reverb: el 'casi psicodelico'."""
+    """+12 semitones fed back into the reverb: the 'almost psychedelic'."""
     if x.dim() == 1:
         x = torch.stack([x, x])
     acumulado = torch.zeros_like(x)
@@ -355,22 +355,22 @@ def shimmer(x, ir, mix=0.18, feedback=0.35, vueltas=3):
 
 
 def congelar(x, inicio, dur, ventana=0.25):
-    """Congelado espectral: toma un tramo, fija la magnitud y hace derivar la fase."""
+    """Spectral freeze: takes a stretch, fixes the magnitude and lets the phase drift."""
     if x.dim() == 1:
         x = torch.stack([x, x])
     n, hop = 2048, 256
     X = stft(x, n, hop)
     t0 = int(inicio * SR / hop)
     t1 = t0 + max(int(ventana * SR / hop), 1)
-    # OJO: hay que congelar MAGNITUD. Promediar los complejos cancela las fases
-    # entre tramas y el resultado se queda en -60 dB (paso de verdad).
+    # WATCH OUT: MAGNITUDE must be frozen. Averaging the complex values cancels the phases
+    # between frames and the result drops to -60 dB (really happened).
     base = X[:, :, t0:t1].abs().mean(dim=2, keepdim=True)   # (2, F, 1)
     tramos = int(dur * SR / hop)
     salida = torch.zeros(2, tramos * hop, device=DISPOSITIVO)
     fase0 = torch.rand(2, base.shape[1], 1, device=DISPOSITIVO) * 6.28
     for k in range(0, tramos, 64):
         cuantos = min(64, tramos - k)
-        # la fase sigue avanzando entre bloques (si no, se oye el patron periodico)
+        # the phase keeps advancing between blocks (otherwise the periodic pattern is heard)
         avance = torch.arange(k, k + cuantos, device=DISPOSITIVO, dtype=DT)
         deriva = torch.exp(1j * (fase0 + 0.02 * avance))       # (2, F, cuantos)
         trozo = istft(base * deriva, cuantos * hop, n, hop)
@@ -379,7 +379,7 @@ def congelar(x, inicio, dur, ventana=0.25):
 
 
 def granular(x, tam=0.06, densidad=60.0, dur=None, jitter=0.4):
-    """Nube granular batcheada: miles de granos de una vez (index_add)."""
+    """Batched granular cloud: thousands of grains at once (index_add)."""
     if x.dim() == 1:
         x = torch.stack([x, x])
     dur = dur or x.shape[-1] / SR
@@ -398,24 +398,24 @@ def granular(x, tam=0.06, densidad=60.0, dur=None, jitter=0.4):
     return salida
 
 
-# ------------------------------------------------------------------ dinamica y master
+# ------------------------------------------------------------------ dynamics and master
 def _envolvente(x, ms_ventana=30.0):
-    """Envolvente paralela (max-pool + media movil) por canal, sin bucles."""
+    """Parallel envelope (max-pool + moving average) per channel, no loops."""
     n = max(int(SR * ms_ventana / 1000), 8)
     plano = x.abs().reshape(-1, 1, x.shape[-1])
     pico = torch.nn.functional.max_pool1d(plano, n, stride=1, padding=n // 2)
     suave = torch.nn.functional.avg_pool1d(pico, n, stride=1, padding=n // 2)
-    # con padding la longitud sale L+2: se recorta antes de devolver la forma original
+    # with padding the length comes out L+2: it is trimmed before returning the original shape
     suave = suave[..., : x.shape[-1]]
     return suave.reshape(x.shape)
 
 
 def compresor(x, umbral_db=-18.0, ratio=2.5, ataque_ms=12.0, salida_ms=90.0):
-    """Compresor con envolvente paralela y suavizado exponencial aproximado."""
+    """Compressor with a parallel envelope and approximate exponential smoothing."""
     env = torch.clamp(_envolvente(x, ataque_ms), min=1e-6)
     sobre = db(env) - umbral_db
     ganancia_db = torch.where(sobre > 0, -sobre * (1 - 1 / ratio), torch.zeros_like(sobre))
-    # suavizado del lado de salida con media movil larga
+    # output-side smoothing with a long moving average
     n = max(int(SR * salida_ms / 1000), 8)
     g = torch.nn.functional.avg_pool1d(ganancia_db.reshape(1, 1, -1), n, stride=1, padding=n // 2)
     g = g.reshape(-1)[: x.shape[-1]]
@@ -423,7 +423,7 @@ def compresor(x, umbral_db=-18.0, ratio=2.5, ataque_ms=12.0, salida_ms=90.0):
 
 
 def compresor_multibanda(x, cortes=(180.0, 1800.0), umbrales=(-20.0, -18.0, -16.0), ratio=2.2):
-    """3 bandas complementarias por FFT; cada una con su compresor."""
+    """3 complementary bands via FFT; each one with its own compressor."""
     if x.dim() == 1:
         x = x.unsqueeze(0)
     bandas = _bandas_fft(x, cortes)
@@ -434,21 +434,21 @@ def compresor_multibanda(x, cortes=(180.0, 1800.0), umbrales=(-20.0, -18.0, -16.
 
 
 def limitador(x, techo_db=-1.0, lookahead_ms=3.0):
-    """Limitador con lookahead: max-pool centrado + suavizado de la ganancia."""
+    """Limiter with lookahead: centred max-pool + gain smoothing."""
     if x.dim() == 1:
         x = x.unsqueeze(0)
     techo = 10 ** (techo_db / 20)
     ventana = max(int(SR * lookahead_ms / 1000), 8)
     plano = x.abs().reshape(-1, 1, x.shape[-1])
-    # La envolvente se toma CRUDA (max deslizante). Promediarla despues -que era
-    # el error- hunde los transitorios: una senal de 14,5 daba envolvente 9,2 y
-    # el limitador dejaba pasar 1,4 (el master salia a +3,6 dBFS).
+    # The envelope is taken RAW (sliding max). Averaging it afterwards —which was
+    # the mistake— sinks the transients: a signal of 14.5 gave an envelope of 9.2 and
+    # the limiter let 1.4 through (the master came out at +3.6 dBFS).
     env = torch.nn.functional.max_pool1d(plano, ventana, stride=1, padding=ventana // 2)
     env = env[..., : x.shape[-1]].reshape(x.shape)
     ganancia = torch.clamp(techo / torch.clamp(env, min=1e-6), max=1.0)
-    # Suavizar la GANANCIA (no la envolvente) con el minimo deslizante: si hay un
-    # pico cerca, la ganancia baja en toda la ventana. Un promedio corto detras
-    # quita el escalon, y el clamp final se come el sobrante inaudible.
+    # Smooth the GAIN (not the envelope) with the sliding minimum: if there is a
+    # peak nearby, the gain drops across the whole window. A short average behind
+    # removes the step, and the final clamp eats the inaudible excess.
     g = -torch.nn.functional.max_pool1d(
         -ganancia.reshape(-1, 1, ganancia.shape[-1]), ventana, stride=1, padding=ventana // 2
     )[..., : ganancia.shape[-1]]
@@ -459,15 +459,15 @@ def limitador(x, techo_db=-1.0, lookahead_ms=3.0):
 
 
 def master(x, crest_objetivo=13.0, comprimir=True, tilt_db=0.0, bajo_db=0.0):
-    """Cadena final: HP, tilt, compresion multibanda suave y limitador.
+    """Final chain: HP, tilt, gentle multiband compression and limiter.
 
-    Se normaliza por CREST (pico - rms), no por RMS: normalizar a un RMS fijo
-    aplasta la dinamica y deja el tema en 7 dB de crest, que suena a ladrillo.
+    It is normalized by CREST (peak - rms), not by RMS: normalizing to a fixed RMS
+    flattens the dynamics and leaves the track at 7 dB crest, which sounds like a brick.
     """
     if x.dim() == 1:
         x = torch.stack([x, x])
-    x = paso_alto(x, 26.0)                          # quita subsonico (exacto por FFT)
-    # perillas de equilibrio: estante de graves (120 Hz) y de agudos (3 kHz)
+    x = paso_alto(x, 26.0)                          # removes subsonic content (exact via FFT)
+    # balance knobs: bass shelf (120 Hz) and treble shelf (3 kHz)
     if abs(bajo_db) > 0.01:
         g = 10 ** (bajo_db / 20) - 1
         x = eq_fft(x, lambda f: 1 + g / (1 + (f / 120.0) ** 2))
@@ -476,7 +476,7 @@ def master(x, crest_objetivo=13.0, comprimir=True, tilt_db=0.0, bajo_db=0.0):
         x = eq_fft(x, lambda f: 1 + g / (1 + (3000.0 / torch.clamp(f, min=1.0)) ** 2))
     if comprimir:
         x = compresor_multibanda(x, cortes=(180.0, 1800.0), umbrales=(-12.0, -12.0, -12.0), ratio=1.6)
-    # aire controlado
+    # controlled air
     x = x + 0.08 * filtrar(x, fir_sinc(12000.0, 127) - fir_sinc(200.0, 127))
 
     def crest(v):
@@ -487,14 +487,14 @@ def master(x, crest_objetivo=13.0, comprimir=True, tilt_db=0.0, bajo_db=0.0):
     rms = torch.sqrt(torch.mean(x ** 2))
     factor = 10 ** ((-1.0 - crest_objetivo) / 20) / torch.clamp(rms, min=1e-9)
     x = limitador(x * factor, -1.0)
-    print(f"    crest: mezcla {antes:.1f} dB -> master {crest(x):.1f} dB")
+    print(f"    crest: mix {antes:.1f} dB -> master {crest(x):.1f} dB")
     return x
 
 
-# ------------------------------------------------------------------------- escritura
+# ------------------------------------------------------------------------- writing
 def escribir_wav(ruta, x, pico_db=-1.0, sr=SR):
-    """WAV 24 bits entrelazado. Vectorizado: 208 s de audio se escriben en ~0,2 s
-    (con un bucle por muestra eran 129 s de reloj, mas que todo el render)."""
+    """24-bit interleaved WAV. Vectorized: 208 s of audio are written in ~0.2 s
+    (with a per-sample loop it was 129 s of wall time, more than the whole render)."""
     import numpy as np
 
     x = normalizar_pico(x.detach().cpu(), pico_db)
@@ -502,7 +502,7 @@ def escribir_wav(ruta, x, pico_db=-1.0, sr=SR):
         x = x.unsqueeze(0)
     canales, n = x.shape
     entero = (torch.clamp(x, -1, 1) * 8388607).round().to(torch.int32).t().contiguous().numpy()
-    # int32 little-endian -> los 3 primeros bytes de cada muestra son el PCM 24 bits
+    # int32 little-endian -> the first 3 bytes of each sample are the 24-bit PCM
     datos = entero.astype("<i4").view(np.uint8).reshape(-1, 4)[:, :3].tobytes()
     cabecera = (b"RIFF" + struct.pack("<I", 36 + len(datos)) + b"WAVE" +
                 b"fmt " + struct.pack("<IHHIIHH", 16, 1, canales, sr, sr * canales * 3, canales * 3, 24) +
@@ -512,9 +512,9 @@ def escribir_wav(ruta, x, pico_db=-1.0, sr=SR):
         f.write(cabecera + datos)
 
 
-# ------------------------------------------------------------------------ bus / mezcla
+# ------------------------------------------------------------------------ bus / mix
 def sumar(bus, senales, inicios):
-    """Deposita (V, L) en un bus 1-D en las posiciones dadas. Una sola operacion."""
+    """Deposits (V, L) into a 1-D bus at the given positions. A single operation."""
     V, L = senales.shape
     inicios = inicios.to(torch.int64)
     idx = inicios[:, None] + torch.arange(L, device=DISPOSITIVO)[None, :]
@@ -523,14 +523,14 @@ def sumar(bus, senales, inicios):
 
 
 def panear(mono, p, ganancia=1.0):
-    """(L,) mono -> (2, L) con paneo constante potencia."""
+    """(L,) mono -> (2, L) with constant-power panning."""
     l = math.cos((p + 1) * math.pi / 4)
     r = math.sin((p + 1) * math.pi / 4)
     return torch.stack([mono * l * ganancia, mono * r * ganancia])
 
 
 def mezclar(pistas, largo):
-    """pistas: lista de (2, L) o (L,). Devuelve (2, largo)."""
+    """pistas: list of (2, L) or (L,). Returns (2, largo)."""
     salida = torch.zeros(2, largo, device=DISPOSITIVO)
     for p in pistas:
         if p.dim() == 1:
@@ -541,8 +541,8 @@ def mezclar(pistas, largo):
 
 
 def prueba():
-    """Autotest rapido de cada primitiva (se lanza antes del render)."""
-    print(f"dispositivo: {DISPOSITIVO} | {torch.cuda.get_device_name(0) if DISPOSITIVO == 'cuda' else 'cpu'}")
+    """Quick self-test of each primitive (run before the render)."""
+    print(f"device: {DISPOSITIVO} | {torch.cuda.get_device_name(0) if DISPOSITIVO == 'cuda' else 'cpu'}")
     n = SR
     o = osc([110.0, 220.0, 55.0], n, "sierra")
     print(f"  osc          {tuple(o.shape)} pico {o.abs().max():.3f}")
@@ -569,4 +569,4 @@ def prueba():
     print(f"  limitador    pico {limitador(x, -1.0).abs().max():.3f}")
     m = master(x)
     print(f"  master       pico {m.abs().max():.3f} rms {torch.sqrt(torch.mean(m**2)):.3f}")
-    print("  TODO OK")
+    print("  ALL OK")

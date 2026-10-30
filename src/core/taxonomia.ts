@@ -1,20 +1,20 @@
 /**
- * Taxonomía del catálogo: las etiquetas con las que se nombra un sonido.
+ * Catalog taxonomy: the tags with which a sound is named.
  *
- * Tres referencias estándar, cada una para lo suyo:
- *  - **General MIDI (canal 10)**: el mapa de percusión (notas 35-81). Es el nombre
- *    que todo el mundo reconoce para un bombo, una caja o un ride, y da una nota
- *    MIDI canónica para cada golpe.
- *  - **Freesound Broad Sound Taxonomy (BST, 2025)**: dos niveles para ordenar una
- *    colección heterogénea: Music (m), Instrument samples (is) con Percussion
- *    (is-p), Synths (is-e)…, Sound effects (fx) con Electronic/Design (fx-el)…
- *  - **AudioSet (Google)**: 632 clases jerárquicas de eventos sonoros; se usa como
- *    vocabulario de sinónimos de lo que no es un instrumento (impactos, texturas).
+ * Three standard references, each for its own purpose:
+ *  - **General MIDI (channel 10)**: the percussion map (notes 35-81). It is the name
+ *    everyone recognizes for a kick, a snare, or a ride, and it gives a canonical
+ *    MIDI note for each hit.
+ *  - **Freesound Broad Sound Taxonomy (BST, 2025)**: two levels to organize a
+ *    heterogeneous collection: Music (m), Instrument samples (is) with Percussion
+ *    (is-p), Synths (is-e)…, Sound effects (fx) with Electronic/Design (fx-el)…
+ *  - **AudioSet (Google)**: 632 hierarchical classes of sound events; it is used as
+ *    a synonym vocabulary for what is not an instrument (impacts, textures).
  *
- * Cada entrada lleva: identificador, nombre en español, nombre en inglés, nota GM
- * si es percusión, categoría BST, familia nuestra y **alias** (español e inglés,
- * incluidos los regionalismos). Los alias son lo que permite que el agente
- * reconozca «tarola», «redoblante» o «hi-hat» como la misma cosa.
+ * Each entry has: identifier, Spanish name, English name, GM note if it is
+ * percussion, BST category, our family, and **aliases** (Spanish and English,
+ * including regionalisms). The aliases are what let the agent recognize "tarola",
+ * "redoblante", or "hi-hat" as the same thing.
  */
 
 import { normalizarTexto } from "./nombres.ts";
@@ -25,16 +25,16 @@ export interface Etiqueta {
   id: string;
   es: string;
   en: string;
-  /** Nota GM del mapa de percusión (35-81), si la tiene. */
+  /** GM note from the percussion map (35-81), if it has one. */
   gm?: number;
-  /** Categoría de la Broad Sound Taxonomy. */
+  /** Broad Sound Taxonomy category. */
   bst: string;
   familia: Familia;
   alias: string[];
 }
 
 export const ETIQUETAS: Etiqueta[] = [
-  // ── Batería: bombos y cajas ───────────────────────────────────────────────
+  // ── Drums: kicks and snares ───────────────────────────────────────────────
   { id: "bombo", es: "Bombo", en: "Kick / Bass drum", gm: 36, bst: "is-p", familia: "percusión",
     alias: ["kick", "bombo de batería", "bass drum", "acoustic bass drum", "golpe de bombo", "patada"] },
   { id: "bombo-acustico", es: "Bombo acústico", en: "Acoustic bass drum", gm: 35, bst: "is-p", familia: "percusión",
@@ -48,7 +48,7 @@ export const ETIQUETAS: Etiqueta[] = [
   { id: "palmada", es: "Palmada", en: "Hand clap", gm: 39, bst: "fx-h", familia: "percusión",
     alias: ["clap", "aplauso", "palmas", "handclap"] },
 
-  // ── Charles ───────────────────────────────────────────────────────────────
+  // ── Hi-hats ───────────────────────────────────────────────────────────────
   { id: "charles", es: "Charles cerrado", en: "Closed hi-hat", gm: 42, bst: "is-p", familia: "percusión",
     alias: ["hi-hat", "hihat", "hat", "charles cerrado", "contratiempo"] },
   { id: "charles-pedal", es: "Charles a pedal", en: "Pedal hi-hat", gm: 44, bst: "is-p", familia: "percusión",
@@ -78,7 +78,7 @@ export const ETIQUETAS: Etiqueta[] = [
   { id: "campana-ride", es: "Campana de ride", en: "Ride bell", gm: 53, bst: "is-p", familia: "percusión",
     alias: ["bell", "cúpula", "campana del ride", "ping"] },
 
-  // ── Percusión pequeña ─────────────────────────────────────────────────────
+  // ── Small percussion ─────────────────────────────────────────────────────
   { id: "cencerro", es: "Cencerro", en: "Cowbell", gm: 56, bst: "is-p", familia: "percusión",
     alias: ["cowbell", "cencerro metálico", "esquila"] },
   { id: "pandereta", es: "Pandereta", en: "Tambourine", gm: 54, bst: "is-p", familia: "percusión",
@@ -112,7 +112,7 @@ export const ETIQUETAS: Etiqueta[] = [
   { id: "vibraslap", es: "Vibraslap", en: "Vibraslap", gm: 58, bst: "is-p", familia: "percusión",
     alias: ["vibra slap", "quijada"] },
 
-  // ── Tonales ───────────────────────────────────────────────────────────────
+  // ── Tonal ─────────────────────────────────────────────────────────────────
   { id: "bajo", es: "Bajo", en: "Bass guitar", bst: "is-e", familia: "tonal",
     alias: ["bass guitar", "bajo eléctrico", "bajo sintético", "sub"] },
   { id: "piano", es: "Piano", en: "Piano", bst: "is-k", familia: "tonal",
@@ -134,7 +134,7 @@ export const ETIQUETAS: Etiqueta[] = [
   { id: "sintetizador", es: "Sintetizador", en: "Synth", bst: "is-e", familia: "tonal",
     alias: ["synth", "sintetizador analógico", "saw", "diente de sierra", "tx81z", "fm piano", "fm"] },
 
-  // ── Texturas y efectos ────────────────────────────────────────────────────
+  // ── Textures and effects ──────────────────────────────────────────────────
   { id: "drone", es: "Drone", en: "Drone", bst: "is-e", familia: "textura",
     alias: ["zumbido", "drone sostenido", "textura sostenida", "bordón"] },
   { id: "textura", es: "Textura", en: "Texture", bst: "fx-ex", familia: "textura",
@@ -163,20 +163,20 @@ export const ETIQUETAS: Etiqueta[] = [
     alias: ["error digital", "stutter", "corte", "fallo"] },
 ];
 
-/** Categorías BST usadas aquí, con su nombre legible. */
+/** BST categories used here, with their readable name. */
 export const BST: Record<string, string> = {
-  "is-p": "Instrument samples · Percusión",
-  "is-e": "Instrument samples · Sintetizadores / Electrónico",
-  "is-s": "Instrument samples · Cuerda",
-  "is-k": "Instrument samples · Piano / Teclado",
-  "is-w": "Instrument samples · Viento",
-  "fx-h": "Sound effects · Sonidos y acciones humanas",
-  "fx-el": "Sound effects · Electrónico / Diseño",
+  "is-p": "Instrument samples · Percussion",
+  "is-e": "Instrument samples · Synths / Electronic",
+  "is-s": "Instrument samples · Strings",
+  "is-k": "Instrument samples · Piano / Keyboard",
+  "is-w": "Instrument samples · Winds",
+  "fx-h": "Sound effects · Human sounds and actions",
+  "fx-el": "Sound effects · Electronic / Design",
   "fx-ex": "Sound effects · Experimental",
-  "fx-m": "Sound effects · Máquinas",
+  "fx-m": "Sound effects · Machines",
 };
 
-/** Texto comparable: sin tildes latinas y sin signos, en cualquier alfabeto. */
+/** Comparable text: no Latin accents and no punctuation, in any alphabet. */
 export function normalizar(texto: string): string {
   return normalizarTexto(texto.replace(/[^\p{L}\p{N}\p{M}\s-]/gu, " "));
 }
@@ -185,7 +185,7 @@ export function etiquetaPorId(id: string): Etiqueta | undefined {
   return ETIQUETAS.find((e) => e.id === id);
 }
 
-/** ¿Aparece `aguja` en `pajar` como palabra completa (o como frase completa)? */
+/** Does `aguja` appear in `pajar` as a whole word (or as a whole phrase)? */
 function contienePalabra(pajar: string, aguja: string): boolean {
   if (aguja.length < 4) return pajar === aguja;
   const esc = aguja.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
@@ -193,11 +193,11 @@ function contienePalabra(pajar: string, aguja: string): boolean {
 }
 
 /**
- * Etiquetas que coinciden con un texto: id, nombre es/en o cualquier alias.
+ * Tags that match a text: id, es/en name, or any alias.
  *
- * Se compara por palabra completa: con `includes` a secas, «Baroque Alto
- * Recorder» daba «rimshot» porque contiene «aro», y «Bell Tree» salía como
- * «campana de ride». Las palabras de menos de 4 letras sólo valen exactas.
+ * Compared by whole word: with plain `includes`, "Baroque Alto Recorder" gave
+ * "rimshot" because it contains "aro", and "Bell Tree" came out as "ride bell".
+ * Words under 4 letters only match exactly.
  */
 export function etiquetasDeTexto(texto: string): Etiqueta[] {
   const buscado = normalizar(texto);
@@ -209,8 +209,8 @@ export function etiquetasDeTexto(texto: string): Etiqueta[] {
 }
 
 /**
- * Saca de una frase las etiquetas que aparecen: «un china sucio y corto» →
- * [china]. Ordena por longitud para que «charles abierto» gane a «charles».
+ * Extracts the tags that appear in a phrase: "a dirty, short china" →
+ * [china]. It sorts by length so "charles abierto" beats "charles".
  */
 export function etiquetasEnFrase(frase: string): Etiqueta[] {
   const encontradas: Etiqueta[] = [];

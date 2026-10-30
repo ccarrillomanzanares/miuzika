@@ -1,4 +1,4 @@
-/** Audio del proyecto: subir, servir con Range, picos para la onda, MIDI a notas, medidas de un WAV y de una referencia. */
+/** Project audio: upload, serve with Range, waveform peaks, MIDI to notes, measurements of a WAV and of a reference. */
 
 import { existsSync, mkdirSync, statSync, writeFileSync, createReadStream } from "node:fs";
 import { basename, resolve } from "node:path";
@@ -8,12 +8,12 @@ import type { Contexto } from "../contexto.ts";
 export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
   const { anotar, ficheroHerramientas, responderJson, leerCuerpo, leerCuerpoBinario, slugProyecto, carpetaProyecto, resolverEnTrabajo, correr } = ctx;
 
-  // WAV del navegador al disco: lo que el usuario importa con «Audio» se
-  // copia a proyectos/<slug>/entrada/ para que el fichero maestro lo pueda
-  // referenciar (si no, sólo viviría en IndexedDB y el proyecto no viajaría).
+  // WAV from the browser to disk: what the user imports with "Audio" is
+  // copied to proyectos/<slug>/entrada/ so the master file can reference it
+  // (otherwise it would only live in IndexedDB and the project would not travel).
   server.middlewares.use("/api/audio/subir", (req, res) => {
     if (req.method !== "POST") {
-      responderJson(res, 405, { error: "usa POST" });
+      responderJson(res, 405, { error: "use POST" });
       return;
     }
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -24,20 +24,20 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
       .replace(/[\u0300-\u036f]/g, "")
       .replace(/[^A-Za-z0-9._-]+/g, "_")
       .slice(-80);
-    // .mid entra por aquí porque es el único endpoint binario: no es audio, pero
-    // es un fichero que el navegador tiene que dejar en la carpeta del proyecto.
+    // .mid comes in through here because it is the only binary endpoint: it is not audio, but
+    // it is a file the browser has to leave in the project folder.
     if (!/\.(wav|mp3|ogg|flac|aif|aiff|m4a|mid|midi)$/i.test(base)) {
-      responderJson(res, 400, { error: "sólo audio (.wav, .mp3, .ogg, .flac, .aif, .m4a) o MIDI (.mid)" });
+      responderJson(res, 400, { error: "only audio (.wav, .mp3, .ogg, .flac, .aif, .m4a) or MIDI (.mid)" });
       return;
     }
     leerCuerpoBinario(req, 512 * 1024 * 1024, (datos) => {
       if (!datos || datos.length === 0) {
-        responderJson(res, 413, { error: "audio vacío o mayor de 512 MB" });
+        responderJson(res, 413, { error: "empty audio or larger than 512 MB" });
         return;
       }
       try {
-        // `carpeta=salida`: una exportación del proyecto (MIDI o WAV del encargo),
-        // que se sobrescribe; lo demás es material que entra y nunca pisa nada.
+        // `carpeta=salida`: a project export (MIDI or WAV of the commission),
+        // which is overwritten; everything else is incoming material and never overwrites anything.
         const salida = url.searchParams.get("carpeta") === "salida";
         const carpeta = resolve(carpetaProyecto(slug), salida ? "salida" : "entrada");
         mkdirSync(carpeta, { recursive: true });
@@ -59,8 +59,8 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
     });
   });
 
-  // Sirve un WAV de workspace/ con soporte de Range: el cliente puede pedir
-  // trozos y decodificarlos de uno en uno (streaming) en vez del fichero entero.
+  // Serves a WAV from workspace/ with Range support: the client can request
+  // chunks and decode them one by one (streaming) instead of the whole file.
   server.middlewares.use("/api/audio", (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const rel = url.searchParams.get("path") ?? "";
@@ -68,7 +68,7 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
       ? resolverEnTrabajo(rel, slugProyecto(req.headers["x-miuzika-proyecto"]))
       : null;
     if (!destino || !existsSync(destino)) {
-      responderJson(res, 404, { error: "no existe" });
+      responderJson(res, 404, { error: "does not exist" });
       return;
     }
     const totalBytes = statSync(destino).size;
@@ -95,12 +95,12 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
     createReadStream(destino).pipe(res);
   });
 
-  // Picos de un WAV calculados en el servidor: la onda se dibuja sin decodificar.
+  // Peaks of a WAV computed on the server: the waveform is drawn without decoding.
   //
-  // Con caché por (ruta, mtime, cubos): cada /api/picos lanzaba un Python que
-  // leía el fichero entero, y abrir un proyecto de 21 pistas con 11 WAV
-  // tardaba 38 s (medido). El WAV sólo cambia si cambia su mtime, así que la
-  // segunda apertura no vuelve a leerlo.
+  // With a cache keyed by (path, mtime, buckets): each /api/picos launched a Python that
+  // read the whole file, and opening a 21-track project with 11 WAVs
+  // took 38 s (measured). The WAV only changes if its mtime changes, so the
+  // second opening does not read it again.
   const cachePicos = new Map<string, unknown>();
   server.middlewares.use("/api/picos", async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -110,7 +110,7 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
       ? resolverEnTrabajo(rel, slugProyecto(req.headers["x-miuzika-proyecto"]))
       : null;
     if (!destino || !existsSync(destino)) {
-      responderJson(res, 404, { error: "no existe" });
+      responderJson(res, 404, { error: "does not exist" });
       return;
     }
     const clave = `${destino}|${statSync(destino).mtimeMs}|${cubos}`;
@@ -130,14 +130,14 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
       cachePicos.set(clave, datos);
       responderJson(res, 200, { ok: true, ...datos });
     } catch (error) {
-      responderJson(res, 500, { error: "salida no es JSON: " + String(error) });
+      responderJson(res, 500, { error: "output is not JSON: " + String(error) });
     }
   });
 
-  // Mide una canción de referencia (enlace o fichero): tempo, tono, forma.
+  // Measures a reference song (link or file): tempo, key, form.
   server.middlewares.use("/api/referencia/medir", (req, res) => {
     if (req.method !== "POST") {
-      responderJson(res, 405, { error: "usa POST" });
+      responderJson(res, 405, { error: "use POST" });
       return;
     }
     leerCuerpo(req, res, async (cuerpo) => {
@@ -145,17 +145,17 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
         const datos = JSON.parse(cuerpo) as { origen?: string };
         const origen = String(datos.origen ?? "").trim();
         if (!origen) {
-          responderJson(res, 400, { error: "falta el origen (enlace o ruta)" });
+          responderJson(res, 400, { error: "missing the origin (link or path)" });
           return;
         }
         const r = await correr("codigo/analizar_referencia.py", [origen], 900);
         if (r.codigo !== 0) {
           const crudo = (r.errores || r.salida).slice(-800);
-          // Lo que falta en el equipo, dicho de forma que el agente se lo pueda pedir a la persona.
+          // What is missing on the machine, phrased so the agent can ask the person for it.
           const falta = /No module named ['"]?yt_dlp/.test(crudo)
-            ? "Falta yt-dlp en el Python del equipo: instálalo con «python -m pip install yt-dlp» (y ffmpeg en el PATH). Mientras, pide un enlace a otra fuente o un audio."
+            ? "yt-dlp is missing from the machine's Python: install it with “python -m pip install yt-dlp” (and ffmpeg on the PATH). In the meantime, ask for a link to another source or an audio file."
             : /ffmpeg/i.test(crudo) && /(not found|no se reconoce|No such file)/i.test(crudo)
-              ? "Falta ffmpeg en el PATH del equipo para decodificar el audio."
+              ? "ffmpeg is missing from the machine's PATH to decode the audio."
               : "";
           responderJson(res, 400, { error: falta ? `${falta}\n${crudo}` : crudo });
           return;
@@ -167,13 +167,13 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
     });
   });
 
-  // Devuelve las notas de un .mid ya normalizadas a beats (op add_notes).
+  // Returns the notes of a .mid already normalized to beats (op add_notes).
   server.middlewares.use("/api/midi", async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const rel = url.searchParams.get("path") ?? "";
     const destino = rel ? resolverEnTrabajo(rel, slugProyecto(req.headers["x-miuzika-proyecto"])) : null;
     if (!destino || !existsSync(destino)) {
-      responderJson(res, 404, { error: "no existe" });
+      responderJson(res, 404, { error: "does not exist" });
       return;
     }
     const r = await correr("herramientas/midi_lector.py", [destino], 60);
@@ -185,14 +185,14 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
       const datos = JSON.parse(r.salida) as Record<string, unknown>;
       responderJson(res, 200, { ok: true, ...datos });
     } catch (error) {
-      responderJson(res, 500, { error: "salida no es JSON: " + String(error) });
+      responderJson(res, 500, { error: "output is not JSON: " + String(error) });
     }
   });
 
-  // verificar_audio: metricas objetivas de un WAV (no reescribir analizadores).
+  // verificar_audio: objective metrics of a WAV (do not rewrite analyzers).
   server.middlewares.use("/api/verificar", (req, res) => {
     if (req.method !== "POST") {
-      responderJson(res, 405, { error: "usa POST" });
+      responderJson(res, 405, { error: "use POST" });
       return;
     }
     leerCuerpo(req, res, async (cuerpo) => {
@@ -200,11 +200,11 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
         const d = JSON.parse(cuerpo) as { path?: string };
         const destino = d.path ? resolverEnTrabajo(d.path, slugProyecto(req.headers["x-miuzika-proyecto"])) : null;
         if (!destino) {
-          responderJson(res, 403, { error: "ruta fuera de workspace/" });
+          responderJson(res, 403, { error: "path outside workspace/" });
           return;
         }
         if (!existsSync(destino)) {
-          responderJson(res, 404, { error: "no existe" });
+          responderJson(res, 404, { error: "does not exist" });
           return;
         }
         const r = await correr("herramientas/verificar_audio.py", [destino], 180);

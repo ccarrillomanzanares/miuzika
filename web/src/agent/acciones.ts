@@ -1,13 +1,13 @@
 /**
- * Acciones del agente sobre el proyecto abierto.
+ * Agent actions on the open project.
  *
- * Son las herramientas que CAMBIAN o LEEN el proyecto: se ejecutan en la pestaña
- * porque la pestaña es la única que escribe `proyecto.json`. Antes vivían en
- * `main.ts` (que además pintaba, reproducía, guardaba y arrancaba la app); aquí
- * dependen sólo de `Estudio`, un contrato pequeño con lo que necesitan del resto.
+ * These are the tools that CHANGE or READ the project: they run in the tab because the
+ * tab is the only one that writes `proyecto.json`. Before, they lived in `main.ts` (which
+ * also painted, played, saved and booted the app); here they depend only on `Estudio`, a
+ * small contract with what they need from the rest.
  *
- * Todas cambian el proyecto con ops (`applyOps`): son transaccionales, se validan
- * y se deshacen con Ctrl+Z igual que una edición a mano.
+ * They all change the project with ops (`applyOps`): they are transactional, they are
+ * validated and they are undone with Ctrl+Z just like a manual edit.
  */
 
 import type { InstrumentType, Mode, Note, Project } from "../../../src/core/types.ts";
@@ -51,23 +51,23 @@ import type {
   ResultadoAccion,
 } from "./tools.ts";
 
-/** Lo que las acciones necesitan de la app. Lo implementa main.ts. */
+/** What the actions need from the app. main.ts implements it. */
 export interface Estudio {
-  /** El proyecto abierto (o null). */
+  /** The open project (or null). */
   proyecto(): Project | null;
-  /** Estado nuevo con historial; reinicia el engine (pistas o clips nuevos). */
+  /** New state with history; restarts the engine (new tracks or clips). */
   fijar(siguiente: Project): void;
-  /** Cambio en vivo (mezcla, longitudes): con historial, sin reiniciar el engine. */
+  /** Live change (mix, lengths): with history, without restarting the engine. */
   enVivo(siguiente: Project): void;
-  /** Aviso en el chat para la persona (no para el modelo). */
+  /** Notice in the chat for the person (not the model). */
   avisar(texto: string): void;
-  /** Exporta el proyecto a MIDI y/o la mezcla a WAV en salida/. */
+  /** Exports the project to MIDI and/or the mix to WAV in salida/. */
   exportar?(formatos: { midi: boolean; wav: boolean }): Promise<ResultadoAccion>;
-  /** Renderiza con openDAW y mide el nivel por tramos de la mezcla y de cada pista sola. */
+  /** Renders with openDAW and measures the level per bar range of the mix and of each track alone. */
   escuchar?(opciones: { pistas?: string[]; compasesPorTramo?: number }): Promise<ResultadoAccion>;
 }
 
-/** Nombre de proyecto a partir del fichero entregado (salida/sacramento_multitrack.mid -> sacramento). */
+/** Project name from the delivered file (salida/sacramento_multitrack.mid -> sacramento). */
 export function nombreDesdeRuta(ruta: string): string {
   const base = (ruta.split("/").pop() ?? "proyecto").replace(/\.[^.]+$/, "");
   const limpio = base
@@ -78,7 +78,7 @@ export function nombreDesdeRuta(ruta: string): string {
   return (limpio || base || "proyecto").slice(0, 40);
 }
 
-/** Pista por id, por nombre (sin tildes ni mayúsculas) o por parte del nombre si es única. */
+/** Track by id, by name (without accents or uppercase) or by part of the name if it is unique. */
 function pistaPorNombre(project: Project, nombre: string) {
   const buscado = normalizarTexto(nombre);
   if (buscado === "") return undefined;
@@ -96,31 +96,31 @@ const mensajeDe = (error: unknown): string => (error instanceof Error ? error.me
 
 export function crearAcciones(e: Estudio): AccionesEstudio {
   /**
-   * Crea pistas reales en el proyecto desde ficheros de workspace/: los .mid como
-   * pistas MIDI con sus notas y los .wav como pistas de audio. Reutiliza el mismo
-   * camino que el importador de «Audio» (loadAudioFile -> persistAudioAsset -> ops).
+   * Creates real tracks in the project from files in workspace/: the .mid as MIDI tracks
+   * with their notes and the .wav as audio tracks. It reuses the same path as the "Audio"
+   * importer (loadAudioFile -> persistAudioAsset -> ops).
    */
   async function importarPistas(
     peticion: PeticionPistas,
   ): Promise<ResultadoAccion> {
     const inicio = Math.max(0, Math.min(511, Math.trunc(peticion.inicioCompas)));
-    const MAX_NOTAS = 2000; // tope de la op add_notes
+    const MAX_NOTAS = 2000; // cap of the add_notes op
     const hechas: string[] = [];
     const fallos: string[] = [];
     /**
-     * La duracion de una toma se cuenta en COMPASES, no en segundos de fichero: asi
-     * el MIDI (que acaba en su ultima nota) y el WAV (que lleva cola) del mismo
-     * instrumento acaban en el mismo compas. Si el agente no la dice, se toma la del
-     * audio, que es lo que dura el material.
+     * A take's duration is counted in BARS, not file seconds: that way the MIDI (which
+     * ends at its last note) and the WAV (which has a tail) of the same instrument end in
+     * the same bar. If the agent does not give it, the audio's is taken, which is how long
+     * the material lasts.
      */
     const compasesToma = peticion.compases && peticion.compases > 0 ? Math.trunc(peticion.compases) : 0;
     const clipsMidi: { trackId: string; clipId: string }[] = [];
     let largoAudio = 0;
     const avisos: string[] = [];
 
-    // 1) sin proyecto hace falta el nombre ANTES de leer nada: la carpeta del
-    //    proyecto es lo que permite resolver 'salida/...'. Se crea provisional y
-    //    luego se ajustan tempo y compases con set_song.
+    // 1) without a project the name is needed BEFORE reading anything: the project folder
+    //    is what makes it possible to resolve 'salida/...'. It is created provisionally and
+    //    then tempo and bars are adjusted with set_song.
     let creadoAqui = false;
     if (!e.proyecto()) {
       if (!peticion.nombreProyecto) {
@@ -128,10 +128,10 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         return {
           ok: false,
           texto:
-            "No hay proyecto abierto y no me has dado nombre. PREGUNTA al usuario como quiere llamar el " +
-            "proyecto" +
-            (sugerencia ? ` (sugerencia: "${sugerencia}")` : "") +
-            " y vuelve a llamar con nombre_proyecto. No inventes el nombre.",
+            "There is no open project and you have not given me a name. ASK the user what they want to " +
+            "call the project" +
+            (sugerencia ? ` (suggestion: "${sugerencia}")` : "") +
+            " and call again with nombre_proyecto. Do not invent the name.",
         };
       }
       e.fijar(
@@ -144,7 +144,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       creadoAqui = true;
     }
 
-    // 2) leer los MIDI (la carpeta del proyecto ya existe, asi que 'salida/...' resuelve)
+    // 2) read the MIDI files (the project folder already exists, so 'salida/...' resolves)
     interface PistaMidi {
       name: string;
       program?: number;
@@ -169,15 +169,15 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       }
     }
 
-    // 3) si no hay proyecto, no hay donde colgar las pistas
+    // 3) if there is no project, there is nowhere to hang the tracks
     const project = e.proyecto();
     if (!project) {
-      return { ok: false, texto: "No se pudo crear el proyecto." };
+      return { ok: false, texto: "The project could not be created." };
     }
 
     let current: Project = project;
 
-    // 4) si lo hemos creado aqui, ajustamos tempo y compases al material real
+    // 4) if we created it here, adjust tempo and bars to the real material
     if (creadoAqui) {
       let finBeat = 0;
       for (const bloque of material) {
@@ -192,15 +192,15 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       }
     }
 
-    // Un MIDI a 90 BPM dentro de un proyecto a 120 no suena "mal": suena a 120, porque
-    // las notas son beats. Sin este aviso parece que el fichero venia roto.
+    // A MIDI at 90 BPM inside a 120 BPM project does not sound "wrong": it sounds at 120,
+    // because the notes are beats. Without this warning it looks like the file came broken.
     if (!creadoAqui && material.length > 0) {
       for (const bloque of material) {
         if (Math.abs(bloque.bpm - current.bpm) > 0.5) {
           avisos.push(
-            `${bloque.ruta}: el MIDI esta a ${bloque.bpm} BPM y el proyecto a ${current.bpm}. ` +
-              "Las notas se colocan en beats, asi que sonaran mas rapidas o mas lentas; " +
-              "si quieres el tempo del fichero, cambia el del proyecto.",
+            `${bloque.ruta}: the MIDI is at ${bloque.bpm} BPM and the project at ${current.bpm}. ` +
+              "The notes are placed in beats, so they will sound faster or slower; " +
+              "if you want the file's tempo, change the project's.",
           );
         }
       }
@@ -214,7 +214,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         for (const pista of pistas) {
           const prog = pista.program ?? 0;
           const canal = pista.channel ?? 0;
-          // Familias de General MIDI (programa 0-127): bajos 32-39, solistas 80-87, pads 88-95.
+          // General MIDI families (program 0-127): basses 32-39, leads 80-87, pads 88-95.
         const tipo: InstrumentType =
           canal === 9
             ? "drumkit"
@@ -239,22 +239,22 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
               const clipId = current.tracks.find((t) => t.id === id)?.clips.at(-1)?.id;
               if (clipId) clipsMidi.push({ trackId: id, clipId });
             } else {
-              // Los trozos siguen en el MISMO clip: si no, cada trozo crea un clip
-              // nuevo desde el compas inicial y se solapan (Bateria: 2376 notas).
+              // The chunks stay in the SAME clip: otherwise each chunk creates a new
+              // clip from the start bar and they overlap (Drums: 2,376 notes).
               const clipId = current.tracks.find((t) => t.id === id)?.clips.at(-1)?.id;
               current = applyOps(current, [
                 { op: "add_notes", trackId: id, clipId, notes: trozo },
               ]).project;
             }
           }
-          hechas.push(`${nombre} (MIDI, ${pista.notes.length} notas)`);
+          hechas.push(`${nombre} (MIDI, ${pista.notes.length} notes)`);
         }
       }
     }
 
-    // prefijo comun de los WAV, para que las pistas no se llamen "tema_bateria"
-    // Prefijo a quitar de los nombres: el del fichero comun y, si no hay varios,
-    // el del propio proyecto ("sacramento_bajo.wav" -> "bajo").
+    // common prefix of the WAVs, so the tracks are not called "tema_bateria"
+    // Prefix to strip from the names: the common file's and, if there are not several,
+    // the project's own ("sacramento_bajo.wav" -> "bajo").
     let prefijo = project ? `${carpetaDeProyecto(project)}_` : "";
     if (peticion.wavs.length > 1) {
       const bases = peticion.wavs.map((r) => (r.split("/").pop() ?? r).replace(/\.[^.]+$/, ""));
@@ -272,8 +272,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         const recortado = prefijo && sinExt.startsWith(prefijo) ? sinExt.slice(prefijo.length) : sinExt;
         const nombre = (recortado || sinExt || "Audio").slice(0, 60);
 
-        // Los stems largos NO se decodifican: streaming con <audio> y picos del
-        // servidor. Asi caben muchos a la vez (la RAM no crece con la duracion).
+        // Long stems are NOT decoded: streaming with <audio> and peaks from the
+        // server. That way many fit at once (RAM does not grow with duration).
         const meta = await metadatosWav(rutaEnProyecto(ruta, carpetaDeProyecto(project)));
         if (meta.duracionSeg >= SEGUNDOS_STREAMING) {
           const durationBeats = (meta.duracionSeg * current.bpm) / 60;
@@ -290,8 +290,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
             { op: "register_audio_asset", assetId, name: nombre, durationBeats, ruta },
             ...(existente
               ? [
-                  // Reimportar REEMPLAZA los clips de esa pista: asi se corrige una
-                  // tanda mal recortada sin acabar con dos pistas iguales.
+                  // Reimporting REPLACES that track's clips: that way a badly trimmed
+                  // batch is fixed without ending up with two identical tracks.
                   ...existente.clips.map((clip) => ({
                     op: "remove_clip" as const,
                     trackId: existente.id,
@@ -327,8 +327,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
           ]).project;
           if (compasesToma > 0 && compasesToma * beatsPerBar(current) > durationBeats + 1e-6) {
             avisos.push(
-              `${nombre}: pediste ${compasesToma} compases pero el WAV dura ${durationBeats.toFixed(1)} beats ` +
-                `(${(durationBeats / beatsPerBar(current)).toFixed(2)} compases). El clip se queda en lo que hay.`,
+              `${nombre}: you asked for ${compasesToma} bars but the WAV lasts ${durationBeats.toFixed(1)} beats ` +
+                `(${(durationBeats / beatsPerBar(current)).toFixed(2)} bars). The clip stays at what there is.`,
             );
           }
           largoAudio = Math.max(
@@ -336,7 +336,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
             compasesToma > 0 ? compasesToma * beatsPerBar(current) : compasesDeAudio(durationBeats, beatsPerBar(current)),
           );
           hechas.push(
-            `${nombre} (audio streaming, ${durationBeats.toFixed(1)} beats, sin decodificar)`,
+            `${nombre} (streaming audio, ${durationBeats.toFixed(1)} beats, not decoded)`,
           );
           continue;
         }
@@ -345,7 +345,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const blob = await res.blob();
         const file = new File([blob], fichero, { type: "audio/wav" });
-        // El asset apunta a su ruta en disco: el proyecto es portable sin más.
+        // The asset points to its path on disk: the project is portable with no more.
         const asset = await loadAudioFile(file, current.bpm, ruta);
         current = applyOps(current, [
           {
@@ -370,8 +370,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         ]).project;
         if (compasesToma > 0 && compasesToma * beatsPerBar(current) > asset.durationBeats + 1e-6) {
           avisos.push(
-            `${nombre}: pediste ${compasesToma} compases pero el WAV dura ${asset.durationBeats.toFixed(1)} beats. ` +
-              "El clip se queda en lo que hay.",
+            `${nombre}: you asked for ${compasesToma} bars but the WAV lasts ${asset.durationBeats.toFixed(1)} beats. ` +
+              "The clip stays at what there is.",
           );
         }
         largoAudio = Math.max(
@@ -384,9 +384,9 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       }
     }
 
-    // La toma entera mide lo mismo: compases dichos por el agente o, si no, lo que
-    // dura el audio. Los clips MIDI se estiran hasta ahi (nunca se recortan: sus
-    // notas ya caben dentro).
+    // The whole take measures the same: bars given by the agent or, if not, how long the
+    // audio lasts. The MIDI clips are stretched to there (they are never trimmed: their
+    // notes already fit inside).
     const barBeatsToma = beatsPerBar(current);
     const largoToma =
       compasesToma > 0 ? compasesToma * barBeatsToma : largoAudio;
@@ -417,15 +417,15 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       e.avisar(`Tracks added to the project: ${hechas.length}.`);
     }
     const texto = [
-      hechas.length > 0 ? `Anadidas ${hechas.length} pistas:` : "No se anadio ninguna pista.",
+      hechas.length > 0 ? `Added ${hechas.length} tracks:` : "No track was added.",
       ...hechas.map((linea) => `- ${linea}`),
-      ...(fallos.length > 0 ? ["Fallos:", ...fallos.map((linea) => `- ${linea}`)] : []),
+      ...(fallos.length > 0 ? ["Failures:", ...fallos.map((linea) => `- ${linea}`)] : []),
       ...avisos,
-      // El mismo material dos veces suena doble: se avisa en el acto, no después.
+      // The same material twice sounds double: it warns on the spot, not afterwards.
       ...(peticion.midis.length > 0 && peticion.wavs.length > 0
         ? [
-            "AVISO: has anadido MIDI y WAV del mismo tema. Suenan los dos a la vez (doble nivel y fase). " +
-              "Pregunta al usuario cual dejar y silencia el otro juego con ajustar_pistas.",
+            "WARNING: you have added MIDI and WAV of the same song. They both sound at once (double level and phase). " +
+              "Ask the user which one to keep and silence the other set with ajustar_pistas.",
           ]
         : []),
     ].join("\n");
@@ -433,18 +433,18 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
   }
 
   /**
-   * Crea un sonido desde el chat: receta -> script -> render -> medida -> disco.
+   * Creates a sound from the chat: recipe -> script -> render -> measurement -> disk.
    *
-   * La voz y sus parametros salen del catalogo del motor (/api/voces), las palabras
-   * del vocabulario humano, y el resultado se guarda con su ficha en
-   * proyectos/<slug>/sonidos/, asi que se puede repetir y volver a escuchar.
+   * The voice and its parameters come from the engine catalog (/api/voces), the words
+   * from the human vocabulary, and the result is saved with its card in
+   * proyectos/<slug>/sonidos/, so it can be repeated and listened to again.
    */
   async function crearSonido(
     peticion: PeticionSonido,
   ): Promise<ResultadoAccion> {
     const project = e.proyecto();
     if (!project) {
-      return { ok: false, texto: "No hay proyecto abierto: crea uno primero (su carpeta es donde vive el sonido)." };
+      return { ok: false, texto: "There is no open project: create one first (its folder is where the sound lives)." };
     }
     const slug = carpetaDeProyecto(project);
     const avisos: string[] = [];
@@ -457,7 +457,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     } catch (error) {
       return {
         ok: false,
-        texto: `No pude leer el catalogo del motor: ${error instanceof Error ? error.message : String(error)}`,
+        texto: `I could not read the engine catalog: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
 
@@ -477,7 +477,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     const destino: "cpu" | "gpu" = (voz as { destino?: string } | undefined)?.destino === "gpu" ? "gpu" : "cpu";
     receta = { ...receta, destino };
     if (destino === "gpu") {
-      avisos.push("Esta voz renderiza en la GPU: usa Lambda (1,29 $/h si esta apagada, ~3 min de arranque).");
+      avisos.push("This voice renders on the GPU: it uses Lambda ($1.29/h while off, ~3 min to start).");
     }
 
     if (peticion.palabras && peticion.palabras.length > 0) {
@@ -487,8 +487,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     }
 
     const rutaScript = rutaScriptDeSonido(receta);
-    // El slug va explícito: `cabecerasProyecto()` depende de que el agente haya
-    // llamado antes a setProyectoActivo y, si no, el fichero acaba en «sin-proyecto».
+    // The slug is explicit: `cabecerasProyecto()` depends on the agent having called
+    // setProyectoActivo before and, if not, the file ends up in "sin-proyecto".
     const escribir = (ruta: string, contenido: string): Promise<Response> =>
       fetch("/api/fs/write", {
         method: "POST",
@@ -498,7 +498,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
 
     try {
       const w = await escribir(rutaScript, scriptDeSonido(receta, { slug }));
-      if (!w.ok) throw new Error(`no pude escribir el script (${w.status})`);
+      if (!w.ok) throw new Error(`could not write the script (${w.status})`);
       const r = await fetch(destino === "gpu" ? "/api/run/lambda" : "/api/run/python", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...cabeceraDeProyecto(slug) },
@@ -510,15 +510,15 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       const corrida = (await r.json()) as { codigo?: number; salida?: string; errores?: string };
       if (!r.ok || (corrida.codigo ?? 1) !== 0) {
         throw new Error(
-          `el render fallo: ${(corrida.errores || corrida.salida || `HTTP ${r.status}`).slice(-600)}`,
+          `the render failed: ${(corrida.errores || corrida.salida || `HTTP ${r.status}`).slice(-600)}`,
         );
       }
 
-      // Ficha junto al WAV: es lo que permite repetirlo con otras palabras.
+      // Card next to the WAV: it is what makes it possible to repeat it with other words.
       const rutaFicha = `proyectos/${slug}/${rutaWavDeSonido(receta).replace(/\.wav$/, ".json")}`;
       await escribir(rutaFicha, JSON.stringify(receta, null, 2));
 
-      // Medida objetiva: no se entrega un sonido sin saber como esta.
+      // Objective measurement: a sound is not delivered without knowing how it is.
       const rutaWav = `proyectos/${slug}/${rutaWavDeSonido(receta)}`;
       let informe = "";
       try {
@@ -529,7 +529,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         });
         if (v.ok) informe = String(((await v.json()) as { informe?: string }).informe ?? "");
       } catch {
-        /* medir es opcional: el sonido ya esta hecho */
+        /* measuring is optional: the sound is already made */
       }
       const medidas = informe
         .split("\n")
@@ -537,14 +537,14 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         .join(" ");
 
       const texto = [
-        `Sonido "${receta.nombre}" creado (voz ${receta.voz} en ${destino.toUpperCase()}${receta.palabras?.length ? ` · ${receta.palabras.join(", ")}` : ""}).`,
+        `Sound "${receta.nombre}" created (voice ${receta.voz} on ${destino.toUpperCase()}${receta.palabras?.length ? ` · ${receta.palabras.join(", ")}` : ""}).`,
         `WAV: ${rutaWav}`,
-        medidas ? `Medidas: ${medidas}` : "",
+        medidas ? `Measurements: ${medidas}` : "",
         ...avisos.map((a) => `- ${a}`),
-        // Ruta RELATIVA al proyecto (la convención de todo lo demás): el servidor la
-        // resuelve dentro de proyectos/<slug>/. Con "proyectos/<slug>/..." también
-        // funcionaba, pero el agente acababa mezclando las dos formas.
-        `Para oirlo en la cancion: anadir_pistas(wavs=["${rutaWavDeSonido(receta)}"], compases=<los del tema>).`,
+        // Path RELATIVE to the project (the convention of everything else): the server
+        // resolves it inside proyectos/<slug>/. With "proyectos/<slug>/..." it also
+        // worked, but the agent ended up mixing the two forms.
+        `To hear it in the song: anadir_pistas(wavs=["${rutaWavDeSonido(receta)}"], compases=<the song's>).`,
       ]
         .filter((l) => l !== "")
         .join("\n");
@@ -555,19 +555,19 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
   }
 
   /**
-   * Mete un sample de la biblioteca en el proyecto: lo convierte y normaliza en el
-   * servidor (`codigo/importar_sample.py`) y lo deja como clip de audio.
+   * Puts a library sample into the project: it is converted and normalized on the
+   * server (`codigo/importar_sample.py`) and left as an audio clip.
    *
-   * El sample queda copiado dentro del proyecto: el proyecto sigue siendo portable y
-   * no depende de que la biblioteca siga en su sitio.
+   * The sample ends up copied inside the project: the project remains portable and does
+   * not depend on the library staying where it is.
    */
   async function usarSample(
     peticion: PeticionSample,
   ): Promise<ResultadoAccion> {
     const project = e.proyecto();
-    if (!project) return { ok: false, texto: "No hay proyecto abierto: el sample tiene que entrar en alguno." };
+    if (!project) return { ok: false, texto: "There is no open project: the sample has to go into one." };
     const archivo = peticion.archivo.trim();
-    if (archivo === "") return { ok: false, texto: "Falta la ruta del sample." };
+    if (archivo === "") return { ok: false, texto: "Missing the sample path." };
     const nombre = slugDe((peticion.nombre ?? archivo.split("/").pop() ?? "sample").replace(/\.[^.]+$/, ""), {
       max: 40,
       defecto: "sample",
@@ -576,8 +576,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     try {
       const res = await fetch("/api/catalogo/importar", {
         method: "POST",
-        // El slug va explícito: `cabecerasProyecto()` depende de que el agente haya
-        // pasado por `setProyectoActivo`, y si no, el sample acaba en "sin-proyecto".
+        // The slug is explicit: `cabecerasProyecto()` depends on the agent having gone
+        // through `setProyectoActivo`, and if not, the sample ends up in "sin-proyecto".
         headers: { "Content-Type": "application/json", ...cabeceraDeProyecto(carpetaDeProyecto(project)) },
         body: JSON.stringify({ archivo, nombre }),
       });
@@ -589,7 +589,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         error?: string;
       };
       if (!res.ok || !datos.ok || !datos.ruta) {
-        return { ok: false, texto: `No pude importar el sample: ${datos.error ?? `HTTP ${res.status}`}` };
+        return { ok: false, texto: `I could not import the sample: ${datos.error ?? `HTTP ${res.status}`}` };
       }
       const puesto = await importarPistas({
         midis: [],
@@ -600,8 +600,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       return {
         ok: puesto.ok,
         texto:
-          `Sample "${nombre}" en el proyecto (${datos.duracion_s} s, pico ${datos.pico_original_dbfs} -> -1 dBFS).\n` +
-          `Fichero: proyectos/${carpetaDeProyecto(project)}/${datos.ruta}\n` +
+          `Sample "${nombre}" in the project (${datos.duracion_s} s, peak ${datos.pico_original_dbfs} -> -1 dBFS).\n` +
+          `File: proyectos/${carpetaDeProyecto(project)}/${datos.ruta}\n` +
           puesto.texto,
       };
     } catch (error) {
@@ -610,15 +610,15 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
   }
 
   /**
-   * Iguala la duracion de los clips: todos al mismo numero de compases.
+   * Matches the clip durations: all to the same number of bars.
    *
-   * Los clips se miden en compases, asi que el MIDI de un instrumento y el WAV del
-   * mismo material tienen que acabar en el mismo compas. Va por ops (se deshace con
-   * Ctrl+Z) y no toca notas, niveles ni tempo.
+   * Clips are measured in bars, so the MIDI of an instrument and the WAV of the same
+   * material have to end in the same bar. It goes through ops (undone with Ctrl+Z) and
+   * touches neither notes, levels nor tempo.
    */
   function igualarClips(peticion: PeticionIgualar): ResultadoAccion {
     const project = e.proyecto();
-    if (!project) return { ok: false, texto: "No hay ningun proyecto abierto." };
+    if (!project) return { ok: false, texto: "There is no open project." };
     const bar = beatsPerBar(project);
     const normal = normalizarTexto;
 
@@ -628,7 +628,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         ? project.tracks
         : project.tracks.filter((t) => pedidas.some((n) => normal(t.name).includes(normal(n))));
     if (pistas.length === 0) {
-      return { ok: false, texto: `No encuentro ninguna pista que se llame asi: ${pedidas.join(", ")}` };
+      return { ok: false, texto: `I cannot find any track called that: ${pedidas.join(", ")}` };
     }
 
     const masLargo = Math.max(0, ...pistas.flatMap((t) => t.clips.map((c) => c.length)));
@@ -636,7 +636,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       peticion.compases && peticion.compases > 0
         ? Math.trunc(peticion.compases) * bar
         : compasesDeAudio(masLargo, bar);
-    if (!(objetivo > 0)) return { ok: false, texto: "No hay clips que igualar." };
+    if (!(objetivo > 0)) return { ok: false, texto: "There are no clips to match." };
 
     const ops: Op[] = [];
     for (const pista of pistas) {
@@ -649,7 +649,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     if (ops.length === 0) {
       return {
         ok: true,
-        texto: `Nada que igualar: los ${pistas.length} clips ya duran ${(objetivo / bar).toFixed(2)} compases.`,
+        texto: `Nothing to match: the ${pistas.length} clips already last ${(objetivo / bar).toFixed(2)} bars.`,
       };
     }
     const siguiente = applyOps(project, [
@@ -664,21 +664,21 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     return {
       ok: true,
       texto:
-        `Igualados ${ops.length} clips a ${(objetivo / bar).toFixed(2)} compases (${objetivo} beats) ` +
-        `en ${pistas.length} pistas. El proyecto queda en ${siguiente.lengthBars} compases.`,
+        `Matched ${ops.length} clips to ${(objetivo / bar).toFixed(2)} bars (${objetivo} beats) ` +
+        `across ${pistas.length} tracks. The project is now ${siguiente.lengthBars} bars long.`,
     };
   }
 
 
   /**
-   * Proyecto vacío con el nombre pedido (lo llama el agente tras preguntar). La
-   * carpeta se elige LIBRE: si ya existe `proyectos/<slug>/`, se usa `<slug>-2`, y
-   * así. Antes dos proyectos con el mismo nombre (o dos nombres en un alfabeto no
-   * latino, que daban todos «proyecto») escribían en la misma carpeta.
+   * Empty project with the requested name (the agent calls it after asking). The folder
+   * is chosen FREELY: if `proyectos/<slug>/` already exists, `<slug>-2` is used, and so
+   * on. Before, two projects with the same name (or two names in a non-Latin alphabet,
+   * which all gave "proyecto") wrote into the same folder.
    */
   async function crearProyecto(peticion: PeticionProyecto): Promise<ResultadoAccion> {
     const nombre = peticion.nombre.trim();
-    if (!nombre) return { ok: false, texto: "Falta el nombre del proyecto." };
+    if (!nombre) return { ok: false, texto: "Missing the project name." };
     const previo = e.proyecto()?.name ?? null;
     const bpm = Math.min(300, Math.max(20, Math.round(peticion.bpm)));
     const compases = Math.min(512, Math.max(4, Math.round(peticion.compases)));
@@ -687,7 +687,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     try {
       ocupadas = new Set((await listarProyectos()).map((p) => p.slug));
     } catch {
-      /* sin lista: se usa la carpeta del nombre */
+      /* no list: the folder for the name is used */
     }
     const base = carpetaDeNombre(nombre);
     let carpeta = base;
@@ -710,28 +710,28 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     return {
       ok: true,
       texto:
-        `Proyecto "${nombre}" creado: ${bpm} BPM, ${proyecto.key.tonic} ${proyecto.key.mode}, ${compases} compases. ` +
-        `Carpeta: proyectos/${carpeta}/` +
-        (carpeta !== base ? ` (proyectos/${base}/ ya existía)` : "") +
-        ". Compón con escribir_progresion y editar_proyecto; los WAV/MIDI que generes con Python van a salida/ " +
-        "y entran con anadir_pistas.",
+        `Project "${nombre}" created: ${bpm} BPM, ${proyecto.key.tonic} ${proyecto.key.mode}, ${compases} bars. ` +
+        `Folder: proyectos/${carpeta}/` +
+        (carpeta !== base ? ` (proyectos/${base}/ already existed)` : "") +
+        ". Compose with escribir_progresion and editar_proyecto; the WAV/MIDI you generate with Python go to salida/ " +
+        "and come in with anadir_pistas.",
     };
   }
 
-  /** Resumen del proyecto con ids: lo que el agente lee antes de editar. */
+  /** Project summary with ids: what the agent reads before editing. */
   function leerProyecto(peticion: { clipId?: string }): ResultadoAccion {
     const project = e.proyecto();
-    if (!project) return { ok: false, texto: "No hay proyecto abierto: crea uno con crear_proyecto." };
+    if (!project) return { ok: false, texto: "There is no open project: create one with crear_proyecto." };
     return { ok: true, texto: resumenParaAgente(project, peticion) };
   }
 
-  /** Ops del dominio, tal cual: transaccionales (o todas o ninguna) y deshacibles. */
+  /** Domain ops, as they are: transactional (all or none) and undoable. */
   function editarProyecto(peticion: { ops: unknown[] }): ResultadoAccion {
     const project = e.proyecto();
-    if (!project) return { ok: false, texto: "No hay proyecto abierto: crea uno con crear_proyecto." };
+    if (!project) return { ok: false, texto: "There is no open project: create one with crear_proyecto." };
     try {
       const { project: siguiente, results, warnings } = applyOps(project, peticion.ops as Op[]);
-      // Si sólo cambian mezcla o dispositivos no hace falta reiniciar el engine.
+      // If only the mix or devices change, the engine does not need restarting.
       const estructural = (peticion.ops as { op?: string }[]).some(
         (op) => !["set_track", "set_master", "set_device", "set_clip_length"].includes(String(op.op)),
       );
@@ -740,19 +740,19 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       const avisos = warnings
         .filter((w) => !/Pista sin clips|Proyecto sin pistas/.test(w.message))
         .slice(0, 6)
-        .map((w) => `aviso ${w.path}: ${w.message}`);
+        .map((w) => `warning ${w.path}: ${w.message}`);
       return { ok: true, texto: [...results, ...avisos].join("\n") };
     } catch (error) {
       const texto = error instanceof OpError ? error.message : `Error: ${mensajeDe(error)}`;
-      return { ok: false, texto: `${texto}\nNo se ha cambiado nada. Usa leer_proyecto para ver los ids.` };
+      return { ok: false, texto: `${texto}\nNothing has been changed. Use leer_proyecto to see the ids.` };
     }
   }
 
   /**
-   * Escribe notas en una pista a partir de un compás: la crea si no existe y, si ya
-   * hay clips en ese tramo, los SUSTITUYE (rehacer una sección es lo normal; apilar
-   * clips encima sonaba doble). Es el camino común de escribir_progresion,
-   * escribir_notas y escribir_bateria: una sola transacción, un solo Ctrl+Z.
+   * Writes notes on a track from a bar: creates it if it does not exist and, if there
+   * are already clips in that range, REPLACES them (redoing a section is normal; stacking
+   * clips on top sounded double). It is the common path of escribir_progresion,
+   * escribir_notas and escribir_bateria: a single transaction, a single Ctrl+Z.
    */
   function escribirEnPista(
     peticion: PeticionEscritura,
@@ -761,8 +761,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     porDefecto: InstrumentType,
   ): { ok: false; texto: string } | { ok: true; texto: string; trackId: string; clipId: string; desde: number; compases: number; sustituidos: string[] } {
     const project = e.proyecto();
-    if (!project) return { ok: false, texto: "No hay proyecto abierto: crea uno con crear_proyecto." };
-    if (notas.length === 0) return { ok: false, texto: "No hay ninguna nota que escribir." };
+    if (!project) return { ok: false, texto: "There is no open project: create one with crear_proyecto." };
+    if (notas.length === 0) return { ok: false, texto: "There is no note to write." };
     const barBeats = beatsPerBar(project);
     const startBar = Math.max(0, Math.round((peticion.desdeCompas ?? 1) - 1));
     const compases = Math.max(1, Math.ceil(beats / barBeats - 1e-6));
@@ -773,7 +773,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     const pista = pistaPorNombre(project, peticion.pista);
     let trackId = pista?.id ?? "";
     if (pista && pista.kind !== "midi") {
-      return { ok: false, texto: `«${pista.name}» es una pista de audio: elige una MIDI o un nombre nuevo.` };
+      return { ok: false, texto: `“${pista.name}” is an audio track: choose a MIDI one or a new name.` };
     }
     const programa =
       typeof peticion.programa === "number" && Number.isInteger(peticion.programa) && peticion.programa >= 0 && peticion.programa <= 127
@@ -791,17 +791,17 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         instrument: { type: instrumento, ...(programa !== undefined ? { program: programa } : {}) },
       });
     } else if ((programa !== undefined || tipoPedido) && !pista.instrument.archivo) {
-      // Una pista con instrumento de la biblioteca (archivo .sf2) no se pisa con un
-      // programa GM: escribir_notas suele llevar `programa` por costumbre.
+      // A track with a library instrument (.sf2 archive) is not overwritten with a GM
+      // program: escribir_notas usually carries `programa` out of habit.
       ops.push({
         op: "set_instrument",
         trackId,
         instrument: { ...pista.instrument, ...(tipoPedido ? { type: tipoPedido } : {}), ...(programa !== undefined ? { program: programa } : {}) },
       });
     }
-    // Lo que ya había en ese tramo se sustituye, pero SÓLO en ese tramo: un clip que
-    // empieza antes o acaba después conserva sus trozos de fuera. Antes se borraba el
-    // clip entero y un redoble de un compás se comió 16 compases de batería (27-oct).
+    // What was already in that range is replaced, but ONLY in that range: a clip that
+    // starts before or ends after keeps its outer pieces. Before, the whole clip was
+    // deleted and a one-bar drum roll ate 16 bars of drums (Oct 27).
     const sustituidos: string[] = [];
     const conservados: { startBar: number; length: number; notes: Note[]; name: string }[] = [];
     for (const clip of pista?.clips ?? []) {
@@ -825,7 +825,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       trozo(clip.start, Math.min(finClip, inicio));
       trozo(Math.max(clip.start, fin), finClip);
     }
-    // add_notes acepta 2000 notas por op: lo largo va en trozos al mismo clip.
+    // add_notes accepts 2000 notes per op: long ones go in chunks to the same clip.
     const trozos: Note[][] = [];
     for (let i = 0; i < notas.length; i += 2000) trozos.push(notas.slice(i, i + 2000));
     try {
@@ -838,9 +838,9 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       for (const resto of trozos.slice(1)) {
         siguiente = applyOps(siguiente, [{ op: "add_notes", trackId, clipId, notes: resto }]).project;
       }
-      // El clip dura lo que dice la frase (con sus silencios del final), en compases.
+      // The clip lasts what the phrase says (with its trailing rests), in bars.
       siguiente = applyOps(siguiente, [{ op: "set_clip_length", trackId, clipId, lengthBeats: compases * barBeats }]).project;
-      // Y los trozos que quedaban fuera del tramo vuelven, cada uno en su clip.
+      // And the pieces that were left outside the range come back, each one in its clip.
       for (const c of conservados) {
         siguiente = applyOps(siguiente, [{ op: "add_notes", trackId, startBar: c.startBar, name: c.name.slice(0, 60), notes: c.notes }]).project;
         const nuevo = siguiente.tracks.find((t) => t.id === trackId)?.clips.at(-1)?.id ?? "";
@@ -849,28 +849,28 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       e.fijar(siguiente);
       return { ok: true, texto: "", trackId, clipId, desde: startBar + 1, compases, sustituidos };
     } catch (error) {
-      return { ok: false, texto: `${mensajeDe(error)}\nNo se ha cambiado nada.` };
+      return { ok: false, texto: `${mensajeDe(error)}\nNothing has been changed.` };
     }
   }
 
-  /** Línea común del resultado: dónde ha quedado lo escrito. */
+  /** Common result line: where what was written ended up. */
   function dondeQueda(r: { trackId: string; clipId: string; desde: number; compases: number; sustituidos: string[] }, notas: number): string {
     const pista = e.proyecto()?.tracks.find((t) => t.id === r.trackId);
     const instrumento = pista
       ? `${pista.instrument.type}${pista.instrument.program !== undefined ? ` GM ${pista.instrument.program}` : ""}`
       : "";
     return (
-      `${notas} notas en «${pista?.name ?? r.trackId}» (${r.trackId}, ${instrumento}), clip ${r.clipId}, ` +
-      `compases ${r.desde}-${r.desde + r.compases - 1}` +
-      (r.sustituidos.length > 0 ? ` (sustituye lo que había en ese tramo de ${r.sustituidos.join(", ")}; lo de fuera se conserva)` : "") +
+      `${notas} notes on “${pista?.name ?? r.trackId}” (${r.trackId}, ${instrumento}), clip ${r.clipId}, ` +
+      `bars ${r.desde}-${r.desde + r.compases - 1}` +
+      (r.sustituidos.length > 0 ? ` (replaces what was in that range from ${r.sustituidos.join(", ")}; what is outside is kept)` : "") +
       "."
     );
   }
 
-  /** Una progresión de acordes, escrita como notas en una pista (que se crea si falta). */
+  /** A chord progression, written as notes on a track (created if missing). */
   function escribirProgresion(peticion: PeticionProgresionPista): ResultadoAccion {
     const project = e.proyecto();
-    if (!project) return { ok: false, texto: "No hay proyecto abierto: crea uno con crear_proyecto." };
+    if (!project) return { ok: false, texto: "There is no open project: create one with crear_proyecto." };
     let resultado;
     try {
       resultado = notasDeProgresion(project.key, beatsPerBar(project), peticion);
@@ -883,18 +883,18 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       ok: true,
       texto:
         `${dondeQueda(r, resultado.notas.length)} ${resultado.acordes.join(" - ")}` +
-        `${(peticion.repeticiones ?? 1) > 1 ? ` ×${peticion.repeticiones}` : ""} · patrón ${peticion.patron ?? "bloque"} · ` +
-        `tonalidad ${project.key.tonic} ${project.key.mode}.`,
+        `${(peticion.repeticiones ?? 1) > 1 ? ` ×${peticion.repeticiones}` : ""} · pattern ${peticion.patron ?? "bloque"} · ` +
+        `key ${project.key.tonic} ${project.key.mode}.`,
     };
   }
 
-  /** Melodía, bajo o cualquier línea en notación compacta (ver src/core/notacion.ts). */
+  /** Melody, bass or any line in compact notation (see src/core/notacion.ts). */
   function escribirNotas(peticion: PeticionNotas): ResultadoAccion {
     let leido;
     try {
       leido = leerNotacion(peticion.notas, peticion.velocidad ?? 90);
     } catch (error) {
-      return { ok: false, texto: `${mensajeDe(error)}. No se ha cambiado nada.` };
+      return { ok: false, texto: `${mensajeDe(error)}. Nothing has been changed.` };
     }
     const proyecto = e.proyecto();
     const irregulares = proyecto ? tramosIrregulares(leido.tramos, beatsPerBar(proyecto)) : [];
@@ -902,8 +902,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       return {
         ok: false,
         texto:
-          `Los compases no cuadran: ${irregulares.join("; ")}. Corrige las duraciones (o quita la barra si ` +
-          "el tramo ocupa varios compases). No se ha cambiado nada.",
+          `The bars do not add up: ${irregulares.join("; ")}. Fix the durations (or remove the bar line if ` +
+          "the range spans several bars). Nothing has been changed.",
       };
     }
     const repeticiones = Math.max(1, Math.min(64, Math.round(peticion.repeticiones ?? 1)));
@@ -916,34 +916,34 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     const alturas = notas.map((n) => n.pitch);
     return {
       ok: true,
-      texto: `${dondeQueda(r, notas.length)} Rango ${nombreDeNota(Math.min(...alturas))}-${nombreDeNota(Math.max(...alturas))}.`,
+      texto: `${dondeQueda(r, notas.length)} Range ${nombreDeNota(Math.min(...alturas))}-${nombreDeNota(Math.max(...alturas))}.`,
     };
   }
 
-  /** Batería en rejilla (ver src/core/bateria.ts). */
+  /** Drums in a grid (see src/core/bateria.ts). */
   function escribirBateria(peticion: PeticionBateriaPista): ResultadoAccion {
     const project = e.proyecto();
-    if (!project) return { ok: false, texto: "No hay proyecto abierto: crea uno con crear_proyecto." };
+    if (!project) return { ok: false, texto: "There is no open project: create one with crear_proyecto." };
     let resultado;
     try {
       resultado = notasDeBateria(peticion, beatsPerBar(project));
     } catch (error) {
-      return { ok: false, texto: `${mensajeDe(error)}. No se ha cambiado nada.` };
+      return { ok: false, texto: `${mensajeDe(error)}. Nothing has been changed.` };
     }
     const r = escribirEnPista({ ...peticion, instrumento: peticion.instrumento ?? "drumkit" }, resultado.notas, resultado.beats, "drumkit");
     if (!r.ok) return r;
-    return { ok: true, texto: `${dondeQueda(r, resultado.notas.length)} Piezas: ${Object.keys(peticion.patrones).join(", ")}.` };
+    return { ok: true, texto: `${dondeQueda(r, resultado.notas.length)} Pieces: ${Object.keys(peticion.patrones).join(", ")}.` };
   }
 
   /**
-   * Mueve faders por nombre de pista: es como el agente aplica una mezcla.
+   * Moves faders by track name: this is how the agent applies a mix.
    *
-   * Va por ops (set_track), asi que es un cambio normal del proyecto: entra en el
-   * historial, se deshace con Ctrl+Z y no reinicia el engine (commitLive).
+   * It goes through ops (set_track), so it is a normal project change: it enters the
+   * history, it is undone with Ctrl+Z and it does not restart the engine (commitLive).
    */
   function ajustarPistas(peticion: { pistas: AjustePista[] }): ResultadoAccion {
     const project = e.proyecto();
-    if (!project) return { ok: false, texto: "No hay ningun proyecto abierto." };
+    if (!project) return { ok: false, texto: "There is no open project." };
 
     const ops: Op[] = [];
     const hechas: string[] = [];
@@ -951,8 +951,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
 
     for (const ajuste of peticion.pistas) {
       if (ajuste.nombre.trim() === "") continue;
-      // Un nombre parcial sólo vale si es de UNA pista: antes «Bajo» movía el fader
-      // de la primera que lo contuviera aunque hubiera «Bajo 1» y «Bajo 2».
+      // A partial name only works if it belongs to ONE track: before, "Bajo" moved the
+      // fader of the first one that contained it even if there were "Bajo 1" and "Bajo 2".
       const pista = pistaPorNombre(project, ajuste.nombre);
       if (!pista) {
         faltan.push(ajuste.nombre);
@@ -966,15 +966,15 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       }
       if (typeof ajuste.pan === "number" && Number.isFinite(ajuste.pan)) {
         op.pan = Math.min(1, Math.max(-1, ajuste.pan));
-        cambios.push(`paneo ${op.pan.toFixed(2)}`);
+        cambios.push(`pan ${op.pan.toFixed(2)}`);
       }
       if (typeof ajuste.muted === "boolean") {
         op.muted = ajuste.muted;
-        cambios.push(ajuste.muted ? "mute" : "sin mute");
+        cambios.push(ajuste.muted ? "mute" : "no mute");
       }
       if (typeof ajuste.solo === "boolean") {
         op.solo = ajuste.solo;
-        cambios.push(ajuste.solo ? "solo" : "sin solo");
+        cambios.push(ajuste.solo ? "solo" : "no solo");
       }
       if (cambios.length === 0) continue;
       ops.push(op);
@@ -987,34 +987,34 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       } catch (error) {
         return {
           ok: false,
-          texto: `No se pudo ajustar: ${error instanceof Error ? error.message : String(error)}`,
+          texto: `Could not adjust: ${error instanceof Error ? error.message : String(error)}`,
         };
       }
     }
 
     const partes: string[] = [];
-    if (hechas.length > 0) partes.push(`Ajustadas ${hechas.length} pista(s):\n${hechas.join("\n")}`);
+    if (hechas.length > 0) partes.push(`Adjusted ${hechas.length} track(s):\n${hechas.join("\n")}`);
     if (faltan.length > 0) {
       const nombres = project.tracks.map((t) => t.name).join(", ");
       partes.push(
         nombres === ""
-          ? `No encuentro: ${faltan.join(", ")}. El proyecto no tiene pistas todavía.`
-          : `No encuentro: ${faltan.join(", ")}. Las pistas son: ${nombres}.`,
+          ? `I cannot find: ${faltan.join(", ")}. The project has no tracks yet.`
+          : `I cannot find: ${faltan.join(", ")}. The tracks are: ${nombres}.`,
       );
     }
-    if (partes.length === 0) partes.push("No habia nada que cambiar.");
+    if (partes.length === 0) partes.push("There was nothing to change.");
     return { ok: hechas.length > 0, texto: partes.join("\n\n") };
   }
 
   /**
-   * Un instrumento de la biblioteca, convertido a SoundFont y puesto como pista.
-   * El .sf2 trae sus 46 regiones con la nota raíz que declara el SFZ, que es lo que
-   * evita el «suena a armónica» de estirar un único sample.
+   * A library instrument, converted to SoundFont and put as a track.
+   * The .sf2 comes with its 46 regions and the root note declared by the SFZ, which is
+   * what avoids the "sounds like a harmonic" of stretching a single sample.
    */
   async function instrumentar(peticion: { sfz: string; nombre: string; pista?: string }): Promise<ResultadoAccion> {
-    // Se comprueba ANTES de convertir: si no, se convertía un SFZ de 46 regiones para
-    // nada y luego se avisaba de que no había proyecto.
-    if (!e.proyecto()) return { ok: false, texto: "Abre o crea un proyecto antes de añadir un instrumento." };
+    // It is checked BEFORE converting: otherwise a 46-region SFZ was converted for
+    // nothing and then it warned that there was no project.
+    if (!e.proyecto()) return { ok: false, texto: "Open or create a project before adding an instrument." };
     try {
       const res = await fetch("/api/instrumentos/crear", {
         method: "POST",
@@ -1030,20 +1030,20 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         sfz?: string;
       };
       if (!datos.ok || !datos.archivo) {
-        return { ok: false, texto: `No se pudo convertir: ${datos.error ?? res.status}` };
+        return { ok: false, texto: `Could not convert: ${datos.error ?? res.status}` };
       }
       const project = e.proyecto();
-      if (!project) return { ok: false, texto: "El proyecto se cerró mientras se convertía el instrumento." };
+      if (!project) return { ok: false, texto: "The project was closed while the instrument was being converted." };
       const sonido = (datos.sfz ?? peticion.sfz).split("/").pop()!.replace(/\.sfz$/i, "");
       const instrumento = { type: "soundfont" as const, preset: sonido.slice(0, 64), archivo: datos.archivo };
       const notas = datos.notas ?? [];
-      const rango = notas.length === 2 ? ` (suena de ${nombreDeNota(notas[0]!)} a ${nombreDeNota(notas[1]!)})` : "";
+      const rango = notas.length === 2 ? ` (sounds from ${nombreDeNota(notas[0]!)} to ${nombreDeNota(notas[1]!)})` : "";
       if (peticion.pista) {
         const despues = applyOps(project, [{ op: "set_instrument", trackId: peticion.pista, instrument: instrumento }]);
         e.fijar(despues.project);
         return {
           ok: true,
-          texto: `${despues.results.join(" ")}: «${sonido}», ${datos.zonas ?? 0} zonas${rango}. Las notas de la pista se conservan.`,
+          texto: `${despues.results.join(" ")}: “${sonido}”, ${datos.zonas ?? 0} zones${rango}. The track's notes are kept.`,
         };
       }
       const nombre = (peticion.nombre || sonido).slice(0, 60);
@@ -1053,21 +1053,21 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       return {
         ok: true,
         texto:
-          `Instrumento «${sonido}» listo: ${datos.zonas ?? 0} zonas${rango} en ${datos.archivo}. ` +
-          `Pista ${pista ? `«${pista.name}» (${pista.id})` : ""} creada: escribe sus notas con escribir_notas ` +
-          `o escribir_progresion (pista = su id).`,
+          `Instrument “${sonido}” ready: ${datos.zonas ?? 0} zones${rango} in ${datos.archivo}. ` +
+          `Track ${pista ? `“${pista.name}” (${pista.id})` : ""} created: write its notes with escribir_notas ` +
+          `or escribir_progresion (pista = its id).`,
       };
     } catch (error) {
-      return { ok: false, texto: `No se pudo convertir: ${error instanceof Error ? error.message : String(error)}` };
+      return { ok: false, texto: `Could not convert: ${error instanceof Error ? error.message : String(error)}` };
     }
   }
   /**
-   * Fotos del proyecto tomadas al empezar cada turno (main.ts, guardarVersion):
-   * `listar` las enseña; `restaurar` copia las pistas pedidas (o todo) de una.
+   * Project snapshots taken at the start of each turn (main.ts, guardarVersion):
+   * `listar` shows them; `restaurar` copies the requested tracks (or everything) from one.
    */
   async function versiones(peticion: { accion: string; version?: string; pistas?: string[] }): Promise<ResultadoAccion> {
     const project = e.proyecto();
-    if (!project) return { ok: false, texto: "No hay proyecto abierto." };
+    if (!project) return { ok: false, texto: "There is no open project." };
     const carpeta = `proyectos/${carpetaDeProyecto(project)}/${CARPETA_VERSIONES}`;
     try {
       const lista = await fetch(`/api/fs/list?carpeta=${encodeURIComponent(carpeta)}`, { headers: cabecerasProyecto() });
@@ -1078,49 +1078,49 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         .sort()
         .reverse();
       if (nombres.length === 0) {
-        return { ok: true, texto: "Aún no hay versiones: se guarda una al empezar cada turno." };
+        return { ok: true, texto: "There are no versions yet: one is saved at the start of each turn." };
       }
       if (peticion.accion !== "restaurar") {
         return {
           ok: true,
           texto:
-            `${nombres.length} versión(es), de la más nueva a la más vieja. Cada una es el proyecto ANTES del ` +
-            `pedido que se indica:\n` +
+            `${nombres.length} version(s), from the newest to the oldest. Each one is the project BEFORE the ` +
+            `request shown:\n` +
             nombres.slice(0, 30).map((n, i) => `${i + 1}. ${n} (${describirVersion(n)})`).join("\n"),
         };
       }
       const pedida = (peticion.version ?? "").trim();
       const nombre = /^\d{1,2}$/.test(pedida) ? nombres[Number(pedida) - 1] : nombres.find((n) => n === pedida || n.startsWith(pedida));
       if (!nombre) {
-        return { ok: false, texto: `No encuentro la versión «${pedida}». Usa versiones con accion=listar y pasa su nombre o su número.` };
+        return { ok: false, texto: `I cannot find version “${pedida}”. Use versiones with accion=listar and pass its name or number.` };
       }
       const res = await fetch("/api/fs/read", {
         method: "POST",
         headers: cabecerasProyecto({ "Content-Type": "application/json" }),
         body: JSON.stringify({ path: `${carpeta}/${nombre}` }),
       });
-      if (!res.ok) return { ok: false, texto: `No se pudo leer ${nombre} (HTTP ${res.status}).` };
+      if (!res.ok) return { ok: false, texto: `Could not read ${nombre} (HTTP ${res.status}).` };
       const { contenido } = (await res.json()) as { contenido: string };
       const antigua = interpretarProyectoEnDisco(contenido).proyecto;
       const { project: siguiente, hechas } = restaurarVersion(project, antigua, peticion.pistas ?? []);
       e.fijar(siguiente);
       return {
         ok: true,
-        texto: `Desde ${nombre} (${describirVersion(nombre)}):\n${hechas.join("\n")}\nSe deshace con Ctrl+Z.`,
+        texto: `From ${nombre} (${describirVersion(nombre)}):\n${hechas.join("\n")}\nIt is undone with Ctrl+Z.`,
       };
     } catch (error) {
-      return { ok: false, texto: `Error con las versiones: ${mensajeDe(error)}` };
+      return { ok: false, texto: `Error with the versions: ${mensajeDe(error)}` };
     }
   }
 
   async function exportar(peticion: { midi: boolean; wav: boolean }): Promise<ResultadoAccion> {
-    if (!e.exportar) return { ok: false, texto: "Esta pestaña no sabe exportar." };
-    if (!peticion.midi && !peticion.wav) return { ok: false, texto: "Pide midi, wav o los dos." };
+    if (!e.exportar) return { ok: false, texto: "This tab does not know how to export." };
+    if (!peticion.midi && !peticion.wav) return { ok: false, texto: "Ask for midi, wav or both." };
     return e.exportar(peticion);
   }
 
   async function escuchar(opciones: { pistas?: string[]; compasesPorTramo?: number }): Promise<ResultadoAccion> {
-    if (!e.escuchar) return { ok: false, texto: "Esta pestaña no sabe escuchar la mezcla." };
+    if (!e.escuchar) return { ok: false, texto: "This tab does not know how to listen to the mix." };
     return e.escuchar(opciones);
   }
 

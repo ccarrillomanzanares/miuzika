@@ -338,15 +338,15 @@ main {
   color: #e5c07b;
 }
 
-/* Arrastrar un fichero sobre la ventana: el lienzo se marca para que se vea que
-   se puede soltar (antes no pasaba nada al soltarlo). */
+/* Dragging a file over the window: the canvas is marked so it is clear that
+   it can be dropped (before, nothing happened when dropping it). */
 body.arrastrando .canvas-wrap {
   outline: 2px dashed var(--accent);
   outline-offset: -8px;
 }
 
 body.arrastrando .canvas-wrap::after {
-  content: "Suelta el fichero: WAV, .mid o proyecto";
+  content: "Drop the file: WAV, .mid or project";
   position: absolute;
   inset: auto 0 24px 0;
   text-align: center;
@@ -413,7 +413,7 @@ body.arrastrando .canvas-wrap::after {
   font-size: 11.5px;
 }
 
-/* Resumen del turno al final del historial: informativo, no una burbuja mas. */
+/* Turn summary at the end of the history: informative, not another bubble. */
 .msg.meta {
   padding: 0 11px;
   background: none;
@@ -623,7 +623,7 @@ body.arrastrando .canvas-wrap::after {
 
 .code-card .render-audio { height: 34px; padding: 0 14px; }
 
-/* ── Panel de chat del agente ─────────────────────────────────────────────── */
+/* ── Agent chat panel ─────────────────────────────────────────────────────── */
 
 button.active {
   border-color: var(--accent);
@@ -648,7 +648,7 @@ button.active {
   color: var(--muted);
 }
 
-/* Contador de gasto de la GPU: en vivo mientras la maquina esta encendida. */
+/* GPU spending counter: live while the machine is on. */
 .chat-head .coste {
   margin-left: auto;
   font-family: ui-monospace, monospace;
@@ -662,7 +662,7 @@ button.active {
   color: var(--accent);
 }
 
-/* Destino de ejecucion: CPU del portatil o GPU en Lambda Cloud. */
+/* Execution target: the laptop CPU or a GPU on Lambda Cloud. */
 .chat-head .destino select {
   font: inherit;
   font-size: 10.5px;
@@ -735,7 +735,7 @@ button.active {
   font-size: 13px;
 }
 
-/* Mientras el agente trabaja, la caja se ve inactiva. */
+/* While the agent is working, the box looks inactive. */
 .chat-composer.busy textarea,
 .chat-composer.busy #chat-send {
   opacity: 0.55;
@@ -748,7 +748,7 @@ button.active {
   max-width: 96%;
 }
 
-/* El panel se puede esconder sin mover el resto de la aplicación. */
+/* The panel can be hidden without moving the rest of the application. */
 #app.chat-collapsed main {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -758,8 +758,8 @@ button.active {
 }
 
 
-/* ── Diálogos (proyectos del disco y destino del audio) ─────────────────────
-   <dialog> nativo: se centra solo y el backdrop oscurece sin capas propias. */
+/* ── Dialogs (projects on disk and audio destination) ───────────────────────
+   native <dialog>: it centers itself and the backdrop darkens without custom layers. */
 .dialogo {
   min-width: 420px;
   max-width: min(720px, 92vw);
@@ -825,7 +825,7 @@ button.active {
   color: var(--text);
 }
 
-/* Una fila por proyecto: nombre arriba, datos y carpeta debajo. */
+/* One row per project: name on top, data and folder below. */
 .proyecto-fila {
   display: flex;
   flex-direction: column;
@@ -857,7 +857,7 @@ button.active {
   color: var(--accent);
 }
 
-/* ── Barra de estado: texto + botón de cancelar ────────────────────────────── */
+/* ── Status bar: text + cancel button ─────────────────────────────────────── */
 .status span {
   flex: 1;
   min-width: 0;
@@ -880,13 +880,13 @@ button.active {
   background: var(--accent-soft);
 }
 
-/* La GPU arrancando o apagándose: cuenta, pero todavía no cobra. */
+/* The GPU starting or shutting down: it counts, but it is not billing yet. */
 .coste.arrancando {
   color: #e5c07b;
   border-color: #4a3f22;
 }
 
-/* Aviso de bundle viejo: botón que aparece solo cuando el servidor cambió. */
+/* Stale bundle warning: a button that only appears when the server changed. */
 .recargar {
   border-color: #e5c07b;
   color: #e5c07b;
@@ -902,7 +902,7 @@ button.active {
   50% { border-color: #6a5a30; }
 }
 
-/* ── Diálogo «Sonidos» ─────────────────────────────────────────────────── */
+/* ── "Sounds" dialog ──────────────────────────────────────────────────────── */
 .dialogo-ancho { width: min(720px, 92vw); }
 .dialogo .sonidos-ayuda { margin: 0.2rem 0 0.6rem; font-size: 0.78rem; opacity: 0.65; }
 #sonidos-buscar {
@@ -928,7 +928,7 @@ button.active {
 .sonido-nombre strong { font-weight: 600; font-size: 0.86rem; }
 .sonido-nombre em { font-style: normal; font-size: 0.74rem; opacity: 0.6; }
 
-/* Burbuja de «está trabajando»: se ve en el chat, no sólo en la barra de abajo. */
+/* "Working" bubble: it is visible in the chat, not only in the bottom bar. */
 .msg.progreso {
   display: flex;
   align-items: center;
@@ -951,7 +951,7 @@ button.active {
   50% { opacity: 1; transform: scale(1.15); }
 }
 
-/* ── Pad (touchpad como instrumento) ──────────────────────────────────────── */
+/* ── Pad (touchpad as an instrument) ───────────────────────────────────────── */
 .dialogo-pad {
   width: min(720px, 92vw);
 }
@@ -1007,7 +1007,7 @@ button.active {
   color: var(--muted);
 }
 
-/* ── Encargo (formulario que escribe el mensaje del chat) ─────────────────── */
+/* ── Brief (form that writes the chat message) ────────────────────────────── */
 .dialogo-encargo {
   width: min(640px, 94vw);
 }
@@ -1177,7 +1177,7 @@ button.active {
   color: var(--muted);
 }
 
-/* ── Modelos (proveedor, clave y modelo del agente) ───────────────────────── */
+/* ── Models (provider, key and agent model) ───────────────────────────────── */
 .dialogo-modelos {
   width: min(760px, 94vw);
 }

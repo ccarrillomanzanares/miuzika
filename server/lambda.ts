@@ -1,18 +1,18 @@
 /**
- * Ejecutar Python en una GPU de Lambda Cloud, igual que en la CPU local.
+ * Run Python on a Lambda Cloud GPU, just like on the local CPU.
  *
- * El navegador no habla con la nube: la clave (`LAMBDA_API_KEY`) vive en `.env` y
- * solo la usa el servidor de desarrollo. El flujo es el mismo que en local —
- * mismo script, mismos argumentos, misma salida— pero el proceso corre en la
- * instancia:
+ * The browser does not talk to the cloud: the key (`LAMBDA_API_KEY`) lives in `.env` and
+ * only the dev server uses it. The flow is the same as locally —
+ * same script, same arguments, same output — but the process runs on the
+ * instance:
  *
- *   1. se enciende (o se reutiliza) la instancia `LAMBDA_NOMBRE`
- *   2. se sube el motor y los scripts del proyecto
- *   3. se ejecuta con `python3 -u <script>` dentro de la carpeta del proyecto
- *   4. se traen de vuelta los ficheros nuevos (marca de tiempo)
+ *   1. the `LAMBDA_NOMBRE` instance is powered on (or reused)
+ *   2. the engine and the project scripts are uploaded
+ *   3. it runs with `python3 -u <script>` inside the project folder
+ *   4. the new files are brought back (timestamp based)
  *
- * La instancia NO se apaga sola: apagarla cuesta un clic y encenderla otra vez
- * cuesta tres minutos, así que decide la persona, no el proceso.
+ * The instance does NOT shut itself down: shutting it down costs one click and starting it again
+ * costs three minutes, so the person decides, not the process.
  */
 
 import { spawn } from "node:child_process";
@@ -36,21 +36,21 @@ export interface Instancia {
   ip: string | null;
   nombre: string;
   tipo: string;
-  /** Cuando empezo a facturar (ISO). Base del contador de gasto. */
+  /** When it started billing (ISO). Base for the spend counter. */
   desde: string | null;
-  /** Ultimo cambio de estado (ISO): sirve para contar el arranque. */
+  /** Last state change (ISO): useful for timing the boot. */
   cambio: string | null;
-  /** Tarifa real del tipo de instancia, en dinero/hora. */
+  /** Actual rate for the instance type, in money/hour. */
   precioHora: number;
-  /** Horas desde que arranco y dinero acumulado a precio de tarifa. */
+  /** Hours since it started and money accumulated at the rate price. */
   horas: number;
   gastado: number;
 }
 
 const BASE = "https://cloud.lambda.ai/api/v1";
-/** Carpeta de la instancia donde se replica workspace/. */
+/** Instance folder where workspace/ is replicated. */
 const REMOTO = "miuzika";
-/** Por encima de esto no se sube un fichero del proyecto (stems, masters...). */
+/** Above this, a project file is not uploaded (stems, masters...). */
 const MAX_SUBIDA = 50 * 1024 * 1024;
 
 export function configDesdeEnv(env: Record<string, string>): {
@@ -64,7 +64,7 @@ export function configDesdeEnv(env: Record<string, string>): {
   if (!sshKey) {
     faltan.push("LAMBDA_SSH_KEY");
   } else if (!existsSync(sshKey)) {
-    faltan.push(`LAMBDA_SSH_KEY (no existe: ${sshKey})`);
+    faltan.push(`LAMBDA_SSH_KEY (does not exist: ${sshKey})`);
   }
   if (faltan.length > 0) return { cfg: null, faltan };
   return {
@@ -93,7 +93,7 @@ async function api(
     method: cuerpo === undefined ? "GET" : "POST",
     headers: {
       Authorization: `Bearer ${cfg.apiKey}`,
-      // Cloudflare responde 1010 (y parece un 401) a clientes sin User-Agent.
+      // Cloudflare answers 1010 (and it looks like a 401) to clients without a User-Agent.
       "User-Agent": "miuzika/1.0 (curl/8.0)",
       ...(cuerpo === undefined ? {} : { "Content-Type": "application/json" }),
     },
@@ -105,7 +105,7 @@ async function api(
   return texto === "" ? {} : (JSON.parse(texto) as Record<string, unknown>);
 }
 
-/** Tarifas por tipo de instancia, tal como las publica Lambda (cacheadas 10 min). */
+/** Rates by instance type, as published by Lambda (cached for 10 min). */
 const preciosTipo = new Map<string, number>();
 let preciosCuando = 0;
 
@@ -114,8 +114,8 @@ async function preciosDeTipos(cfg: ConfigLambda): Promise<Map<string, number>> {
   try {
     const datos = (await api(cfg, "instance-types")) as { data?: unknown };
     preciosTipo.clear();
-    // Lambda devuelve un objeto indexado por nombre (no una lista): cada valor
-    // trae el tipo dentro de `instance_type`. Se aceptan las dos formas.
+    // Lambda returns an object indexed by name (not a list): each value
+    // carries the type inside `instance_type`. Both shapes are accepted.
     const bruto = datos.data;
     const lista: Record<string, unknown>[] = Array.isArray(bruto)
       ? (bruto as Record<string, unknown>[])
@@ -133,7 +133,7 @@ async function preciosDeTipos(cfg: ConfigLambda): Promise<Map<string, number>> {
     }
     preciosCuando = Date.now();
   } catch {
-    /* sin tarifas publicadas: se usa el precio del .env como estimacion */
+    /* no published rates: the .env price is used as an estimate */
   }
   return preciosTipo;
 }
@@ -145,12 +145,12 @@ export async function instancias(cfg: ConfigLambda): Promise<Instancia[]> {
   ]);
   return (datos.data ?? []).map((i) => {
     const tipo = (i.instance_type ?? {}) as { name?: string; price_cents_per_hour?: number };
-    // first_healthy es cuando la maquina empezo a estar viva; a partir de ahi se
-    // factura. Si aun no arranco, se cuenta desde ahora (0 horas).
+    // first_healthy is when the machine started being alive; billing starts
+    // from there. If it has not booted yet, count from now (0 hours).
     const desde = typeof i.first_healthy === "string" ? i.first_healthy : null;
     const horas = desde ? Math.max(0, (Date.now() - Date.parse(desde)) / 3_600_000) : 0;
-    // Precio REAL: el que da la API para ese tipo; si no lo trae, la tabla de
-    // tarifas publicadas; y solo si no hay nada, el del .env (estimacion).
+    // REAL price: the one the API gives for that type; if it does not provide it, the table of
+    // published rates; and only if there is nothing, the .env one (estimate).
     const nombreTipo = String(tipo.name ?? "");
     const centimos = typeof tipo.price_cents_per_hour === "number" ? tipo.price_cents_per_hour : null;
     const precio = centimos !== null ? centimos / 100 : (tarifas.get(nombreTipo) ?? cfg.precioHora);
@@ -171,7 +171,7 @@ export async function instancias(cfg: ConfigLambda): Promise<Instancia[]> {
 
 const esperar = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/** Enciende la instancia o reutiliza la que ya este viva con ese nombre. */
+/** Powers on the instance or reuses the one already alive with that name. */
 export async function encender(
   cfg: ConfigLambda,
   aviso: (texto: string) => void,
@@ -182,13 +182,13 @@ export async function encender(
   );
   const lista = vivas.find((i) => i.status === "active" && i.ip);
   if (lista?.ip) {
-    aviso(`reutilizo la instancia ${lista.id.slice(0, 12)} (${lista.ip})`);
+    aviso(`reusing instance ${lista.id.slice(0, 12)} (${lista.ip})`);
     return { id: lista.id, ip: lista.ip, reutilizada: true, minutos: 0 };
   }
 
   let id = vivas[0]?.id ?? "";
   if (id === "") {
-    aviso(`lanzando ${cfg.tipo} en ${cfg.region}`);
+    aviso(`launching ${cfg.tipo} in ${cfg.region}`);
     const resp = (await api(cfg, "instance-operations/launch", {
       region_name: cfg.region,
       instance_type_name: cfg.tipo,
@@ -198,14 +198,14 @@ export async function encender(
       quantity: 1,
     })) as { data?: { instance_ids?: string[] } };
     id = resp.data?.instance_ids?.[0] ?? "";
-    if (id === "") throw new Error("Lambda no devolvio ninguna instancia");
+    if (id === "") throw new Error("Lambda returned no instance");
   }
 
   for (let intento = 0; intento < 90; intento++) {
     await esperar(6000);
     const mia = (await instancias(cfg)).find((i) => i.id === id);
     if (mia?.status === "active" && mia.ip) {
-      aviso(`activa en ${Math.round((Date.now() - t0) / 1000)} s: ${mia.ip}`);
+      aviso(`active in ${Math.round((Date.now() - t0) / 1000)} s: ${mia.ip}`);
       return {
         id,
         ip: mia.ip,
@@ -213,13 +213,13 @@ export async function encender(
         minutos: Math.round((Date.now() - t0) / 6000) / 10,
       };
     }
-    if (mia === undefined) throw new Error(`la instancia ${id} desaparecio mientras arrancaba`);
-    if (intento % 5 === 4) aviso(`esperando... ${mia.status} (${Math.round((Date.now() - t0) / 1000)} s)`);
+    if (mia === undefined) throw new Error(`instance ${id} disappeared while booting`);
+    if (intento % 5 === 4) aviso(`waiting... ${mia.status} (${Math.round((Date.now() - t0) / 1000)} s)`);
   }
-  throw new Error("la instancia no llego a 'active' en 9 minutos");
+  throw new Error("the instance did not reach 'active' within 9 minutes");
 }
 
-/** Apaga (termina) la instancia y confirma que desaparece de la cuenta. */
+/** Shuts down (terminates) the instance and confirms it disappears from the account. */
 export async function apagar(
   cfg: ConfigLambda,
   id: string,
@@ -257,7 +257,7 @@ function correrComando(
         if (process.platform === "win32") spawn("taskkill", ["/PID", String(hijo.pid), "/T", "/F"]);
         else hijo.kill("SIGKILL");
       }
-      errores += `\n[miuzika] ${comando} cortado a los ${segundos} s\n`;
+      errores += `\n[miuzika] ${comando} cut off after ${segundos} s\n`;
       setTimeout(() => terminar(null), 2000);
     }, segundos * 1000);
     hijo.stdout.on("data", (t: Buffer) => {
@@ -312,18 +312,18 @@ function scp(
   );
 }
 
-/** ¿Hay ssh y scp en el PATH del servidor? (en Windows vienen con git-bash) */
+/** Are ssh and scp on the server's PATH? (on Windows they come with git-bash) */
 export async function comprobarSsh(): Promise<{ ok: boolean; detalle: string }> {
   const r = await correrComando("ssh", ["-V"], 15);
   const texto = (r.errores + r.salida).trim();
   return { ok: /OpenSSH/i.test(texto), detalle: texto.split("\n")[0] ?? "" };
 }
 
-// ------------------------------------------------------------------ sincronizar
+// ------------------------------------------------------------------ sync
 
 const comillas = (texto: string): string => `'${texto.replace(/'/g, `'\\''`)}'`;
 
-/** Ficheros del proyecto que tiene sentido subir (scripts y datos pequenos). */
+/** Project files that make sense to upload (scripts and small data). */
 function ficherosDelProyecto(carpetaProyecto: string): string[] {
   const salida: string[] = [];
   const recorrer = (dir: string): void => {
@@ -349,7 +349,7 @@ const pyDe = (carpeta: string): string[] => {
     .map((n) => join(carpeta, n));
 };
 
-/** Replica motor + proyecto en la instancia. */
+/** Replicates engine + project on the instance. */
 export async function sincronizar(
   cfg: ConfigLambda,
   ip: string,
@@ -394,7 +394,7 @@ export async function sincronizar(
   return { codigo: 0, errores: "", ficheros: total };
 }
 
-/** Trae de vuelta lo que el script haya escrito (mas nuevo que la marca). */
+/** Brings back whatever the script wrote (newer than the mark). */
 async function traerNuevos(
   cfg: ConfigLambda,
   ip: string,
@@ -414,7 +414,7 @@ async function traerNuevos(
     .filter((l) => l !== "" && !l.includes("__pycache__") && !l.endsWith(".pyc"));
   if (relativos.length === 0) return { traidos: [], errores: "" };
 
-  // Un scp por grupo de ficheros del mismo directorio destino.
+  // One scp per group of files with the same destination directory.
   const porDestino = new Map<string, string[]>();
   for (const rel of relativos) {
     const destinoLocal = resolve(join(carpetaTrabajo, "proyectos", slug, rel));
@@ -441,7 +441,7 @@ async function traerNuevos(
   return { traidos: traidos.filter((n) => n !== ""), errores };
 }
 
-// ------------------------------------------------------------------ ejecutar
+// ------------------------------------------------------------------ run
 
 export interface PeticionLambda {
   scriptRel: string;
@@ -472,21 +472,21 @@ export async function ejecutarEnLambda(
   if (sinc.codigo !== 0) {
     return {
       ok: false, id: arranque.id, ip: arranque.ip, codigo: sinc.codigo, salida: "",
-      errores: `no se pudo sincronizar: ${sinc.errores}`, ms: Date.now() - t0, traidos: [],
-      nota: "sincronizacion",
+      errores: `could not sync: ${sinc.errores}`, ms: Date.now() - t0, traidos: [],
+      nota: "sync",
     };
   }
-  p.aviso(`${sinc.ficheros} fichero(s) subidos; ejecutando ${p.scriptRel}`);
+  p.aviso(`${sinc.ficheros} file(s) uploaded; running ${p.scriptRel}`);
 
   await ssh(cfg, arranque.ip, `touch ~/${REMOTO}/.marca`, 30);
-  // El cwd remoto es la carpeta del proyecto: lo que vive dentro se pasa relativo
-  // a ella; lo compartido (codigo/, herramientas/) se pasa relativo hacia arriba
-  // ("../../codigo/..."), o se prefijaria dos veces ("proyectos/<slug>/codigo/...").
+  // The remote cwd is the project folder: what lives inside it is passed relative
+  // to it; shared things (codigo/, herramientas/) are passed relative upwards
+  // ("../../codigo/..."), otherwise the prefix would be doubled ("proyectos/<slug>/codigo/...").
   const prefijo = `proyectos/${p.slug}/`;
-  // Lo compartido se pasa RELATIVO al cwd del proyecto (../.. = ~/miuzika), no
-  // como "$HOME/...": la ruta va entrecomillada, la shell no expande $HOME y
-  // python la resolvia contra el cwd ("proyectos/<slug>/$HOME/miuzika/..."),
-  // que es exactamente el error que dejaba el render sin ejecutar.
+  // Shared things are passed RELATIVE to the project cwd (../.. = ~/miuzika), not
+  // as "$HOME/...": the path goes quoted, the shell does not expand $HOME and
+  // python resolved it against the cwd ("proyectos/<slug>/$HOME/miuzika/..."),
+  // which is exactly the error that left the render unexecuted.
   const script = p.scriptRel.startsWith(prefijo)
     ? p.scriptRel.slice(prefijo.length)
     : `../../${p.scriptRel}`;
@@ -498,7 +498,7 @@ export async function ejecutarEnLambda(
 
   const r = await ssh(cfg, arranque.ip, comando, p.segundos + 60);
   const traida = await traerNuevos(cfg, arranque.ip, p.carpetaTrabajo, p.slug);
-  p.aviso(`terminado; ${traida.traidos.length} fichero(s) traidos de vuelta`);
+  p.aviso(`done; ${traida.traidos.length} file(s) brought back`);
 
   return {
     ok: r.codigo === 0,
@@ -509,28 +509,28 @@ export async function ejecutarEnLambda(
     errores: r.errores + traida.errores,
     ms: Date.now() - t0,
     traidos: traida.traidos,
-    nota: arranque.reutilizada ? "instancia reutilizada" : "instancia nueva",
+    nota: arranque.reutilizada ? "reused instance" : "new instance",
   };
 }
 
-/** Estado para la barra/el panel: configurado, viva, coste y ssh disponible. */
+/** State for the bar/panel: configured, alive, cost and ssh available. */
 /**
- * Estado agregado. La forma es DELIBERADAMENTE generica: cualquier proveedor
- * (Lambda, RunPod, Paperspace...) puede rellenarla y el contador de la app
- * funciona igual, porque solo necesita precio/hora y desde cuando cuenta.
+ * Aggregated state. The shape is DELIBERATELY generic: any provider
+ * (Lambda, RunPod, Paperspace...) can fill it and the app's counter
+ * works the same, because it only needs price/hour and when it started counting.
  */
 export async function estado(cfg: ConfigLambda): Promise<{
   configurado: boolean;
   instancias: Instancia[];
   ssh: { ok: boolean; detalle: string };
-  /** Tarifa que se aplica AHORA: la de la instancia viva o la del tipo configurado. */
+  /** Rate applied RIGHT NOW: the live instance's or the configured type's. */
   precioHora: number;
   tipo: string;
   /** apagada | arrancando | activa | apagandose */
   fase: "apagada" | "arrancando" | "activa" | "apagandose";
   activo: boolean;
   desde: string | null;
-  /** Inicio del arranque en curso (para el reloj de "arrancando"). */
+  /** Start of the boot in progress (for the "starting" clock). */
   arranque: string | null;
   gastado: number;
   moneda: string;
@@ -541,16 +541,16 @@ export async function estado(cfg: ConfigLambda): Promise<{
     comprobarSsh(),
   ]);
   const vivas = lista.filter((i) => i.status !== "terminated");
-  // Solo cuentan las que estan ACTIVAS: una instancia colgada en "terminating"
-  // durante dias conserva su first_healthy y sumaba miles de dolares al contador.
+  // Only ACTIVE ones count: an instance stuck in "terminating"
+  // for days keeps its first_healthy and added thousands of dollars to the counter.
   const activas = vivas.filter((i) => i.status === "active");
   const arrancando = vivas.filter(
     (i) => i.status === "booting" || i.status === "loading" || i.status === "unhealthy",
   );
   const apagandose = vivas.filter(
-    // Sólo cuenta la que se está apagando AHORA: una instancia zombi en
-    // "terminating" desde hace meses (caso abierto con soporte) no puede dejar la
-    // cabecera diciendo "apagándose" para siempre.
+    // Only count the one shutting down NOW: a zombie instance in
+    // "terminating" for months (open support case) cannot leave the
+    // header saying "shutting down" forever.
     (i) =>
       i.status === "terminating" &&
       (i.desde === null || Date.now() - Date.parse(i.desde) < 30 * 60_000),
@@ -566,8 +566,8 @@ export async function estado(cfg: ConfigLambda): Promise<{
     .filter((i) => i.desde !== null)
     .sort((a, b) => Date.parse(a.desde ?? "") - Date.parse(b.desde ?? ""));
   const principal = contando[0] ?? null;
-  // La tarifa que se muestra es la de la instancia que hay delante, no la del
-  // .env: un A10 no cuesta lo mismo que un A100 y el .env es solo el respaldo.
+  // The rate shown is the one of the instance in front, not the .env
+  // one: an A10 does not cost the same as an A100 and the .env is only the fallback.
   const tarifas = await preciosDeTipos(cfg).catch(() => new Map<string, number>());
   const precioHora = (activas[0] ?? arrancando[0])?.precioHora ?? tarifas.get(cfg.tipo) ?? cfg.precioHora;
   return {

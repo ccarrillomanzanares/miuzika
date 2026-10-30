@@ -1,10 +1,10 @@
-"""Lee un Standard MIDI File y lo devuelve como JSON (sin dependencias).
+"""Reads a Standard MIDI File and returns it as JSON (no dependencies).
 
-Uso: python herramientas/midi_lector.py <ruta.mid>
+Usage: python herramientas/midi_lector.py <path.mid>
 
-Salida: {"bpm", "division", "tracks": [{"name", "program", "channel",
+Output: {"bpm", "division", "tracks": [{"name", "program", "channel",
          "notes": [{"pitch", "start", "duration", "velocity"}]}]}
-`start` y `duration` van en BEATS (pulsos de negra), listos para la op add_notes.
+`start` and `duration` are in BEATS (quarter-note pulses), ready for the add_notes op.
 """
 
 import json
@@ -27,7 +27,7 @@ def vlq(datos, i):
 def leer(path):
     datos = open(path, "rb").read()
     if datos[:4] != b"MThd":
-        raise SystemExit("no es un fichero MIDI (falta MThd)")
+        raise SystemExit("not a MIDI file (MThd missing)")
     _fmt, ntrk, division = struct.unpack(">HHH", datos[8:14])
     division = division or 480
     i = 14
@@ -97,7 +97,7 @@ def leer(path):
                         t0, vel = activas.pop(clave)
                         notas.append((t0, max(t - t0, 1), a, vel))
 
-        # notas que quedaron sin apagar: se cierran al final de la pista
+        # notes left unstopped: they are closed at the end of the track
         for (ch, a), (t0, vel) in activas.items():
             notas.append((t0, max(t - t0, 1), a, vel))
 
@@ -106,7 +106,7 @@ def leer(path):
         notas.sort()
         pistas.append(
             {
-                "name": nombre or f"Pista {len(pistas) + 1}",
+                "name": nombre or f"Track {len(pistas) + 1}",
                 "program": prog if prog is not None else 0,
                 "channel": canal,
                 "notes": [
@@ -129,7 +129,7 @@ def leer(path):
 
 def main():
     if len(sys.argv) < 2:
-        raise SystemExit("uso: python herramientas/midi_lector.py <ruta.mid>")
+        raise SystemExit("usage: python herramientas/midi_lector.py <path.mid>")
     print(json.dumps(leer(sys.argv[1]), ensure_ascii=False))
 
 

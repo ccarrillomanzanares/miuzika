@@ -1,37 +1,38 @@
-# Terceros
+# Third parties
 
 ## openDAW
 
 - Web: https://opendaw.org
-- Código: https://github.com/andremichelle/openDAW
-- Licencia: AGPL-3.0-or-later **o** licencia comercial (dual)
+- Source: https://github.com/andremichelle/openDAW
+- License: AGPL-3.0-or-later **or** commercial license (dual)
 - Copyright © 2025 André Michelle
 
-miuzika se plantea como un trabajo combinado con openDAW. En despliegues públicos
-(SaaS) esto implica publicar el código bajo AGPL-3.0, tal como exige la sección 13.
-La licencia comercial de openDAW excluye algunos componentes de terceros
-(compresor CTAGDRC, Tone3000, TempoCNN); ver `docs/OPENDAW.md`.
+miuzika is intended as a combined work with openDAW. In public deployments (SaaS)
+this means publishing the source under AGPL-3.0, as required by section 13. The
+openDAW commercial license excludes some third-party components (CTAGDRC compressor,
+Tone3000, TempoCNN); see `docs/OPENDAW.md`.
 
 ## Strudel / superdough
 
 - Web: https://strudel.cc
-- Código: https://codeberg.org/uzu/strudel
-- Licencia: AGPL-3.0-or-later
-- Paquetes: `@strudel/core`, `@strudel/mini`, `@strudel/transpiler`, `@strudel/tonal`,
+- Source: https://codeberg.org/uzu/strudel
+- License: AGPL-3.0-or-later
+- Packages: `@strudel/core`, `@strudel/mini`, `@strudel/transpiler`, `@strudel/tonal`,
   `@strudel/webaudio`, `@strudel/soundfonts`, `superdough`.
-- El render de audio descarga sample maps de `strudel.b-cdn.net` y soundfonts de
-  `webaudiofontdata`. Las licencias de cada pack/soundfont son las de su proyecto de origen;
-  revisa la atribución antes de redistribuir un build con esos assets empaquetados.
-- Packs usados por defecto en el render: Uzu drumkit, Tidal drum machines y VCSL
-  (VCSL se distribuye como CC0; comprueba el resto de packs antes de empaquetarlos).
+- Audio rendering downloads sample maps from `strudel.b-cdn.net` and soundfonts from
+  `webaudiofontdata`. Each pack/soundfont keeps the license of its source project;
+  check attribution before redistributing a build with those assets bundled.
+- Default packs used by the renderer: Uzu drumkit, Tidal drum machines and VCSL
+  (VCSL is distributed as CC0; check the other packs before bundling them).
 
-## Modelos de generación de audio (no integrados)
+## Audio generation models (not integrated)
 
-Cualquier modelo de generación de audio que se integre debe pasar por una allowlist
-de licencias. Referencias verificadas durante el diseño:
+Any audio-generation model integrated into the product must pass a license allowlist.
+References verified during design:
 
-- ACE-Step — Apache-2.0 / MIT según checkpoint
+- ACE-Step — Apache-2.0 / MIT depending on the checkpoint
 - Demucs — MIT
-- Stable Audio Open / Stable Audio 3 — Stability AI Community License (límite de
-  1 M$ de ingresos anuales, registro y atribución)
-- MusicGen — CC-BY-NC (la restricción se aplica a la salida; no apto para uso comercial)
+- Stable Audio Open / Stable Audio 3 — Stability AI Community License (revenue
+  cap of $1M/year, registration and attribution)
+- MusicGen — CC-BY-NC (the restriction applies to the output; not suitable for
+  commercial use)

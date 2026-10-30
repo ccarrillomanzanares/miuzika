@@ -1,4 +1,4 @@
-/** Piano roll mínimo: añadir, mover y borrar notas de un clip. */
+/** Minimal piano roll: add, move and delete notes in a clip. */
 
 import type { Clip, Note } from "../../src/core/types.ts";
 
@@ -106,7 +106,7 @@ export function openPianoRoll(clip: Clip, onApply: (notes: Note[]) => void): voi
       try {
         canvas.setPointerCapture(event.pointerId);
       } catch {
-        /* pointer sintético */
+        /* synthetic pointer */
       }
       draw();
       return;
@@ -122,7 +122,7 @@ export function openPianoRoll(clip: Clip, onApply: (notes: Note[]) => void): voi
     try {
       canvas.setPointerCapture(event.pointerId);
     } catch {
-      /* pointer sintético */
+      /* synthetic pointer */
     }
     draw();
   });

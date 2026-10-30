@@ -1,15 +1,15 @@
 /**
- * Adaptador real contra el SDK de openDAW.
+ * Real adapter against the openDAW SDK.
  *
- * Usa imports dinámicos porque el SDK está pensado para un bundler (imports sin
- * extensión) y porque en Node hay que instalar shims antes de cargarlo.
+ * It uses dynamic imports because the SDK is meant for a bundler (extensionless
+ * imports) and because in Node shims must be installed before loading it.
  *
- * Alcance actual:
- *  - tempo, compases, master, pistas MIDI, clips y notas
- *  - volumen, pan, mute, solo
- *  - efectos: reverb, delay, waveshaper, crusher, compressor, gate, stereotool
- *  - pistas de audio: AudioFileBox/AudioRegionBox (los bytes WAV se
- *    proporcionan al engine en playback; el .odw solo guarda referencias)
+ * Current scope:
+ *  - tempo, bars, master, MIDI tracks, clips, and notes
+ *  - volume, pan, mute, solo
+ *  - effects: reverb, delay, waveshaper, crusher, compressor, gate, stereotool
+ *  - audio tracks: AudioFileBox/AudioRegionBox (WAV bytes are provided to the
+ *    engine during playback; the .odw only stores references)
  */
 
 import type { Device, Project as MiuzikaProject, Track } from "../../core/types.ts";
@@ -58,20 +58,20 @@ export interface OpenDawDrumSample {
 interface OpenDawAudioChunk {
   uuid: Uint8Array;
   name: string;
-  /** Duración del chunk en segundos. */
+  /** Duration of the chunk in seconds. */
   durationInSeconds: number;
-  /** Offset del chunk dentro del WAV original, en segundos. */
+  /** Offset of the chunk inside the original WAV, in seconds. */
   startInSeconds: number;
 }
 
 export interface OpenDawSoundfont {
-  /** uuid del SoundfontFileBox y clave con la que el motor pide los bytes. */
+  /** uuid of the SoundfontFileBox and key with which the engine asks for the bytes. */
   uuid: Uint8Array;
   name: string;
   bytes: ArrayBuffer;
 }
 
-/** El SoundFont General MIDI de la instalación y sus presets (banco, programa). */
+/** The installation's General MIDI SoundFont and its presets (bank, program). */
 export interface OpenDawGm extends OpenDawSoundfont {
   presets: ReadonlyArray<{ bank: number; preset: number }>;
 }
@@ -82,13 +82,13 @@ export interface OpenDawAudioAsset {
 }
 
 interface OpenDawBuildOptions {
-  /** Muestras del kit para las pistas Playfield. */
+  /** Kit samples for Playfield tracks. */
   drumSamples?: OpenDawDrumSample[];
-  /** WAV de las pistas de audio, por id de asset del IR. */
+  /** WAVs of the audio tracks, by IR asset id. */
   audioAssets?: ReadonlyMap<string, OpenDawAudioAsset>;
-  /** SoundFonts por ruta de fichero (`instrumento.archivo`). */
+  /** SoundFonts by file path (`instrumento.archivo`). */
   soundfonts?: ReadonlyMap<string, OpenDawSoundfont>;
-  /** SoundFont General MIDI: las pistas con `instrument.program` suenan con él. */
+  /** General MIDI SoundFont: tracks with `instrument.program` play through it. */
   gm?: OpenDawGm;
 }
 
@@ -109,7 +109,7 @@ function createHeadlessEnv(): HostEnv {
     currentTime: 0,
     sampleRate: 48_000,
     destination: { maxChannelCount: 2 },
-    // CaptureAudio se instancia al crear una pista Tape aunque no se grabe.
+    // CaptureAudio is instantiated when creating a Tape track even if nothing is recorded.
     createGain: () => ({
       gain: { value: 1 },
       connect: () => {},
@@ -122,8 +122,8 @@ function createHeadlessEnv(): HostEnv {
     }),
   };
   const noopTerminable = { terminate: () => {} };
-  // En Node no hay audio real. El adaptador de openDAW pide un loader para
-  // precalentar las muestras Playfield; le damos uno vacío para serializar.
+  // There is no real audio in Node. The openDAW adapter asks for a loader to
+  // prewarm the Playfield samples; we give it an empty one so it can serialize.
   const emptyLoader = {
     state: { type: "error", reason: "headless" },
     data: { isEmpty: () => true },
@@ -140,13 +140,13 @@ function createHeadlessEnv(): HostEnv {
       register: () => noopTerminable,
       getOrCreate: () => emptyLoader,
     },
-    // Un SoundfontDeviceBox pide su cargador al serializar; aquí sólo hace falta
-    // que exista y diga que no está cargado (el sonido no se toca en Node).
+    // A SoundfontDeviceBox asks for its loader when serializing; here it only needs
+    // to exist and say it is not loaded (sound is not touched in Node).
     soundfontManager: {
       getOrCreate: () => ({
         uuid: new Uint8Array(16),
         state: { type: "error", reason: "headless" },
-        // Tiene que ser un Option de verdad: openDAW llama a `.match` sobre él.
+        // It has to be a real Option: openDAW calls `.match` on it.
         soundfont: Option.None,
         subscribe: (observer: (state: unknown) => void) => {
           observer({ type: "error", reason: "headless" });
@@ -175,7 +175,7 @@ async function loadSdk() {
   return { core, adapters, boxes };
 }
 
-/** Asigna un parámetro, admitiendo rutas anidadas tipo "lowShelf.gain". */
+/** Sets a parameter, accepting nested paths like "lowShelf.gain". */
 function setParameter(root: Record<string, unknown>, path: string, value: number | boolean): void {
   const parts = path.split(".");
   let target: unknown = root;
@@ -188,7 +188,7 @@ function setParameter(root: Record<string, unknown>, path: string, value: number
   parameter?.setValue(value);
 }
 
-/** Convierte nuestro IR en un proyecto de openDAW serializado. */
+/** Converts our IR into a serialized openDAW project. */
 export async function projectToOpenDaw(
   source: MiuzikaProject,
   options: OpenDawBuildOptions = {},
@@ -221,14 +221,14 @@ export async function projectToOpenDaw(
         unit.namedParameter.solo.setValue(track.solo);
       };
 
-      // Los efectos van en todas las pistas: MIDI, SoundFont y audio. Antes sólo las
-      // de sintetizador los llevaban; en las de audio se avisaba y se descartaban.
+      // Effects go on all tracks: MIDI, SoundFont, and audio. Before, only synth
+      // tracks had them; on audio tracks they were warned about and discarded.
       const aplicarEfectos = (audioUnitBox: { audioEffects: unknown }, track: { name: string; devices: Device[] }): void => {
         track.devices.forEach((device, index) => {
           const mapped = mapDevice(device);
           if (!mapped.factory) {
             stats.skippedDevices++;
-            warnings.push(`"${track.name}" / ${device.type}: ${mapped.reason ?? "sin equivalente"}`);
+            warnings.push(`"${track.name}" / ${device.type}: ${mapped.reason ?? "no equivalent"}`);
             return;
           }
           const effectFactory = (core.EffectFactories as unknown as Record<string, unknown>)[mapped.factory] as never;
@@ -242,7 +242,7 @@ export async function projectToOpenDaw(
         });
       };
 
-      // Un SoundfontFileBox por fichero, aunque lo usen varias pistas (el GM, sobre todo).
+      // One SoundfontFileBox per file, even if several tracks use it (GM, above all).
       const ficherosSoundfont = new Map<string, unknown>();
       const ficheroSoundfont = (sf: OpenDawSoundfont): unknown => {
         const clave = Array.from(sf.uuid).join(",");
@@ -258,9 +258,9 @@ export async function projectToOpenDaw(
         return fichero;
       };
 
-      // Buses auxiliares: un AudioBusBox cuya salida entra en una AudioUnit «aux», que
-      // suena en el master; lleva sus efectos y su volumen como una pista. Es como lo
-      // monta el importador de DAWproject de openDAW (DawProjectImporter, canales EFFECT).
+      // Auxiliary buses: an AudioBusBox whose output goes into an "aux" AudioUnit, which
+      // plays through the master; it carries its effects and volume like a track. This is
+      // how openDAW's DAWproject importer sets it up (DawProjectImporter, EFFECT channels).
       const entradaDeBus = new Map<string, unknown>();
       for (const bus of source.buses ?? []) {
         const unitBox = adapters.AudioUnitFactory.create(
@@ -283,12 +283,12 @@ export async function projectToOpenDaw(
         stats.buses++;
       }
 
-      // Envíos post-fader de una pista a sus buses.
+      // Post-fader sends from a track to its buses.
       const aplicarEnvios = (audioUnitBox: { auxSends: unknown }, track: Track): void => {
         (track.sends ?? []).forEach((send, index) => {
           const entrada = entradaDeBus.get(send.busId);
           if (!entrada) {
-            warnings.push(`"${track.name}": manda a un bus que no existe (${send.busId})`);
+            warnings.push(`"${track.name}": sends to a bus that does not exist (${send.busId})`);
             return;
           }
           boxes.AuxSendBox.create(project.boxGraph, UUID.generate(), (box) => {
@@ -324,7 +324,7 @@ export async function projectToOpenDaw(
             const info = options.audioAssets?.get(clip.audio.assetId);
             if (!info) {
               warnings.push(
-                `"${track.name}" / "${clip.name}": falta el WAV "${clip.audio.assetId}" para openDAW`,
+                `"${track.name}" / "${clip.name}": missing the WAV "${clip.audio.assetId}" for openDAW`,
               );
               continue;
             }
@@ -364,7 +364,7 @@ export async function projectToOpenDaw(
                 gainInDb: clip.audio.gainDb,
                 waveformOffset,
               });
-              // clip.length/offset viven en beats; la región no estirada usa segundos.
+              // clip.length/offset are in beats; the unstretched region uses seconds.
               region.duration.setValue(regionDurationSeconds);
               region.loopDuration.setValue(regionDurationSeconds);
               region.waveformOffset.setValue(waveformOffset);
@@ -379,10 +379,10 @@ export async function projectToOpenDaw(
           continue;
         }
 
-        // Tres formas de sonar, por orden: el SoundFont propio de la pista (usar_instrumento),
-        // el General MIDI de la instalación si la pista tiene programa, y si no, los
-        // instrumentos de openDAW. Las tres llevan mezcla, efectos y notas: antes la rama
-        // del SoundFont terminaba en `continue` y sus notas no se exportaban nunca.
+        // Three ways to sound, in order: the track's own SoundFont (usar_instrumento),
+        // the installation's General MIDI if the track has a program, and if not, openDAW's
+        // instruments. All three carry mix, effects, and notes: before, the SoundFont branch
+        // ended in `continue` and its notes were never exported.
         const soundfont =
           track.instrument.type === "soundfont" && track.instrument.archivo
             ? options.soundfonts?.get(track.instrument.archivo)
@@ -402,7 +402,7 @@ export async function projectToOpenDaw(
           if (presetGm !== undefined) {
             (product.instrumentBox as { presetIndex: { setValue: (v: number) => void } }).presetIndex.setValue(presetGm);
           } else {
-            warnings.push(`"${track.name}": arranca con el SoundFont ${fuente.name} (preset 0)`);
+            warnings.push(`"${track.name}": starts with the SoundFont ${fuente.name} (preset 0)`);
           }
         } else {
           const instrument = mapInstrument(track.instrument.type);
@@ -452,7 +452,7 @@ export async function projectToOpenDaw(
   }
 }
 
-/** Lee un proyecto de openDAW y lo convierte a nuestro IR. */
+/** Reads an openDAW project and converts it to our IR. */
 export async function openDawToProject(bytes: ArrayBuffer): Promise<OpenDawImport> {
   const { core, adapters, boxes } = await loadSdk();
   const env = createHeadlessEnv();
@@ -463,7 +463,7 @@ export async function openDawToProject(bytes: ArrayBuffer): Promise<OpenDawImpor
     const bpm = project.timelineBox.bpm.getValue();
     const pulses = project.timelineBox.durationInPulses.getValue();
     const result = createProject({
-      name: "Importado de openDAW",
+      name: "Imported from openDAW",
       bpm,
       lengthBars: Math.max(1, Math.ceil(pulsesToBeats(pulses) / 4)),
     });
@@ -491,7 +491,7 @@ export async function openDawToProject(bytes: ArrayBuffer): Promise<OpenDawImpor
 
       const track: Track = emptyTrack({
         id: `trk_opendaw_${++index}`,
-        name: unit.label || `Pista ${index}`,
+        name: unit.label || `Track ${index}`,
         kind: "midi",
         instrument: { type: instrumentType },
         gainDb: unit.namedParameter.volume.getValue(),
@@ -528,9 +528,9 @@ export async function openDawToProject(bytes: ArrayBuffer): Promise<OpenDawImpor
     }
 
     if (project.boxGraph.boxes().some((box) => box instanceof boxes.AudioRegionBox)) {
-      warnings.push("Las regiones de audio de openDAW no se importan todavía");
+      warnings.push("openDAW audio regions are not imported yet");
     }
-    if (result.tracks.length === 0) warnings.push("No se encontraron pistas MIDI con notas");
+    if (result.tracks.length === 0) warnings.push("No MIDI tracks with notes were found");
 
     return { project: result, warnings, stats };
   } finally {

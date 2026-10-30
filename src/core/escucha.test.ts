@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { informeEscucha, nivelesPorTramo, notasPorTramo } from "./escucha.ts";
 
-test("las notas cuentan en cada tramo que pisan, recortadas por el clip", () => {
+test("notes count in every span they cross, trimmed by the clip", () => {
   const pista = {
     clips: [
       {
@@ -12,20 +12,20 @@ test("las notas cuentan en cada tramo que pisan, recortadas por el clip", () => 
         length: 16,
         notes: [
           { pitch: 60, start: 0, duration: 1, velocity: 100 }, // tramo 1
-          { pitch: 62, start: 14, duration: 8, velocity: 100 }, // 30..32: el clip la corta en 32
-          { pitch: 64, start: 20, duration: 1, velocity: 100 }, // fuera del clip: no suena
+          { pitch: 62, start: 14, duration: 8, velocity: 100 }, // 30..32: the clip cuts it at 32
+          { pitch: 64, start: 20, duration: 1, velocity: 100 }, // outside the clip: does not play
         ],
       },
       { id: "c2", name: "audio", start: 0, length: 20, notes: [], audio: { assetId: "a", offset: 0, gainDb: 0 } },
     ],
   };
-  // Tramos de 16 tiempos: [0,16) [16,32) [32,48)
+  // Spans of 16 beats: [0,16) [16,32) [32,48)
   assert.deepEqual(notasPorTramo(pista, 16, 3), [1, 3, 0]);
 });
 
-test("el nivel por tramo distingue silencio de señal", () => {
+test("the level per span distinguishes silence from signal", () => {
   const sr = 1000;
-  // 120 BPM: un tramo de 4 tiempos = 2 s = 2000 muestras. Primer tramo a 0.5, segundo mudo.
+  // 120 BPM: a span of 4 beats = 2 s = 2000 samples. First span at 0.5, second silent.
   const canal = new Float32Array(4000);
   for (let i = 0; i < 2000; i += 1) canal[i] = i % 2 === 0 ? 0.5 : -0.5;
   const niveles = nivelesPorTramo([canal, canal], sr, 120, 4, 2);
@@ -33,7 +33,7 @@ test("el nivel por tramo distingue silencio de señal", () => {
   assert.equal(niveles[1]!.picoDb, -Infinity);
 });
 
-test("el informe señala la pista con notas que no suena", () => {
+test("the report flags the track with notes that does not play", () => {
   const texto = informeEscucha({
     compasesPorTramo: 4,
     mezcla: [
@@ -46,9 +46,9 @@ test("el informe señala la pista con notas que no suena", () => {
     ],
     sinCargar: ["instrumentos/piano.sf2"],
   });
-  assert.match(texto, /Piano\s+MUDO\s+MUDO/);
+  assert.match(texto, /Piano\s+SILENT\s+SILENT/);
   assert.match(texto, /Pad\s+·\s+-30/);
-  assert.match(texto, /«Piano» no suena en NINGÚN tramo/);
-  assert.doesNotMatch(texto, /«Pad»/);
-  assert.match(texto, /No se pudo cargar instrumentos\/piano\.sf2/);
+  assert.match(texto, /"Piano" does not play in ANY span/);
+  assert.doesNotMatch(texto, /"Pad"/);
+  assert.match(texto, /Could not load instrumentos\/piano\.sf2/);
 });

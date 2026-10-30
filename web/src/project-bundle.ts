@@ -1,8 +1,9 @@
 /**
- * Bundle autocontenido de un proyecto: `project.json` + WAVs en un ZIP.
+ * Self-contained bundle of a project: `project.json` + WAVs in a ZIP.
  *
- * Sólo se lee (la app no exporta bundles). Los WAV que trae se devuelven para
- * que main.ts los escriba en la carpeta del proyecto: aquí no se guarda nada.
+ * It is read-only (the app does not export bundles). The WAVs it contains are
+ * returned so that main.ts can write them into the project folder: nothing is
+ * saved here.
  */
 
 import { strFromU8, unzipSync } from "fflate";
@@ -15,7 +16,7 @@ interface BundleAsset {
   file: string;
 }
 
-/** Un WAV del bundle, listo para subirlo a `proyectos/<slug>/entrada/`. */
+/** A WAV from the bundle, ready to be uploaded to `proyectos/<slug>/entrada/`. */
 export interface WavDeBundle {
   assetId: string;
   nombre: string;
@@ -44,18 +45,18 @@ export async function importProjectBundle(file: Blob): Promise<BundleImportado> 
   try {
     entries = unzipSync(bytes);
   } catch {
-    throw new Error("El archivo no es un bundle de miuzika válido.");
+    throw new Error("The file is not a valid miuzika bundle.");
   }
   const projectBytes = entries["project.json"];
-  if (!projectBytes) throw new Error("El bundle no contiene project.json.");
+  if (!projectBytes) throw new Error("The bundle does not contain project.json.");
   let project: Project;
   try {
     project = JSON.parse(strFromU8(projectBytes)) as Project;
   } catch {
-    throw new Error("project.json no es JSON válido.");
+    throw new Error("project.json is not valid JSON.");
   }
   if (!project || project.schemaVersion !== 1 || !Array.isArray(project.tracks)) {
-    throw new Error("El proyecto del bundle no es válido.");
+    throw new Error("The project in the bundle is not valid.");
   }
   migrarProyecto(project);
 
@@ -64,11 +65,11 @@ export async function importProjectBundle(file: Blob): Promise<BundleImportado> 
     ? (JSON.parse(strFromU8(entries["manifest.json"])) as BundleManifest)
     : null;
   if (manifest && manifest.format !== "miuzika-project") {
-    throw new Error("El manifest del bundle no es de miuzika.");
+    throw new Error("The bundle manifest is not from miuzika.");
   }
 
-  // Los WAV se devuelven con el id del asset al que pertenecen, para poder
-  // escribir su ruta en el proyecto.
+  // The WAVs are returned with the id of the asset they belong to, so that their
+  // path can be written into the project.
   const wavs: WavDeBundle[] = [];
   for (const asset of manifest?.assets ?? []) {
     const data = entries[asset.file];

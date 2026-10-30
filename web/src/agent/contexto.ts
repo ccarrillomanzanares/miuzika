@@ -1,35 +1,35 @@
 /**
- * Contexto del agente: qué se le manda al modelo y qué se guarda en el proyecto.
+ * Agent context: what is sent to the model and what is saved in the project.
  *
- * Dos ideas, y las dos son por dinero y por cordura:
+ * Two ideas, and both are about money and sanity:
  *
- *  - Al modelo no se le manda la salida entera de una herramienta (un render
- *    imprime 500 líneas). Se le manda la cabeza, la cola y la ruta donde está el
- *    texto completo, que puede releer con `leer_fichero`.
- *  - La conversación no vive en el navegador: se guarda en
- *    `proyectos/<slug>/agente.json` como turnos (petición + respuesta final, sin
- *    el fontanería de tool_calls) y un resumen rodante de los turnos viejos.
+ *  - The model is not sent a tool's entire output (a render prints 500 lines). It is
+ *    sent the head, the tail and the path where the full text is, which it can re-read
+ *    with `leer_fichero`.
+ *  - The conversation does not live in the browser: it is saved in
+ *    `proyectos/<slug>/agente.json` as turns (request + final answer, without the
+ *    tool_calls plumbing) and a rolling summary of the old turns.
  *
- * Sin DOM y sin red: todo se prueba con `node --test`.
+ * No DOM and no network: everything is tested with `node --test`.
  */
 
 export interface TurnoAgente {
-  /** Lo que pidió el usuario. */
+  /** What the user asked for. */
   usuario: string;
-  /** La respuesta final del agente (no los pasos intermedios). */
+  /** The agent's final answer (not the intermediate steps). */
   asistente: string;
 }
 
-/** Turnos que se guardan enteros; los anteriores se funden en el resumen. */
+/** Turns kept whole; earlier ones are merged into the summary. */
 export const MAX_TURNOS = 8;
 
-/** Caracteres por campo al guardar un turno (lo que se manda luego al modelo). */
+/** Characters per field when saving a turn (what is later sent to the model). */
 const MAX_CAMPO = 700;
 
-/** Tamaño del bloque de resumen. */
+/** Summary block size. */
 const MAX_RESUMEN = 1800;
 
-/** Por encima de esto una salida de herramienta se recorta antes de ir al modelo. */
+/** Above this, a tool output is trimmed before going to the model. */
 export const UMBRAL_SALIDA = 4000;
 
 export interface AgenteEnDisco {
@@ -42,30 +42,30 @@ export interface AgenteEnDisco {
 }
 
 /**
- * Recorta la salida de una herramienta: principio, final y el aviso de dónde
- * está el resto. Respeta las líneas (un log se lee por líneas).
+ * Trims a tool's output: beginning, end and the notice of where the rest is. It
+ * respects lines (a log is read line by line).
  */
 export function recortarSalida(texto: string, cabecera = 28, cola = 12): string {
   if (texto.length <= UMBRAL_SALIDA) return texto;
   const lineas = texto.split("\n");
   if (lineas.length <= cabecera + cola) {
-    // Pocas líneas pero muy largas: corte por caracteres.
+    // Few lines but very long: cut by characters.
     return `${texto.slice(0, 900)} … ${texto.slice(-250)}`;
   }
   const cabeza = lineas.slice(0, cabecera).join("\n");
   const final = lineas.slice(-cola).join("\n");
   const quitadas = lineas.length - cabecera - cola;
-  return `${cabeza}\n[ …${quitadas} línea(s) omitida(s) … ]\n${final}`;
+  return `${cabeza}\n[ …${quitadas} line(s) omitted … ]\n${final}`;
 }
 
-/** Recorta un turno para que no crezca sin control. */
+/** Trims a turn so it does not grow without control. */
 function recortarCampo(texto: string, limite = MAX_CAMPO): string {
   const limpio = texto.trim().replace(/\s+\n/g, "\n");
   if (limpio.length <= limite) return limpio;
   return `${limpio.slice(0, limite - 1)}…`;
 }
 
-/** Una línea por turno viejo, para el resumen rodante. */
+/** One line per old turn, for the rolling summary. */
 function lineaDeTurno(turno: TurnoAgente): string {
   const pregunta = turno.usuario.split("\n")[0]?.trim() ?? "";
   const respuesta = turno.asistente.split("\n")[0]?.trim() ?? "";
@@ -73,9 +73,9 @@ function lineaDeTurno(turno: TurnoAgente): string {
 }
 
 /**
- * Añade un turno y devuelve el estado nuevo: sólo los últimos MAX_TURNOS quedan
- * enteros, el resto se resume en una línea cada uno. El resumen nunca crece
- * más allá de MAX_RESUMEN: se van cayendo las líneas más viejas.
+ * Adds a turn and returns the new state: only the last MAX_TURNOS stay whole, the rest
+ * are summarized in one line each. The summary never grows beyond MAX_RESUMEN: the
+ * oldest lines fall off.
  */
 export function agregarTurno(
   resumen: string,
@@ -101,25 +101,25 @@ export function agregarTurno(
 }
 
 /**
- * Bloque que se pega al prompt de sistema con lo que pasó en sesiones
- * anteriores: resumen de lo viejo y los últimos turnos literales.
+ * Block pasted onto the system prompt with what happened in previous sessions:
+ * a summary of the old stuff and the last turns verbatim.
  */
 export function bloqueContexto(resumen: string, turnos: TurnoAgente[]): string {
   if (resumen.trim() === "" && turnos.length === 0) return "";
-  const partes = ["\n\n=== CONVERSACIÓN ANTERIOR DE ESTE PROYECTO ==="];
-  if (resumen.trim() !== "") partes.push(`Resumen:\n${resumen.trim()}`);
+  const partes = ["\n\n=== PREVIOUS CONVERSATION IN THIS PROJECT ==="];
+  if (resumen.trim() !== "") partes.push(`Summary:\n${resumen.trim()}`);
   if (turnos.length > 0) {
-    partes.push("Últimos turnos:");
+    partes.push("Last turns:");
     for (const turno of turnos) {
-      partes.push(`usuario: ${turno.usuario}`);
-      partes.push(`tú: ${turno.asistente}`);
+      partes.push(`user: ${turno.usuario}`);
+      partes.push(`you: ${turno.asistente}`);
     }
   }
-  partes.push("(No repitas lo ya hecho sin comprobarlo; el estado real es proyecto.json y los ficheros.)");
+  partes.push("(Do not repeat what has already been done without checking it; the real state is proyecto.json and the files.)");
   return partes.join("\n");
 }
 
-/** Lee `agente.json` sea cual sea su estado: lo que falte, vacío. */
+/** Reads `agente.json` whatever its state: whatever is missing is empty. */
 export function interpretarAgente(texto: string): { resumen: string; turnos: TurnoAgente[] } {
   let crudo: unknown;
   try {
@@ -140,7 +140,7 @@ export function interpretarAgente(texto: string): { resumen: string; turnos: Tur
   return { resumen: typeof datos.resumen === "string" ? datos.resumen : "", turnos };
 }
 
-/** Construye el fichero que se escribe en `proyectos/<slug>/agente.json`. */
+/** Builds the file that is written to `proyectos/<slug>/agente.json`. */
 export function serializarAgente(
   resumen: string,
   turnos: TurnoAgente[],
@@ -157,20 +157,19 @@ export function serializarAgente(
   };
 }
 
-/** Lo mínimo de un mensaje de chat que hace falta para recortar la conversación. */
+/** The bare minimum of a chat message needed to trim the conversation. */
 interface MensajeRecortable {
   role: string;
 }
 
 /**
- * Deja la conversación en `[sistema, ...últimos mensajes]` con como mucho `max`
- * mensajes detrás del sistema, cortando SIEMPRE justo antes de un mensaje del
- * usuario.
+ * Leaves the conversation as `[system, ...last messages]` with at most `max` messages
+ * after the system one, ALWAYS cutting right before a user message.
  *
- * Antes se cortaba por número a secas, y el corte podía caer entre un
- * `assistant` con `tool_calls` y sus `tool`: el primer mensaje que quedaba era un
- * resultado de herramienta sin la llamada que lo pidió, y el proveedor rechaza esa
- * conversación (o el modelo se confunde con un resultado que no sabe de dónde viene).
+ * Before, it was cut by number alone, and the cut could fall between an `assistant`
+ * with `tool_calls` and its `tool`: the first message left was a tool result without
+ * the call that requested it, and the provider rejects that conversation (or the model
+ * gets confused by a result whose origin it does not know).
  */
 export function recortarConversacion<T extends MensajeRecortable>(mensajes: T[], max: number): void {
   if (mensajes.length - 1 <= max) return;
@@ -182,8 +181,8 @@ export function recortarConversacion<T extends MensajeRecortable>(mensajes: T[],
       break;
     }
   }
-  // Si en la ventana no hay ningún mensaje del usuario (un turno larguísimo), se
-  // conserva el turno entero desde su petición: mejor largo que roto.
+  // If there is no user message in the window (a very long turn), the whole turn is
+  // kept from its request: better long than broken.
   if (corte === -1) {
     for (let i = desde - 1; i >= 1; i -= 1) {
       if (mensajes[i]!.role === "user") {

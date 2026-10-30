@@ -1,32 +1,33 @@
 /**
- * Idioma de la interfaz.
+ * Interface language.
  *
- * La CONVERSACIÓN no pasa por aquí: el agente contesta en el idioma en que le
- * escribe cada persona, y es él quien traduce lo que dice el usuario al vocabulario
- * canónico de las herramientas (palabras de sonido, tipos de efecto, modos). Esto
- * sólo traduce los textos fijos de la página.
+ * The CONVERSATION does not go through here: the agent answers in the language
+ * each person writes in, and it is the agent that translates what the user says
+ * into the tools' canonical vocabulary (sound words, effect types, modes). This
+ * only translates the page's fixed texts.
  *
- * El idioma BASE es el inglés: los textos que se escriben en el código y en
- * `web/index.html` van en inglés, y cada idioma es un diccionario que traduce desde
- * ahí. Lo que falte en un diccionario se queda en inglés, nunca en blanco.
+ * The BASE language is English: the texts written in the code and in
+ * `web/index.html` are in English, and each language is a dictionary that
+ * translates from there. Whatever is missing from a dictionary stays in English,
+ * never blank.
  *
- * Cómo funciona la página: `index.html` lleva el texto en inglés y una clave en
- * `data-i18n` (texto), `data-i18n-title` o `data-i18n-placeholder`; si el idioma
- * elegido no es inglés, `traducirPagina` sustituye por el diccionario.
+ * How the page works: `index.html` carries the English text and a key in
+ * `data-i18n` (text), `data-i18n-title` or `data-i18n-placeholder`; if the selected
+ * language is not English, `traducirPagina` replaces it with the dictionary.
  *
- * Cómo funciona el código: `t("clave", "English text")`, con el inglés de reserva.
- * Los textos con partes variables van en plantillas: `t("x", "Added ${n} tracks")`
- * no sirve, así que se traduce el trozo fijo y se concatena el número.
+ * How the code works: `t("key", "English text")`, with English as the fallback.
+ * Texts with variable parts go in templates: `t("x", "Added ${n} tracks")` does
+ * not work, so the fixed part is translated and the number is concatenated.
  *
- * Para forzar un idioma: `?lang=es` en la URL o `localStorage.miuzika.idioma = "es"`
- * (`fijarIdioma`). Sin nada de eso manda el navegador, y gana el inglés.
+ * To force a language: `?lang=es` in the URL or `localStorage.miuzika.idioma = "es"`
+ * (`fijarIdioma`). Without any of that the browser decides, and English wins.
  */
 
 export type Idioma = "es" | "en";
 
 type Diccionario = Record<string, string>;
 
-/** Traducciones al español. Las claves son las mismas que en index.html. */
+/** Spanish translations. The keys are the same as in index.html. */
 const ES: Diccionario = {
   play: "Reproducir con el engine de openDAW",
   stop: "Detener",
@@ -77,7 +78,7 @@ const ES: Diccionario = {
   cancelar: "Cancelar",
   "cancelar.title": "Corta el turno del agente (la GPU no se apaga sola)",
   "estado.inicial": "Doble clic en un clip = piano roll · Ctrl+rueda = zoom",
-  // Contador de la GPU (gpu-texto.ts).
+  // GPU counter (gpu-texto.ts).
   "gpu.sesion": "sesión",
   "gpu.arrancando": "arrancando",
   "gpu.sinFacturar": "aún sin facturar",
@@ -91,28 +92,28 @@ const ES: Diccionario = {
 
 const DICCIONARIOS: Partial<Record<Idioma, Diccionario>> = { es: ES };
 
-/** Clave de localStorage con el idioma forzado a mano. */
+/** localStorage key for the manually forced language. */
 export const CLAVE_IDIOMA = "miuzika.idioma";
 
 /**
- * Idioma pedido en la URL (`?lang=es`). Vale para esta carga y NO se guarda: un
- * parámetro de URL que se queda pegado deja la app en español para siempre, sin
- * forma de volver salvo borrar el localStorage a mano.
+ * Language requested in the URL (`?lang=es`). It applies to this load and is NOT
+ * saved: a URL parameter that sticks around leaves the app in Spanish forever,
+ * with no way back except deleting localStorage by hand.
  */
 function idiomaDeUrl(): Idioma | null {
   try {
     const pedido = new URLSearchParams(location.search).get("lang");
     if (pedido === "es" || pedido === "en") return pedido;
   } catch {
-    /* sin location (pruebas) */
+    /* no location (tests) */
   }
   return null;
 }
 
-/** Idioma forzado en esta sesión con `fijarIdioma` (gana a todo lo demás). */
+/** Language forced in this session with `fijarIdioma` (it wins over everything else). */
 let forzado: Idioma | null = null;
 
-/** Idioma forzado a mano (URL, memoria o localStorage); null si no hay ninguno. */
+/** Language forced by hand (URL, memory or localStorage); null if there is none. */
 function idiomaForzado(): Idioma | null {
   const deUrl = idiomaDeUrl();
   if (deUrl) return deUrl;
@@ -121,38 +122,39 @@ function idiomaForzado(): Idioma | null {
     const guardado = localStorage.getItem(CLAVE_IDIOMA);
     if (guardado === "es" || guardado === "en") return guardado;
   } catch {
-    /* sin localStorage */
+    /* no localStorage */
   }
   return null;
 }
 
-/** Fuerza el idioma de la interfaz y lo recuerda. */
+/** Forces the interface language and remembers it. */
 export function fijarIdioma(nuevo: Idioma): void {
   forzado = nuevo;
   try {
     localStorage.setItem(CLAVE_IDIOMA, nuevo);
   } catch {
-    /* sin localStorage: se queda para esta sesión */
+    /* no localStorage: it stays for this session */
   }
   actual = nuevo;
 }
 
-/** Vuelve al idioma de partida (inglés). Para los tests y para «automático». */
+/** Returns to the starting language (English). For tests and for "automatic". */
 export function olvidarIdioma(): void {
   forzado = null;
   actual = "en";
   try {
     localStorage.removeItem(CLAVE_IDIOMA);
   } catch {
-    /* sin localStorage */
+    /* no localStorage */
   }
 }
 
 /**
- * Idioma de la interfaz: **inglés para todo el mundo**. El navegador ya no decide
- * nada; sólo se cambia si alguien lo fuerza (`?lang=es` o `fijarIdioma`). El
- * argumento se acepta para no romper las llamadas, pero no se usa: que el sistema
- * esté en español no debe hacer que la app hable español a quien no lo ha pedido.
+ * Interface language: **English for everyone**. The browser no longer decides
+ * anything; it only changes if someone forces it (`?lang=es` or `fijarIdioma`).
+ * The argument is accepted so as not to break callers, but it is not used: the
+ * system being in Spanish should not make the app speak Spanish to someone who
+ * did not ask for it.
  */
 export function idiomaDe(_preferidos: readonly string[] = []): Idioma {
   return idiomaForzado() ?? "en";
@@ -164,17 +166,17 @@ export function idioma(): Idioma {
   return actual;
 }
 
-/** Locale para formatear números y fechas: el del idioma de la interfaz. */
+/** Locale for formatting numbers and dates: the interface language's locale. */
 export function locale(): string {
   return actual === "es" ? "es-ES" : "en-GB";
 }
 
-/** Texto de una clave en el idioma actual; si no hay traducción, el inglés. */
+/** Text for a key in the current language; English if there is no translation. */
 export function t(clave: string, reserva: string): string {
   return DICCIONARIOS[actual]?.[clave] ?? reserva;
 }
 
-/** Traduce los textos marcados de la página. Se llama una vez al arrancar. */
+/** Translates the marked texts on the page. Called once at startup. */
 export function traducirPagina(raiz: Document = document): void {
   try {
     actual = idiomaDe(navigator.languages?.length ? navigator.languages : [navigator.language]);
@@ -182,7 +184,7 @@ export function traducirPagina(raiz: Document = document): void {
     actual = "en";
   }
   raiz.documentElement.lang = actual;
-  // El HTML ya está en inglés: sólo hay que tocarlo si el idioma no es inglés.
+  // The HTML is already in English: it only has to be touched if the language is not English.
   if (actual === "en") return;
   for (const el of raiz.querySelectorAll<HTMLElement>("[data-i18n]")) {
     el.textContent = t(el.dataset.i18n ?? "", el.textContent ?? "");

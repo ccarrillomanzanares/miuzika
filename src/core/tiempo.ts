@@ -1,19 +1,19 @@
 /**
- * Aritmética de tiempo de la timeline.
+ * Timeline time arithmetic.
  *
- * Los clips MIDI acaban donde acaba su última nota (y se redondean al compás, ver
- * `add_notes`). Los de audio, en cambio, duran lo que dura el fichero: un stem de
- * 336,667 beats dejaba el clip a mitad de compás mientras el proyecto iba por 85
- * compases. Aquí se decide cuánto dura un clip de audio, en compases enteros.
+ * MIDI clips end where their last note ends (and are rounded to the bar, see
+ * `add_notes`). Audio clips, on the other hand, last as long as the file: a
+ * 336.667-beat stem left the clip halfway through a bar while the project ran
+ * for 85 bars. This decides how long an audio clip lasts, in whole bars.
  */
 
 /**
- * Duración de un clip de audio en la timeline.
+ * Duration of an audio clip on the timeline.
  *
- * Los stems (2 compases o más) se redondean HACIA ARRIBA al compás: nunca dejan
- * el clip a mitad de compás, y nunca ganan un compás cuando el fichero ya acaba
- * justo en el borde. Los one-shots (un bombo de 2 s) se quedan con su duración
- * exacta: estirarlos a un compás entero sería dibujar aire que no suena.
+ * Stems (2 bars or more) are rounded UP to the bar: they never leave the clip
+ * halfway through a bar, and they never gain a bar when the file already ends
+ * exactly on the edge. One-shots (a 2-second kick) keep their exact duration:
+ * stretching them to a whole bar would be drawing silence that does not play.
  */
 export function compasesDeAudio(
   durationBeats: number,
@@ -27,8 +27,8 @@ export function compasesDeAudio(
 }
 
 /**
- * Cuántos compases necesita el proyecto para un clip que empieza en `startBar` y
- * dura `lengthBeats`. Se usa para crecer `lengthBars` sin pasarse.
+ * How many bars the project needs for a clip that starts at `startBar` and lasts
+ * `lengthBeats`. Used to grow `lengthBars` without overshooting.
  */
 export function compasesNecesarios(startBar: number, lengthBeats: number, barBeats: number): number {
   if (!(barBeats > 0)) return Math.max(1, Math.ceil(startBar + 1));

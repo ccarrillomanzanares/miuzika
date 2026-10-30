@@ -1,117 +1,128 @@
-# ESTADO · 28-oct-2026
+# STATUS — 28-Oct-2026
 
-Documento de relevo: qué hay, qué funciona, qué falta y por dónde seguir. Las
-reglas de trabajo están en `CLAUDE.md`; la arquitectura, en `docs/ARCHITECTURE.md`;
-la revisión del 27-oct con sus fallos, en `docs/REVISION-2026-10-27.md`.
+Handover document: what exists, what works, what is missing and where to go next.
+Working rules are in `CLAUDE.md`; architecture in `docs/ARCHITECTURE.md`; the 27-Oct
+review with its bugs in `docs/REVISION-2026-10-27.md`.
 
-Repositorio: `github.com/ccarrillomanzanares/miuzika`, rama `master` (la historia
-anterior, humseed, está en la rama `humseed`). En el portátil, la carpeta sigue a
-`origin/master`; `master-antiguo` y `revision-arquitectura` son ramas viejas.
+Repository: `github.com/ccarrillomanzanares/miuzika`, branch `master` (the previous
+history, humseed, is on the `humseed` branch). On the laptop, the folder follows
+`origin/master`; `master-antiguo` and `revision-arquitectura` are old branches.
 
-## 1. Qué se hizo el 27 y 28 de octubre
+## 1. What was done on 27 and 28 October
 
-**El agente**
-- Compone en el proyecto, no en scripts: `escribir_notas` (notación compacta:
-  `"D2:1.5 D2:.5 F2 | r:2 [D3 F3 A3]:4"`, con repeticiones `( … )x4`),
-  `escribir_bateria` (rejilla `x...x...`), `escribir_progresion`, `editar_proyecto`
-  (ops transaccionales, se deshacen con Ctrl+Z). Reescribir un tramo conserva lo de
-  fuera; los compases que no cuadran se rechazan.
-- Instrumentos: General MIDI (GeneralUser GS en `workspace/catalogo/gm/`) y la
-  biblioteca VCSL (142 instrumentos grabados: Steinway, órganos, arpas…) con
-  `usar_instrumento("Grand Piano, Steinway B", pista=…)`.
-- Busca en internet (`buscar_web`, `leer_web`, servicios de Ollama).
-- `versiones`: foto del proyecto al empezar cada turno (`proyectos/<c>/versiones/`,
-  últimas 40); restaura una pista o todo.
-- `exportar(midi, wav)`: MIDI tipo 1 desde el proyecto; WAV de la mezcla con el
-  `OfflineEngineRenderer` de openDAW (mismo sonido que el Play).
-- Prompt v4 (huella `0eaa1767`): termina la canción entera en el turno y no pregunta
-  por MIDI/WAV salvo que se pida. Tope: 80 pasos por turno; freno de bucles por
-  ciclos fallidos (4), no por escrituras.
+**The agent**
+- Composes in the project, not in scripts: `escribir_notas` (compact notation:
+  `"D2:1.5 D2:.5 F2 | r:2 [D3 F3 A3]:4"`, with repetitions `( ... )x4`),
+  `escribir_bateria` (`x...x...` grid), `escribir_progresion`, `editar_proyecto`
+  (transactional ops, undone with Ctrl+Z). Rewriting a section preserves what is
+  outside it; bars that do not fit are rejected.
+- Instruments: General MIDI (GeneralUser GS in `workspace/catalogo/gm/`) and the VCSL
+  library (142 recorded instruments: Steinway, organs, harps...) with
+  `usar_instrumento("Grand Piano, Steinway B", pista=...)`.
+- Searches the internet (`buscar_web`, `leer_web`, Ollama services).
+- `versiones`: project snapshot at the start of every turn (`proyectos/<c>/versiones/`,
+  last 40); restores a track or the whole project.
+- `exportar(midi, wav)`: type-1 MIDI from the project; WAV of the mix with openDAW's
+  `OfflineEngineRenderer` (same sound as Play).
+- Prompt v4 (fingerprint `0eaa1767`): finishes the whole song in the turn and does not
+  ask about MIDI/WAV unless asked. Limit: 80 steps per turn; loop brake by failed
+  cycles (4), not by writes.
 
-**La app**
-- Interfaz en inglés (base) con español opcional (`?lang=es`); `i18n.ts`.
-- «Brief» (antes «Plantilla»): formulario que escribe el encargo en el chat. Modos
-  nueva / versión (a dónde se lleva, qué se conserva, tempo y tonalidad relativos) /
-  arreglo; entrega MIDI y/o WAV.
-- «Models»: proveedor, clave y modelo del agente (Ollama Cloud por defecto,
-  Anthropic, OpenAI, Gemini, OpenRouter, DeepSeek, Mistral, Groq, Ollama local, LM
-  Studio, cualquiera compatible con OpenAI). Claves en `.miuzika/proveedores.json`.
-  La búsqueda web usa siempre la clave de Ollama Cloud.
-- «Pad»: el touchpad del portátil como instrumento (Raw Input de Windows,
-  `workspace/herramientas/touchpad/`): teclas en la escala del proyecto, pads de
-  batería, deslizar; graba en un clip con cuenta atrás y metrónomo.
-- El Play espera a que el motor cargue samples y SoundFonts (antes lo primero sonaba
-  en silencio).
+**The app**
+- Interface in English (base) with optional Spanish (`?lang=es`); `i18n.ts`.
+- "Brief" (formerly "Template"): form that writes the request into the chat. Modes:
+  new / version (where it goes, what is kept, relative tempo and key) / arrangement;
+  delivers MIDI and/or WAV.
+- "Models": provider, key and model for the agent (Ollama Cloud by default, Anthropic,
+  OpenAI, Gemini, OpenRouter, DeepSeek, Mistral, Groq, local Ollama, LM Studio, any
+  OpenAI-compatible provider). Keys in `.miuzika/proveedores.json`. Web search always
+  uses the Ollama Cloud key.
+- "Pad": the laptop touchpad as an instrument (Windows Raw Input,
+  `workspace/herramientas/touchpad/`): keys in the project scale, drum pads, sliding;
+  records into a clip with count-in and metronome.
+- Play waits for the engine to load samples and SoundFonts (previously the first part
+  played silently).
 
-**El motor Python** (`workspace/codigo`)
-- `pan`, `reverb`, `delay` y `place` aceptan mono y estéreo; `render.stem(ruta, fn,
-  datos…)` sólo recalcula lo que cambia; `write_wav` baja a −1 dBFS lo que recortaba.
-- `sfz2sf2.py` escribe SF2 válidos (antes TODOS los instrumentos VCSL sonaban en
-  silencio: EOP/EOI y rangos mal escritos) y caben en el navegador (≤ 40 MB).
+**The Python engine** (`workspace/codigo`)
+- `pan`, `reverb`, `delay` and `place` accept mono and stereo; `render.stem(path, fn,
+  data...)` only recomputes what changes; `write_wav` lowers to -1 dBFS what used to
+  clip.
+- `sfz2sf2.py` writes valid SF2 files (previously ALL VCSL instruments played silently:
+  EOP/EOI and ranges written incorrectly) and they fit in the browser (<= 40 MB).
 
-**Hecho el 28-oct por la tarde** (un commit por punto, con su porqué):
-- La conversación del agente sin proyecto se guarda en `proyectos/sin-proyecto/agente.json`.
-- «Hard»: el Steinway ya estaba; quitados los 2 compases de silencio (todo empieza en
-  el compás 1, 46 compases). Copia de antes en `hard/versiones/…_antes-de-quitar-…`.
-- `escuchar_mezcla`: renderiza con openDAW la mezcla y cada pista sola y da el RMS por
-  tramos cruzado con las notas (MUDO = notas sin señal). `src/core/escucha.ts`.
-- Efectos en unidades reales (`cutoffHz`, `timeMs`, `thresholdDb`…; EQ con frecuencias).
-  Los proyectos viejos se migran al abrirse y suenan igual (las pruebas lo fijan).
-- Buses y envíos: `add_bus`, `set_bus`, `remove_bus`, `set_send`; los efectos de un bus
-  con `add_device` sobre su nombre. En openDAW: AudioBusBox + unidad «aux» + AuxSendBox.
-  La interfaz aún no dibuja los buses (sólo los ve el agente en `leer_proyecto`).
-- WAV largos: entran en openDAW mientras quepan en 400 MB decodificados
-  (`PRESUPUESTO_DECODIFICADO_MB`); sólo el resto va por `<audio>`.
-- El Python del agente corre en `server/python/caja.py`: escribe sólo en su proyecto,
-  no lee claves, sin procesos, red ni ctypes; entorno mínimo. Guardarraíl, no jaula.
-- Contador de la GPU en inglés (español con `?lang=es`).
+**Done on 28-Oct afternoon** (one commit per point, with its reason):
+- The agent conversation without a project is saved in
+  `proyectos/sin-proyecto/agente.json`.
+- "Hard": the Steinway was already there; removed the 2 bars of silence (everything
+  starts at bar 1, 46 bars). Copy of the previous version in
+  `hard/versiones/..._antes-de-quitar-...`.
+- `escuchar_mezcla`: renders the mix and each track alone with openDAW and gives RMS
+  by sections crossed with the notes (MUTED = notes with no signal).
+  `src/core/escucha.ts`.
+- Effects in real units (`cutoffHz`, `timeMs`, `thresholdDb`...; EQ with frequencies).
+  Old projects are migrated when opened and sound the same (tests pin this).
+- Buses and sends: `add_bus`, `set_bus`, `remove_bus`, `set_send`; effects on a bus with
+  `add_device` by its name. In openDAW: AudioBusBox + "aux" unit + AuxSendBox.
+  The interface does not draw buses yet (only the agent sees them in `leer_proyecto`).
+- Long WAVs: they enter openDAW as long as they fit in 400 MB decoded
+  (`PRESUPUESTO_DECODIFICADO_MB`); only the rest goes through `<audio>`.
+- The agent's Python runs in `server/python/caja.py`: it writes only in its project,
+  does not read keys, no processes, network or ctypes; minimal environment. Guardrail,
+  not a cage.
+- GPU counter in English (Spanish with `?lang=es`).
 
-**28-oct, noche: sesión con el agente sobre «Hard»** (vigilando `tmp/llm.log`):
-- Arreglado: los parámetros sueltos de un efecto (`{type:"compressor", thresholdDb:-20}`) se
-  perdían sin avisar (`6da2f44`); el render de openDAW se cortaba tras 10 s de silencio y daba
-  MUDO falsos en `escuchar_mezcla` (`2fc97ab`); openDAW tira la zona global de los SF2 y 113 de
-  128 presets GM perdían el bucle (`f3a734d`, `web/src/soundfont-zonas.ts`). Ninguno se ha oído.
-- «Hard»: 112 compases (4:04), final nuevo. Grand Piano silenciado (y a −60 dB). La pista
-  «Piano oscuro» (GM 5) tiene OTRA VEZ las notas copiadas del piano: el agente restauró la
-  versión de antes y borró la melodía nueva. Está guardada en
-  `proyectos/hard/melodia-nueva-lead-oscuro.json` (10 llamadas a `escribir_notas`); falta
-  volver a escribirla. Los efectos de batería, bajo y bus siguen con valores por defecto.
+**28-Oct, night: session with the agent on "Hard"** (watching `tmp/llm.log`):
+- Fixed: loose effect parameters (`{type:"compressor", thresholdDb:-20}`) were lost
+  without warning (`6da2f44`); openDAW render stopped after 10 s of silence and gave
+  false MUTED results in `escuchar_mezcla` (`2fc97ab`); openDAW drops the global zone of
+  SF2 files and 113 of 128 GM presets lost the loop (`f3a734d`,
+  `web/src/soundfont-zonas.ts`). None of this has been heard.
+- "Hard": 112 bars (4:04), new ending. Grand Piano muted (and at -60 dB). The
+  "Piano oscuro" track (GM 5) has the piano notes copied AGAIN: the agent restored the
+  previous version and deleted the new melody. It is saved in
+  `proyectos/hard/melodia-nueva-lead-oscuro.json` (10 calls to `escribir_notas`); it
+  still needs to be written again. Drum, bass and bus effects still have default
+  values.
 
-## 2. Pendiente de comprobar en el navegador (Carlos)
+## 2. Pending browser checks (Carlos)
 
-Nada de esto se ha podido oír desde las sesiones anteriores:
-1. **El Steinway y la biblioteca VCSL suenan** (regenerados en «Hard» y «Stairway»).
-2. **Lo del compás 1 suena** con la espera de carga del Play.
-3. **`exportar` WAV** (OfflineEngineRenderer) y MIDI.
-4. **«Models» → Probar** con Ollama Cloud de verdad (el proxy sólo se probó contra un
-   servidor simulado).
-5. **El pad** en el portátil: que arranque la captura, suene y grabe.
-6. **`escuchar_mezcla`** sobre «Hard»: que la tabla salga y cuadre con lo que se oye.
-7. **Un bus** con reverb y envíos: que la cola se oiga (el `.odw` carga, pero no se ha oído).
-8. **Un proyecto con stems largos** (p. ej. «hurt-instrumental»): que abra y la memoria
-   aguante con el presupuesto de 400 MB.
-9. **Hablar con el agente sin proyecto**, F5, y que la conversación siga ahí.
+None of this has been heard in previous sessions:
+1. **The Steinway and the VCSL library sound** (regenerated in "Hard" and "Stairway").
+2. **The bar-1 material sounds** with the Play load wait.
+3. **`exportar` WAV** (OfflineEngineRenderer) and MIDI.
+4. **"Models" -> Test** with real Ollama Cloud (the proxy was only tested against a
+   simulated server).
+5. **The pad** on the laptop: capture starts, sounds and records.
+6. **`escuchar_mezcla`** on "Hard": the table appears and matches what is heard.
+7. **A bus** with reverb and sends: the tail is audible (the `.odw` loads, but it has
+   not been heard).
+8. **A project with long stems** (e.g. "hurt-instrumental"): it opens and memory holds
+   with the 400 MB budget.
+9. **Talking to the agent without a project**, F5, and the conversation is still there.
 
-## 3. Pendiente de hacer
+## 3. Pending work
 
-1. Dibujar los buses y los envíos en la interfaz (mezclador).
-1. Visto el 28-oct con el agente:
-   - `escribir_notas`/`escribir_bateria` sin `pista` crean una pista nueva («trk_pista_…»);
-     deben dar error (es obligatorio en el esquema y el código no lo comprueba).
-   - Los nombres de clip repiten el compás («Pre - batería 33 33»).
-   - `escuchar_mezcla`: la fila «(muted)» se mide sola y sin mute a propósito, pero no lo dice;
-     el agente concluyó dos veces que el mute no funcionaba. Decirlo en el informe.
-   - Cancel no corta `escuchar_mezcla`/`exportar` a medias: espera a que acaben los renders.
-     Comprobar la señal entre render y render.
-   - Los instrumentos VCSL suenan ~12 dB por debajo de los GM (medido por el agente): mirar
-     el nivel en `sfz2sf2.py`.
-   - `llm.log` corta los resultados de las herramientas y `agente.json` no los guarda: para
-     revisar una escucha hace falta la tabla entera.
-2. Si la caja de Python se queda corta: otro usuario de Windows o un contenedor. Los
-   scripts de la GPU (Lambda) no pasan por la caja.
+1. Draw buses and sends in the interface (mixer).
+2. Seen on 28-Oct with the agent:
+   - `escribir_notas`/`escribir_bateria` without `pista` create a new track
+     (`trk_pista_...`); they should error (required in the schema and the code does not
+     check it).
+   - Clip names repeat the bar ("Pre - batería 33 33").
+   - `escuchar_mezcla`: the "(muted)" row is measured alone and without mute on purpose,
+     but it does not say so; the agent twice concluded that mute did not work. State it
+     in the report.
+   - Cancel does not stop `escuchar_mezcla`/`exportar` midway: it waits for the renders
+     to finish. Check the signal between render and render.
+   - VCSL instruments play ~12 dB below GM (measured by the agent): check the level in
+     `sfz2sf2.py`.
+   - `llm.log` truncates tool results and `agente.json` does not save them: reviewing a
+     listening pass needs the whole table.
+3. If the Python box falls short: another Windows user or a container. GPU (Lambda)
+   scripts do not go through the box.
 
-## 4. Cómo empezar
+## 4. How to start
 
-1. `npm run typecheck` y `npm run test:unit` (189 pruebas en verde el 28-oct por la noche; `npm test` añade el contrato con openDAW).
+1. `npm run typecheck` and `npm run test:unit` (189 tests green on 28-Oct at night;
+   `npm test` adds the openDAW contract).
 2. `python workspace/herramientas/smoke.py`.
-3. `npm run dev` y repasar la lista de la sección 2 con Carlos.
+3. `npm run dev` and go through the list in section 2 with Carlos.

@@ -1,33 +1,33 @@
 /**
- * Proveedores de modelos para el agente.
+ * Model providers for the agent.
  *
- * Todos hablan el protocolo de chat de OpenAI (`POST {base}/chat/completions`, con
- * herramientas y streaming), así que el agente no cambia: sólo cambia a dónde
- * reenvía el servidor y con qué clave. Las claves NUNCA llegan al navegador: se
- * guardan en el servidor (.miuzika/proveedores.json, fuera de git) o en el .env.
+ * They all speak OpenAI's chat protocol (`POST {base}/chat/completions`, with tools
+ * and streaming), so the agent does not change: only where the server forwards to
+ * and with which key changes. Keys NEVER reach the browser: they are stored on the
+ * server (.miuzika/proveedores.json, outside git) or in .env.
  *
- * La búsqueda web (buscar_web, leer_web) es un servicio de Ollama: sigue usando la
- * clave de Ollama Cloud aunque el agente hable con otro proveedor.
+ * Web search (buscar_web, leer_web) is an Ollama service: it keeps using the Ollama
+ * Cloud key even if the agent talks to another provider.
  *
- * Sin DOM y sin red: se prueba con `node --test`.
+ * No DOM and no network: tested with `node --test`.
  */
 
 export interface Proveedor {
   id: string;
   nombre: string;
-  /** Base OpenAI-compatible: `${base}/chat/completions` y `${base}/models`. */
+  /** OpenAI-compatible base: `${base}/chat/completions` and `${base}/models`. */
   base: string;
-  /** false = local (Ollama, LM Studio): no hace falta clave. */
+  /** false = local (Ollama, LM Studio): no key needed. */
   necesitaClave: boolean;
-  /** Cómo se listan sus modelos. */
+  /** How its models are listed. */
   listado: "openai" | "ollama";
-  /** Modelo que se propone si no se ha elegido ninguno. */
+  /** Model proposed if none has been chosen. */
   modeloPorDefecto: string;
-  /** Dónde se consigue la clave (se enseña en el menú). */
+  /** Where to get the key (shown in the menu). */
   ayuda: string;
-  /** Variable del .env que también vale como clave. */
+  /** .env variable that also works as a key. */
   variableEnv?: string;
-  /** Se puede cambiar la base (servidores propios). */
+  /** The base can be changed (self-hosted servers). */
   baseEditable?: boolean;
 }
 
@@ -150,7 +150,7 @@ export function proveedorPorId(id: string): Proveedor | undefined {
   return PROVEEDORES.find((p) => p.id === id);
 }
 
-/** Lo que se guarda de cada proveedor en el servidor. */
+/** What is stored for each provider on the server. */
 export interface AjustesProveedor {
   apiKey?: string;
   base?: string;
@@ -164,26 +164,26 @@ export interface ConfigProveedores {
 
 export const CONFIG_VACIA: ConfigProveedores = { activo: PROVEEDOR_POR_DEFECTO, proveedores: {} };
 
-/** Base efectiva (la editada si se puede editar), sin barra final. */
+/** Effective base (the edited one if editable), without a trailing slash. */
 export function baseDe(p: Proveedor, ajustes: AjustesProveedor | undefined): string {
   const editada = p.baseEditable ? (ajustes?.base ?? "").trim() : "";
   return (editada || p.base).replace(/\/+$/, "");
 }
 
-/** Clave efectiva: la guardada o la del .env. */
+/** Effective key: the stored one or the one from .env. */
 export function claveDe(p: Proveedor, ajustes: AjustesProveedor | undefined, env: Record<string, string | undefined>): string {
   return (ajustes?.apiKey ?? "").trim() || (p.variableEnv ? (env[p.variableEnv] ?? "").trim() : "");
 }
 
-/** «sk-…f3a9»: para enseñar que hay clave sin enseñarla. */
+/** "sk-…f3a9": to show that a key exists without showing it. */
 export function claveOculta(clave: string): string {
   if (clave === "") return "";
   return clave.length <= 8 ? "••••" : `${clave.slice(0, 3)}…${clave.slice(-4)}`;
 }
 
 /**
- * El cuerpo de la petición, adaptado al proveedor. El agente lo escribe pensando
- * en Ollama; los demás rechazan campos que no conocen (OpenAI contesta 400 con
+ * The request body, adapted to the provider. The agent writes it thinking of
+ * Ollama; the others reject fields they do not know (OpenAI answers 400 with
  * `keep_alive`).
  */
 export function adaptarCuerpo(p: Proveedor, cuerpo: Record<string, unknown>): Record<string, unknown> {
@@ -196,7 +196,7 @@ export function adaptarCuerpo(p: Proveedor, cuerpo: Record<string, unknown>): Re
   return salida;
 }
 
-/** Nombres de modelo de la respuesta de `/models` (OpenAI) o `/api/tags` (Ollama). */
+/** Model names from the `/models` (OpenAI) or `/api/tags` (Ollama) response. */
 export function modelosDeRespuesta(datos: unknown): string[] {
   const d = (datos ?? {}) as { data?: { id?: string }[]; models?: { name?: string; model?: string }[] };
   const nombres = [

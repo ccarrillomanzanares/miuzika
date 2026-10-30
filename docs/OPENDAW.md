@@ -1,76 +1,76 @@
-# Integración con openDAW
+# openDAW integration
 
-Este documento fija la frontera entre miuzika y el motor. Está **implementada y verificada**
-la integración de `src/host/opendaw/` (export/import con ida y vuelta de notas, tempo, mezcla y
-audio) y el playback WASM de `web/src/opendaw-engine.ts`. Lo que sigue explica las decisiones y
-lo que queda pendiente.
+This document sets the boundary between miuzika and the engine. The integration in
+`src/host/opendaw/` (export/import with round-trip of notes, tempo, mix and
+audio) and the WASM playback in `web/src/opendaw-engine.ts` are **implemented and verified**.
+What follows explains the decisions and what remains pending.
 
-## Estado real
+## Actual status
 
-| Pieza | Estado |
+| Piece | Status |
 |---|---|
-| Crear `Project` de openDAW sin navegador | ✅ (shims mínimos en `shims.ts`) |
-| Tempo, compases, master, pistas MIDI | ✅ |
-| Clips/regiones y notas | ✅ |
-| Volumen, pan, mute, solo | ✅ |
+| Create an openDAW `Project` without a browser | ✅ (minimal shims in `shims.ts`) |
+| Tempo, bars, master, MIDI tracks | ✅ |
+| Clips/regions and notes | ✅ |
+| Volume, pan, mute, solo | ✅ |
 | Reverb, delay, waveshaper, crusher, compressor, gate, stereotool | ✅ |
-| EQ y filtro (aproximados con Revamp), chorus (delay modulado) | ✅ |
-| Import (openDAW → IR): pistas, notas, tempo, mezcla | ✅ |
-| Playback en navegador: `WasmEngine` + `EngineWorklet` | ✅ `web/src/opendaw-engine.ts`; ▶ en proyectos MIDI |
-| Batería Playfield con samples WAV | ✅ `SampleProvider` sobre `web/public/drums` |
-| Mute/solo/volumen/pan en caliente | ✅ `syncMix` actualiza los `AudioUnitBox` del engine |
-| Import de dispositivos | 📋 (se conservan las notas; los FX no se reconstruyen) |
-| Pistas/regiones de audio dentro del engine | ✅ `AudioFileBox` + `AudioRegionBox`; WAV largos partidos en bloques de 2 min |
+| EQ and filter (approximated with Revamp), chorus (modulated delay) | ✅ |
+| Import (openDAW → IR): tracks, notes, tempo, mix | ✅ |
+| Playback in the browser: `WasmEngine` + `EngineWorklet` | ✅ `web/src/opendaw-engine.ts`; ▶ on MIDI projects |
+| Playfield drums with WAV samples | ✅ `SampleProvider` over `web/public/drums` |
+| Mute/solo/volume/pan on the fly | ✅ `syncMix` updates the engine's `AudioUnitBox`es |
+| Device import | 📋 (notes are preserved; FX are not rebuilt) |
+| Audio tracks/regions inside the engine | ✅ `AudioFileBox` + `AudioRegionBox`; long WAVs split into 2-minute blocks |
 
-Comandos:
+Commands:
 
 ```bash
-npm run test:opendaw                       # ida y vuelta contra el SDK real
+npm run test:opendaw                       # round trip against the real SDK
 ```
 
-Resultado medido: 6 pistas, 24 clips, 666 notas y 11 FX exportados; al reimportar se conservan
-las 666 notas, el tempo, la duración y las ganancias.
+Measured result: 6 tracks, 24 clips, 666 notes and 11 FX exported; on re-import the
+666 notes, the tempo, the length and the gains are preserved.
 
-## Por qué openDAW
+## Why openDAW
 
-- Motor de audio en Rust/WASM + Web Audio, pensado para navegador.
-- SDK público en npm (subpaquetes: `studio-core`, `studio-boxes`, `studio-adapters`,
+- Audio engine in Rust/WASM + Web Audio, designed for the browser.
+- Public SDK on npm (subpackages: `studio-core`, `studio-boxes`, `studio-adapters`,
   `studio-core-wasm`, `lib-dsp`, `lib-midi`, `lib-dawproject`…).
-- Import/export **DAWproject**, lo que da interoperabilidad con Bitwig, Studio One, etc.
-- Dispositivos propios: Vaporisateur (sustractivo), Playfield (batería), Nano (sampler),
-  reproductor de SoundFont, y efectos (reverb Dattorro/FreeVerb, delay, vocoder, waveshaper,
-  crusher, compresor, maximizador…).
-- Ya incluye inferencia para separación de stems y audio-to-MIDI (`lib-inference`, solo en el
-  estudio, no en el SDK).
+- **DAWproject** import/export, which gives interoperability with Bitwig, Studio One, etc.
+- Its own devices: Vaporisateur (subtractive), Playfield (drums), Nano (sampler),
+  SoundFont player, and effects (Dattorro/FreeVerb reverb, delay, vocoder, waveshaper,
+  crusher, compressor, maximizer…).
+- It already includes inference for stem separation and audio-to-MIDI (`lib-inference`, only in the
+  studio, not in the SDK).
 
-## Licencia (leer antes de escribir código)
+## License (read before writing code)
 
-openDAW es **dual**:
+openDAW is **dual**:
 
-| Opción | Obligación |
+| Option | Obligation |
 |---|---|
-| AGPL-3.0-or-later | Todo el trabajo combinado se publica bajo AGPL, **incluido SaaS** (§13). |
-| Comercial | Se paga y se puede mantener el código cerrado. Contacto: andre.michelle@opendaw.org |
+| AGPL-3.0-or-later | All combined work is published under AGPL, **including SaaS** (§13). |
+| Commercial | You pay and can keep the code closed. Contact: andre.michelle@opendaw.org |
 
-La licencia comercial **excluye** componentes con copyleft de terceros o servicios externos:
+The commercial license **excludes** components with third-party copyleft or external services:
 
-- compresor CTAGDRC (GPL-3.0) → sustituir por otro compresor
-- Neural Amp / Tone3000 (servicio y licencias por modelo) → omitir
-- detección de tempo TempoCNN (AGPL-3.0) → sustituir
+- CTAGDRC compressor (GPL-3.0) → replace with another compressor
+- Neural Amp / Tone3000 (service and per-model licenses) → omit
+- TempoCNN tempo detection (AGPL-3.0) → replace
 
-Como el producto va a ser abierto, la ruta es AGPL: hay que mantener avisos de copyright y
-publicar las modificaciones de openDAW. Nuestro código (`src/core`) también se
-licencia AGPL-3.0 para que el conjunto sea coherente.
+Since the product is going to be open, the route is AGPL: copyright notices must be kept and
+modifications to openDAW must be published. Our code (`src/core`) is also
+licensed AGPL-3.0 so that the whole is coherent.
 
-## Arranque técnico
+## Technical startup
 
-Requisitos que condicionan el despliegue:
+Requirements that condition deployment:
 
-1. **Cross-origin isolation** (`COOP: same-origin`, `COEP: require-corp`) porque el motor usa
-   `SharedArrayBuffer`. Está configurado en `vite.config.ts` para `server` y `preview`.
-2. Servir los artefactos WASM del paquete. `web/public/opendaw-wasm/wasm/` contiene
-   `engine.wasm`, `stretch_wasm.wasm` y `plugins/*.wasm`; los worklets/workers se importan con
-   `?url` para que Vite los empaquete. El arranque real está en `web/src/opendaw-engine.ts`:
+1. **Cross-origin isolation** (`COOP: same-origin`, `COEP: require-corp`) because the engine uses
+   `SharedArrayBuffer`. It is configured in `vite.config.ts` for `server` and `preview`.
+2. Serve the package's WASM artifacts. `web/public/opendaw-wasm/wasm/` contains
+   `engine.wasm`, `stretch_wasm.wasm` and `plugins/*.wasm`; worklets/workers are imported with
+   `?url` so that Vite bundles them. The actual startup is in `web/src/opendaw-engine.ts`:
 
 ```ts
 import workletsUrl from "@opendaw/studio-core/processors.js?url"
@@ -82,162 +82,162 @@ import { AudioWorklets, Workers } from "@opendaw/studio-core"
 
 await Workers.install(workersUrl)
 AudioWorklets.install(workletsUrl)
-await AudioWorklets.createFor(audioContext) // añade processors.js a ESTE contexto
+await AudioWorklets.createFor(audioContext) // adds processors.js to THIS context
 WasmEngine.install({
   processorUrl: wasmProcessorUrl,
   offlineWorkerUrl: wasmOfflineWorkerUrl,
   wasmUrl: `${import.meta.env.BASE_URL}opendaw-wasm`,
 })
-await WasmEngine.ensureReady(audioContext) // añade wasm-processor.js
+await WasmEngine.ensureReady(audioContext) // adds wasm-processor.js
 ```
 
-   El processor WASM se registra **una vez por contexto**. Por eso hay un único `AudioContext`
-   guardado en `globalThis` (`__miuzikaOpenDawBoot`), incluso si Vite recarga el módulo por HMR.
+   The WASM processor is registered **once per context**. That is why there is a single `AudioContext`
+   stored on `globalThis` (`__miuzikaOpenDawBoot`), even if Vite reloads the module through HMR.
 
-3. Si se compila el motor desde fuente: Rust ≥ 1.82, target `wasm32-unknown-unknown` y toolchain
-   nightly con `rust-src`. Con los artefactos prebuilt del npm no hace falta.
+3. If the engine is built from source: Rust ≥ 1.82, target `wasm32-unknown-unknown` and a nightly
+   toolchain with `rust-src`. With the npm prebuilt artifacts this is not necessary.
 
-## Dos formas de integrar
+## Two ways to integrate
 
-### A. SDK embebido (recomendada)
+### A. Embedded SDK (recommended)
 
-Nuestra app (React/Solid/vanilla) monta el `Project` del SDK y usa sus dispositivos. Mantenemos
-nuestra timeline y el piano roll puede ser propio o reutilizado.
+Our app (React/Solid/vanilla) mounts the SDK's `Project` and uses its devices. We keep
+our timeline and the piano roll can be our own or reused.
 
-- Ventaja: control total del producto.
-- Coste: hay que construir timeline, mixer y piano roll, o adaptar los del estudio.
+- Advantage: full control of the product.
+- Cost: the timeline, mixer and piano roll must be built, or the studio's adapted.
 
-### B. Fork del estudio
+### B. Fork of the studio
 
-Se parte del repo de openDAW y se añade el panel de la GUI.
+Start from the openDAW repo and add the GUI panel.
 
-- Ventaja: DAW completo desde el día 1.
-- Coste: mantener un fork grande, UI no basada en React, y todo el código queda AGPL.
+- Advantage: a complete DAW from day 1.
+- Cost: maintaining a large fork, a UI not based on React, and all the code ends up AGPL.
 
-Para miuzika, **A** es más limpio: el `Project` del SDK es el ejecutor y nuestro IR manda.
-Si se elige B, el adaptador sigue siendo el mismo; solo cambia dónde se engancha.
+For miuzika, **A** is cleaner: the SDK's `Project` is the executor and our IR rules.
+If B is chosen, the adapter is still the same; only where it hooks in changes.
 
-## Mapeo conceptual
+## Conceptual mapping
 
-| miuzika | openDAW | Notas |
+| miuzika | openDAW | Notes |
 |---|---|---|
-| `Project.bpm`, `key`, `lengthBars` | tempo map y escala del proyecto | openDAW tiene automatización de tempo |
-| `Track` | `AudioUnitBox` + `TrackBox` | una unidad de audio por pista |
+| `Project.bpm`, `key`, `lengthBars` | project tempo map and scale | openDAW has tempo automation |
+| `Track` | `AudioUnitBox` + `TrackBox` | one audio unit per track |
 | `Track.instrument.type` | `InstrumentFactories` | drumkit→Playfield, bass/pad/lead/synth→Vaporisateur, soundfont→SoundFont player, sampler→Nano |
-| `Clip` (MIDI) | región MIDI + `ValueEventCollectionBox` | convertir `beat × PPQN` |
-| `Note` | note event (pitch, position, duration, velocity) | `lib-midi` puede ayudar |
-| `Clip` (audio) | `AudioRegionBox` + `AudioFileBox` | playback y referencias; los bytes WAV se cargan del disco (`/api/audio`) |
-| `Device` | dispositivo del grafo | los nombres de parámetros **no** coinciden; hace falta tabla |
-| `Track.gainDb/pan` | gain/pan de la unidad | dB vs ganancia lineal: convertir |
-| `master.gainDb` | salida/master | ídem |
-| `Project` completo | `ProjectBundle` (OPFS) | serialización y assets |
-| export | DAWproject | interop con otros DAW |
+| `Clip` (MIDI) | MIDI region + `ValueEventCollectionBox` | convert `beat × PPQN` |
+| `Note` | note event (pitch, position, duration, velocity) | `lib-midi` can help |
+| `Clip` (audio) | `AudioRegionBox` + `AudioFileBox` | playback and references; WAV bytes are loaded from disk (`/api/audio`) |
+| `Device` | graph device | parameter names **do not** match; a table is needed |
+| `Track.gainDb/pan` | unit gain/pan | dB vs linear gain: convert |
+| `master.gainDb` | output/master | same |
+| `Project` complete | `ProjectBundle` (OPFS) | serialization and assets |
+| export | DAWproject | interop with other DAWs |
 
-### Dispositivos
+### Devices
 
-| miuzika | openDAW | conversión aplicada |
+| miuzika | openDAW | Conversion applied |
 |---|---|---|
-| reverb | Reverb (FreeVerb) | `wet`/`dry` a dB, `preDelay` a segundos |
-| delay | Delay | `time` a ms, feedback, cross, wet/dry dB |
-| chorus | Delay modulado | delay 16-28 ms + LFO (aproximación) |
-| distortion | Waveshaper | `drive` a inputGain dB, mix |
+| reverb | Reverb (FreeVerb) | `wet`/`dry` to dB, `preDelay` to seconds |
+| delay | Delay | `time` to ms, feedback, cross, wet/dry dB |
+| chorus | Modulated delay | 16-28 ms delay + LFO (approximation) |
+| distortion | Waveshaper | `drive` to inputGain dB, mix |
 | filter | Revamp (low-pass) | `cutoff` 0..1 → 20 Hz..20 kHz, `resonance` → Q |
 | eq | Revamp | lowShelf 100 Hz, midBell 1 kHz, highShelf 8 kHz |
-| compressor | Compressor | umbral dB, ratio, attack/release ms |
+| compressor | Compressor | threshold dB, ratio, attack/release ms |
 | bitcrusher | Crusher | bits, mix |
-| gate | Gate | umbral dB, release ms |
+| gate | Gate | threshold dB, release ms |
 | width | StereoTool | `width` 0..2 → stereo -1..1 |
 
-Los dispositivos sin equivalente exacto se aproximan a propósito; la alternativa sería omitirlos.
-El adaptador devuelve avisos cuando algo no se puede mapear.
+Devices without an exact equivalent are approximated on purpose; the alternative would be to omit them.
+The adapter returns warnings when something cannot be mapped.
 
-### Conversion de parámetros
+### Parameter conversion
 
-Nuestros dispositivos usan 0..1 normalizado (salvo eq en dB, ratio 1..20, bits 1..16). openDAW
-usa unidades propias por dispositivo. El adaptador debe tener una tabla explícita:
+Our devices use normalized 0..1 (except eq in dB, ratio 1..20, bits 1..16). openDAW
+uses its own units per device. The adapter must have an explicit table:
 
 ```ts
 type ParamMap = Record<string, (value: number) => number>
 const REVERB: ParamMap = {
-  wet: (v) => v,          // verificar: ¿0..1 o porcentaje?
-  decay: (v) => 0.5 + v * 9.5, // segundos, verificar
+  wet: (v) => v,          // check: 0..1 or percentage?
+  decay: (v) => 0.5 + v * 9.5, // seconds, check
   preDelay: (v) => v * 0.2,
   damping: (v) => v,
 }
 ```
 
-Regla: si un parámetro no tiene mapeo, **fallar** en vez de adivinar. Es preferible que el
-usuario reciba "no puedo mapear ese parámetro" a que genere un proyecto silencioso.
+Rule: if a parameter has no mapping, **fail** instead of guessing. It is better for the
+user to get "I cannot map that parameter" than to generate a silent project.
 
-## Contrato del adaptador
+## Adapter contract
 
 ```ts
-// pseudocódigo: define la frontera, no se ha ejecutado
+// pseudocode: defines the boundary, has not been run
 interface HostAdapter {
-  load(project: Project): Promise<void>          // crea/actualiza el proyecto en el host
-  apply(project: Project): Promise<void>         // sincroniza tras applyOps
+  load(project: Project): Promise<void>          // creates/updates the project in the host
+  apply(project: Project): Promise<void>         // synchronizes after applyOps
   render(project: Project): Promise<AudioBuffer> // OfflineEngineRenderer
   exportDawproject(project: Project): Promise<Uint8Array>
 }
 ```
 
-Flujo con la GUI:
+Flow with the GUI:
 
-1. Una operaci?n produce un `Project` nuevo (inmutable).
-2. `adapter.apply(project)` reconcilia por id: crea lo que falta, actualiza lo que cambi?,
-   borra lo que desapareci?.
-3. La UI escucha el resultado y mantiene su propia pila de undo.
+1. An operation produces a new `Project` (immutable).
+2. `adapter.apply(project)` reconciles by id: creates what is missing, updates what changed,
+   deletes what disappeared.
+3. The UI listens to the result and keeps its own undo stack.
 
-### Sincronización
+### Synchronization
 
-No serializar el proyecto entero en cada cambio. El adaptador debe aplicar un **diff por id**:
+Do not serialize the whole project on every change. The adapter must apply a **diff by id**:
 
 ```
 tracks: added / removed / updated(gain, pan, mute, devices)
 clips:  added / removed / updated(notes)
 ```
 
-Nuestros ids (`trk_bass`, `clp_3`) se pueden mapear 1:1 a ids del host si el SDK acepta UUIDs
-propios; si no, mantener una tabla `miuzikaId ↔ hostId`.
+Our ids (`trk_bass`, `clp_3`) can be mapped 1:1 to host ids if the SDK accepts its own UUIDs;
+if not, keep a `miuzikaId ↔ hostId` table.
 
-## Import hoy
+## Import today
 
-- **Abrir**: la GUI importa un JSON o un bundle `.miuzika.zip` existente con sus WAVs.
-- **openDAW**: el adaptador convierte el `Project` a un proyecto del engine para reproducir.
-- No hay exportaci?n de proyecto ni MIDI desde la interfaz.
+- **Open**: the GUI imports an existing JSON or `.miuzika.zip` bundle with its WAVs.
+- **openDAW**: the adapter converts the `Project` into an engine project for playback.
+- There is no project or MIDI export from the interface.
 
-## Plan de implementación
+## Implementation plan
 
-1. ~~**Spike de SDK**: montar un proyecto en blanco, cargar el WASM y reproducir.~~
-   Hecho: `web/src/opendaw-engine.ts` carga el IR como `.odw`, arranca `EngineWorklet` y suena
-   con `WasmEngine`. MIDI, batería Playfield y pistas WAV usan el mismo camino; ya no hay
-   reproductor WebAudio alternativo.
-2. ~~**Adaptador de lectura**: volcar un `Project` nuestro a openDAW.~~ Hecho.
-3. ~~**Adaptador de escritura**: leer un proyecto de openDAW y convertirlo a IR.~~ Hecho para
-   notas/pistas/mezcla; los FX no se reconstruyen.
-4. **Reconciliación**: diff por id + undo compartido entre la UI y openDAW.
-5. **Piano roll**: hecho en miuzika (edita el IR); falta sincronizar con el editor de openDAW.
-6. **Render offline**: no implementado; la app reproduce con el engine.
-7. ~~**Audio**: `AudioFileBox` + `SampleService` para reproducir los WAV.~~
-   Hecho en playback con `AudioFileBox`/`AudioRegionBox`; los WAV largos se parten en chunks
-   de 2 minutos. 
+1. ~~**SDK spike**: mount a blank project, load the WASM and play.~~
+   Done: `web/src/opendaw-engine.ts` loads the IR as `.odw`, starts `EngineWorklet` and it sounds
+   with `WasmEngine`. MIDI, Playfield drums and WAV tracks use the same path; there is no longer an
+   alternative WebAudio player.
+2. ~~**Read adapter**: dump one of our `Project`s into openDAW.~~ Done.
+3. ~~**Write adapter**: read an openDAW project and convert it to IR.~~ Done for
+   notes/tracks/mix; FX are not rebuilt.
+4. **Reconciliation**: diff by id + undo shared between the UI and openDAW.
+5. **Piano roll**: done in miuzika (edits the IR); still to be synchronized with the openDAW editor.
+6. **Offline render**: not implemented; the app plays with the engine.
+7. ~~**Audio**: `AudioFileBox` + `SampleService` to play the WAVs.~~
+   Done in playback with `AudioFileBox`/`AudioRegionBox`; long WAVs are split into chunks
+   of 2 minutes.
 
-## Checklist de verificación contra el SDK real
+## Verification checklist against the real SDK
 
-- [x] Nombre y firma exactos de `WasmEngine.install` / `ensureReady` en la versión instalada.
-- [x] Constante `PPQN` y utilidades de conversión de beats.
-- [x] API para crear región MIDI y volcar eventos (`ValueEventCollectionBox`).
-- [x] Factorías de instrumentos disponibles y sus parámetros.
-- [ ] Nombres y rangos de parámetros de cada efecto (mapeados y probados en ida/vuelta).
-- [ ] Cómo se expone el historial de undo.
-- [ ] Formato de `ProjectBundle` y gestión de assets en OPFS.
-- [ ] `OfflineEngineRenderer`: entrada, salida y límites.
-- [ ] Comportamiento con `AudioContext` suspendido y con pestañas en segundo plano.
+- [x] Exact name and signature of `WasmEngine.install` / `ensureReady` in the installed version.
+- [x] `PPQN` constant and beat conversion utilities.
+- [x] API to create a MIDI region and dump events (`ValueEventCollectionBox`).
+- [x] Available instrument factories and their parameters.
+- [ ] Parameter names and ranges for each effect (mapped and tested in the round trip).
+- [ ] How the undo history is exposed.
+- [ ] `ProjectBundle` format and asset management in OPFS.
+- [ ] `OfflineEngineRenderer`: input, output and limits.
+- [ ] Behavior with a suspended `AudioContext` and with background tabs.
 
-## Riesgos específicos
+## Specific risks
 
-- **Sin VST3**: el catálogo de instrumentos es el del host. Si el usuario espera Serum, no está.
-- **Madurez**: openDAW está en desarrollo activo; fijar una versión y aislar el adaptador.
-- **AGPL**: cualquier despliegue público obliga a publicar el código. Decisión ya tomada, pero
-  afecta a integraciones futuras (plugins de terceros, SDK cerrados).
-- **Rendimiento**: muchos clips con miles de notas; medir antes de asumir.
+- **No VST3**: the instrument catalog is the host's. If the user expects Serum, it is not there.
+- **Maturity**: openDAW is under active development; pin a version and isolate the adapter.
+- **AGPL**: any public deployment forces publishing the code. The decision is already made, but
+  it affects future integrations (third-party plugins, closed SDKs).
+- **Performance**: many clips with thousands of notes; measure before assuming.

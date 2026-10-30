@@ -1,4 +1,4 @@
-/** RNG determinista: misma semilla -> misma canción. */
+/** Deterministic RNG: same seed -> same song. */
 
 export function hashString(input: string): number {
   let hash = 2166136261;

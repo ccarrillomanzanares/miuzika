@@ -1,13 +1,13 @@
-"""Smoke test del motor de workspace/codigo.
+"""Smoke test for the engine in workspace/codigo.
 
-Importa los módulos del motor y renderiza un bombo y una caja para comprobar que
-sigue usable: audio con señal, nota afinada y reverb estéreo con la forma correcta.
-Sale 0 si todo va bien; imprime el motivo si falla.
+Imports the engine modules and renders a kick and a snare to check that it
+is still usable: audio with signal, a tuned note and stereo reverb with the right shape.
+Exits 0 if all is well; prints the reason if it fails.
 
-Ojo: aquí NO entra ninguna obra (obras/<slug>/cancion.py): la biblioteca no tiene
-canción y el smoke no debe depender de ninguna.
+Note: no work goes in here (obras/<slug>/cancion.py): the library has no
+song and the smoke test must not depend on any.
 
-Uso: python herramientas/smoke.py
+Usage: python herramientas/smoke.py
 """
 
 import pathlib
@@ -33,14 +33,14 @@ def main() -> int:
         rms = float(np.sqrt(np.mean(x ** 2)))
         pico = float(np.max(np.abs(x)))
         if not (pico > 0.01):
-            print(f"FALLO: kick sale en silencio (pico={pico:.6f})")
+            print(f"FAIL: kick comes out silent (peak={pico:.6f})")
             return 1
         hz = dsp.note_hz(57)
         if not (200.0 < hz < 230.0):
-            print(f"FALLO: note_hz(57)={hz:.2f}, se esperaba ~220")
+            print(f"FAIL: note_hz(57)={hz:.2f}, expected ~220")
             return 1
-        # reverb_st debe devolver la MISMA forma que la entrada: reverb() añade la
-        # cola del IR (len(ir)-1 muestras) y sin recortar la mezcla revienta.
+        # reverb_st must return the SAME shape as the input: reverb() adds the
+        # IR tail (len(ir)-1 samples) and without trimming the mix blows up.
         golpe = np.asarray(instruments.snare(vel=1.0), dtype=np.float32)
         largo = int(2.0 * dsp.SR)
         estereo = np.zeros((largo, 2), np.float32)
@@ -49,32 +49,32 @@ def main() -> int:
         ir = dsp.reverb_ir(1.0, 0.3, seed=7, lp_hz=6000.0)
         mezcla = render.reverb_st(estereo, ir, ir, mix=0.3)
         if mezcla.shape != estereo.shape:
-            print(f"FALLO: reverb_st devuelve {mezcla.shape}, se esperaba {estereo.shape}")
+            print(f"FAIL: reverb_st returns {mezcla.shape}, expected {estereo.shape}")
             return 1
         if not np.all(np.isfinite(mezcla)) or float(np.max(np.abs(mezcla))) < 0.01:
-            print("FALLO: reverb_st devuelve señal vacia o con NaN/inf")
+            print("FAIL: reverb_st returns an empty signal or one with NaN/inf")
             return 1
-        # Mono y estéreo valen en todas partes (28-oct: un bus estéreo en pan,
-        # reverb o un bus mono en place tumbaron cuatro renders seguidos).
+        # Mono and stereo work everywhere (28-Oct: a stereo bus into pan,
+        # reverb or a mono bus into place brought down four renders in a row).
         corto = estereo[:4000]
         for nombre, salida, forma in (
-            ("dsp.pan(estéreo)", dsp.pan(corto, 0.5), (4000, 2)),
-            ("dsp.reverb(estéreo)", dsp.reverb(corto, ir)[:4000], (4000, 2)),
-            ("dsp.delay(estéreo)", dsp.delay(corto, 0.05), (4000, 2)),
+            ("dsp.pan(stereo)", dsp.pan(corto, 0.5), (4000, 2)),
+            ("dsp.reverb(stereo)", dsp.reverb(corto, ir)[:4000], (4000, 2)),
+            ("dsp.delay(stereo)", dsp.delay(corto, 0.05), (4000, 2)),
         ):
             if np.asarray(salida).shape != forma:
-                print(f"FALLO: {nombre} devuelve {np.asarray(salida).shape}, se esperaba {forma}")
+                print(f"FAIL: {nombre} returns {np.asarray(salida).shape}, expected {forma}")
                 return 1
         bus_mono = np.zeros(4000, np.float32)
         render.place(bus_mono, corto, 0.0)
         if float(np.max(np.abs(bus_mono))) < 0.01:
-            print("FALLO: render.place no suma en un bus mono")
+            print("FAIL: render.place does not sum into a mono bus")
             return 1
-        print(f"smoke OK: kick {len(x)} muestras, rms={rms:.4f}, pico={pico:.4f}, A3={hz:.2f}Hz")
-        print("modulos importados: dsp, instruments, midi, render")
+        print(f"smoke OK: kick {len(x)} samples, rms={rms:.4f}, peak={pico:.4f}, A3={hz:.2f}Hz")
+        print("modules imported: dsp, instruments, midi, render")
         return 0
     except Exception:
-        print("FALLO en el smoke test:")
+        print("FAIL in the smoke test:")
         traceback.print_exc()
         return 1
 

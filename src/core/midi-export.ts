@@ -1,22 +1,22 @@
 /**
- * El proyecto → un fichero MIDI (tipo 1, una pista por pista MIDI del proyecto).
+ * The project → a MIDI file (type 1, one track per MIDI track in the project).
  *
- * Es la exportación «MIDI» del encargo: lo que hay en el proyecto, tal cual, para
- * llevarlo a otro DAW. Antes el agente escribía un script de Python que leía
- * proyecto.json (export_midi.py, 27-oct) y cada vez era uno distinto.
+ * It is the "MIDI" export of the brief: what is in the project, as-is, to take to
+ * another DAW. The agent used to write a Python script that read proyecto.json
+ * (export_midi.py, Oct 27) and it was a different one every time.
  *
- * - Tempo y compás del proyecto en la pista 0.
- * - Cada pista MIDI con su nombre y su programa General MIDI (si lo tiene); la
- *   batería va en el canal 10. Las pistas de audio no van: no son notas.
- * - Las notas se leen de los clips (inicio del clip + inicio de la nota), sin
- *   cuadrar a la rejilla.
+ * - The project's tempo and time signature on track 0.
+ * - Each MIDI track with its name and General MIDI program (if it has one); drums
+ *   go on channel 10. Audio tracks are not included: they are not notes.
+ * - Notes are read from the clips (clip start + note start), without snapping to
+ *   the grid.
  *
- * Sin DOM: se prueba con `node --test`.
+ * No DOM: tested with `node --test`.
  */
 
 import type { Project } from "./types.ts";
 
-/** Pulsos por negra del fichero. */
+/** Pulses per quarter note in the file. */
 export const PPQ = 480;
 
 function vlq(valor: number): number[] {
@@ -42,7 +42,7 @@ function trozo(id: string, datos: number[]): number[] {
 
 interface Evento {
   tick: number;
-  /** Los note-off antes que los note-on del mismo tick. */
+  /** Note-offs before note-ons on the same tick. */
   orden: number;
   bytes: number[];
 }
@@ -66,7 +66,7 @@ export function midiDeProyecto(project: Project): Uint8Array {
   const finTick = Math.round(project.lengthBars * beatsPorCompas * PPQ);
 
   const pistas: number[][] = [];
-  // Pista 0: nombre, tempo y compás.
+  // Track 0: name, tempo, and time signature.
   pistas.push(
     pistaDeEventos(
       [
@@ -93,7 +93,7 @@ export function midiDeProyecto(project: Project): Uint8Array {
     const eventos: Evento[] = [];
     for (const clip of track.clips) {
       for (const nota of clip.notes) {
-        // Lo que cae fuera del clip no suena en el DAW: tampoco en el MIDI.
+        // What falls outside the clip does not play in the DAW: nor does it in the MIDI.
         if (nota.start >= clip.length) continue;
         const inicio = Math.round((clip.start + nota.start) * PPQ);
         const fin = Math.max(inicio + 1, Math.round((clip.start + Math.min(nota.start + nota.duration, clip.length)) * PPQ));

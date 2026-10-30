@@ -1,4 +1,4 @@
-/** Las voces del motor: el catálogo leído de `instruments.py` y la puerta para voces nuevas. */
+/** The engine voices: the catalog read from `instruments.py` and the door for new voices. */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -8,18 +8,18 @@ import type { Contexto } from "../contexto.ts";
 export function rutasVoces(server: ViteDevServer, ctx: Contexto): void {
   const { anotar, ficheroHerramientas, carpetaTrabajo, responderJson, leerCuerpo, slugProyecto, correr } = ctx;
 
-  // ---------------------------------------------------------- Voces del motor
-  // El catálogo sale del propio instruments.py (ver codigo/voces.py): no hay
-  // una segunda lista que mantener. `medir` renderiza y mide cada voz.
+  // ---------------------------------------------------------- Engine voices
+  // The catalog comes from instruments.py itself (see codigo/voces.py): there is no
+  // second list to maintain. `medir` renders and measures each voice.
   server.middlewares.use("/api/voces", async (req, res, next) => {
-    // Conexión monta por prefijo: /api/voces/nueva tiene su propio handler.
+    // Connection mounted by prefix: /api/voces/nueva has its own handler.
     const resto = (req.url ?? "").split("?")[0];
     if (resto !== "" && resto !== "/") {
       next();
       return;
     }
     if (req.method !== "GET") {
-      responderJson(res, 405, { error: "usa GET" });
+      responderJson(res, 405, { error: "use GET" });
       return;
     }
     const medir = /[?&]medir=1/.test(req.url ?? "");
@@ -35,12 +35,12 @@ export function rutasVoces(server: ViteDevServer, ctx: Contexto): void {
     }
   });
 
-  // Una voz nueva pasa por la puerta (codigo/gate_voz.py): se renderiza, se
-  // mide y, si cumple, se cuece en instruments.py para siempre. Si no, se
-  // devuelven los motivos concretos y el fichero queda intacto.
+  // A new voice goes through the gate (codigo/gate_voz.py): it is rendered,
+  // measured and, if it passes, baked into instruments.py for good. If not, the
+  // specific reasons are returned and the file is left untouched.
   server.middlewares.use("/api/voces/nueva", (req, res) => {
     if (req.method !== "POST") {
-      responderJson(res, 405, { error: "usa POST" });
+      responderJson(res, 405, { error: "use POST" });
       return;
     }
     leerCuerpo(req, res, async (cuerpo) => {
@@ -57,12 +57,12 @@ export function rutasVoces(server: ViteDevServer, ctx: Contexto): void {
         if (!/^[a-z][a-z0-9_]{2,30}$/.test(nombre)) {
           responderJson(res, 400, {
             ok: false,
-            motivos: ["el nombre debe ser minúsculas, 3-31 caracteres, letras/números/_"],
+            motivos: ["the name must be lowercase, 3-31 characters, letters/numbers/_"],
           });
           return;
         }
         if (fuente.trim().length < 40 || fuente.length > 20000) {
-          responderJson(res, 400, { ok: false, motivos: ["la fuente está vacía o es enorme"] });
+          responderJson(res, 400, { ok: false, motivos: ["the source is empty or huge"] });
           return;
         }
         const rutaGpu = resolve(carpetaTrabajo, "gpu", "voces_gpu.py");
@@ -70,12 +70,12 @@ export function rutasVoces(server: ViteDevServer, ctx: Contexto): void {
         const textoGpu = existsSync(rutaGpu) ? readFileSync(rutaGpu, "utf8") : "";
         const existe = new RegExp(`^def ${nombre}\\(`, "m");
         if (existe.test(textoCpu) || existe.test(textoGpu)) {
-          responderJson(res, 409, { ok: false, motivos: [`ya existe la voz "${nombre}"`] });
+          responderJson(res, 409, { ok: false, motivos: [`voice "${nombre}" already exists`] });
           return;
         }
 
-        // 1) la candidata se renderiza donde toca. En GPU va a gpu/ (Lambda
-        //    sube esa carpeta) y la mide gpu/gate_voz_gpu.py allí mismo.
+        // 1) the candidate is rendered where it belongs. On GPU it goes to gpu/ (Lambda
+        //    uploads that folder) and gpu/gate_voz_gpu.py measures it right there.
         const candidata =
           destino === "gpu" ? `gpu/_candidata_${nombre}.py` : `tmp/_candidata_${nombre}.py`;
         writeFileSync(resolve(carpetaTrabajo, candidata), fuente, "utf8");
@@ -104,7 +104,7 @@ export function rutasVoces(server: ViteDevServer, ctx: Contexto): void {
         if (!ultima) {
           responderJson(res, 500, {
             ok: false,
-            motivos: ["la puerta no devolvió veredicto"],
+            motivos: ["the gate returned no verdict"],
             detalle: (prueba.errores || prueba.salida).slice(-800),
           });
           return;
@@ -118,16 +118,16 @@ export function rutasVoces(server: ViteDevServer, ctx: Contexto): void {
         if (!veredicto.ok) {
           responderJson(res, 422, {
             ok: false,
-            motivos: veredicto.motivos ?? ["no pasa la puerta"],
+            motivos: veredicto.motivos ?? ["does not pass the gate"],
             perfil: veredicto.perfil ?? null,
             traza: veredicto.traza ?? null,
           });
           return;
         }
 
-        // 2) cocer: se añade al final de instruments.py, con su sección.
-        //    Se quitan los imports de sí misma (dentro del módulo no hacen
-        //    falta y provocan import circular según dónde caiga la función).
+        // 2) bake: it is appended at the end of instruments.py, with its section.
+        //    Imports of itself are removed (inside the module they are not
+        //    needed and cause a circular import depending on where the function lands).
         const limpia = fuente
           .split("\n")
           .filter((l) => !/^(from instruments import|import instruments)/.test(l.trim()))
@@ -140,20 +140,20 @@ export function rutasVoces(server: ViteDevServer, ctx: Contexto): void {
         const cabecera = original.includes(marca)
           ? ""
           : "\n\n# ── VOCES CREADAS POR EL AGENTE ──────────────────────────────────────────────\n" +
-            "# Añadidas desde la app. Docstring obligatorio: ver codigo/voces.py.\n";
+            "# Added from the app. Mandatory docstring: see codigo/voces.py.\n";
         writeFileSync(
           rutaDestino,
           original.replace(/\s*$/, "\n") + cabecera + "\n" + limpia + "\n",
           "utf8",
         );
 
-        // 3) el módulo tiene que seguir importando y la voz aparecer en el catálogo.
+        // 3) the module has to keep importing and the voice has to appear in the catalog.
         const revisar = await correr("codigo/voces.py", ["--medir"], 240);
         if (revisar.codigo !== 0) {
           writeFileSync(rutaDestino, original, "utf8");
           responderJson(res, 500, {
             ok: false,
-            motivos: ["la voz rompe instruments.py; se ha deshecho el cambio"],
+            motivos: ["the voice breaks instruments.py; the change has been undone"],
             detalle: (revisar.errores || revisar.salida).slice(-800),
           });
           return;

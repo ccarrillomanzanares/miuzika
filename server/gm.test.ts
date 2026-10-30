@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { presetsDeSf2, textoDePresets } from "./gm.ts";
 
-/** Un .sf2 mínimo: RIFF sfbk → LIST pdta → phdr con dos presets y el EOP. */
+/** A minimal .sf2: RIFF sfbk → LIST pdta → phdr with two presets and the EOP. */
 function sf2De(presets: { nombre: string; programa: number; banco: number }[]): Uint8Array {
   const registros = [...presets, { nombre: "EOP", programa: 0, banco: 0 }];
   const phdr = new Uint8Array(8 + registros.length * 38);
@@ -28,7 +28,7 @@ function sf2De(presets: { nombre: string; programa: number; banco: number }[]): 
   return riff;
 }
 
-test("lee los presets de la tabla phdr y descarta el EOP", () => {
+test("reads the presets from the phdr table and discards the EOP", () => {
   const presets = presetsDeSf2(
     sf2De([
       { nombre: "Overdrive Guitar", programa: 29, banco: 0 },
@@ -41,6 +41,6 @@ test("lee los presets de la tabla phdr y descarta el EOP", () => {
   ]);
   const texto = textoDePresets(presets);
   assert.match(texto, /29 Overdrive Guitar/);
-  assert.match(texto, /Kits[^\n]*\n0 Standard 1/);
+  assert.match(texto, /Drum kits[^\n]*\n0 Standard 1/);
   assert.throws(() => presetsDeSf2(new Uint8Array(20)), /SoundFont/);
 });

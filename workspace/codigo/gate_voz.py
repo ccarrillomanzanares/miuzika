@@ -1,16 +1,16 @@
-"""La puerta por la que pasa una voz nueva antes de entrar en el motor.
+"""The gate a new voice goes through before entering the engine.
 
-Uso:
-    python codigo/gate_voz.py <ruta_candidata.py>
+Usage:
+    python codigo/gate_voz.py <candidate_path.py>
 
-El fichero candidato define **una** función (el nombre del fichero sin el prefijo
-`_candidata_` ni la extensión) con su docstring en el formato de `voces.py`.
+The candidate file defines **one** function (the file name without the
+`_candidata_` prefix and without the extension) with its docstring in the `voces.py` format.
 
-Se renderiza dos veces con sus valores por defecto y se mide. Si no cumple los
-umbrales, no entra y se devuelven los motivos concretos; si cumple, imprime
-`"ok": true` y el perfil, y es el servidor quien la cuece en `instruments.py`.
+It is rendered twice with its default values and measured. If it does not meet the
+thresholds, it does not get in and the specific reasons are returned; if it does, it prints
+`"ok": true` and the profile, and it is the server that bakes it into `instruments.py`.
 
-Salida: JSON por stdout (nada más, para poder parsearlo).
+Output: JSON on stdout (nothing else, so it can be parsed).
 """
 
 import hashlib
@@ -31,7 +31,7 @@ import dsp  # noqa: E402
 import instruments  # noqa: E402
 import voces  # noqa: E402
 
-# Umbrales. Ni un click de 3 ms ni una onda cuadrada son un sonido.
+# Thresholds. Neither a 3 ms click nor a square wave is a sound.
 DURACION_MIN, DURACION_MAX = 0.05, 16.0
 RMS_MIN = -60.0
 CREST_MIN, CREST_MAX = 2.0, 30.0
@@ -43,12 +43,12 @@ PARAMS_MAX = 12
 def _cargar(ruta, nombre):
     spec = importlib.util.spec_from_file_location(f"candidata_{nombre}", ruta)
     if spec is None or spec.loader is None:
-        raise RuntimeError("no se pudo cargar el fichero")
+        raise RuntimeError("could not load the file")
     modulo = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(modulo)
     fn = getattr(modulo, nombre, None)
     if fn is None or not callable(fn):
-        raise RuntimeError(f"el fichero no define una función llamada '{nombre}'")
+        raise RuntimeError(f"the file does not define a function called '{nombre}'")
     return fn
 
 
@@ -57,22 +57,22 @@ def _huella(x):
 
 
 def _docstring(fn):
-    """Comprueba que el docstring describe la voz: familia y todos los parámetros."""
+    """Checks that the docstring describes the voice: family and all parameters."""
     problemas = []
     doc = inspect.getdoc(fn) or ""
     lineas = [l.strip() for l in doc.splitlines() if l.strip()]
     if not lineas:
-        return ["sin docstring: hace falta una descripción y la familia"], {}
+        return ["no docstring: a description and the family are required"], {}
     if len(lineas[0]) < 8:
-        problemas.append("la primera línea del docstring debe describir el sonido")
+        problemas.append("the first docstring line must describe the sound")
     familia = None
     for linea in lineas[1:]:
         if linea.lower().startswith("familia:"):
             familia = linea.split(":", 1)[1].strip().lower()
     if familia is None:
-        problemas.append("falta 'familia: percusión|tonal|ruido|textura'")
+        problemas.append("missing 'familia: percusión|tonal|ruido|textura'")
     elif familia not in voces.FAMILIAS:
-        problemas.append(f"familia '{familia}' no válida (usa: {', '.join(voces.FAMILIAS)})")
+        problemas.append(f"family '{familia}' is not valid (use: {', '.join(voces.FAMILIAS)})")
     documentados = {}
     for linea in lineas[1:]:
         m = voces.LINEA_PARAM.match(linea)
@@ -85,18 +85,18 @@ def _docstring(fn):
     params = inspect.signature(fn).parameters
     for clave in params:
         if clave not in documentados:
-            problemas.append(f"el parámetro '{clave}' no está documentado en el docstring")
+            problemas.append(f"parameter '{clave}' is not documented in the docstring")
     for clave, meta in documentados.items():
         if clave not in params:
-            problemas.append(f"documentas '{clave}' pero la función no lo tiene")
+            problemas.append(f"you document '{clave}' but the function does not have it")
         elif meta.get("tipo") != "bool" and meta["min"] >= meta["max"]:
-            problemas.append(f"rango vacío en '{clave}': {meta['min']}..{meta['max']}")
+            problemas.append(f"empty range in '{clave}': {meta['min']}..{meta['max']}")
     return problemas, documentados
 
 
 def main(argv):
     if not argv:
-        print(json.dumps({"ok": False, "motivos": ["falta la ruta del candidato"]}))
+        print(json.dumps({"ok": False, "motivos": ["missing candidate path"]}))
         return 1
     ruta = argv[0]
     base = os.path.basename(ruta)
@@ -105,11 +105,11 @@ def main(argv):
     perfil = {}
 
     if nombre in voces.EXCLUIR:
-        motivos.append(f"'{nombre}' está reservado ({voces.EXCLUIR[nombre]})")
+        motivos.append(f"'{nombre}' is reserved ({voces.EXCLUIR[nombre]})")
     if nombre in vars(instruments):
-        motivos.append(f"ya existe una voz llamada '{nombre}'")
+        motivos.append(f"a voice called '{nombre}' already exists")
     if not nombre.replace("_", "").isalnum() or nombre[:1].isdigit():
-        motivos.append("el nombre solo puede tener letras, números y guiones bajos")
+        motivos.append("the name may only contain letters, numbers and underscores")
 
     fn = None
     try:
@@ -119,7 +119,7 @@ def main(argv):
             json.dumps(
                 {
                     "ok": False,
-                    "motivos": [f"no carga: {error}"],
+                    "motivos": [f"does not load: {error}"],
                     "traza": traceback.format_exc()[-1500:],
                 }
             )
@@ -131,14 +131,14 @@ def main(argv):
 
     firma = inspect.signature(fn)
     if len(firma.parameters) > PARAMS_MAX:
-        motivos.append(f"demasiados parámetros ({len(firma.parameters)} > {PARAMS_MAX})")
+        motivos.append(f"too many parameters ({len(firma.parameters)} > {PARAMS_MAX})")
     obligatorios = [
         c for c, p in firma.parameters.items() if p.default is inspect.Parameter.empty
     ]
     if obligatorios:
-        motivos.append(f"tiene parámetros sin valor por defecto: {', '.join(obligatorios)}")
+        motivos.append(f"has parameters without a default value: {', '.join(obligatorios)}")
 
-    # Render dos veces: tiene que ser reproducible y rápido.
+    # Render twice: it must be reproducible and fast.
     args = {
         clave: param.default
         for clave, param in firma.parameters.items()
@@ -151,14 +151,14 @@ def main(argv):
             x = np.asarray(fn(**args), dtype=float)
             ms = (time.perf_counter() - t0) * 1000.0
             if x.size == 0:
-                motivos.append("devuelve un array vacío")
+                motivos.append("returns an empty array")
                 break
             if not np.all(np.isfinite(x)):
-                motivos.append("devuelve NaN o infinitos")
+                motivos.append("returns NaN or infinities")
                 break
             huellas.append(_huella(x))
             if ms > RENDER_MAX_MS:
-                motivos.append(f"tarda {ms:.0f} ms en renderizar (máximo {RENDER_MAX_MS:.0f})")
+                motivos.append(f"takes {ms:.0f} ms to render (maximum {RENDER_MAX_MS:.0f})")
             perfil = voces.perfil(x)
             perfil["render_ms"] = round(ms, 1)
     except Exception as error:
@@ -166,7 +166,7 @@ def main(argv):
             json.dumps(
                 {
                     "ok": False,
-                    "motivos": [f"falla al renderizar: {error}"],
+                    "motivos": [f"fails when rendering: {error}"],
                     "traza": traceback.format_exc()[-1500:],
                 }
             )
@@ -174,22 +174,22 @@ def main(argv):
         return 1
 
     if len(huellas) == 2 and huellas[0] != huellas[1]:
-        motivos.append("no es reproducible: dos renders dan muestras distintas (usa 'seed')")
+        motivos.append("not reproducible: two renders give different samples (use 'seed')")
 
     if perfil:
         if not DURACION_MIN <= perfil["duracion_s"] <= DURACION_MAX:
             motivos.append(
-                f"dura {perfil['duracion_s']} s (debe estar entre {DURACION_MIN} y {DURACION_MAX})"
+                f"lasts {perfil['duracion_s']} s (must be between {DURACION_MIN} and {DURACION_MAX})"
             )
         if perfil["rms_dbfs"] < RMS_MIN:
-            motivos.append(f"es silencio: RMS {perfil['rms_dbfs']} dBFS")
+            motivos.append(f"it is silence: RMS {perfil['rms_dbfs']} dBFS")
         if not CREST_MIN <= perfil["crest_db"] <= CREST_MAX:
             motivos.append(
-                f"crest {perfil['crest_db']} dB fuera de {CREST_MIN}-{CREST_MAX} "
-                "(un click o una onda cuadrada, no un sonido)"
+                f"crest {perfil['crest_db']} dB outside {CREST_MIN}-{CREST_MAX} "
+                "(a click or a square wave, not a sound)"
             )
         if abs(perfil["dc"]) > DC_MAX:
-            motivos.append(f"tiene continua: DC {perfil['dc']}")
+            motivos.append(f"has DC offset: DC {perfil['dc']}")
 
     print(
         json.dumps(

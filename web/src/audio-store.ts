@@ -1,15 +1,15 @@
 /**
- * Audio del proyecto.
+ * Project audio.
  *
- * Los WAV viven en el disco (`workspace/proyectos/<slug>/…`) y aquí sólo se
- * cachean en memoria los que el engine necesita decodificados. No hay
- * IndexedDB: el proyecto es el fichero maestro (`proyecto.json`) más sus WAV,
- * así que lo que suena es exactamente lo que hay en la carpeta.
+ * WAVs live on disk (`workspace/proyectos/<slug>/…`) and here only the ones the
+ * engine needs decoded are cached in memory. There is no IndexedDB: the project is
+ * the master file (`proyecto.json`) plus its WAVs, so what sounds is exactly what
+ * is in the folder.
  *
- * Los cortos (≤ SEGUNDOS_STREAMING) se decodifican siempre. Los largos, mientras
- * quepan en PRESUPUESTO_DECODIFICADO_MB: así pasan por openDAW (efectos, envíos,
- * exportar). Los que no caben se reproducen con `<audio>` por streaming, con la
- * onda calculada en el servidor, y no entran en el mezclador.
+ * Short ones (≤ SEGUNDOS_STREAMING) are always decoded. Long ones, as long as they
+ * fit in PRESUPUESTO_DECODIFICADO_MB: that way they go through openDAW (effects,
+ * sends, export). The ones that do not fit are played with streaming `<audio>`, with
+ * the waveform computed on the server, and do not enter the mixer.
  */
 
 import type { Project } from "../../src/core/types.ts";
@@ -17,20 +17,20 @@ import { idsDeAssets } from "../../src/core/project.ts";
 import { rutaEnWorkspace } from "../../src/core/rutas.ts";
 import { slugDe } from "../../src/core/nombres.ts";
 
-/** Hasta estos segundos el WAV se decodifica siempre. */
+/** Up to these seconds the WAV is always decoded. */
 export const SEGUNDOS_STREAMING = 30;
 
 /**
- * Memoria para WAV largos decodificados (Float32, estéreo, 48 kHz ≈ 0,37 MB/s).
- * Medido el 23-oct: diez stems de 6 min (1,3 GB) no cabían en el portátil, y por
- * eso todo lo de más de 30 s iba por streaming, fuera de openDAW. 400 MB son unos
- * 18 min de audio estéreo: tres stems de 6 min, o un proyecto entero de pocas pistas.
- * Si el navegador se queda sin memoria, bájalo.
+ * Memory for long decoded WAVs (Float32, stereo, 48 kHz ≈ 0.37 MB/s).
+ * Measured on Oct 23: ten 6-min stems (1.3 GB) did not fit on the laptop, and that
+ * is why everything over 30 s went through streaming, outside openDAW. 400 MB is
+ * about 18 min of stereo audio: three 6-min stems, or a whole project with few
+ * tracks. If the browser runs out of memory, lower it.
  */
 export const PRESUPUESTO_DECODIFICADO_MB = 400;
 const BYTES_POR_SEGUNDO = 48_000 * 2 * 4;
 
-/** Bytes que reservan las decodificaciones en curso (hidratarAssets va de cuatro en cuatro). */
+/** Bytes reserved by decodings in progress (hidratarAssets runs four at a time). */
 let reservado = 0;
 
 function bytesDecodificados(): number {
@@ -41,15 +41,16 @@ function bytesDecodificados(): number {
   return total;
 }
 
-/** ¿Se decodifica un WAV de esta duración con estos bytes ya en uso? Pura, con pruebas. */
+/** Is a WAV of this duration decoded with these bytes already in use? Pure, with tests. */
 export function decidirDecodificar(duracionSeg: number, bytesEnUso: number, presupuestoMb = PRESUPUESTO_DECODIFICADO_MB): boolean {
   if (duracionSeg <= SEGUNDOS_STREAMING) return true;
   return bytesEnUso + duracionSeg * BYTES_POR_SEGUNDO <= presupuestoMb * 1024 * 1024;
 }
 
 /**
- * Reserva memoria para decodificar un WAV. Devuelve con qué soltar la reserva una
- * vez decodificado (o fallido), o null si no cabe y debe ir por streaming.
+ * Reserves memory to decode a WAV. Returns a function to release the reservation
+ * once decoded (or failed), or null if it does not fit and must go through
+ * streaming.
  */
 export function reservarDecodificado(duracionSeg: number): (() => void) | null {
   if (!decidirDecodificar(duracionSeg, bytesDecodificados() + reservado)) return null;
@@ -63,7 +64,7 @@ export function reservarDecodificado(duracionSeg: number): (() => void) | null {
   };
 }
 
-/** Nombres de los assets del proyecto que van por streaming: no suenan en openDAW ni en el WAV exportado. */
+/** Names of the project assets that go through streaming: they do not sound in openDAW or in the exported WAV. */
 export function assetsPorStreaming(project: Project | null): string[] {
   if (!project) return [];
   return idsDeAssets(project).flatMap((id) => {
@@ -75,11 +76,11 @@ export function assetsPorStreaming(project: Project | null): string[] {
 interface LoadedAsset {
   id: string;
   name: string;
-  /** null cuando el asset va por streaming (no se decodifica en el navegador). */
+  /** null when the asset goes through streaming (it is not decoded in the browser). */
   buffer: AudioBuffer | null;
   durationBeats: number;
   peaks: Float32Array;
-  /** Ruta dentro de la carpeta del proyecto ("entrada/kick.wav"). */
+  /** Path inside the project folder ("entrada/kick.wav"). */
   src: string;
   streaming: boolean;
 }
@@ -92,7 +93,7 @@ function slug(value: string): string {
   return slugDe(value, { separador: "_", max: 24, defecto: "audio" });
 }
 
-/** Id nuevo para un asset, con el nombre del fichero dentro (aud_kick_lz3k9). */
+/** New id for an asset, with the file name inside it (aud_kick_lz3k9). */
 export function idDeAsset(nombre: string): string {
   const base = `aud_${slug(nombre)}_${Date.now().toString(36)}`;
   let id = base;
@@ -102,25 +103,26 @@ export function idDeAsset(nombre: string): string {
 }
 
 /**
- * Ruta que entiende el servidor: lo compartido tal cual y el resto en el proyecto.
- * La lista de carpetas compartidas es la misma que usa el servidor
- * (`src/core/rutas.ts`); antes eran dos listas y a ésta le faltaba `catalogo/`.
+ * Path the server understands: shared folders as is and the rest inside the
+ * project. The list of shared folders is the same one the server uses
+ * (`src/core/rutas.ts`); before they were two lists and this one was missing
+ * `catalogo/`.
  */
 export function rutaEnProyecto(ruta: string, slugProyecto: string): string {
   return rutaEnWorkspace(ruta, slugProyecto);
 }
 
-/** Duración y picos de un WAV sin decodificarlo en el navegador (los da el servidor). */
+/** Duration and peaks of a WAV without decoding it in the browser (the server provides them). */
 export async function metadatosWav(ruta: string): Promise<{ picos: number[]; duracionSeg: number }> {
   const res = await fetch(`/api/picos?path=${encodeURIComponent(ruta)}&cubos=1024`);
-  if (!res.ok) throw new Error(`no se pudo leer ${ruta}`);
+  if (!res.ok) throw new Error(`could not read ${ruta}`);
   const datos = (await res.json()) as { picos?: number[]; duracionSeg?: number };
   return { picos: datos.picos ?? [], duracionSeg: Number(datos.duracionSeg ?? 0) };
 }
 
 /**
- * Registra un asset que NO se decodifica: se reproduce por streaming con <audio>
- * y la onda viene calculada del servidor. Pensado para stems largos.
+ * Registers an asset that is NOT decoded: it is played through streaming with
+ * <audio> and the waveform comes precomputed from the server. Meant for long stems.
  */
 export function registrarAssetStreaming(datos: {
   id: string;
@@ -145,20 +147,20 @@ export async function decodeAudioBlob(blob: Blob): Promise<AudioBuffer> {
   return decodeContext.decodeAudioData(await blob.arrayBuffer());
 }
 
-/** Trae un WAV del servidor y lo decodifica (sólo los cortos: openDAW los necesita en memoria). */
+/** Fetches a WAV from the server and decodes it (only short ones: openDAW needs them in memory). */
 async function decodificarDeDisco(datos: {
   id: string;
   name: string;
-  /** Ruta relativa a la carpeta del proyecto. */
+  /** Path relative to the project folder. */
   ruta: string;
-  /** Ruta con la que se pide al servidor (con la carpeta del proyecto delante). */
+  /** Path used to request it from the server (with the project folder in front). */
   completa: string;
   bpm: number;
   durationBeats?: number;
   peaks?: Float32Array;
 }): Promise<LoadedAsset> {
   const res = await fetch(`/api/audio?path=${encodeURIComponent(datos.completa)}`);
-  if (!res.ok) throw new Error(`no se pudo leer ${datos.ruta}`);
+  if (!res.ok) throw new Error(`could not read ${datos.ruta}`);
   const buffer = await decodeAudioBlob(await res.blob());
   const asset: LoadedAsset = {
     id: datos.id,
@@ -173,7 +175,7 @@ async function decodificarDeDisco(datos: {
   return asset;
 }
 
-/** Decodifica un fichero local ya subido al disco y lo deja listo para openDAW. */
+/** Decodes a local file already uploaded to disk and leaves it ready for openDAW. */
 export async function loadAudioFile(file: File, bpm: number, src: string): Promise<LoadedAsset> {
   const buffer = await decodeAudioBlob(file);
   const name = file.name.replace(/\.[^.]+$/, "");
@@ -193,9 +195,9 @@ export async function loadAudioFile(file: File, bpm: number, src: string): Promi
 export { idsDeAssets };
 
 /**
- * Carga del disco los WAV que el proyecto referencia y aún no están en memoria.
- * Se llama al arrancar, al abrir un proyecto, antes de un undo/redo y al darle
- * al play. Devuelve los que no están en la carpeta.
+ * Loads from disk the WAVs the project references and that are not in memory yet.
+ * Called at startup, when opening a project, before an undo/redo and when pressing
+ * play. Returns the ones that are not in the folder.
  */
 export async function hidratarAssets(
   project: Project | null,
@@ -209,12 +211,12 @@ export async function hidratarAssets(
     const meta = project.audioAssets?.find((asset) => asset.id === id);
     const enMemoria = audioAssets.get(id);
     if (enMemoria) {
-      // Ya decodificado en esta sesión: sólo se refresca el nombre.
+      // Already decoded in this session: only the name is refreshed.
       if (meta) enMemoria.name = meta.name;
       return;
     }
     if (!meta?.ruta) {
-      // Sin ruta no hay nada que buscar: el WAV era del navegador y ya no está.
+      // Without a path there is nothing to look for: the WAV came from the browser and is gone.
       faltan.push(meta?.name ?? id);
       return;
     }
@@ -253,8 +255,8 @@ export async function hidratarAssets(
     }
   };
 
-  // Cuatro a la vez: en serie, 21 pistas con 11 WAV tardaban 38 s en abrir (medido,
-  // un viaje al servidor por asset). Más de cuatro satura el `spawn` de Python.
+  // Four at a time: serially, 21 tracks with 11 WAVs took 38 s to open (measured,
+  // one trip to the server per asset). More than four saturates Python's `spawn`.
   const cola = [...idsDeAssets(project)];
   const A_LA_VEZ = 4;
   await Promise.all(
@@ -269,7 +271,7 @@ export async function hidratarAssets(
   return { cargados, faltan };
 }
 
-/** Suelta de la memoria lo que el proyecto actual ya no usa (al cambiar de proyecto). */
+/** Frees from memory what the current project no longer uses (when switching projects). */
 export function liberarAssetsNoUsados(project: Project | null): void {
   const vivos = new Set(project ? idsDeAssets(project) : []);
   for (const id of [...audioAssets.keys()]) {

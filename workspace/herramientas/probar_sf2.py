@@ -1,16 +1,16 @@
-"""Comprueba un SF2 sin depender de nada: lee el fichero y lo toca.
+"""Checks an SF2 without depending on anything: reads the file and plays it.
 
-    python herramientas/probar_sf2.py <instrumento.sf2> [nota ...]
+    python herramientas/probar_sf2.py <instrument.sf2> [note ...]
 
-Qué hace:
-  1. Recorre los chunks del RIFF y lee `phdr`, `pbag`, `pgen`, `pinst`, `ibag`,
-     `igen` y `shdr` como manda el formato.
-  2. Para cada nota que se le pida, busca la zona cuyo keyRange la contiene, toma
-     su sample y la afina con la raíz (`overridingRootKey`) y la afinación fina.
-  3. Mide la fundamental y la compara con la esperada (440 · 2^((n-69)/12)).
+What it does:
+  1. Walks the RIFF chunks and reads `phdr`, `pbag`, `pgen`, `pinst`, `ibag`,
+     `igen` and `shdr` as the format mandates.
+  2. For each requested note, it finds the zone whose keyRange contains it, takes
+     its sample and tunes it with the root (`overridingRootKey`) and the fine tuning.
+  3. Measures the fundamental and compares it with the expected one (440 · 2^((n-69)/12)).
 
-Si la nota suena a la frecuencia que toca, el mapa de notas está bien. Es una
-prueba independiente del conversor: sólo comparte con él el formato, no el código.
+If the note sounds at the right frequency, the note map is fine. It is a
+test independent of the converter: it only shares the format with it, not the code.
 """
 
 import json
@@ -21,7 +21,7 @@ import numpy as np
 
 
 def _chunks(datos, inicio, fin):
-    """Recorre los chunks de un RIFF y devuelve {id: (inicio_cuerpo, tamaño)}."""
+    """Walks the chunks of a RIFF and returns {id: (body_start, size)}."""
     salida = {}
     i = inicio
     while i + 8 <= fin:
@@ -49,7 +49,7 @@ def leer(datos):
         inicio, tam = info["INAM"]
         nombre = datos[inicio : inicio + tam].split(b"\x00")[0].decode("latin-1", "replace")
 
-    # shdr: 46 bytes por registro
+    # shdr: 46 bytes per record
     inicio_shdr, tam_shdr = pdta["shdr"]
     muestras = []
     for i in range(0, tam_shdr, 46):
@@ -70,7 +70,7 @@ def leer(datos):
             }
         )
 
-    # igen: 4 bytes por generador, termina en (0,0)
+    # igen: 4 bytes per generator, ends at (0,0)
     inicio_igen, tam_igen = pdta["igen"]
     zonas = []
     actual = {}
@@ -98,7 +98,7 @@ def leer(datos):
     if actual:
         zonas.append(actual)
 
-    # smpl: PCM 16 bits
+    # smpl: 16-bit PCM
     inicio_smpl, tam_smpl = sdta["smpl"]
     pcm = np.frombuffer(datos[inicio_smpl : inicio_smpl + tam_smpl], dtype="<i2")
     return {"nombre": nombre, "muestras": muestras, "zonas": zonas, "pcm": pcm}
@@ -127,12 +127,12 @@ def tocar(sf2, nota, duracion=1.2):
 
 
 def fundamental(x, sr=44100):
-    """Fundamental por análisis armónico, no por el pico más alto.
+    """Fundamental by harmonic analysis, not by the highest peak.
 
-    Un arpa o un saxo pueden tener el 2º armónico mucho más fuerte que la
-    fundamental (medido: 522 Hz con amplitud 66 frente a 261 Hz con 13). Se busca el
-    pico global y luego se comprueba si la mitad —o un tercio, o un cuarto— también
-    tiene un pico con energía suficiente: si lo tiene, ésa es la fundamental.
+    A harp or a saxophone can have the 2nd harmonic much stronger than the
+    fundamental (measured: 522 Hz at amplitude 66 versus 261 Hz at 13). The global
+    peak is found and then it checks whether half —or a third, or a quarter— also
+    has a peak with enough energy: if it does, that is the fundamental.
     """
     trozo = x[int(0.15 * sr) : int(0.15 * sr) + 16384]
     if len(trozo) < 1024:
@@ -149,7 +149,7 @@ def fundamental(x, sr=44100):
     if maximo <= 0:
         return 0.0
     pico = float(f[int(np.argmax(a))])
-    # ¿Hay energía en un submúltiplo del pico? Entonces el pico era un armónico.
+    # Is there energy at a submultiple of the peak? Then the peak was a harmonic.
     for divisor in (2, 3, 4):
         objetivo = pico / divisor
         cercanos = np.nonzero(np.abs(f - objetivo) / max(objetivo, 1e-9) < 0.03)[0]
@@ -161,7 +161,7 @@ def fundamental(x, sr=44100):
 
 def main(argv):
     if not argv:
-        print("uso: probar_sf2.py <instrumento.sf2> [nota ...]")
+        print("usage: probar_sf2.py <instrument.sf2> [note ...]")
         return 1
     datos = open(argv[0], "rb").read()
     sf2 = leer(datos)
@@ -170,7 +170,7 @@ def main(argv):
     for nota in notas:
         audio, ratio, nombre, raiz = tocar(sf2, nota)
         if audio is None:
-            resultados.append({"nota": nota, "error": "ninguna zona cubre esa nota"})
+            resultados.append({"nota": nota, "error": "no zone covers that note"})
             continue
         f = fundamental(audio)
         esperada = 440.0 * 2 ** ((nota - 69) / 12.0)

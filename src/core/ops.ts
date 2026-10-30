@@ -1,6 +1,6 @@
 /**
- * Operaciones: el vocabulario con el que la GUI modifica
- * el proyecto. Todo es validable, transaccional y reversible.
+ * Operations: the vocabulary with which the GUI modifies
+ * the project. Everything is validatable, transactional, and reversible.
  */
 
 import { z } from "zod";
@@ -31,9 +31,9 @@ const BarsSchema = z.number().int().min(1).max(512);
 const GainSchema = z.number().min(-60).max(12);
 
 const NoteSchema = z.object({
-  pitch: z.number().int().min(0).max(127).describe("Nota MIDI, 60 = Do central"),
-  start: z.number().min(0).describe("Beats desde el inicio del clip"),
-  duration: z.number().positive().describe("Duración en beats"),
+  pitch: z.number().int().min(0).max(127).describe("MIDI note, 60 = middle C"),
+  start: z.number().min(0).describe("Beats from the start of the clip"),
+  duration: z.number().positive().describe("Duration in beats"),
   velocity: z.number().int().min(1).max(127).default(96),
 });
 
@@ -41,14 +41,14 @@ const InstrumentSchema = z.object({
   type: z.enum(INSTRUMENT_TYPES),
   preset: z.string().max(64).optional(),
   program: z.number().int().min(0).max(127).optional(),
-  /** .sf2 del instrumento, relativo al proyecto (sólo para `soundfont`). */
+  /** Instrument .sf2, relative to the project (only for `soundfont`). */
   archivo: z.string().max(200).optional(),
 });
 
 /**
- * El instrumento se acepta también como texto: el modelo escribe a menudo
- * `"instrument": "bass"` en vez de `{ "type": "bass" }` (pasó el 27-oct, y costó un
- * paso). Las dos formas significan lo mismo.
+ * The instrument is also accepted as text: the model often writes
+ * `"instrument": "bass"` instead of `{ "type": "bass" }` (it happened on Oct 27, and
+ * cost a step). Both forms mean the same thing.
  */
 const InstrumentInput = z.preprocess(
   (valor) => (typeof valor === "string" ? { type: valor.trim().toLowerCase() } : valor),
@@ -56,7 +56,7 @@ const InstrumentInput = z.preprocess(
 );
 
 const KeySchema = z.object({
-  tonic: z.string().min(1).max(4).describe("Tónica: C, D, F#, Bb..."),
+  tonic: z.string().min(1).max(4).describe("Tonic: C, D, F#, Bb..."),
   mode: z.enum(MODE_NAMES),
 });
 
@@ -81,7 +81,7 @@ const AddTrackOp = z.object({
 
 const SetTrackOp = z.object({
   op: z.literal("set_track"),
-  trackId: IdSchema.describe("Id, nombre exacto o índice 1-based de la pista"),
+  trackId: IdSchema.describe("Track id, exact name, or 1-based index"),
   name: z.string().min(1).max(60).optional(),
   gainDb: GainSchema.optional(),
   pan: z.number().min(-1).max(1).optional(),
@@ -89,7 +89,7 @@ const SetTrackOp = z.object({
   solo: z.boolean().optional(),
 });
 
-/** Cambia el instrumento de una pista MIDI (p. ej. de sintetizador a guitarra General MIDI). */
+/** Changes the instrument of a MIDI track (e.g. from synth to General MIDI guitar). */
 const SetInstrumentOp = z.object({
   op: z.literal("set_instrument"),
   trackId: IdSchema,
@@ -124,20 +124,20 @@ const RemoveClipOp = z.object({
 });
 
 /**
- * Un dispositivo: «"reverb"», «{type, params}» o con los parámetros sueltos
- * («{type:"compressor", thresholdDb:-20}»).
- * - «"reverb"» vale igual que «{type:"reverb"}»: el modelo lo escribe así a menudo
- *   (medido el 27-oct: tres add_device seguidos rechazados por eso).
- * - Los parámetros sueltos se pasan a `params`: antes zod los tiraba sin avisar y el
- *   dispositivo se quedaba con los valores por defecto (medido el 28-oct en «Hard»:
- *   dos compresores, un EQ y la reverb de un bus, todos sin lo que pidió el modelo).
- *   Un nombre que no existe da error en `coerceParams`, no se pierde.
+ * A device: `"reverb"`, `{type, params}`, or with loose parameters
+ * (`{type:"compressor", thresholdDb:-20}`).
+ * - `"reverb"` is equivalent to `{type:"reverb"}`: the model often writes it that way
+ *   (measured on Oct 27: three add_device calls in a row rejected because of that).
+ * - Loose parameters are moved into `params`: before, zod dropped them without notice
+ *   and the device kept the default values (measured on Oct 28 in "Hard": two
+ *   compressors, an EQ, and a bus reverb, all without what the model asked for).
+ *   A name that does not exist gives an error in `coerceParams`; it is not lost.
  */
 const DeviceInput = z.preprocess(
   (valor) => {
     if (typeof valor === "string") return { type: valor.trim().toLowerCase() };
     if (!valor || typeof valor !== "object" || Array.isArray(valor)) return valor;
-    // id y name son etiquetas, no parámetros: si el modelo las pone aquí, se ignoran.
+    // id and name are labels, not parameters: if the model puts them here, they are ignored.
     const { type, params, id: _id, name: _name, ...sueltos } = valor as Record<string, unknown>;
     if (Object.keys(sueltos).length === 0) return valor;
     const juntos = params && typeof params === "object" && !Array.isArray(params) ? { ...sueltos, ...params } : sueltos;
@@ -151,25 +151,25 @@ const DeviceInput = z.preprocess(
 
 const AddDeviceOp = z.object({
   op: z.literal("add_device"),
-  trackId: IdSchema.describe("Pista o bus (id o nombre)"),
+  trackId: IdSchema.describe("Track or bus (id or name)"),
   id: IdSchema.optional(),
   device: DeviceInput,
 });
 
 const SetDeviceOp = z.object({
   op: z.literal("set_device"),
-  trackId: IdSchema.describe("Pista o bus (id o nombre)"),
-  deviceId: IdSchema.describe("Id o tipo del dispositivo (p. ej. 'reverb')"),
-  params: z.record(z.string(), ParamValueSchema).describe("Solo los parámetros a cambiar"),
+  trackId: IdSchema.describe("Track or bus (id or name)"),
+  deviceId: IdSchema.describe("Device id or type (e.g. 'reverb')"),
+  params: z.record(z.string(), ParamValueSchema).describe("Only the parameters to change"),
 });
 
 const RemoveDeviceOp = z.object({
   op: z.literal("remove_device"),
-  trackId: IdSchema.describe("Pista o bus (id o nombre)"),
+  trackId: IdSchema.describe("Track or bus (id or name)"),
   deviceId: IdSchema,
 });
 
-/** Bus auxiliar con sus efectos («reverb» o {type, params}); las pistas le mandan señal con set_send. */
+/** Auxiliary bus with its effects ("reverb" or {type, params}); tracks send it signal with set_send. */
 const AddBusOp = z.object({
   op: z.literal("add_bus"),
   id: IdSchema.optional(),
@@ -190,7 +190,7 @@ const RemoveBusOp = z.object({
   busId: IdSchema,
 });
 
-/** Cuánto manda una pista a un bus (dB, post-fader). remove=true quita el envío. */
+/** How much a track sends to a bus (dB, post-fader). remove=true removes the send. */
 const SetSendOp = z.object({
   op: z.literal("set_send"),
   trackId: IdSchema,
@@ -204,7 +204,7 @@ const RegisterAudioAssetOp = z.object({
   assetId: IdSchema,
   name: z.string().min(1).max(80),
   durationBeats: z.number().positive().max(4096),
-  /** Ruta del WAV en la carpeta del proyecto ("salida/x.wav"). */
+  /** WAV path in the project folder ("salida/x.wav"). */
   ruta: z.string().min(1).max(200).optional(),
 });
 
@@ -224,16 +224,16 @@ const SetAudioClipOp = z.object({
   op: z.literal("set_audio_clip"),
   trackId: IdSchema,
   clipId: IdSchema,
-  startBar: z.number().int().min(0).max(511).optional().describe("Mueve el clip a este compás"),
+  startBar: z.number().int().min(0).max(511).optional().describe("Moves the clip to this bar"),
   offsetBeats: z.number().min(0).max(4096).optional(),
   lengthBeats: z.number().positive().max(4096).optional(),
   gainDb: GainSchema.optional(),
 });
 
 /**
- * Cambia la duracion de un clip, MIDI o de audio. Los clips se miden en compases:
- * el MIDI de un instrumento y el WAV del mismo material tienen que acabar en el
- * mismo compas, aunque el fichero MIDI acabe en su ultima nota y el WAV lleve cola.
+ * Changes the duration of a clip, MIDI or audio. Clips are measured in bars: the
+ * MIDI of an instrument and the WAV of the same material must end at the same bar,
+ * even if the MIDI file ends on its last note and the WAV has a tail.
  */
 const SetClipLengthOp = z.object({
   op: z.literal("set_clip_length"),
@@ -244,23 +244,23 @@ const SetClipLengthOp = z.object({
 
 const MoveClipOp = z.object({
   op: z.literal("move_clip"),
-  trackId: IdSchema.describe("Pista donde esta el clip"),
-  clipId: IdSchema.describe("Id o nombre del clip"),
-  startBeat: z.number().min(0).max(16384).describe("Nuevo inicio en beats desde el compas 1"),
-  trackDestinoId: IdSchema.optional().describe("Pista destino si se arrastra en vertical"),
+  trackId: IdSchema.describe("Track where the clip is"),
+  clipId: IdSchema.describe("Clip id or name"),
+  startBeat: z.number().min(0).max(16384).describe("New start in beats from bar 1"),
+  trackDestinoId: IdSchema.optional().describe("Destination track when dragging vertically"),
 });
 
 const DuplicateClipOp = z.object({
   op: z.literal("duplicate_clip"),
-  trackId: IdSchema.describe("Pista donde esta el clip original"),
-  clipId: IdSchema.describe("Id o nombre del clip original"),
+  trackId: IdSchema.describe("Track where the original clip is"),
+  clipId: IdSchema.describe("Original clip id or name"),
   startBeat: z
     .number()
     .min(0)
     .max(16384)
     .optional()
-    .describe("Inicio de la copia; por defecto, justo despues del original"),
-  trackDestinoId: IdSchema.optional().describe("Pista destino de la copia"),
+    .describe("Start of the copy; by default, right after the original"),
+  trackDestinoId: IdSchema.optional().describe("Destination track of the copy"),
   name: z.string().max(60).optional(),
 });
 
@@ -296,12 +296,12 @@ const OpSchema = z.discriminatedUnion("op", [
 
 const OpsSchema = z.array(OpSchema).min(1).max(200);
 
-/** Nombres de las operaciones, en el orden del esquema. */
+/** Operation names, in schema order. */
 export const NOMBRES_OPS = OpSchema.options.map((schema) => schema.shape.op.value);
 
 /**
- * Chuleta de las operaciones para el agente, SACADA DEL ESQUEMA: un campo nuevo
- * en una op aparece aquí sin tocar nada más. Una línea por op:
+ * Cheat sheet of the operations for the agent, TAKEN FROM THE SCHEMA: a new field
+ * in an op appears here without touching anything else. One line per op:
  * `add_notes(trackId, notes, clipId?, startBar?, name?)`.
  */
 export function firmasDeOps(): string {
@@ -318,20 +318,20 @@ export function firmasDeOps(): string {
 export type Op = z.input<typeof OpSchema>;
 type ParsedOp = z.output<typeof OpSchema>;
 
-/** Valida y normaliza operaciones del proyecto. */
+/** Validates and normalizes project operations. */
 export function parseOps(value: unknown): ParsedOp[] {
   const result = OpsSchema.safeParse(value);
   if (!result.success) {
     const detail = result.error.issues
-      .map((issue) => `${issue.path.join(".") || "(raíz)"}: ${issue.message}`)
+      .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
       .join("; ");
-    throw new OpError(`Operaciones inválidas: ${detail}`);
+    throw new OpError(`Invalid operations: ${detail}`);
   }
   return result.data;
 }
 
 // ---------------------------------------------------------------------------
-// Resolución de referencias
+// Reference resolution
 // ---------------------------------------------------------------------------
 
 function resolveTrack(project: Project, ref: string): Track {
@@ -353,14 +353,15 @@ function resolveTrack(project: Project, ref: string): Track {
   }
 
   const available = project.tracks.map((track, index) => `${index + 1}:${track.id}(${track.name})`).join(", ");
-  throw new OpError(`No encuentro la pista "${ref}". Disponibles: ${available || "ninguna"}`);
+  throw new OpError(`I can't find track "${ref}". Available: ${available || "none"}`);
 }
 
 /**
- * Clip de una pista por id, por nombre exacto o por nombre parcial (si es único).
+ * A track's clip by id, exact name, or partial name (if unique).
  *
- * No se cae al «único clip» cuando el nombre no coincide: con una pista de un solo
- * clip, `remove_clip` con un nombre mal escrito borraba el bueno sin decir nada.
+ * It does not fall back to "the only clip" when the name does not match: on a track
+ * with a single clip, `remove_clip` with a misspelled name deleted the right one
+ * without saying anything.
  */
 function resolveClip(track: Track, ref: string) {
   const cleaned = ref.trim();
@@ -373,8 +374,8 @@ function resolveClip(track: Track, ref: string) {
   if (lower !== "" && byParcial.length === 1) return byParcial[0]!;
   const available = track.clips.map((clip) => `${clip.id}(${clip.name})`).join(", ");
   throw new OpError(
-    `No encuentro el clip "${ref}" en "${track.name}" (${track.clips.length} clip(s)). ` +
-      `Disponibles: ${available || "ninguno"}`,
+    `I can't find clip "${ref}" on "${track.name}" (${track.clips.length} clip(s)). ` +
+      `Available: ${available || "none"}`,
   );
 }
 
@@ -386,13 +387,13 @@ function resolveBus(project: Project, ref: string): Bus {
   const encontrado = buses.find((bus) => bus.id === cleaned) ?? (porNombre.length === 1 ? porNombre[0] : undefined);
   if (encontrado) return encontrado;
   const available = buses.map((bus) => `${bus.id}(${bus.name})`).join(", ");
-  throw new OpError(`No encuentro el bus "${ref}". Disponibles: ${available || "ninguno (créalo con add_bus)"}`);
+  throw new OpError(`I can't find bus "${ref}". Available: ${available || "none (create it with add_bus)"}`);
 }
 
 /**
- * Dónde van los efectos de add_device/set_device/remove_device: una pista o, si
- * no hay pista con ese nombre, un bus. Así el agente no aprende otra op para lo
- * mismo.
+ * Where the add_device/set_device/remove_device effects go: a track or, if there is
+ * no track with that name, a bus. This way the agent does not learn another op for
+ * the same thing.
  */
 function resolveCadena(project: Project, ref: string): { name: string; devices: Device[]; poner(devices: Device[]): void } {
   let track: Track;
@@ -419,17 +420,17 @@ function resolveDevice(track: { name: string; devices: Device[] }, ref: string):
   if (byId) return byId;
   const byType = track.devices.filter((device) => device.type === cleaned);
   if (byType.length === 1) return byType[0]!;
-  if (byType.length > 1) throw new OpError(`Hay ${byType.length} dispositivos "${cleaned}" en "${track.name}"; usa el id`);
+  if (byType.length > 1) throw new OpError(`There are ${byType.length} devices "${cleaned}" on "${track.name}"; use the id`);
   const available = track.devices.map((device) => `${device.id}(${device.type})`).join(", ");
-  throw new OpError(`"${track.name}" no tiene el dispositivo "${ref}". Tiene: ${available || "ninguno"}`);
+  throw new OpError(`"${track.name}" does not have the device "${ref}". It has: ${available || "none"}`);
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Parte legible de un id ("Bajo eléctrico" → "bajo_electrico"); 24 puntos de código
- *  como mucho para que el id quepa en los 64 caracteres de IdSchema en cualquier alfabeto. */
+/** Readable part of an id ("Bajo eléctrico" → "bajo_electrico"); 24 code points
+ *  at most so the id fits within IdSchema's 64 characters in any alphabet. */
 function slugify(name: string): string {
   return slugDe(name, { separador: "_", max: 24, defecto: "x" });
 }
@@ -478,18 +479,18 @@ function coerceParams(
     const value = numericParam(raw);
     const range = allowed[name];
     if (!range) {
-      // Un nombre de antes del 28-oct (cutoff, time, threshold…): NO se convierte en
-      // silencio, porque el modelo puede mandar «cutoff: 2000» creyendo que son Hz.
-      // Se le dice el nombre nuevo y su unidad.
+      // A pre-Oct-28 name (cutoff, time, threshold…): it does NOT become silence,
+      // because the model may send "cutoff: 2000" believing those are Hz.
+      // It is told the new name and its unit.
       const nuevo = Object.keys(migrarParametros(type, { [name]: 0 }))[0];
-      const pista = nuevo && nuevo !== name && allowed[nuevo] ? ` Ahora se llama "${nuevo}" (${allowed[nuevo]![0]}..${allowed[nuevo]![1]}).` : "";
+      const pista = nuevo && nuevo !== name && allowed[nuevo] ? ` It is now called "${nuevo}" (${allowed[nuevo]![0]}..${allowed[nuevo]![1]}).` : "";
       throw new OpError(
-        `El parámetro "${name}" no existe en ${type}.${pista} Disponibles: ${Object.entries(allowed)
+        `The parameter "${name}" does not exist in ${type}.${pista} Available: ${Object.entries(allowed)
           .map(([clave, [min, max]]) => `${clave} ${min}..${max}`)
           .join(", ")}`,
       );
     }
-    if (!Number.isFinite(value)) throw new OpError(`El parámetro "${name}" no es un número válido`);
+    if (!Number.isFinite(value)) throw new OpError(`The parameter "${name}" is not a valid number`);
     result[name] = Number(Math.max(range[0], Math.min(range[1], value)).toFixed(3));
   }
   return result;
@@ -503,7 +504,7 @@ function defaultDeviceId(track: { devices: Device[] }, type: DeviceType): string
 }
 
 // ---------------------------------------------------------------------------
-// Aplicación
+// Application
 // ---------------------------------------------------------------------------
 
 function applyOne(project: Project, op: ParsedOp): string {
@@ -517,11 +518,11 @@ function applyOne(project: Project, op: ParsedOp): string {
         try {
           pitchClass(op.key.tonic);
         } catch {
-          throw new OpError(`Tónica no válida: "${op.key.tonic}"`);
+          throw new OpError(`Invalid tonic: "${op.key.tonic}"`);
         }
         project.key = { tonic: canonicalPitchClass(op.key.tonic), mode: op.key.mode };
       }
-      return `Canción: ${project.name} · ${project.bpm} BPM · ${project.key.tonic} ${project.key.mode} · ${project.lengthBars} compases`;
+      return `Song: ${project.name} · ${project.bpm} BPM · ${project.key.tonic} ${project.key.mode} · ${project.lengthBars} bars`;
     }
 
     case "add_track": {
@@ -529,13 +530,13 @@ function applyOne(project: Project, op: ParsedOp): string {
       track.kind = op.kind;
       if (op.id) {
         if (project.tracks.some((existing) => existing.id === op.id && existing !== track)) {
-          throw new OpError(`Ya existe una pista con id "${op.id}"`);
+          throw new OpError(`A track with id "${op.id}" already exists`);
         }
         track.id = op.id;
       }
       if (op.gainDb !== undefined) track.gainDb = op.gainDb;
       if (op.pan !== undefined) track.pan = op.pan;
-      return `Pista creada: ${track.name} (${track.id})`;
+      return `Track created: ${track.name} (${track.id})`;
     }
 
     case "set_track": {
@@ -545,26 +546,26 @@ function applyOne(project: Project, op: ParsedOp): string {
       if (op.pan !== undefined) track.pan = op.pan;
       if (op.muted !== undefined) track.muted = op.muted;
       if (op.solo !== undefined) track.solo = op.solo;
-      return `Pista actualizada: ${track.name} (${track.id})`;
+      return `Track updated: ${track.name} (${track.id})`;
     }
 
     case "set_instrument": {
       const track = resolveTrack(project, op.trackId);
-      if (track.kind !== "midi") throw new OpError(`"${track.name}" es una pista de audio: no tiene instrumento`);
+      if (track.kind !== "midi") throw new OpError(`"${track.name}" is an audio track: it has no instrument`);
       track.instrument = { ...op.instrument };
-      const programa = op.instrument.program !== undefined ? ` (programa GM ${op.instrument.program})` : "";
-      return `Instrumento de ${track.name}: ${op.instrument.type}${programa}`;
+      const programa = op.instrument.program !== undefined ? ` (GM program ${op.instrument.program})` : "";
+      return `Instrument on ${track.name}: ${op.instrument.type}${programa}`;
     }
 
     case "remove_track": {
       const track = resolveTrack(project, op.trackId);
       project.tracks = project.tracks.filter((existing) => existing !== track);
-      return `Pista eliminada: ${track.name} (${track.id})`;
+      return `Track removed: ${track.name} (${track.id})`;
     }
 
     case "add_notes": {
       const track = resolveTrack(project, op.trackId);
-      if (track.kind !== "midi") throw new OpError(`"${track.name}" es una pista de audio`);
+      if (track.kind !== "midi") throw new OpError(`"${track.name}" is an audio track`);
       const notes: Note[] = op.notes.map((note) => ({ ...note }));
       if (op.clipId) {
         const clip = resolveClip(track, op.clipId);
@@ -583,7 +584,7 @@ function applyOne(project: Project, op: ParsedOp): string {
         });
         project.lengthBars = Math.max(project.lengthBars, startBar + Math.ceil(end / barBeats));
       }
-      return `Añadidas ${notes.length} notas a ${track.name}`;
+      return `Added ${notes.length} notes to ${track.name}`;
     }
 
     case "replace_clip_notes": {
@@ -591,14 +592,14 @@ function applyOne(project: Project, op: ParsedOp): string {
       const clip = resolveClip(track, op.clipId);
       clip.notes = op.notes.map((note) => ({ ...note }));
       clip.length = Math.max(clip.length, ...clip.notes.map((note) => note.start + note.duration));
-      return `Clip ${clip.id} reemplazado por ${clip.notes.length} notas`;
+      return `Clip ${clip.id} replaced with ${clip.notes.length} notes`;
     }
 
     case "remove_clip": {
       const track = resolveTrack(project, op.trackId);
       const clip = resolveClip(track, op.clipId);
       track.clips = track.clips.filter((existing) => existing !== clip);
-      return `Clip eliminado: ${clip.id} de ${track.name}`;
+      return `Clip removed: ${clip.id} from ${track.name}`;
     }
 
     case "register_audio_asset": {
@@ -608,7 +609,7 @@ function applyOne(project: Project, op: ParsedOp): string {
         existing.name = op.name;
         existing.durationBeats = op.durationBeats;
         if (op.ruta) existing.ruta = op.ruta;
-        return `Asset actualizado: ${op.name} (${op.durationBeats.toFixed(2)} beats)`;
+        return `Asset updated: ${op.name} (${op.durationBeats.toFixed(2)} beats)`;
       }
       assets.push({
         id: op.assetId,
@@ -616,7 +617,7 @@ function applyOne(project: Project, op: ParsedOp): string {
         durationBeats: op.durationBeats,
         ...(op.ruta ? { ruta: op.ruta } : {}),
       });
-      return `Asset registrado: ${op.name} (${op.durationBeats.toFixed(2)} beats)`;
+      return `Asset registered: ${op.name} (${op.durationBeats.toFixed(2)} beats)`;
     }
 
     case "add_audio_clip": {
@@ -624,7 +625,7 @@ function applyOne(project: Project, op: ParsedOp): string {
       const asset = assets.find((candidate) => candidate.id === op.assetId);
       if (!asset) {
         throw new OpError(
-          `No existe el asset "${op.assetId}". Registrados: ${assets.map((candidate) => candidate.id).join(", ") || "ninguno"}`,
+          `Asset "${op.assetId}" does not exist. Registered: ${assets.map((candidate) => candidate.id).join(", ") || "none"}`,
         );
       }
       let track = op.trackId ? resolveTrack(project, op.trackId) : undefined;
@@ -632,15 +633,14 @@ function applyOne(project: Project, op: ParsedOp): string {
         track = createTrack(project, op.track?.name ?? "Audio", { type: "sampler" });
         track.kind = "audio";
       }
-      if (track.kind !== "audio") throw new OpError(`"${track.name}" no es una pista de audio`);
+      if (track.kind !== "audio") throw new OpError(`"${track.name}" is not an audio track`);
 
       const barBeats = beatsPerBar(project);
       const start = op.startBar * barBeats;
       const offset = op.offsetBeats ?? 0;
       const available = Math.max(0.25, asset.durationBeats - offset);
-      // Sin tope artificial: un stem de 6 minutos son 560 beats y antes se
-      // recortaba a 64 compases (256 beats), asi que el audio acababa en el
-      // compas 65 mientras el MIDI seguia hasta el 116.
+      // No artificial cap: a 6-minute stem is 560 beats and used to be trimmed to
+      // 64 bars (256 beats), so the audio ended at bar 65 while the MIDI went on to 116.
       const length = Math.min(op.lengthBeats ?? available, available);
       track.clips.push({
         id: nextClipId(project),
@@ -651,14 +651,14 @@ function applyOne(project: Project, op: ParsedOp): string {
         audio: { assetId: asset.id, offset, gainDb: op.gainDb ?? 0 },
       });
       project.lengthBars = Math.max(project.lengthBars, Math.ceil((start + length) / barBeats));
-      return `Audio colocado: ${asset.name} · ${length.toFixed(2)} beats en ${track.name}`;
+      return `Audio placed: ${asset.name} · ${length.toFixed(2)} beats on ${track.name}`;
     }
 
     case "set_audio_clip": {
       const track = resolveTrack(project, op.trackId);
-      if (track.kind !== "audio") throw new OpError(`"${track.name}" no es una pista de audio`);
+      if (track.kind !== "audio") throw new OpError(`"${track.name}" is not an audio track`);
       const clip = resolveClip(track, op.clipId);
-      if (!clip.audio) throw new OpError(`El clip "${clip.id}" no es de audio`);
+      if (!clip.audio) throw new OpError(`Clip "${clip.id}" is not an audio clip`);
       if (op.offsetBeats !== undefined) clip.audio.offset = op.offsetBeats;
       if (op.gainDb !== undefined) clip.audio.gainDb = op.gainDb;
       if (op.lengthBeats !== undefined) clip.length = op.lengthBeats;
@@ -669,7 +669,7 @@ function applyOne(project: Project, op: ParsedOp): string {
           Math.ceil((clip.start + clip.length) / beatsPerBar(project)),
         );
       }
-      return `Clip de audio actualizado: ${clip.id}`;
+      return `Audio clip updated: ${clip.id}`;
     }
 
     case "set_clip_length": {
@@ -681,7 +681,7 @@ function applyOne(project: Project, op: ParsedOp): string {
         project.lengthBars,
         Math.ceil((clip.start + clip.length) / barBeats - 1e-6),
       );
-      return `Clip ${clip.id} dura ${clip.length.toFixed(2)} beats`;
+      return `Clip ${clip.id} lasts ${clip.length.toFixed(2)} beats`;
     }
 
     case "move_clip": {
@@ -693,7 +693,7 @@ function applyOne(project: Project, op: ParsedOp): string {
         destino = resolveTrack(project, op.trackDestinoId);
         if (destino.kind !== origen.kind) {
           throw new OpError(
-            `No se puede mover un clip de ${origen.kind} a una pista de ${destino.kind} ("${destino.name}")`,
+            `Cannot move a ${origen.kind} clip to a ${destino.kind} track ("${destino.name}")`,
           );
         }
         origen.clips = origen.clips.filter((existing) => existing !== clip);
@@ -704,7 +704,7 @@ function applyOne(project: Project, op: ParsedOp): string {
         project.lengthBars,
         Math.ceil((clip.start + clip.length) / barBeats),
       );
-      return `Clip movido: ${clip.id} a ${clip.start.toFixed(2)} beats en ${destino.name}`;
+      return `Clip moved: ${clip.id} to ${clip.start.toFixed(2)} beats on ${destino.name}`;
     }
 
     case "duplicate_clip": {
@@ -713,7 +713,7 @@ function applyOne(project: Project, op: ParsedOp): string {
       const destino = op.trackDestinoId ? resolveTrack(project, op.trackDestinoId) : origen;
       if (destino.kind !== origen.kind) {
         throw new OpError(
-          `No se puede duplicar un clip de ${origen.kind} en una pista de ${destino.kind} ("${destino.name}")`,
+          `Cannot duplicate a ${origen.kind} clip onto a ${destino.kind} track ("${destino.name}")`,
         );
       }
       const barBeats = beatsPerBar(project);
@@ -731,7 +731,7 @@ function applyOne(project: Project, op: ParsedOp): string {
         project.lengthBars,
         Math.ceil((copia.start + copia.length) / barBeats),
       );
-      return `Clip duplicado: ${copia.id} en ${destino.name} (${copia.start.toFixed(2)} beats)`;
+      return `Clip duplicated: ${copia.id} on ${destino.name} (${copia.start.toFixed(2)} beats)`;
     }
 
     case "add_device": {
@@ -743,25 +743,25 @@ function applyOne(project: Project, op: ParsedOp): string {
         params: coerceParams(op.device.type, op.device.params),
       };
       if (track.devices.some((existing) => existing.id === device.id)) {
-        throw new OpError(`Ya existe el dispositivo "${device.id}" en "${track.name}"`);
+        throw new OpError(`Device "${device.id}" already exists on "${track.name}"`);
       }
       track.devices.push(device);
-      return `Dispositivo añadido a ${track.name}: ${device.type} (${device.id})`;
+      return `Device added to ${track.name}: ${device.type} (${device.id})`;
     }
 
     case "set_device": {
       const track = resolveCadena(project, op.trackId);
-      if (Object.keys(op.params).length === 0) throw new OpError("set_device necesita al menos un parámetro");
+      if (Object.keys(op.params).length === 0) throw new OpError("set_device needs at least one parameter");
       const device = resolveDevice(track, op.deviceId);
       device.params = coerceParams(device.type, op.params, device.params);
-      return `Parámetros de ${device.type} en ${track.name}: ${JSON.stringify(op.params)}`;
+      return `Parameters of ${device.type} on ${track.name}: ${JSON.stringify(op.params)}`;
     }
 
     case "remove_device": {
       const track = resolveCadena(project, op.trackId);
       const device = resolveDevice(track, op.deviceId);
       track.poner(track.devices.filter((existing) => existing !== device));
-      return `Dispositivo eliminado de ${track.name}: ${device.type}`;
+      return `Device removed from ${track.name}: ${device.type}`;
     }
 
     case "set_master": {
@@ -772,9 +772,9 @@ function applyOne(project: Project, op: ParsedOp): string {
     case "add_bus": {
       const buses = (project.buses ??= []);
       const id = op.id ?? uniqueId("bus_", slugify(op.name), buses.map((bus) => bus.id));
-      if (buses.some((bus) => bus.id === id)) throw new OpError(`Ya existe un bus con id "${id}"`);
+      if (buses.some((bus) => bus.id === id)) throw new OpError(`A bus with id "${id}" already exists`);
       if (project.tracks.some((track) => track.id === id || track.name.toLowerCase() === op.name.toLowerCase())) {
-        throw new OpError(`Ya hay una pista llamada "${op.name}": dale al bus otro nombre`);
+        throw new OpError(`There is already a track named "${op.name}": give the bus another name`);
       }
       const bus: Bus = { id, name: op.name, gainDb: op.gainDb ?? 0, devices: [] };
       for (const entrada of op.devices ?? []) {
@@ -786,15 +786,15 @@ function applyOne(project: Project, op: ParsedOp): string {
         });
       }
       buses.push(bus);
-      const efectos = bus.devices.map((device) => device.type).join(", ") || "ningún efecto";
-      return `Bus creado: ${bus.name} (${bus.id}) con ${efectos}. Mándale señal con set_send.`;
+      const efectos = bus.devices.map((device) => device.type).join(", ") || "no effects";
+      return `Bus created: ${bus.name} (${bus.id}) with ${efectos}. Send it signal with set_send.`;
     }
 
     case "set_bus": {
       const bus = resolveBus(project, op.busId);
       if (op.name !== undefined) bus.name = op.name;
       if (op.gainDb !== undefined) bus.gainDb = op.gainDb;
-      return `Bus actualizado: ${bus.name} (${bus.id}) · ${bus.gainDb} dB`;
+      return `Bus updated: ${bus.name} (${bus.id}) · ${bus.gainDb} dB`;
     }
 
     case "remove_bus": {
@@ -808,7 +808,7 @@ function applyOne(project: Project, op: ParsedOp): string {
         if (quedan.length > 0) track.sends = quedan;
         else delete track.sends;
       }
-      return `Bus eliminado: ${bus.name}${quitados ? ` (y ${quitados} envío(s) a él)` : ""}`;
+      return `Bus removed: ${bus.name}${quitados ? ` (and ${quitados} send(s) to it)` : ""}`;
     }
 
     case "set_send": {
@@ -820,18 +820,18 @@ function applyOne(project: Project, op: ParsedOp): string {
         const quedan = sends.filter((send) => send !== existente);
         if (quedan.length > 0) track.sends = quedan;
         else delete track.sends;
-        return existente ? `Envío quitado: ${track.name} → ${bus.name}` : `${track.name} no mandaba nada a ${bus.name}`;
+        return existente ? `Send removed: ${track.name} → ${bus.name}` : `${track.name} was not sending anything to ${bus.name}`;
       }
-      if (op.levelDb === undefined) throw new OpError("set_send necesita levelDb (dB que la pista manda al bus) o remove=true");
+      if (op.levelDb === undefined) throw new OpError("set_send needs levelDb (dB the track sends to the bus) or remove=true");
       if (existente) existente.levelDb = op.levelDb;
       else sends.push({ busId: bus.id, levelDb: op.levelDb });
       track.sends = sends;
-      return `Envío: ${track.name} → ${bus.name} a ${op.levelDb} dB`;
+      return `Send: ${track.name} → ${bus.name} at ${op.levelDb} dB`;
     }
 
     default: {
       const exhaustive: never = op;
-      throw new OpError(`Operación no soportada: ${JSON.stringify(exhaustive)}`);
+      throw new OpError(`Unsupported operation: ${JSON.stringify(exhaustive)}`);
     }
   }
 }
@@ -843,8 +843,8 @@ interface ApplyResult {
 }
 
 /**
- * Aplica operaciones de forma transaccional: si alguna falla o el proyecto
- * queda inválido, no se devuelve nada y el estado original queda intacto.
+ * Applies operations transactionally: if any fails or the project ends up invalid,
+ * nothing is returned and the original state stays untouched.
  */
 export function applyOps(project: Project, ops: Op[]): ApplyResult {
   const normalized = parseOps(ops);
@@ -855,7 +855,7 @@ export function applyOps(project: Project, ops: Op[]): ApplyResult {
       results.push(applyOne(draft, op));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new OpError(`Operación #${index + 1} (${op.op}) falló: ${message}`);
+      throw new OpError(`Operation #${index + 1} (${op.op}) failed: ${message}`);
     }
   });
 
@@ -863,7 +863,7 @@ export function applyOps(project: Project, ops: Op[]): ApplyResult {
   const errors = issues.filter((issue) => issue.severity === "error");
   if (errors.length > 0) {
     throw new OpError(
-      `El proyecto quedaría inválido y no se ha aplicado nada:\n${errors
+      `The project would become invalid and nothing has been applied:\n${errors
         .map((issue) => `- ${issue.path}: ${issue.message}`)
         .join("\n")}`,
     );

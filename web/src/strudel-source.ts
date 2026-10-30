@@ -1,6 +1,6 @@
-/** Utilidades de código Strudel compartidas por el render a WAV. */
+/** Strudel code utilities shared by the WAV rendering. */
 
-/** Quita métodos visuales del REPL que no existen en el motor de audio. */
+/** Removes REPL visual methods that do not exist in the audio engine. */
 export function stripVisualMethods(code: string): string {
   return code.replace(
     /\.?_(punchcard|scope|spiral|pianoroll|wordfall|spectrum|pitchwheel)\s*\([^)]*\)/g,
@@ -8,7 +8,7 @@ export function stripVisualMethods(code: string): string {
   );
 }
 
-/** El REPL convierte `$: patrón` en bloques; aquí los unimos en un `stack`. */
+/** The REPL turns `$: pattern` into blocks; here we join them into a `stack`. */
 export function expandLabeledPatterns(code: string): string {
   const lines = code.split(/\r?\n/);
   const blocks: string[] = [];

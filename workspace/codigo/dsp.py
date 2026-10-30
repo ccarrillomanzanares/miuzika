@@ -1,13 +1,13 @@
-"""dsp.py - utilidades DSP en numpy puro (sin scipy)."""
+"""dsp.py - DSP utilities in pure numpy (no scipy)."""
 import numpy as np
 
 SR = 44100
 
-# Aquí NO hay tempo: la biblioteca no tiene canción. Cada obra calcula su
-# SPB = 60/BPM y su BAR con SU tempo (los tenía metidos a 90 BPM de una obra
-# concreta, y el smoke test obligaba a que siguieran casando con ella).
+# There is NO tempo here: the library has no song. Each work computes its
+# own SPB = 60/BPM and its BAR with ITS tempo (they used to be hardcoded to 90 BPM
+# from a specific work, and the smoke test required them to keep matching it).
 
-# ---------------------------------------------------------------- basicos
+# ---------------------------------------------------------------- basics
 def db2lin(db):
     return 10.0 ** (np.asarray(db, dtype=float) / 20.0)
 
@@ -31,7 +31,7 @@ def fade(x, ms_in=5.0, ms_out=5.0):
         x[n - b:] *= np.linspace(1.0, 0.0, b)
     return x
 
-# ---------------------------------------------------------------- filtros
+# ---------------------------------------------------------------- filters
 def biquad(kind, f0, Q=0.70710678, gain_db=0.0, fs=SR):
     f0 = float(min(max(f0, 1.0), fs * 0.49))
     w0 = 2.0 * np.pi * f0 / fs
@@ -61,7 +61,7 @@ def biquad(kind, f0, Q=0.70710678, gain_db=0.0, fs=SR):
         a = [(A + 1) + (A - 1) * cw + sq, -2 * ((A - 1) + (A + 1) * cw),
              (A + 1) + (A - 1) * cw - sq]
     else:
-        raise ValueError('tipo de filtro desconocido: ' + kind)
+        raise ValueError('unknown filter type: ' + kind)
     b = np.array(b, float) / a[0]
     a = np.array(a, float) / a[0]
     return b, a
@@ -142,7 +142,7 @@ def istft(X, w, pad, length, n=1024, hop=256):
     return out[pad:pad + length]
 
 def tv_filter(x, env_func, n=1024, hop=256, chunk=1024):
-    """Filtro variante en el tiempo: env_func(times, freqs) -> (nframes, nbins)."""
+    """Time-varying filter: env_func(times, freqs) -> (nframes, nbins)."""
     X, w, pad = stft(x, n, hop)
     freqs = np.fft.rfftfreq(n, 1.0 / SR)
     nf = X.shape[0]
@@ -154,11 +154,11 @@ def tv_filter(x, env_func, n=1024, hop=256, chunk=1024):
         Y[i:j] = X[i:j] * E
     return istft(Y, w, pad, len(x), n, hop)
 
-# ---------------------------------------------------------------- utilidades
+# ---------------------------------------------------------------- utilities
 def pan(x, p):
-    """Mono -> estéreo con ley de potencia constante. Si ya es estéreo (N, 2),
-    hace de balance: atenúa el lado contrario sin volver a duplicar canales.
-    (Medido el 28-oct: con un bus estéreo devolvía (N, 2, 2) y la mezcla moría.)"""
+    """Mono -> stereo with a constant-power law. If it is already stereo (N, 2),
+    it acts as a balance: it attenuates the opposite side without duplicating channels again.
+    (Measured on 28-Oct: with a stereo bus it returned (N, 2, 2) and the mix died.)"""
     p = float(np.clip(p, -1.0, 1.0))
     l = np.cos((p + 1.0) * np.pi / 4.0)
     r = np.sin((p + 1.0) * np.pi / 4.0)
@@ -206,8 +206,8 @@ def reverb_ir(dur=2.5, decay=0.55, seed=1, lp_hz=6000.0):
     return ir
 
 def reverb(x, ir):
-    """Convolución con la respuesta `ir`. Acepta mono o estéreo (N, 2): cada canal
-    por separado. (Con estéreo antes pedía una FFT de 64 GiB.)"""
+    """Convolution with the `ir` response. Accepts mono or stereo (N, 2): each channel
+    separately. (With stereo it used to ask for a 64 GiB FFT.)"""
     x = np.asarray(x, float)
     if x.ndim == 2:
         return np.stack([fftconvolve(x[:, c], ir) for c in range(x.shape[1])], axis=1)
@@ -215,7 +215,7 @@ def reverb(x, ir):
 
 def delay(x, time_s, fb=0.35, mix=0.3, taps=5, lp_hz=4000.0):
     x = np.asarray(x, float)
-    if x.ndim == 2:  # estéreo: cada canal por separado
+    if x.ndim == 2:  # stereo: each channel separately
         return np.stack([delay(x[:, c], time_s, fb, mix, taps, lp_hz) for c in range(x.shape[1])], axis=1)
     d = int(time_s * SR)
     out = np.zeros(len(x) + d * taps)
@@ -250,7 +250,7 @@ def tape_hiss(n, seed=0, level=0.01):
     wow = 1.0 + 0.05 * np.sin(2 * np.pi * 0.31 * np.arange(n) / SR)
     return h * level * wow
 
-# ---------------------------------------------------------------- medicion
+# ---------------------------------------------------------------- measurement
 def _k_weight(x):
     b1, a1 = biquad('hshelf', 1681.974450955533, 0.7071752369554196, 4.0)
     b2, a2 = biquad('hp', 38.13547087602444, 0.5003270373238773)

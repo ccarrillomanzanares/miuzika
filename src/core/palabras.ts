@@ -1,13 +1,14 @@
 /**
- * El vocabulario del sonido: lo que dice el usuario, traducido a movimientos.
+ * The vocabulary of sound: what the user says, translated into movements.
  *
- * Cada palabra no es un botón, es un **empujón** a unos cuantos parámetros. Sumar
- * «corto, gordo y sucio» es sumar sus empujones. Los contrarios van por ejes: si
- * pides dos del mismo eje, gana la última y se avisa (no se cancelan en silencio).
+ * Each word is not a button, it is a **push** on a few parameters. Adding up
+ * "short, fat, and dirty" means adding up their pushes. Opposites work by axes: if
+ * you ask for two on the same axis, the last one wins and you are told about it
+ * (they are not canceled silently).
  *
- * Los empujones se aplican primero al parámetro de la voz, si existe, y siempre al
- * post-proceso, que funciona en cualquier voz. Así «más corto» hace algo incluso
- * en un bombo, cuya duración está fijada en el código.
+ * Pushes are applied first to the voice parameter, if it exists, and always to the
+ * post-processing, which works on any voice. So "shorter" does something even on a
+ * kick, whose duration is fixed in code.
  */
 
 import { normalizarTexto } from "./nombres.ts";
@@ -16,19 +17,19 @@ import type { ArgsSonido, PostSonido, RecetaSonido, VozSonido } from "./sonidos.
 export type Eje = "duracion" | "tono" | "brillo" | "suciedad" | "caracter" | "cuerpo";
 
 export interface Movimiento {
-  /** Parámetro de la voz (`arg`) o del post-proceso (`post`). */
+  /** Voice parameter (`arg`) or post-processing parameter (`post`). */
   destino: "arg" | "post";
   clave: string;
-  /** Multiplica el valor actual (para parámetros relativos). */
+  /** Multiplies the current value (for relative parameters). */
   factor?: number;
-  /** Se suma al valor actual (para los parámetros del post). */
+  /** Adds to the current value (for post parameters). */
   suma?: number;
 }
 
 export interface Palabra {
   clave: string;
   etiqueta: string;
-  /** Si pertenece a un eje, su contrario ocupa el mismo. */
+  /** If it belongs to an axis, its opposite occupies the same one. */
   eje?: Eje;
   movimientos: Movimiento[];
 }
@@ -171,7 +172,7 @@ export const PALABRAS: Palabra[] = [
   },
 ];
 
-/** Rango de cada parámetro del post, para no salirse al sumar. */
+/** Range of each post parameter, so adding does not go outside it. */
 const LIMITES_POST: Record<string, [number, number]> = {
   brillo: [-1, 1],
   suciedad: [0, 1],
@@ -181,7 +182,7 @@ const LIMITES_POST: Record<string, [number, number]> = {
 
 const normalizar = normalizarTexto;
 
-/** Busca una palabra del vocabulario por su clave o su etiqueta, con o sin tilde. */
+/** Looks up a vocabulary word by its key or its label, with or without accents. */
 export function buscarPalabra(texto: string): Palabra | undefined {
   const buscado = normalizar(texto);
   return PALABRAS.find((p) => p.clave === buscado || normalizar(p.etiqueta) === buscado);
@@ -195,9 +196,9 @@ export interface ResultadoPalabras {
 }
 
 /**
- * Aplica las palabras a una receta. Devuelve una receta nueva (no toca la de
- * entrada), las palabras que se aplicaron, las que se descartaron por conflicto y
- * los avisos de palabras que no existen.
+ * Applies the words to a recipe. Returns a new recipe (it does not touch the input
+ * one), the words that were applied, those discarded due to conflict, and warnings
+ * for words that do not exist.
  */
 export function aplicarPalabras(
   receta: RecetaSonido,
@@ -213,13 +214,13 @@ export function aplicarPalabras(
   for (const pedida of pedidas) {
     const palabra = buscarPalabra(pedida);
     if (!palabra) {
-      avisos.push(`No conozco «${pedida}». Disponibles: ${PALABRAS.map((p) => p.clave).join(", ")}.`);
+      avisos.push(`I don't know "${pedida}". Available: ${PALABRAS.map((p) => p.clave).join(", ")}.`);
       continue;
     }
     resueltas.push(palabra);
   }
 
-  // Un eje, una palabra: gana la última y la anterior se descarta con motivo.
+  // One axis, one word: the last one wins and the previous one is discarded with a reason.
   const porEje = new Map<Eje, Palabra>();
   for (const palabra of resueltas) {
     if (!palabra.eje) continue;
@@ -227,7 +228,7 @@ export function aplicarPalabras(
     if (previa) {
       descartadas.push({
         palabra: previa.clave,
-        motivo: `«${previa.clave}» y «${palabra.clave}» se contradicen (${palabra.eje}); vale la última`,
+        motivo: `"${previa.clave}" and "${palabra.clave}" contradict each other (${palabra.eje}); the last one applies`,
       });
       resueltas.splice(resueltas.indexOf(previa), 1);
     }
@@ -240,7 +241,7 @@ export function aplicarPalabras(
       if (mov.destino === "arg") {
         const param = voz?.params.find((p) => p.clave === mov.clave);
         const actual = args[mov.clave];
-        if (!param || typeof actual !== "number") continue; // la voz no lo tiene: lo hará el post
+        if (!param || typeof actual !== "number") continue; // the voice does not have it: post will handle it
         let valor = actual;
         if (mov.factor !== undefined) valor *= mov.factor;
         if (mov.suma !== undefined) valor += mov.suma;

@@ -1,102 +1,103 @@
 # miuzika
 
-Un DAW en el navegador con un agente que compone, arregla y produce. Se le habla
-en cualquier idioma; el agente escribe directamente en el proyecto (notas, acordes,
-efectos, mezcla) y, cuando hace falta audio sintetizado, ejecuta Python en tu equipo
-o en una GPU de Lambda Cloud.
+A browser DAW with an agent that composes, arranges and produces. You can talk to it
+in any language; the agent writes directly into the project (notes, chords, effects,
+mix) and, when synthesized audio is needed, runs Python on your machine or on a
+Lambda Cloud GPU.
 
 ```text
-GUI + openDAW (WASM)    timeline, piano roll, reproducción, batería, SoundFonts
-agente (LLM)            lee y edita el proyecto con ops; compone con teoría musical
-motor numpy / torch     síntesis, render, análisis (workspace/codigo, workspace/gpu)
-Strudel → WAV           patrones generativos renderizados a pista de audio
-disco                   cada proyecto es su carpeta: proyecto.json + sus WAV
+GUI + openDAW (WASM)    timeline, piano roll, playback, drums, SoundFonts
+agent (LLM)             reads and edits the project with ops; composes with music theory
+numpy / torch engine    synthesis, render, analysis (workspace/codigo, workspace/gpu)
+Strudel -> WAV          generative patterns rendered to an audio track
+disk                    every project is a folder: proyecto.json + its WAVs
 ```
 
-La arquitectura, las fronteras y los acoplamientos peligrosos están en
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). El parte del día, en
-[`ESTADO.md`](ESTADO.md); las fases pendientes, en [`PLAN.md`](PLAN.md); la revisión
-del 27-oct, en [`docs/REVISION-2026-10-27.md`](docs/REVISION-2026-10-27.md).
+Architecture, boundaries and dangerous couplings are in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The daily status report is in
+[`ESTADO.md`](ESTADO.md); pending phases are in [`PLAN.md`](PLAN.md); the 27-Oct
+review is in [`docs/REVISION-2026-10-27.md`](docs/REVISION-2026-10-27.md).
 
-## Arranque
+## Getting started
 
-Requisitos: **Node 24** y **Python 3 con numpy** (`MIUZIKA_PYTHON` en `.env` si no se
-llama `python`).
+Requirements: **Node 24** and **Python 3 with numpy** (`MIUZIKA_PYTHON` in `.env` if
+the executable is not called `python`).
 
 ```bash
 npm install
-npm run dev          # http://localhost:5173  (no 127.0.0.1: el origen importa)
+npm run dev          # http://localhost:5173  (not 127.0.0.1: the origin matters)
 ```
 
-`.env` (sólo lo lee el servidor; el navegador nunca ve las claves):
+`.env` (only the server reads it; the browser never sees the keys):
 
 ```text
-OLLAMA_API_KEY=...            # Ollama Cloud (y la búsqueda web); otros proveedores y claves, en el menú «Modelos»
+OLLAMA_API_KEY=...            # Ollama Cloud (and web search); other providers and keys, in the "Models" menu
 OLLAMA_BASE_URL=https://ollama.com
-# Opcional, GPU en Lambda Cloud:
+# Optional, GPU on Lambda Cloud:
 LAMBDA_API_KEY=...  LAMBDA_SSH_KEY=...  LAMBDA_SSH_KEY_NAME=...  LAMBDA_SSH_USER=ubuntu
 LAMBDA_REGION=us-east-1  LAMBDA_INSTANCE_TYPE=gpu_1x_a10  LAMBDA_NOMBRE=miuzika-gpu
 ```
 
-## Comprobaciones
+## Checks
 
-| comando | qué |
+| command | what it does |
 |---|---|
-| `npm run typecheck` | TypeScript sin emitir (0 errores) |
-| `npm run test:unit` | dominio, agente y ficheros (`node --test`) |
-| `npm test` | lo anterior + contrato con openDAW (exportar/importar un `.odw`) |
-| `npm run build:web` | bundle de producción |
+| `npm run typecheck` | TypeScript without emitting (0 errors) |
+| `npm run test:unit` | domain, agent and file tests (`node --test`) |
+| `npm test` | the above + openDAW contract (export/import an `.odw`) |
+| `npm run build:web` | production bundle |
 
-Y a mano, porque ningún test lo cubre: abrir un proyecto, darle a play y **oírlo**.
+And manually, because no test covers it: open a project, press play and **listen to it**.
 
-## Cómo se trabaja
+## How it works
 
-- **Proyectos**: `workspace/proyectos/<carpeta>/proyecto.json` es la única verdad. La
-  carpeta se fija al crear el proyecto y no cambia al renombrarlo; admite nombres en
-  cualquier alfabeto. Autoguardado 1,5 s tras cada cambio (y `Guardar` / Ctrl+S).
-- **Abrir**: proyecto (`.json`, `.miuzika.zip`), audio o MIDI, desde el botón o
-  arrastrándolo a la ventana.
-- **Agente**: panel de la derecha. Lee el proyecto, escribe progresiones y notas,
-  ajusta mezcla y efectos, busca sonidos en la biblioteca CC0 (4.231 samples de
-  VCSL), convierte instrumentos SFZ a SoundFont, crea sonidos con palabras y
-  ejecuta Python. Su memoria es del proyecto (`agente.json`). El prompt de sistema
-  es un literal con huella: no cambia sin querer.
-- **Strudel**: botón «Strudel», un patrón y «Renderizar WAV»; entra como pista de
-  audio (1 ciclo = 1 compás).
-- **GPU**: selector CPU / GPU en el chat. La instancia **no se apaga sola**: el
-  contador de la cabecera enseña la tarifa real y el gasto; apágala desde ahí.
+- **Projects**: `workspace/proyectos/<folder>/proyecto.json` is the single source of
+  truth. The folder is fixed when the project is created and does not change when the
+  project is renamed; it accepts names in any alphabet. Autosave 1.5 s after every
+  change (and `Save` / Ctrl+S).
+- **Open**: project (`.json`, `.miuzika.zip`), audio or MIDI, from the button or by
+  dragging it onto the window.
+- **Agent**: right-hand panel. It reads the project, writes progressions and notes,
+  adjusts mix and effects, searches the CC0 library (4,231 VCSL samples), converts SFZ
+  instruments to SoundFont, creates sounds from words and runs Python. Its memory is
+  per project (`agente.json`). The system prompt is a fingerprinted literal: it does
+  not change by accident.
+- **Strudel**: `Strudel` button, a pattern and `Render WAV`; it becomes an audio track
+  (1 cycle = 1 bar).
+- **GPU**: CPU / GPU selector in the chat. The instance **does not shut down by
+  itself**: the header counter shows the real hourly rate and spend; turn it off from
+  there.
 
-## Estructura
+## Structure
 
 ```text
-src/core/          dominio puro: tipos, ops transaccionales, teoría, composición,
-                   resumen para el agente, sonidos y palabras, búsqueda, nombres
-src/host/opendaw/  proyecto ↔ openDAW (adapter, mapping, contrato)
-web/src/           la app: main.ts (estado y UI), timeline, piano roll, openDAW,
+src/core/          pure domain: types, transactional ops, theory, composition,
+                   summary for the agent, sounds and words, search, names
+src/host/opendaw/  miuzika project -> openDAW (adapter, mapping, contract)
+web/src/           the app: main.ts (state and UI), timeline, piano roll, openDAW,
                    stems, Strudel, chat, i18n
-web/src/agent/     bucle del agente, herramientas (contrato con el LLM), acciones
-                   sobre el proyecto, contexto y actividad
-server/            API del servidor de desarrollo: contexto + un módulo por área
-                   (ficheros, proyectos, audio, catálogo, voces, gpu, python) y Lambda
-workspace/         motor numpy (codigo/), motor torch (gpu/), herramientas/,
-                   plantillas/, obras/, catálogo CC0 y proyectos (fuera de git)
-docs/              arquitectura, openDAW, legal, plan de pruebas, revisiones
+web/src/agent/     agent loop, tools (LLM contract), actions on the project,
+                   context and activity
+server/            dev server API: context + one module per area
+                   (files, projects, audio, catalog, voices, gpu, python) and Lambda
+workspace/         numpy engine (codigo/), torch engine (gpu/), tools/,
+                   templates/, works/, CC0 catalog and projects (outside git)
+docs/              architecture, openDAW, legal, test plan, reviews
 ```
 
-## Limitaciones
+## Limitations
 
-- Sólo existe con `npm run dev`: la API (`/api/*`) son middlewares de Vite. No hay
-  despliegue, ni usuarios, ni aislamiento: el agente ejecuta Python con tus
-  permisos. Ver «Producto» en `docs/REVISION-2026-10-27.md`.
-- Los WAV de más de 30 s se reproducen por streaming (`<audio>`), fuera del mezclador
-  de openDAW: no les afectan los efectos de pista ni el master.
-- Efectos con parámetros normalizados 0..1 (salvo el eq, en dB); sin buses ni
-  automatización.
-- El motor de patrones asume 4/4. Strudel depende de sample maps remotos.
-- La interfaz está en español e inglés; los avisos del chat, sólo en español.
+- It only exists with `npm run dev`: the API (`/api/*`) is Vite middleware. There is
+  no deployment, no users, no isolation: the agent runs Python with your permissions.
+  See "Product" in `docs/REVISION-2026-10-27.md`.
+- WAVs longer than 30 s are streamed (`<audio>`), outside the openDAW mixer: track FX
+  and the master do not affect them.
+- Effects use normalized parameters 0..1 (except EQ, in dB); no buses or automation.
+- The pattern engine assumes 4/4. Strudel depends on remote sample maps.
+- The interface is in English and Spanish; the agent answers in the language of the user.
 
-## Licencia
+## License
 
-**AGPL-3.0-or-later**. openDAW tiene licencia dual (AGPL/comercial); Strudel,
-superdough y los sample packs son de terceros. Ver [LICENSE](LICENSE),
-[NOTICE.md](NOTICE.md) y [docs/LEGAL.md](docs/LEGAL.md).
+**AGPL-3.0-or-later**. openDAW is dual-licensed (AGPL/commercial); Strudel,
+superdough and the sample packs are third-party. See [LICENSE](LICENSE),
+[NOTICE.md](NOTICE.md) and [docs/LEGAL.md](docs/LEGAL.md).

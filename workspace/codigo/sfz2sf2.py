@@ -1,27 +1,27 @@
-"""Convierte un SFZ (+ sus WAV) en un SF2 que entienda openDAW.
+"""Converts an SFZ (+ its WAVs) into an SF2 that openDAW can read.
 
-    python codigo/sfz2sf2.py "<ruta/al/instrumento.sfz>" "<salida.sf2>"
+    python codigo/sfz2sf2.py "<path/to/instrument.sfz>" "<output.sf2>"
 
-Por qué existe: los samples de VCSL traen el mapa de notas en `.sfz`, pero el motor
-del DAW toca SoundFont (`.sf2`). Sin este paso, un arpa es «un WAV de un Do4»; con
-él, es un instrumento que responde al piano roll con sus capas de intensidad.
+Why it exists: VCSL samples bring their note map in `.sfz`, but the DAW engine
+plays SoundFont (`.sf2`). Without this step, a harp is «a WAV of one C4»; with
+it, it is an instrument that responds to the piano roll with its velocity layers.
 
-Qué se hace con cada región del SFZ:
-  sample            → se carga, se pasa a mono 44,1k/16b (SF2 no guarda 24 bits)
-  pitch_keycenter   → overridingRootKey (la nota original del sample)
+What is done with each SFZ region:
+  sample            → loaded, converted to mono 44.1k/16b (SF2 does not store 24 bits)
+  pitch_keycenter   → overridingRootKey (the sample's original note)
   lokey..hikey      → keyRange
-  lovey..hivey      → velRange (si no hay, 0..127)
-  tune              → fineTune / coarseTune (el SFZ lo da en cents)
-  volume            → initialAttenuation (dB → centibeles, sin pasar de 0)
-  offset            → se recorta el principio del sample
+  lovey..hivey      → velRange (if absent, 0..127)
+  tune              → fineTune / coarseTune (the SFZ gives it in cents)
+  volume            → initialAttenuation (dB → centibels, never above 0)
+  offset            → the beginning of the sample is trimmed
 
-Los bucles y los ampeg se ignoran: en VCSL ningún SFZ trae `loop_start`, así que
-todos los sonidos son one-shot con release. Si algún día aparecen, hay que añadir
-el generador 54 (sampleModes) y los índices de bucle en `shdr`.
+Loops and ampeg are ignored: in VCSL no SFZ brings `loop_start`, so
+all sounds are one-shots with release. If they ever appear, generator 54
+(sampleModes) and the loop indices in `shdr` would have to be added.
 
-Lo que NO hace: no genera presets por banco, ni moduladores reales (se emiten los
-mínimos obligatorios), ni capas cruzadas por `xfout`. Es un conversor honesto, no
-un editor de SoundFonts.
+What it does NOT do: it does not generate per-bank presets, nor real modulators
+(only the mandatory minimums are emitted), nor crossfaded layers via `xfout`. It is an honest
+converter, not a SoundFont editor.
 """
 
 import json
@@ -35,7 +35,7 @@ import numpy as np
 
 SR = 44100
 
-# Generadores de SF2 que usamos.
+# SF2 generators we use.
 GEN_KEY_RANGE = 43
 GEN_VEL_RANGE = 44
 GEN_INITIAL_ATTENUATION = 48
@@ -48,7 +48,7 @@ GEN_ROOT_KEY = 58
 
 
 def _leer_wav(ruta):
-    """WAV a mono float (16 o 24 bits, cualquier frecuencia)."""
+    """WAV to mono float (16 or 24 bits, any sample rate)."""
     with wave.open(ruta, "rb") as w:
         canales = w.getnchannels()
         ancho = w.getsampwidth()
@@ -73,24 +73,25 @@ def _leer_wav(ruta):
     return datos
 
 
-# Tamaño máximo del .sf2: el navegador lo carga entero en memoria. El Steinway de
-# VCSL son 1,3 GB de WAV (126 muestras de 28 s en estéreo a 24 bits por cada pedal):
-# convertido sin más, ~600 MB que el DAW no puede abrir.
+# Maximum .sf2 size: the browser loads it entirely into memory. VCSL's Steinway
+# is 1.3 GB of WAV (126 samples of 28 s in stereo at 24 bits for each pedal):
+# converted as-is, ~600 MB that the DAW cannot open.
 MAX_BYTES = 40 * 1024 * 1024
-# Cada muestra se corta a esta duración (con un fundido): una nota de piano de 28 s
-# no hace falta para tocar; si el sf2 sigue grande se baja hasta MIN_SEGUNDOS.
+# Each sample is cut to this duration (with a fade): a 28 s piano note
+# is not needed to play; if the sf2 is still large it is lowered to MIN_SEGUNDOS.
 MAX_SEGUNDOS = 6.0
 MIN_SEGUNDOS = 2.5
 FUNDIDO_S = 0.25
 
 
 def suenan_por_defecto(regiones):
-    """Las regiones que suenan al pulsar una tecla sin tocar nada más.
+    """The regions that sound when a key is pressed without touching anything else.
 
-    El SFZ condiciona regiones a controladores (locc64/hicc64 = pedal) y a
-    `trigger=release` (el ruido de soltar la tecla). SF2 no tiene nada de eso:
-    sin este filtro sonaban A LA VEZ las muestras con pedal, sin pedal y las de
-    soltar. Un controlador sin mover vale 0 (como dice el estándar SFZ).
+    The SFZ ties regions to controllers (locc64/hicc64 = pedal) and to
+    `trigger=release` (the noise of releasing the key). SF2 has none of that:
+    without this filter, the samples with pedal, without pedal and the release
+    ones all sounded AT THE SAME TIME. An untouched controller is worth 0 (as the SFZ
+    standard says).
     """
     elegidas = []
     for region in regiones:
@@ -114,10 +115,10 @@ def suenan_por_defecto(regiones):
 
 
 def capas_reducidas(regiones, maximo):
-    """Deja como mucho `maximo` capas de intensidad por rango de teclas.
+    """Leaves at most `maximo` velocity layers per key range.
 
-    Las que quedan se reparten (la más suave, la más fuerte y las del medio) y se
-    estiran para cubrir 0-127 sin huecos.
+    The remaining ones are spread out (the softest, the loudest and the middle ones) and
+    stretched to cover 0-127 without gaps.
     """
     por_tecla = {}
     for region in regiones:
@@ -128,7 +129,7 @@ def capas_reducidas(regiones, maximo):
         grupo = sorted(grupo, key=lambda r: int(_campo(r, "lovel", 0) or 0))
         if len(grupo) > maximo:
             if maximo == 1:
-                # La del medio: ni la más apagada ni la más dura.
+                # The middle one: neither the quietest nor the hardest.
                 indices = [len(grupo) // 2]
             else:
                 indices = sorted({round(i * (len(grupo) - 1) / (maximo - 1)) for i in range(maximo)})
@@ -150,7 +151,7 @@ def _frames_de(ruta):
 
 
 def ajustar_tamano(regiones, carpeta_sfz, max_bytes=MAX_BYTES):
-    """(regiones, segundos por muestra) que caben en `max_bytes` (16 bits mono)."""
+    """(regions, seconds per sample) that fit in `max_bytes` (16-bit mono)."""
     def estimar(lista, segundos):
         total = 0
         for region in lista:
@@ -177,7 +178,7 @@ def _agrupar(regiones):
 
 
 def parsear_sfz_secuencial(ruta):
-    """Parser secuencial de verdad: cada <region> se cierra al empezar la siguiente."""
+    """A real sequential parser: each <region> closes when the next one starts."""
     regiones = []
     grupo = {}
     actual = None
@@ -222,7 +223,7 @@ def _campo(region, nombre, defecto=None):
 
 
 def construir(regiones, carpeta_sfz, nombre_preset, max_segundos=None):
-    """Devuelve (pcm_bytes, shdr_lista, zonas) listo para escribir."""
+    """Returns (pcm_bytes, shdr_list, zones) ready to write."""
     pcm = bytearray()
     shdr = []
     zonas = []
@@ -240,7 +241,7 @@ def construir(regiones, carpeta_sfz, nombre_preset, max_segundos=None):
             datos = datos[: int(max_segundos * SR)].copy()
             n = int(FUNDIDO_S * SR)
             datos[-n:] *= np.linspace(1.0, 0.0, n)
-        # SF2 exige 46 muestras de silencio al final de cada sample.
+        # SF2 requires 46 samples of silence at the end of each sample.
         datos = np.concatenate([datos, np.zeros(46)])
         entero = np.clip(datos * 32767.0, -32768, 32767).astype("<i2")
         inicio = len(pcm) // 2
@@ -255,7 +256,7 @@ def construir(regiones, carpeta_sfz, nombre_preset, max_segundos=None):
         tune = _campo(region, "tune", 0.0) or 0.0
         volumen = _campo(region, "volume", 0.0) or 0.0
 
-        # tune en cents → coarse (semitonos) + fine (cents)
+        # tune in cents → coarse (semitones) + fine (cents)
         semitonos = int(round(tune / 100.0))
         cents = int(round(tune - semitonos * 100))
         cents = max(-99, min(99, cents))
@@ -282,7 +283,7 @@ def construir(regiones, carpeta_sfz, nombre_preset, max_segundos=None):
                 "root": max(0, min(127, centro)),
                 "coarse": semitonos,
                 "fine": cents,
-                # initialAttenuation: dB → centibeles; positivo sólo (no se puede amplificar)
+                # initialAttenuation: dB → centibels; positive only (it cannot amplify)
                 "atenuacion": int(round(min(0.0, volumen) * -10.0)),
             }
         )
@@ -290,8 +291,8 @@ def construir(regiones, carpeta_sfz, nombre_preset, max_segundos=None):
 
 
 def _chunk(chunk_id, cuerpo):
-    """Chunk RIFF con su relleno: los cuerpos impares llevan un byte de pad, y sin él
-    el siguiente chunk queda desalineado y ningún lector estricto abre el fichero."""
+    """RIFF chunk with its padding: odd bodies carry a pad byte, and without it
+    the next chunk is misaligned and no strict reader opens the file."""
     relleno = b"\x00" if len(cuerpo) % 2 else b""
     return chunk_id + struct.pack("<I", len(cuerpo)) + cuerpo + relleno
 
@@ -302,9 +303,9 @@ def _lista(tipo, *chunks):
 
 
 def escribir(salida, pcm, shdr, zonas, nombre_preset):
-    """Escribe el SF2 completo: INFO, sdta y pdta con sus listas."""
+    """Writes the complete SF2: INFO, sdta and pdta with their lists."""
     if not zonas:
-        raise SystemExit("no hay ninguna región válida")
+        raise SystemExit("there is no valid region")
 
     # ── INFO
     info = _lista(
@@ -318,22 +319,22 @@ def escribir(salida, pcm, shdr, zonas, nombre_preset):
     sdta = _lista(b"sdta", _chunk(b"smpl", pcm))
 
     # ── pdta
-    # Estructura: preset → bolsas → instrumento → bolsas por zona → generadores.
-    # Las zonas las delimitan los ÍNDICES: las bolsas del preset i van de
-    # phdr[i].bagIndex a phdr[i+1].bagIndex (el registro final EOP/EOI cuenta), y
-    # los generadores de la bolsa j, de bag[j] a bag[j+1]. Sólo cada LISTA termina
-    # en un registro de ceros; dentro de una zona no hay terminador, y el generador
-    # de instrumento (41) o de sample (53) va el último.
-    # Medido el 28-oct: con EOP/EOI apuntando a 0 y un (0,0) cerrando cada zona,
-    # el lector de openDAW veía el preset con 0 zonas y el instrumento sin regiones:
-    # TODOS los instrumentos de la biblioteca sonaban en silencio.
+    # Structure: preset → bags → instrument → per-zone bags → generators.
+    # Zones are delimited by the INDICES: the bags of preset i go from
+    # phdr[i].bagIndex to phdr[i+1].bagIndex (the final EOP/EOI record counts), and
+    # the generators of bag j, from bag[j] to bag[j+1]. Only each LIST ends
+    # in a zero record; inside a zone there is no terminator, and the instrument (41)
+    # or sample (53) generator goes last.
+    # Measured on 28-Oct: with EOP/EOI pointing at 0 and a (0,0) closing each zone,
+    # the openDAW reader saw the preset with 0 zones and the instrument with no regions:
+    # ALL the instruments in the library sounded silent.
     phdr = [
         struct.pack(
             "<20sHHHiii",
             nombre_preset[:19].encode("latin-1", "replace").ljust(20, b"\x00"),
-            0,  # preset (programa)
-            0,  # banco
-            0,  # primera bolsa del preset
+            0,  # preset (program)
+            0,  # bank
+            0,  # first bag of the preset
             0,
             0,
             0,
@@ -341,7 +342,7 @@ def escribir(salida, pcm, shdr, zonas, nombre_preset):
         struct.pack("<20sHHHiii", b"EOP".ljust(20, b"\x00"), 0, 0, 1, 0, 0, 0),
     ]
 
-    # Preset: una bolsa con el generador 41 (instrumento 0); luego los terminadores.
+    # Preset: one bag with generator 41 (instrument 0); then the terminators.
     pgen = [struct.pack("<HH", 41, 0), struct.pack("<HH", 0, 0)]
     pbag = [struct.pack("<HH", 0, 0), struct.pack("<HH", 1, 0)]
     pmod = [struct.pack("<HHhHH", 0, 0, 0, 0, 0)]
@@ -351,13 +352,13 @@ def escribir(salida, pcm, shdr, zonas, nombre_preset):
         struct.pack("<20sH", b"EOI".ljust(20, b"\x00"), len(zonas)),
     ]
 
-    # Una bolsa por zona: (primer generador, primer modulador). Sin moduladores.
+    # One bag per zone: (first generator, first modulator). No modulators.
     ibag = []
     igen = []
     for zona in zonas:
         ibag.append(struct.pack("<HH", len(igen), 0))
         igen.extend([
-            # keyRange primero y velRange después: lo exige la especificación.
+            # keyRange first and velRange after: the specification requires it.
             struct.pack("<HH", GEN_KEY_RANGE, zona["lokey"] | (zona["hikey"] << 8)),
             struct.pack("<HH", GEN_VEL_RANGE, zona["lovey"] | (zona["hivey"] << 8)),
             struct.pack("<HH", GEN_ROOT_KEY, zona["root"]),
@@ -365,13 +366,13 @@ def escribir(salida, pcm, shdr, zonas, nombre_preset):
             struct.pack("<Hh", GEN_FINE_TUNE, zona["fine"]),
             struct.pack("<HH", GEN_INITIAL_ATTENUATION, min(1440, zona["atenuacion"])),
             struct.pack("<HH", GEN_SAMPLE_MODES, 0),
-            struct.pack("<HH", GEN_SAMPLE_ID, zona["sample_id"]),  # el último
+            struct.pack("<HH", GEN_SAMPLE_ID, zona["sample_id"]),  # the last one
         ])
-    ibag.append(struct.pack("<HH", len(igen), 0))  # bolsa terminal
-    igen.append(struct.pack("<HH", 0, 0))  # generador terminal
-    imod = [struct.pack("<HHhHH", 0, 0, 0, 0, 0)]  # modulador terminal
+    ibag.append(struct.pack("<HH", len(igen), 0))  # terminal bag
+    igen.append(struct.pack("<HH", 0, 0))  # terminal generator
+    imod = [struct.pack("<HHhHH", 0, 0, 0, 0, 0)]  # terminal modulator
 
-    # shdr: un registro por sample (46 bytes) y el terminador EOS.
+    # shdr: one record per sample (46 bytes) and the EOS terminator.
     registros_shdr = b""
     for s in shdr:
         registros_shdr += struct.pack(
@@ -395,8 +396,8 @@ def escribir(salida, pcm, shdr, zonas, nombre_preset):
         _chunk(b"pbag", b"".join(pbag)),
         _chunk(b"pmod", b"".join(pmod)),
         _chunk(b"pgen", b"".join(pgen)),
-        # El chunk se llama "inst" (4 letras), no "pinst": el nombre largo es el de
-        # la estructura de la especificación, no el identificador del fichero.
+        # The chunk is called "inst" (4 letters), not "pinst": the long name is that of
+        # the specification structure, not the file identifier.
         _chunk(b"inst", b"".join(pinst)),
         _chunk(b"ibag", b"".join(ibag)),
         _chunk(b"imod", b"".join(imod)),
@@ -411,12 +412,12 @@ def escribir(salida, pcm, shdr, zonas, nombre_preset):
 
 def main(argv):
     if len(argv) < 2:
-        print("uso: sfz2sf2.py <in.sfz> <salida.sf2>")
+        print("usage: sfz2sf2.py <in.sfz> <output.sf2>")
         return 1
     entrada, salida = argv[0], argv[1]
     regiones = parsear_sfz_secuencial(entrada)
     if not regiones:
-        print(json.dumps({"ok": False, "error": "el SFZ no tiene regiones"}))
+        print(json.dumps({"ok": False, "error": "the SFZ has no regions"}))
         return 1
     nombre = os.path.splitext(os.path.basename(entrada))[0]
     carpeta = os.path.dirname(os.path.abspath(entrada))

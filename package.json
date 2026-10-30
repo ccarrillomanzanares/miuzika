@@ -3,7 +3,7 @@
   "version": "0.11.0",
   "private": true,
   "type": "module",
-  "description": "GUI de DAW con openDAW y Strudel a WAV",
+  "description": "Browser DAW with openDAW and Strudel to WAV",
   "license": "AGPL-3.0-or-later",
   "keywords": [
     "daw",

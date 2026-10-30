@@ -1,9 +1,8 @@
 /**
- * Herramientas del agente: sus "manos".
+ * Agent tools: its "hands".
  *
- * El navegador no toca el disco: pide al servidor de desarrollo, que es quien
- * ejecuta y escribe, y SIEMPRE dentro de <proyecto>/workspace. Los esquemas de
- * abajo son los que ve el LLM.
+ * The browser does not touch the disk: it asks the dev server, which is what executes and
+ * writes, and ALWAYS inside <project>/workspace. The schemas below are what the LLM sees.
  */
 
 import type { ToolSpec } from "../llm.ts";
@@ -19,16 +18,16 @@ import { DEVICE_PARAMS, DEVICE_TYPES, INSTRUMENT_TYPES } from "../../../src/core
 import { firmasDeOps } from "../../../src/core/ops.ts";
 import { MODE_NAMES } from "../../../src/core/theory.ts";
 
-/** Texto que vuelve al modelo como resultado de la herramienta. */
+/** Text that goes back to the model as the tool result. */
 export type ResultadoHerramienta = ResultadoAccion;
 
-/** Slug del proyecto abierto: el servidor resuelve ahi las rutas no compartidas. */
+/** Slug of the open project: the server resolves non-shared paths there. */
 /**
- * Vive en `globalThis`, como las acciones (ver `registrarAcciones`): tras una
- * recarga en caliente puede haber dos copias de este módulo, y la que fija el
- * proyecto (main.ts) no es la que hace las peticiones del agente. Medido el
- * 27-oct: ejecutar_python y listar_ficheros caían en «proyectos/sin-proyecto/»
- * con un proyecto abierto.
+ * It lives in `globalThis`, like the actions (see `registrarAcciones`): after a hot
+ * reload there can be two copies of this module, and the one that sets the project
+ * (main.ts) is not the one making the agent's requests. Measured on Oct 27:
+ * ejecutar_python and listar_ficheros fell into "proyectos/sin-proyecto/" with a
+ * project open.
  */
 const estadoProyecto = globalThis as unknown as { __miuzikaProyectoActivo?: string };
 
@@ -40,36 +39,36 @@ function proyectoActivo(): string {
   return estadoProyecto.__miuzikaProyectoActivo ?? "";
 }
 
-/** Donde corre Python: en este portatil (cpu) o en una GPU de Lambda Cloud. */
+/** Where Python runs: on this laptop (cpu) or on a Lambda Cloud GPU. */
 export type Destino = "cpu" | "lambda";
 
 let destinoPreferido: Destino = "cpu";
 
-/** La interfaz (o main.ts) fija aqui el destino por defecto de las herramientas. */
+/** The interface (or main.ts) sets the default destination for the tools here. */
 export function setDestino(destino: Destino): void {
   destinoPreferido = destino === "lambda" ? "lambda" : "cpu";
 }
 
 /**
- * Cabecera con la carpeta de un proyecto. Va CODIFICADA: una cabecera HTTP sólo
- * admite Latin-1 y `fetch` lanza con una carpeta como «夜の歌». El servidor la
- * descodifica en `slugProyecto` (server/contexto.ts).
+ * Header with a project's folder. It goes ENCODED: an HTTP header only accepts Latin-1
+ * and `fetch` throws with a folder like "夜の歌". The server decodes it in
+ * `slugProyecto` (server/contexto.ts).
  */
 export function cabeceraDeProyecto(slug: string): Record<string, string> {
   return { "x-miuzika-proyecto": encodeURIComponent(slug) };
 }
 
-/** Cabeceras con el proyecto activo (lo usa tambien main.ts). */
+/** Headers with the active project (also used by main.ts). */
 export function cabecerasProyecto(extra?: Record<string, string>): Record<string, string> {
   return { ...cabeceraDeProyecto(proyectoActivo()), ...(extra ?? {}) };
 }
 
 /**
- * Peticion con limite de tiempo y cancelable: el chat nunca se queda colgado
- * esperando y el boton «Cancelar» corta tambien lo que este en vuelo.
+ * Request with a time limit and cancellable: the chat never hangs waiting and the
+ * "Cancel" button also cuts whatever is in flight.
  *
- * `senal` es el AbortSignal del turno: sin el, cancelar dejaba la herramienta
- * corriendo hasta su propio tope.
+ * `senal` is the turn's AbortSignal: without it, cancelling left the tool running until
+ * its own limit.
  */
 async function pedir(
   ruta: string,
@@ -115,32 +114,32 @@ async function pedirJson(
 }
 
 // ---------------------------------------------------------------------------
-// Acciones que tocan el proyecto abierto
+// Actions that touch the open project
 //
-// Las herramientas que cambian el proyecto se ejecutan en la pestaña, porque es
-// la dueña de `proyecto.json` (ver docs/ARCHITECTURE.md §3). La pestaña las
-// registra aquí con `registrarAcciones`, de una vez. Antes eran siete registros
-// sueltos, cada uno duplicado en `globalThis`.
+// The tools that change the project run in the tab, because it is the owner of
+// `proyecto.json` (see docs/ARCHITECTURE.md §3). The tab registers them here with
+// `registrarAcciones`, all at once. Before, they were seven loose registrations, each
+// duplicated in `globalThis`.
 // ---------------------------------------------------------------------------
 
-/** Resultado de una acción: el texto vuelve al modelo como resultado de la herramienta. */
+/** Result of an action: the text goes back to the model as the tool result. */
 export interface ResultadoAccion {
   ok: boolean;
   texto: string;
 }
 
-/** Pistas reales a partir de ficheros de workspace/ (la entrega de una canción). */
+/** Real tracks from files in workspace/ (the delivery of a song). */
 export interface PeticionPistas {
   midis: string[];
   wavs: string[];
   inicioCompas: number;
   /**
-   * Cuantos compases dura la toma. Todos los clips de la llamada (MIDI y WAV)
-   * duran exactamente eso: la duracion se cuenta en compases, no en segundos de
-   * fichero, asi que el MIDI y el WAV del mismo instrumento acaban igual.
+   * How many bars the take lasts. All clips in the call (MIDI and WAV) last exactly
+   * that: duration is counted in bars, not file seconds, so the MIDI and the WAV of the
+   * same instrument end up the same.
    */
   compases?: number;
-  /** Nombre del proyecto si hay que crearlo (lo pregunta el agente al usuario). */
+  /** Project name if it has to be created (the agent asks the user). */
   nombreProyecto?: string;
 }
 
@@ -148,21 +147,21 @@ export interface PeticionProyecto {
   nombre: string;
   bpm: number;
   compases: number;
-  /** Tónica y modo, si el usuario los ha dicho («re menor» → D minor). */
+  /** Tonic and mode, if the user said them ("re menor" → D minor). */
   tonica?: string;
   modo?: string;
 }
 
-/** Convierte un instrumento de la biblioteca a .sf2 y lo pone como pista. */
+/** Converts a library instrument to .sf2 and puts it as a track. */
 export interface PeticionInstrumento {
-  /** Nombre de listar_instrumentos («Grand Piano, Steinway B») o ruta del .sfz. */
+  /** Name from listar_instrumentos ("Grand Piano, Steinway B") or the .sfz path. */
   sfz: string;
   nombre: string;
-  /** Pista existente a la que se le cambia el instrumento (conserva sus notas). */
+  /** Existing track whose instrument is changed (keeps its notes). */
   pista?: string;
 }
 
-/** Ajuste de una pista por su nombre: es como se aplica una mezcla. */
+/** Adjustment of a track by name: this is how a mix is applied. */
 export interface AjustePista {
   nombre: string;
   gainDb?: number;
@@ -171,63 +170,63 @@ export interface AjustePista {
   solo?: boolean;
 }
 
-/** Igualar la duracion de los clips (en compases) sin tocar el resto del proyecto. */
+/** Match the clip durations (in bars) without touching the rest of the project. */
 export interface PeticionIgualar {
-  /** Compases que deben durar los clips. Si falta, se toma el clip mas largo. */
+  /** Bars the clips should last. If missing, the longest clip is taken. */
   compases?: number;
-  /** Solo estas pistas (por nombre). Vacio = todas. */
+  /** Only these tracks (by name). Empty = all. */
   pistas?: string[];
 }
 
 /**
- * Crear un sonido: la voz sale del catálogo del motor y las palabras son el
- * vocabulario canónico («corto», «gordo», «sucio»), traducido a parámetros.
+ * Create a sound: the voice comes from the engine catalog and the words are the
+ * canonical vocabulary ("short", "fat", "dirty"), translated into parameters.
  */
 export interface PeticionSonido {
   nombre: string;
-  /** Clave de la voz en el catálogo (kick, metal_hit, cowbell…). */
+  /** Voice key in the catalog (kick, metal_hit, cowbell…). */
   voz: string;
-  /** Palabras del vocabulario, en el orden en que se dicen. */
+  /** Words from the vocabulary, in the order they are said. */
   palabras?: string[];
-  /** Valores concretos de parámetros de la voz (opcional). */
+  /** Concrete values of the voice's parameters (optional). */
   args?: Record<string, number | boolean | number[]>;
 }
 
-/** Meter un sample de la biblioteca en el proyecto (clip + asset, normalizado). */
+/** Put a library sample into the project (clip + asset, normalized). */
 export interface PeticionSample {
-  /** Ruta dentro de workspace/catalogo/ (la que devuelve buscar_sonido). */
+  /** Path inside workspace/catalogo/ (the one buscar_sonido returns). */
   archivo: string;
-  /** Nombre para el fichero y la pista; si falta, se saca del archivo. */
+  /** Name for the file and the track; if missing, it is taken from the archive. */
   nombre?: string;
-  /** Duración del clip en compases (opcional: por defecto, lo que dure el audio). */
+  /** Clip duration in bars (optional: by default, whatever the audio lasts). */
   compases?: number;
 }
 
-/** Escribir una progresión de acordes como notas en una pista. */
-/** Lo común a todas las herramientas que escriben notas en una pista. */
+/** Write a chord progression as notes on a track. */
+/** What all the tools that write notes on a track have in common. */
 export interface PeticionEscritura {
-  /** Pista destino (id o nombre). Si no existe, se crea con ese nombre. */
+  /** Destination track (id or name). If it does not exist, it is created with that name. */
   pista: string;
-  /** Tipo de instrumento si se crea la pista (o para cambiarlo). */
+  /** Instrument type if the track is created (or to change it). */
   instrumento?: string;
-  /** Programa General MIDI (0-127): suena con el SoundFont GM si está instalado. */
+  /** General MIDI program (0-127): it sounds with the GM SoundFont if installed. */
   programa?: number;
-  /** Compás donde empieza, contando desde 1. */
+  /** Bar where it starts, counting from 1. */
   desdeCompas?: number;
-  /** Nombre del clip (por defecto, el de la pista). */
+  /** Clip name (by default, the track's). */
   nombreClip?: string;
 }
 
 export interface PeticionProgresionPista extends PeticionProgresion, PeticionEscritura {}
 
-/** Una línea en notación compacta ("D2:1.5 D2:.5 F2 Eb2 | r:2 [D3 F3 A3]:4"). */
+/** A line in compact notation ("D2:1.5 D2:.5 F2 Eb2 | r:2 [D3 F3 A3]:4"). */
 export interface PeticionNotas extends PeticionEscritura {
   notas: string;
   velocidad?: number;
   repeticiones?: number;
 }
 
-/** Batería en rejilla: pieza → fila de pasos. */
+/** Drums in a grid: piece → row of steps. */
 export interface PeticionBateriaPista extends PeticionBateria, PeticionEscritura {}
 
 export interface AccionesEstudio {
@@ -249,11 +248,11 @@ export interface AccionesEstudio {
 }
 
 /**
- * El registro vive también en `globalThis`. Con el servidor de dev, editar
- * main.ts o este fichero puede dejar DOS copias del módulo cargadas a la vez: la
- * que registra (main) y la que el bucle del agente consulta. Sin esto, la app
- * dice «no puede crear proyectos» con la app perfectamente viva y el agente
- * reintenta en bucle. Pasó el 23-oct y costó 12 pasos.
+ * The registry also lives in `globalThis`. With the dev server, editing main.ts or this
+ * file can leave TWO copies of the module loaded at once: the one that registers (main)
+ * and the one the agent loop consults. Without this, the app says "cannot create
+ * projects" with the app perfectly alive and the agent retries in a loop. It happened on
+ * Oct 23 and cost 12 steps.
  */
 const almacen = globalThis as unknown as { __miuzikaAcciones?: AccionesEstudio | null };
 
@@ -265,7 +264,7 @@ function acciones(): AccionesEstudio | null {
   return almacen.__miuzikaAcciones ?? null;
 }
 
-/** Herramientas que se resuelven en la pestaña, contra el proyecto abierto. */
+/** Tools resolved in the tab, against the open project. */
 const HERRAMIENTAS_DEL_PROYECTO = new Set([
   "exportar",
   "escuchar_mezcla",
@@ -284,7 +283,7 @@ const HERRAMIENTAS_DEL_PROYECTO = new Set([
   "usar_instrumento",
 ]);
 
-/** «reverb(wet 0..1, decay 0..1, …); eq(low -24..24, …)»: lo que acepta cada efecto. */
+/** "reverb(wet 0..1, decay 0..1, …); eq(low -24..24, …)": what each effect accepts. */
 function parametrosDeEfectos(): string {
   return DEVICE_TYPES.map(
     (tipo) =>
@@ -294,33 +293,33 @@ function parametrosDeEfectos(): string {
   ).join("; ");
 }
 
-/** Herramientas que devuelven texto por páginas y no pasan por el recorte. */
-// listar_instrumentos: la lista GM más la biblioteca pasa de 4000 caracteres; cortada,
-// el agente gastaba otro paso en leer el resto desde _salidas (28-oct).
+/** Tools that return text page by page and do not go through the trimming. */
+// listar_instrumentos: the GM list plus the library exceeds 4000 characters; trimmed,
+// the agent spent another step reading the rest from _salidas (Oct 28).
 const PAGINADAS = new Set(["leer_fichero", "leer_web", "leer_proyecto", "listar_instrumentos"]);
 
-/** Tope de un solo escribir_fichero (≈200 líneas). Ver el porqué en el case. */
+/** Cap for a single escribir_fichero (≈200 lines). See the why in the case. */
 const MAX_FICHERO = 8000;
 
-/** Mensaje único para el caso «la app no tiene registradas sus acciones»: dice qué hacer. */
+/** Single message for the case "the app has no actions registered": it says what to do. */
 const SIN_REGISTRO =
-  "La app no tiene registrada esta acción (pasa cuando el servidor de dev se reinicia o se " +
-  "edita código con la pestaña abierta y quedan dos copias del módulo). NO lo reintentes: " +
-  "pide al usuario que recargue la página (F5) y repite después.";
+  "The app does not have this action registered (it happens when the dev server restarts or " +
+  "code is edited with the tab open and two copies of the module are left). Do NOT retry it: " +
+  "ask the user to reload the page (F5) and try again afterwards.";
 export const HERRAMIENTAS: ToolSpec[] = [
   {
     type: "function",
     function: {
       name: "leer_proyecto",
       description:
-        "Devuelve el estado REAL del proyecto abierto: tempo, compás, tonalidad, pistas con su id, " +
-        "instrumento, ganancia, paneo, efectos (con sus parámetros) y clips (compás, duración, rango " +
-        "de notas). Con `clip`, SÓLO ese clip y sus notas (más corto). Léelo antes de editar: los ids que " +
-        "devuelve son los que piden editar_proyecto y escribir_progresion.",
+        "Returns the REAL state of the open project: tempo, time signature, key, tracks with their id, " +
+        "instrument, gain, pan, effects (with their parameters) and clips (bar, duration, note range). " +
+        "With `clip`, ONLY that clip and its notes (shorter). Read it before editing: the ids it " +
+        "returns are the ones editar_proyecto and escribir_progresion ask for.",
       parameters: {
         type: "object",
         properties: {
-          clip: { type: "string", description: "Opcional: id de un clip (clp_3) para ver sus notas" },
+          clip: { type: "string", description: "Optional: a clip id (clp_3) to see its notes" },
         },
       },
     },
@@ -330,11 +329,11 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "exportar",
       description:
-        "Exporta el proyecto a salida/: midi=true escribe un .mid con una pista por pista MIDI " +
-        "(tempo, compás, programas GM, batería en el canal 10); wav=true renderiza la mezcla con el " +
-        "mismo motor que el Play (instrumentos, efectos, volúmenes) a un .wav. Úsalo sólo si el " +
-        "encargo pide MIDI o WAV; si no, el resultado es el propio proyecto. No escribas scripts " +
-        "para exportar.",
+        "Exports the project to salida/: midi=true writes a .mid with one track per MIDI track " +
+        "(tempo, time signature, GM programs, drums on channel 10); wav=true renders the mix with the " +
+        "same engine as Play (instruments, effects, volumes) to a .wav. Use it only if the " +
+        "brief asks for MIDI or WAV; if not, the result is the project itself. Do not write scripts " +
+        "to export.",
       parameters: {
         type: "object",
         properties: {
@@ -349,17 +348,17 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "escuchar_mezcla",
       description:
-        "Renderiza el proyecto con el MISMO motor que el Play (openDAW) y mide el nivel (RMS dBFS) " +
-        "por tramos de compases: la mezcla y cada pista sola, cruzado con dónde hay notas. Marca MUDO " +
-        "donde una pista tiene notas y no sale sonido, la mezcla que recorta y los instrumentos que no " +
-        "cargan. Úsala cuando la persona diga que algo no se oye o suena raro, y antes de cambiar " +
-        "instrumentos o volúmenes: tu render de Python no es lo que suena en la app. Tarda (un render " +
-        "por pista): con `pistas` mides sólo las que importan.",
+        "Renders the project with the SAME engine as Play (openDAW) and measures the level (RMS dBFS) " +
+        "by bar ranges: the mix and each track alone, crossed with where there are notes. It marks MUTE " +
+        "where a track has notes and no sound comes out, the mix that clips and the instruments that do " +
+        "not load. Use it when the person says something cannot be heard or sounds odd, and before " +
+        "changing instruments or volumes: your Python render is not what sounds in the app. It takes a " +
+        "while (one render per track): with `pistas` you measure only the ones that matter.",
       parameters: {
         type: "object",
         properties: {
-          pistas: { type: "array", items: { type: "string" }, description: "Id o nombre de las pistas a medir solas; vacío = todas" },
-          compases_por_tramo: { type: "number", description: "Compases por columna (por defecto 4)" },
+          pistas: { type: "array", items: { type: "string" }, description: "Id or name of the tracks to measure alone; empty = all" },
+          compases_por_tramo: { type: "number", description: "Bars per column (4 by default)" },
         },
       },
     },
@@ -369,17 +368,17 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "versiones",
       description:
-        "Versiones guardadas del proyecto: al empezar CADA turno se guarda una foto del proyecto tal " +
-        "como estaba. Úsala cuando la persona quiera volver atrás («la batería de antes», «deshaz lo de " +
-        "la melodía»): accion=listar enseña las fotos con el pedido que vino después; accion=restaurar " +
-        "copia de una foto las `pistas` pedidas (id o nombre) o, sin `pistas`, el proyecto entero. " +
-        "Restaura de la foto, no reconstruyas a mano: así vuelve exactamente lo que había.",
+        "Saved versions of the project: at the start of EACH turn a snapshot is saved of the project as " +
+        "it was. Use it when the person wants to go back (“the drums from before”, “undo the " +
+        "melody”): accion=listar shows the snapshots with the request that came after them; accion=restaurar " +
+        "copies the requested `pistas` (id or name), or without `pistas`, the whole project, from a snapshot. " +
+        "Restore from the snapshot, do not rebuild by hand: that way exactly what was there comes back.",
       parameters: {
         type: "object",
         properties: {
           accion: { type: "string", enum: ["listar", "restaurar"] },
-          version: { type: "string", description: "Nombre de la foto o su número en la lista (1 = la más nueva)" },
-          pistas: { type: "array", items: { type: "string" }, description: "Pistas a restaurar; vacío = todo" },
+          version: { type: "string", description: "Snapshot name or its number in the list (1 = the newest)" },
+          pistas: { type: "array", items: { type: "string" }, description: "Tracks to restore; empty = all" },
         },
         required: ["accion"],
       },
@@ -390,25 +389,25 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "editar_proyecto",
       description:
-        "Cambia el proyecto con operaciones validadas y TRANSACCIONALES: o entran todas o ninguna, y " +
-        "se deshacen con Ctrl+Z. Es la forma directa de componer (notas), arreglar (clips), producir " +
-        "(efectos) y mezclar (ganancia, paneo, master) sin escribir Python. trackId acepta id, nombre " +
-        "exacto o número de pista. Notas: {pitch 0-127 (60 = C4), start y duration en negras desde " +
-        "el inicio del clip, velocity 1-127}. startBar empieza en 0. Tipos de efecto: " +
-        `${DEVICE_TYPES.join(", ")}; sus parámetros en unidades reales (sufijo Ms = milisegundos, Hz, Db = decibelios; sin sufijo, ` +
-        `proporción 0..1 o lo que diga el rango): ${parametrosDeEfectos()}. ` +
-        `Instrumentos: ${INSTRUMENT_TYPES.join(", ")} (con program 0-127 suenan con General MIDI). ` +
-        "Buses: una reverb o un delay que comparten varias pistas va en un bus (add_bus con sus efectos, " +
-        "set_send desde cada pista, wet 1 en el bus) en vez de uno por pista; add_device/set_device " +
-        "aceptan el bus en trackId. " +
-        "Operaciones:\n" +
+        "Changes the project with validated and TRANSACTIONAL operations: either all of them go in or none, and " +
+        "they are undone with Ctrl+Z. It is the direct way to compose (notes), fix (clips), produce " +
+        "(effects) and mix (gain, pan, master) without writing Python. trackId accepts an id, exact name " +
+        "or track number. Notes: {pitch 0-127 (60 = C4), start and duration in quarter notes from " +
+        "the clip start, velocity 1-127}. startBar starts at 0. Effect types: " +
+        `${DEVICE_TYPES.join(", ")}; their parameters in real units (Ms suffix = milliseconds, Hz, Db = decibels; without suffix, ` +
+        `ratio 0..1 or whatever the range says): ${parametrosDeEfectos()}. ` +
+        `Instruments: ${INSTRUMENT_TYPES.join(", ")} (with program 0-127 they sound with General MIDI). ` +
+        "Buses: a reverb or delay shared by several tracks goes in a bus (add_bus with its effects, " +
+        "set_send from each track, wet 1 on the bus) instead of one per track; add_device/set_device " +
+        "accept the bus in trackId. " +
+        "Operations:\n" +
         firmasDeOps(),
       parameters: {
         type: "object",
         properties: {
           ops: {
             type: "array",
-            description: "Lista de operaciones; cada una es un objeto con `op` y sus campos",
+            description: "List of operations; each one is an object with `op` and its fields",
             items: { type: "object", properties: { op: { type: "string" } }, required: ["op"] },
           },
         },
@@ -421,26 +420,26 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "escribir_progresion",
       description:
-        "Escribe una progresión de acordes como notas MIDI en una pista (la crea si no existe), con " +
-        "conducción de voces. Da `acordes` en cifrado americano (Am, F, C/E, G7, Bbmaj7, Dm7b5) o " +
-        "`grados` de la tonalidad del proyecto (1-7). Patrones: bloque (acordes tenidos), pulso " +
-        "(acordes repetidos cada `paso`), arpegio, alberti, bajo (fundamental o bajo del acorde con " +
-        "barra). Para una base completa llámala varias veces: pad en bloque, bajo en «bajo», etc.",
+        "Writes a chord progression as MIDI notes on a track (creates it if it does not exist), with " +
+        "voice leading. Give `acordes` in American notation (Am, F, C/E, G7, Bbmaj7, Dm7b5) or " +
+        "`grados` of the project key (1-7). Patterns: block (held chords), pulse " +
+        "(chords repeated every `paso`), arpeggio, alberti, bass (root or slash-chord bass with " +
+        "bar). For a full backing, call it several times: pad in block, bass in “bass”, etc.",
       parameters: {
         type: "object",
         properties: {
-          pista: { type: "string", description: "Id o nombre de la pista destino" },
-          acordes: { type: "array", items: { type: "string" }, description: "Cifrado: ['Am','F','C','G']" },
-          grados: { type: "array", items: { type: "integer" }, description: "Grados 1-7: [1,6,4,5]" },
+          pista: { type: "string", description: "Id or name of the destination track" },
+          acordes: { type: "array", items: { type: "string" }, description: "Chord symbols: ['Am','F','C','G']" },
+          grados: { type: "array", items: { type: "integer" }, description: "Degrees 1-7: [1,6,4,5]" },
           patron: { type: "string", enum: [...PATRONES] },
-          compases_por_acorde: { type: "number", description: "Por defecto 1" },
-          desde_compas: { type: "integer", description: "Compás de inicio, desde 1 (por defecto 1)" },
-          octava: { type: "integer", description: "Octava (C4 = 60). Por defecto 4; en «bajo», 2" },
-          paso: { type: "number", description: "Paso en negras para pulso/arpegio/bajo (0.5 = corcheas)" },
-          velocidad: { type: "integer", description: "1-127, por defecto 90" },
-          repeticiones: { type: "integer", description: "Veces que se repite la progresión (por defecto 1)" },
-          instrumento: { type: "string", enum: [...INSTRUMENT_TYPES], description: "Si hay que crear la pista" },
-          programa: { type: "integer", description: "Programa General MIDI 0-127 (48 cuerdas, 89 pad cálido, 19 órgano…)" },
+          compases_por_acorde: { type: "number", description: "1 by default" },
+          desde_compas: { type: "integer", description: "Start bar, from 1 (1 by default)" },
+          octava: { type: "integer", description: "Octave (C4 = 60). 4 by default; in “bass”, 2" },
+          paso: { type: "number", description: "Step in quarter notes for pulse/arpeggio/bass (0.5 = eighth notes)" },
+          velocidad: { type: "integer", description: "1-127, 90 by default" },
+          repeticiones: { type: "integer", description: "Times the progression repeats (1 by default)" },
+          instrumento: { type: "string", enum: [...INSTRUMENT_TYPES], description: "If the track has to be created" },
+          programa: { type: "integer", description: "General MIDI program 0-127 (48 strings, 89 warm pad, 19 organ…)" },
         },
         required: ["pista"],
       },
@@ -451,23 +450,23 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "escribir_notas",
       description:
-        "Escribe una melodía, un bajo o cualquier línea en una pista con NOTACIÓN COMPACTA (la crea si no " +
-        "existe; si ya hay clips en esos compases, los sustituye). Notación: nota = letra o solfeo + " +
-        "alteración + octava, C4 = 60 (D2, Eb4, F#3, do4, sib2) o número MIDI; ':dur' en negras " +
-        "(1 negra, .5 corchea, 1/3 tresillo, 4 redonda) y si falta se repite la anterior; '!vel' 1-127 " +
-        "para una nota; 'r' silencio; [D3 F3 A3] acorde; '|' barra de compás (se ignora); '~' liga con " +
-        "la siguiente igual; '( … )x4' repite un grupo. Ejemplo, riff de un compás cuatro veces y un " +
-        "remate: \"(E2:.5 B2 E3 B2 E2 B2 E3 B2)x4 | D2:2 r:2\".",
+        "Writes a melody, a bass or any line on a track with COMPACT NOTATION (creates it if it does not " +
+        "exist; if there are already clips in those bars, it replaces them). Notation: note = letter or solfège + " +
+        "accidental + octave, C4 = 60 (D2, Eb4, F#3, do4, sib2) or MIDI number; ':dur' in quarter notes " +
+        "(1 quarter, .5 eighth, 1/3 triplet, 4 whole) and if missing the previous one repeats; '!vel' 1-127 " +
+        "for a note; 'r' rest; [D3 F3 A3] chord; '|' bar line (ignored); '~' ties with " +
+        "the next equal one; '( … )x4' repeats a group. Example, one-bar riff four times and a " +
+        "turnaround: \"(E2:.5 B2 E3 B2 E2 B2 E3 B2)x4 | D2:2 r:2\".",
       parameters: {
         type: "object",
         properties: {
-          pista: { type: "string", description: "Id o nombre de la pista" },
-          notas: { type: "string", description: "La frase en notación compacta" },
-          desde_compas: { type: "integer", description: "Compás de inicio, desde 1 (por defecto 1)" },
-          repeticiones: { type: "integer", description: "Veces seguidas que se toca la frase (por defecto 1)" },
-          velocidad: { type: "integer", description: "Velocidad por defecto, 1-127 (90)" },
-          programa: { type: "integer", description: "Programa General MIDI 0-127 (33 bajo eléctrico, 29 guitarra saturada, 0 piano…)" },
-          instrumento: { type: "string", enum: [...INSTRUMENT_TYPES], description: "Tipo si se crea la pista (por defecto lead)" },
+          pista: { type: "string", description: "Id or name of the track" },
+          notas: { type: "string", description: "The phrase in compact notation" },
+          desde_compas: { type: "integer", description: "Start bar, from 1 (1 by default)" },
+          repeticiones: { type: "integer", description: "Times in a row the phrase is played (1 by default)" },
+          velocidad: { type: "integer", description: "Default velocity, 1-127 (90)" },
+          programa: { type: "integer", description: "General MIDI program 0-127 (33 electric bass, 29 overdriven guitar, 0 piano…)" },
+          instrumento: { type: "string", enum: [...INSTRUMENT_TYPES], description: "Type if the track is created (lead by default)" },
           nombre_clip: { type: "string" },
         },
         required: ["pista", "notas"],
@@ -479,24 +478,24 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "escribir_bateria",
       description:
-        "Escribe batería en REJILLA, como una caja de ritmos: una fila por pieza, un carácter por paso " +
-        "(16 por compás = semicorcheas). 'x' golpe, 'X' acento, 'o' medio, 'g' fantasma, '.' nada, '|' se " +
-        "ignora. La fila se repite hasta llenar `compases`; `final` sustituye el último compás (redoble). " +
-        "Piezas: kick, snare, rim, clap, hat, pedal, openhat, lowtom, midtom, hightom, floortom, crash, " +
-        "ride, bell, china, splash, tambourine, cowbell, shaker (o la nota GM). Si ya hay clips en esos " +
-        "compases, los sustituye. Ejemplo: {\"kick\":\"x...x...x...x...\", \"snare\":\"....X.......X...\"}.",
+        "Writes drums in a GRID, like a drum machine: one row per piece, one character per step " +
+        "(16 per bar = sixteenth notes). 'x' hit, 'X' accent, 'o' medium, 'g' ghost, '.' nothing, '|' is " +
+        "ignored. The row repeats until it fills `compases`; `final` replaces the last bar (fill). " +
+        "Pieces: kick, snare, rim, clap, hat, pedal, openhat, lowtom, midtom, hightom, floortom, crash, " +
+        "ride, bell, china, splash, tambourine, cowbell, shaker (or the GM note). If there are already clips in those " +
+        "bars, it replaces them. Example: {\"kick\":\"x...x...x...x...\", \"snare\":\"....X.......X...\"}.",
       parameters: {
         type: "object",
         properties: {
-          pista: { type: "string", description: "Id o nombre de la pista (por defecto se crea como batería)" },
-          patrones: { type: "object", description: "pieza → fila de pasos", additionalProperties: { type: "string" } },
-          compases: { type: "integer", description: "Compases a llenar" },
-          desde_compas: { type: "integer", description: "Compás de inicio, desde 1" },
-          final: { type: "object", description: "Filas del último compás (redoble)", additionalProperties: { type: "string" } },
-          pasos_por_compas: { type: "integer", description: "16 por defecto; 12 para tresillos de corchea" },
+          pista: { type: "string", description: "Id or name of the track (by default it is created as drums)" },
+          patrones: { type: "object", description: "piece → row of steps", additionalProperties: { type: "string" } },
+          compases: { type: "integer", description: "Bars to fill" },
+          desde_compas: { type: "integer", description: "Start bar, from 1" },
+          final: { type: "object", description: "Rows of the last bar (fill)", additionalProperties: { type: "string" } },
+          pasos_por_compas: { type: "integer", description: "16 by default; 12 for eighth-note triplets" },
           swing: { type: "number", description: "0-0.5" },
-          humanizar: { type: "boolean", description: "Pequeña variación de velocidad (por defecto true)" },
-          programa: { type: "integer", description: "Kit General MIDI (0 estándar, 8 room, 16 power, 25 electrónico…)" },
+          humanizar: { type: "boolean", description: "Slight velocity variation (true by default)" },
+          programa: { type: "integer", description: "General MIDI kit (0 standard, 8 room, 16 power, 25 electronic…)" },
           nombre_clip: { type: "string" },
         },
         required: ["pista", "patrones"],
@@ -508,11 +507,11 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "listar_instrumentos",
       description:
-        "Lista los instrumentos que suenan en el DAW: los General MIDI (guitarras, bajos, cuerdas, " +
-        "vientos, synths, pads, kits de batería), con su número de `programa` para escribir_notas, " +
-        "escribir_progresion o escribir_bateria; y los de la biblioteca de samples grabados (pianos de " +
-        "cola, órganos, clavecines, arpas, saxo, láminas), que se ponen con usar_instrumento. Para " +
-        "piano, órgano, clavecín, arpa, saxo y láminas, elige la biblioteca: suena a instrumento real.",
+        "Lists the instruments that sound in the DAW: the General MIDI ones (guitars, basses, strings, " +
+        "winds, synths, pads, drum kits), with their `programa` number for escribir_notas, " +
+        "escribir_progresion or escribir_bateria; and those in the recorded sample library (grand " +
+        "pianos, organs, harpsichords, harps, sax, mallets), which are set with usar_instrumento. For " +
+        "piano, organ, harpsichord, harp, sax and mallets, choose the library: it sounds like a real instrument.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -521,14 +520,14 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "buscar_web",
       description:
-        "Busca en internet y devuelve título, enlace y un extracto de cada resultado. Para datos de una " +
-        "referencia (tonalidad, tempo, estructura, instrumentación, año, productor) o de técnica. NUNCA " +
-        "para copiar letras ni partituras de obras con derechos.",
+        "Searches the internet and returns the title, link and an excerpt of each result. For data about a " +
+        "reference (key, tempo, structure, instrumentation, year, producer) or about technique. NEVER " +
+        "to copy lyrics or scores of copyrighted works.",
       parameters: {
         type: "object",
         properties: {
-          consulta: { type: "string", description: "La búsqueda (mejor en inglés para música anglosajona)" },
-          resultados: { type: "integer", description: "1-10, por defecto 5" },
+          consulta: { type: "string", description: "The search (better in English for Anglo-American music)" },
+          resultados: { type: "integer", description: "1-10, 5 by default" },
         },
         required: ["consulta"],
       },
@@ -539,12 +538,12 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "leer_web",
       description:
-        "Lee el texto de una página web (un enlace de buscar_web), por páginas de 6.000 caracteres.",
+        "Reads the text of a web page (a link from buscar_web), in pages of 6,000 characters.",
       parameters: {
         type: "object",
         properties: {
           url: { type: "string" },
-          desde: { type: "integer", description: "Carácter desde el que seguir leyendo (por defecto 0)" },
+          desde: { type: "integer", description: "Character from which to keep reading (0 by default)" },
         },
         required: ["url"],
       },
@@ -555,16 +554,16 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "escribir_fichero",
       description:
-        "Escribe o sobrescribe un fichero de texto dentro de 'workspace/'. El MOTOR YA EXISTE " +
-        "en codigo/ (dsp, instruments, render, midi): NO lo reescribas ni redefinas sus " +
-        "funciones, importalas. Un fichero nuevo que redefina un simbolo del motor es RECHAZADO " +
-        "(409), igual que los scripts patch*/parche* (para eso esta editar_fichero). " +
-        "Para un sample rapido: copia plantillas/one_shot.py y cambia PARAMS.",
+        "Writes or overwrites a text file inside 'workspace/'. The ENGINE ALREADY EXISTS " +
+        "in codigo/ (dsp, instruments, render, midi): do NOT rewrite it or redefine its " +
+        "functions, import them. A new file that redefines an engine symbol is REJECTED " +
+        "(409), just like patch*/parche* scripts (that is what editar_fichero is for). " +
+        "For a quick sample: copy plantillas/one_shot.py and change PARAMS.",
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Ruta relativa dentro de workspace/, con /" },
-          contenido: { type: "string", description: "Contenido completo del fichero" },
+          path: { type: "string", description: "Relative path inside workspace/, with /" },
+          contenido: { type: "string", description: "Full contents of the file" },
         },
         required: ["path", "contenido"],
       },
@@ -575,13 +574,13 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "leer_fichero",
       description:
-        "Devuelve un fichero de workspace/ por páginas de 6.000 caracteres; si hay más, el resultado " +
-        "dice el `desde` con el que seguir.",
+        "Returns a file from workspace/ in pages of 6,000 characters; if there is more, the result " +
+        "says the `desde` to continue with.",
       parameters: {
         type: "object",
         properties: {
           path: { type: "string" },
-          desde: { type: "integer", description: "Carácter desde el que leer (por defecto 0)" },
+          desde: { type: "integer", description: "Character from which to read (0 by default)" },
         },
         required: ["path"],
       },
@@ -592,17 +591,17 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "listar_ficheros",
       description:
-        "Lista los ficheros de la carpeta del proyecto abierto (o de la carpeta que pidas) con " +
-        "su tamano en bytes. Usalo para comprobar que lo que has generado existe de verdad. " +
-        "No lista el catalogo de samples: para eso esta buscar_sonido.",
+        "Lists the files in the open project's folder (or in the folder you ask for) with " +
+        "their size in bytes. Use it to check that what you generated really exists. " +
+        "It does not list the sample catalog: that is what buscar_sonido is for.",
       parameters: {
         type: "object",
         properties: {
           carpeta: {
             type: "string",
             description:
-              "Opcional. Por defecto, la carpeta del proyecto. Otras: 'codigo', 'gpu', " +
-              "'herramientas', 'plantillas', '_salidas' o '' (la raiz del espacio de trabajo).",
+              "Optional. By default, the project folder. Others: 'codigo', 'gpu', " +
+              "'herramientas', 'plantillas', '_salidas' or '' (the workspace root).",
           },
         },
       },
@@ -613,34 +612,34 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "ejecutar_python",
       description:
-        "Ejecuta con Python un script que ya este en workspace/ ('codigo/render.py') y " +
-        "devuelve su salida, sus errores y el codigo de salida. El directorio de trabajo " +
-        "del proceso es la carpeta del proyecto y hay numpy disponible. Para trabajos largos " +
-        "sube timeout_segundos (por defecto 300, maximo 1800). Si el script renderiza varios " +
-        "stems, escribe cada uno con render.stem(ruta, funcion, datos...): al corregir algo y " +
-        "volver a ejecutar, sólo se recalcula lo que ha cambiado. Con destino='lambda' el MISMO " +
-        "script corre en una GPU de Lambda Cloud (la primera vez tarda ~3 min en arrancar la " +
-        "maquina); los ficheros que escriba en salida/ vuelven solos al proyecto local.",
+        "Runs with Python a script that is already in workspace/ ('codigo/render.py') and " +
+        "returns its output, its errors and the exit code. The process's working directory " +
+        "is the project folder and numpy is available. For long jobs " +
+        "raise timeout_segundos (300 by default, 1800 maximum). If the script renders several " +
+        "stems, write each one with render.stem(ruta, funcion, datos...): when fixing something and " +
+        "running again, only what changed is recomputed. With destino='lambda' the SAME " +
+        "script runs on a Lambda Cloud GPU (the first time it takes ~3 min to start the " +
+        "machine); the files it writes in salida/ come back to the local project by themselves.",
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Ruta del script dentro de workspace/" },
+          path: { type: "string", description: "Path of the script inside workspace/" },
           argumentos: {
             type: "array",
             items: { type: "string" },
-            description: "Argumentos de linea de comandos",
+            description: "Command-line arguments",
           },
           timeout_segundos: {
             type: "number",
-            description: "Limite de tiempo en segundos (por defecto 300, maximo 1800)",
+            description: "Time limit in seconds (300 by default, 1800 maximum)",
           },
           destino: {
             type: "string",
             enum: ["cpu", "lambda"],
             description:
-              "Donde ejecutar: 'cpu' (este equipo, por defecto) o 'lambda' (GPU en la nube, DE PAGO). " +
-              "'lambda' sólo para scripts que usan motor_gpu o torch, y sólo si la persona la ha " +
-              "permitido en el selector del chat.",
+              "Where to run: 'cpu' (this machine, by default) or 'lambda' (cloud GPU, PAID). " +
+              "'lambda' only for scripts that use motor_gpu or torch, and only if the person has " +
+              "allowed it in the chat selector.",
           },
         },
         required: ["path"],
@@ -652,16 +651,16 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "editar_fichero",
       description:
-        "Reemplaza un fragmento EXACTO de un fichero (busca -> reemplaza). Es la forma correcta " +
-        "de corregir codigo existente: atomica, auditable y sin scripts de parche. Si el texto no " +
-        "aparece devuelve 409; usa leer_fichero para copiar el fragmento exacto.",
+        "Replaces an EXACT fragment of a file (search -> replace). It is the right way " +
+        "to fix existing code: atomic, auditable and without patch scripts. If the text does not " +
+        "appear it returns 409; use leer_fichero to copy the exact fragment.",
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Ruta del fichero en workspace/" },
-          busca: { type: "string", description: "Fragmento exacto a localizar (con su indentacion)" },
-          reemplaza: { type: "string", description: "Texto por el que se sustituye (vacio para borrarlo)" },
-          todas: { type: "boolean", description: "Reemplazar todas las apariciones (por defecto true)" },
+          path: { type: "string", description: "Path of the file in workspace/" },
+          busca: { type: "string", description: "Exact fragment to find (with its indentation)" },
+          reemplaza: { type: "string", description: "Text to replace it with (empty to delete it)" },
+          todas: { type: "boolean", description: "Replace all occurrences (true by default)" },
         },
         required: ["path", "busca", "reemplaza"],
       },
@@ -672,23 +671,23 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "crear_proyecto",
       description:
-        "Crea un proyecto vacio en el DAW. Llamala SOLO despues de preguntar al usuario como quiere " +
-        "llamarlo: su nombre es tambien el de su carpeta (proyectos/<nombre>/), y los ficheros que " +
-        "escribas en 'salida/...' iran ahi. Si ya hay un proyecto abierto, no la uses.",
+        "Creates an empty project in the DAW. Call it ONLY after asking the user what they want to " +
+        "call it: its name is also its folder's (proyectos/<nombre>/), and the files you " +
+        "write in 'salida/...' will go there. If there is already an open project, do not use it.",
       parameters: {
         type: "object",
         properties: {
-          nombre: { type: "string", description: "Nombre que ha pedido el usuario" },
-          bpm: { type: "number", description: "Tempo (por defecto 120)" },
+          nombre: { type: "string", description: "Name the user has asked for" },
+          bpm: { type: "number", description: "Tempo (120 by default)" },
           compases: {
             type: "integer",
-            description: "No lo pongas salvo que la duración esté decidida: el proyecto crece solo con el material",
+            description: "Do not set it unless the duration is decided: the project grows on its own with the material",
           },
-          tonica: { type: "string", description: "Tónica en notación americana: C, F#, Bb (re = D)" },
+          tonica: { type: "string", description: "Tonic in American notation: C, F#, Bb (re = D)" },
           modo: {
             type: "string",
             enum: [...MODE_NAMES],
-            description: "Modo de la tonalidad (menor = minor, mayor = major)",
+            description: "Key mode (menor = minor, mayor = major)",
           },
         },
         required: ["nombre"],
@@ -700,8 +699,8 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "listar_voces",
       description:
-        "Lista los timbres que sabe sintetizar el motor, con su familia y sus parametros (rango y " +
-        "unidad). Es el catalogo real, leido del codigo: si una voz no sale aqui, no existe.",
+        "Lists the timbres the engine can synthesize, with their family and their parameters (range and " +
+        "unit). It is the real catalog, read from the code: if a voice is not here, it does not exist.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -710,25 +709,25 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "buscar_sonido",
       description:
-        "Busca en el catalogo del motor y en la biblioteca CC0 lo que pide el usuario en lenguaje natural. " +
-        "Entiende los nombres habituales y los regionalismos (tarola = caja, hi-hat = charles, platillo " +
-        "crash = crash) y el caracter medido (corto, largo, seco, brillante, oscuro, grave, agudo, sucio, " +
-        "limpio). Usala para elegir un sample suelto (un golpe, un efecto, una textura). Para TOCAR " +
-        "notas con un instrumento grabado no hace falta: listar_instrumentos y usar_instrumento. Una o dos " +
-        "consultas bastan; no la repitas con sinónimos.",
+        "Searches the engine catalog and the CC0 library for what the user asks for in natural language. " +
+        "It understands the usual names and regionalisms (tarola = snare, hi-hat = charles, crash " +
+        "cymbal = crash) and the measured character (short, long, dry, bright, dark, low, high, dirty, " +
+        "clean). Use it to choose a loose sample (a hit, an effect, a texture). To PLAY " +
+        "notes with a recorded instrument it is not needed: listar_instrumentos and usar_instrumento. One or two " +
+        "queries are enough; do not repeat it with synonyms.",
       parameters: {
         type: "object",
         properties: {
           consulta: {
             type: "string",
             description:
-              "La petición en español o en inglés (el índice está en esos dos idiomas): si el usuario " +
-              "escribe en otro idioma, tradúcela tú, p. ej. «短くて汚いチャイナ» → 'china sucio y corto'.",
+              "The request in Spanish or English (the index is in those two languages): if the user " +
+              "writes in another language, translate it yourself, e.g. «短くて汚いチャイナ» → 'china dirty and short'.",
           },
           familia: {
             type: "string",
             enum: ["percusión", "tonal", "textura", "ruido", "efecto"],
-            description: "Opcional: acota a una familia",
+            description: "Optional: narrow it to one family",
           },
         },
         required: ["consulta"],
@@ -740,18 +739,18 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "usar_sample",
       description:
-        "Mete en el proyecto un sample de la biblioteca CC0 (los 4.231 ficheros de VCSL) como pista de " +
-        "audio: lo convierte a 44,1k/16b, lo normaliza a -1 dBFS y lo deja en proyectos/<slug>/samples/. " +
-        "Usalo despues de buscar_sonido, con la ruta que devuelve.",
+        "Puts a sample from the CC0 library into the project (the 4,231 VCSL files) as an audio " +
+        "track: it converts it to 44.1k/16b, normalizes it to -1 dBFS and leaves it in proyectos/<slug>/samples/. " +
+        "Use it after buscar_sonido, with the path it returns.",
       parameters: {
         type: "object",
         properties: {
           archivo: {
             type: "string",
-            description: "Ruta del sample dentro de workspace/catalogo/ (la que da buscar_sonido)",
+            description: "Path of the sample inside workspace/catalogo/ (the one buscar_sonido gives)",
           },
-          nombre: { type: "string", description: "Nombre del fichero y de la pista" },
-          compases: { type: "integer", description: "Duracion del clip en compases (opcional)" },
+          nombre: { type: "string", description: "Name of the file and of the track" },
+          compases: { type: "integer", description: "Clip duration in bars (optional)" },
         },
         required: ["archivo"],
       },
@@ -762,16 +761,16 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "medir_referencia",
       description:
-        "Mide una canción de referencia y devuelve tempo, tonalidad, duración, compases y la " +
-        "curva de energía por bloques de 4 compases, más el carácter en palabras. Acepta un " +
-        "enlace de YouTube o la ruta de un audio. NO saca la melodía ni los acordes: si hay que " +
-        "tocar el tema, la melodía tiene que venir de otro sitio.",
+        "Measures a reference song and returns tempo, key, duration, bars and the " +
+        "energy curve by 4-bar blocks, plus the character in words. It accepts a " +
+        "YouTube link or the path of an audio file. It does NOT extract the melody or the chords: if the song " +
+        "has to be played, the melody has to come from somewhere else.",
       parameters: {
         type: "object",
         properties: {
           origen: {
             type: "string",
-            description: "Enlace de YouTube o ruta de un audio dentro de workspace/",
+            description: "YouTube link or path of an audio file inside workspace/",
           },
         },
         required: ["origen"],
@@ -783,20 +782,20 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "usar_instrumento",
       description:
-        "Pone un instrumento GRABADO de la biblioteca de samples (VCSL) en una pista: pianos de cola " +
-        "(Steinway B, Kawai), órganos, clavecines, arpas, saxo, láminas, percusión… (la lista sale en " +
-        "listar_instrumentos). Con `pista`, cambia el sonido de esa pista y conserva sus notas; sin ella, " +
-        "crea una pista nueva. Tarda unos segundos (convierte el instrumento). Después escribe o deja " +
-        "las notas como siempre.",
+        "Puts a RECORDED instrument from the sample library (VCSL) on a track: grand pianos " +
+        "(Steinway B, Kawai), organs, harpsichords, harps, sax, mallets, percussion… (the list comes out in " +
+        "listar_instrumentos). With `pista`, it changes that track's sound and keeps its notes; without it, " +
+        "it creates a new track. It takes a few seconds (it converts the instrument). Afterwards write or leave " +
+        "the notes as usual.",
       parameters: {
         type: "object",
         properties: {
           sfz: {
             type: "string",
-            description: "Nombre del instrumento tal como sale en listar_instrumentos (p. ej. «Grand Piano, Steinway B», «Pipe Organ - Quiet»)",
+            description: "Instrument name as it appears in listar_instrumentos (e.g. «Grand Piano, Steinway B», «Pipe Organ - Quiet»)",
           },
-          nombre: { type: "string", description: "Nombre de la pista (si se crea)" },
-          pista: { type: "string", description: "Opcional: id o nombre de una pista existente para cambiarle el instrumento" },
+          nombre: { type: "string", description: "Track name (if it is created)" },
+          pista: { type: "string", description: "Optional: id or name of an existing track to change its instrument" },
         },
         required: ["sfz"],
       },
@@ -807,24 +806,24 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "crear_sonido",
       description:
-        "Crea un sonido de verdad y lo guarda en el proyecto: elige una voz del catalogo, aplica las " +
-        "palabras del usuario (corto, gordo, sucio...) y renderiza el WAV. Si el usuario pide un sonido " +
-        "que no existe como voz, usa crear_voz.",
+        "Creates a real sound and saves it in the project: it picks a voice from the catalog, applies the " +
+        "user's words (short, fat, dirty...) and renders the WAV. If the user asks for a sound " +
+        "that does not exist as a voice, use crear_voz.",
       parameters: {
         type: "object",
         properties: {
-          nombre: { type: "string", description: "Nombre del sonido; tambien el del fichero" },
-          voz: { type: "string", description: "Clave de la voz del catalogo (kick, snare, metal_hit...)" },
+          nombre: { type: "string", description: "Name of the sound; also the file's" },
+          voz: { type: "string", description: "Voice key from the catalog (kick, snare, metal_hit...)" },
           palabras: {
             type: "array",
             items: { type: "string", enum: PALABRAS.map((p) => p.clave) },
             description:
-              "Vocabulario canónico del sistema. El usuario lo dirá en su idioma («punchy», «kurz», " +
-              "«短い»…): tradúcelo tú a estas claves, en el orden en que lo dice.",
+              "The system's canonical vocabulary. The user will say it in their language («punchy», «kurz», " +
+              "«短い»…): translate it yourself to these keys, in the order they say it.",
           },
           args: {
             type: "object",
-            description: "Parametros de la voz, solo si hace falta precision (dur, pitch, midi...)",
+            description: "Voice parameters, only if precision is needed (dur, pitch, midi...)",
           },
         },
         required: ["nombre", "voz"],
@@ -836,28 +835,28 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "crear_voz",
       description:
-        "Anade un timbre NUEVO al motor: escribes la funcion de Python, se renderiza, se mide y, si " +
-        "pasa la puerta (duracion 0,05-16 s, RMS > -60 dBFS, crest 2-30 dB, DC < 0,01, reproducible, " +
-        "< 3 s), queda en instruments.py para siempre y aparece en el catalogo. Si no pasa, te devuelve " +
-        "las medidas para que la corrijas. Usala solo cuando listar_voces no tenga lo que piden.",
+        "Adds a NEW timbre to the engine: you write the Python function, it is rendered, measured and, if " +
+        "it passes the gate (duration 0.05-16 s, RMS > -60 dBFS, crest 2-30 dB, DC < 0.01, reproducible, " +
+        "< 3 s), it stays in instruments.py forever and appears in the catalog. If it does not pass, it returns " +
+        "the measurements for you to fix it. Use it only when listar_voces does not have what they ask for.",
       parameters: {
         type: "object",
         properties: {
-          nombre: { type: "string", description: "Nombre de la funcion: minusculas, letras/numeros/_, 3-31" },
+          nombre: { type: "string", description: "Function name: lowercase, letters/numbers/_, 3-31" },
           destino: {
             type: "string",
             enum: ["cpu", "gpu"],
             description:
-              "cpu: numpy local, gratis e instantaneo. gpu: torch en Lambda (1,29 $/h, ~3 min de " +
-              "arranque); usalo solo si la voz necesita torch o un render pesado. Pregunta antes.",
+              "cpu: local numpy, free and instant. gpu: torch on Lambda ($1.29/h, ~3 min to " +
+              "start); use it only if the voice needs torch or a heavy render. Ask first.",
           },
           fuente: {
             type: "string",
             description:
-              "Codigo Python COMPLETO de la funcion, con imports (numpy, dsp, instruments o torch) y docstring " +
-              "obligatorio: primera linea = descripcion, luego 'familia: percusion|tonal|ruido|textura' y " +
-              "una linea por parametro 'nombre: min..max Etiqueta (unidad)' o 'nombre: bool Etiqueta'. " +
-              "Todos los parametros con valor por defecto y deterministas por 'seed'.",
+              "COMPLETE Python code of the function, with imports (numpy, dsp, instruments or torch) and a mandatory " +
+              "docstring: first line = description, then 'familia: percusion|tonal|ruido|textura' and " +
+              "one line per parameter 'nombre: min..max Label (unit)' or 'nombre: bool Label'. " +
+              "All parameters with a default value and deterministic through 'seed'.",
           },
         },
         required: ["nombre", "fuente"],
@@ -869,20 +868,20 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "igualar_clips",
       description:
-        "Iguala la duracion de TODOS los clips del proyecto (MIDI y audio) al mismo numero de compases. " +
-        "Usalo cuando el usuario diga que los clips no acaban igual o cuando el MIDI y el WAV de un mismo " +
-        "instrumento terminen en compases distintos. No toca ni notas, ni niveles, ni el tempo.",
+        "Matches the duration of ALL the project's clips (MIDI and audio) to the same number of bars. " +
+        "Use it when the user says the clips do not end together or when the MIDI and the WAV of the same " +
+        "instrument end in different bars. It touches neither notes, nor levels, nor tempo.",
       parameters: {
         type: "object",
         properties: {
           compases: {
             type: "integer",
-            description: "Compases que deben durar todos los clips. Si no lo dices, se usa el clip mas largo.",
+            description: "Bars all clips should last. If you do not say it, the longest clip is used.",
           },
           pistas: {
             type: "array",
             items: { type: "string" },
-            description: "Solo estas pistas (por nombre). Vacio = todo el proyecto.",
+            description: "Only these tracks (by name). Empty = the whole project.",
           },
         },
       },
@@ -893,37 +892,37 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "anadir_pistas",
       description:
-        "Crea pistas REALES en el proyecto del DAW: cada .mid entra como pista MIDI con sus notas y cada " +
-        ".wav como pista de audio. Es la entrega de una cancion: deja los ficheros en salida/ y llamala. " +
-        "NO masterices ni normalices la mezcla final: el master se hace en el DAW.",
+        "Creates REAL tracks in the DAW project: each .mid comes in as a MIDI track with its notes and each " +
+        ".wav as an audio track. It is the delivery of a song: leave the files in salida/ and call it. " +
+        "Do NOT master or normalize the final mix: the master is done in the DAW.",
       parameters: {
         type: "object",
         properties: {
           midis: {
             type: "array",
             items: { type: "string" },
-            description: "Rutas .mid de workspace/ (p.ej. ['salida/tema_multitrack.mid'])",
+            description: "Paths of .mid files in workspace/ (e.g. ['salida/tema_multitrack.mid'])",
           },
           wavs: {
             type: "array",
             items: { type: "string" },
-            description: "Rutas .wav para pistas de audio (cada minuto estereo ocupa ~10 MB de RAM)",
+            description: "Paths of .wav files for audio tracks (each stereo minute takes ~10 MB of RAM)",
           },
           inicio_compas: {
             type: "integer",
-            description: "Compas donde empiezan las pistas (0 = principio)",
+            description: "Bar where the tracks start (0 = beginning)",
           },
           compases: {
             type: "integer",
             description:
-              "Duracion de la toma en COMPASES (p.ej. 80). Todos los clips que anadas duran eso, " +
-              "tanto los MIDI como los WAV: asi acaban en el mismo compas. Ponlo siempre que lo sepas.",
+              "Duration of the take in BARS (e.g. 80). All clips you add last that, " +
+              "both MIDI and WAV: that way they end in the same bar. Always set it when you know it.",
           },
           nombre_proyecto: {
             type: "string",
             description:
-              "Solo si NO hay proyecto abierto: el nombre que ha pedido el usuario. Si no lo sabes, " +
-              "preguntamelo en el chat antes de llamar (no inventes el nombre).",
+              "Only if there is NO open project: the name the user has asked for. If you do not know it, " +
+              "ask me in the chat before calling (do not invent the name).",
           },
         },
       },
@@ -934,22 +933,22 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "ajustar_pistas",
       description:
-        "Cambia gainDb, paneo, mute o solo de las pistas del proyecto, por su nombre. " +
-        "Es LA forma de aplicar una mezcla elegida sin tocar la sintesis: el cambio es " +
-        "un op, se puede deshacer con Ctrl+Z y el audio se reajusta en el momento. " +
-        "Los nombres son los que se ven en la lista de pistas (Bombo, Bajo, Pad...).",
+        "Changes gainDb, pan, mute or solo of the project's tracks, by their name. " +
+        "It is THE way to apply a chosen mix without touching the synthesis: the change is " +
+        "an op, it can be undone with Ctrl+Z and the audio readjusts instantly. " +
+        "The names are the ones seen in the track list (Kick, Bass, Pad...).",
       parameters: {
         type: "object",
         properties: {
           pistas: {
             type: "array",
-            description: "Una entrada por pista a tocar",
+            description: "One entry per track to touch",
             items: {
               type: "object",
               properties: {
-                nombre: { type: "string", description: "Nombre de la pista (tal como se ve)" },
-                gainDb: { type: "number", description: "Ganancia en dB (-60 a +12)" },
-                pan: { type: "number", description: "Paneo -1 (izquierda) a +1 (derecha)" },
+                nombre: { type: "string", description: "Track name (as seen)" },
+                gainDb: { type: "number", description: "Gain in dB (-60 to +12)" },
+                pan: { type: "number", description: "Pan -1 (left) to +1 (right)" },
                 muted: { type: "boolean" },
                 solo: { type: "boolean" },
               },
@@ -966,15 +965,15 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "verificar_audio",
       description:
-        "Mide un WAV de workspace/ y devuelve formato, duracion, pico, RMS, crest, DC, muestras " +
-        "clipeadas y correlacion estereo. Usala en vez de escribir tu propio analizador.",
+        "Measures a WAV from workspace/ and returns format, duration, peak, RMS, crest, DC, clipped " +
+        "samples and stereo correlation. Use it instead of writing your own analyzer.",
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Ruta del WAV en workspace/" },
+          path: { type: "string", description: "Path of the WAV in workspace/" },
           timeout_segundos: {
             type: "number",
-            description: "Cuanto puede tardar la medida (por defecto 180, maximo 1800)",
+            description: "How long the measurement may take (180 by default, 1800 maximum)",
           },
         },
         required: ["path"],
@@ -994,11 +993,11 @@ async function ejecutarCrudo(
   } catch (error) {
     return {
       ok: false,
-      texto: `Los argumentos no son JSON valido: ${error instanceof Error ? error.message : String(error)}`,
+      texto: `The arguments are not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 
-  // Las que cambian o leen el proyecto se ejecutan en la pestaña (ver registrarAcciones).
+  // The ones that change or read the project run in the tab (see registrarAcciones).
   const registradas = acciones();
   if (!registradas && HERRAMIENTAS_DEL_PROYECTO.has(nombre)) return { ok: false, texto: SIN_REGISTRO };
   const local = registradas as AccionesEstudio;
@@ -1006,28 +1005,28 @@ async function ejecutarCrudo(
   try {
     switch (nombre) {
       case "escribir_fichero": {
-        // Un fichero de 9.700 tokens de una sola vez (medido el 25-oct) hace que el
-        // proveedor corte el turno siguiente con finish_reason 'load'. El tope es
-        // mecánico a propósito: pedirlo por prompt no funcionó.
+        // A file of 9,700 tokens in one go (measured on Oct 25) makes the
+        // provider cut the next turn with finish_reason 'load'. The cap is
+        // mechanical on purpose: asking for it in the prompt did not work.
         const contenido = String(args.contenido ?? "");
         if (contenido.length > MAX_FICHERO) {
           return {
             ok: false,
             texto:
-              `Demasiado largo: ${contenido.length} caracteres (el tope son ${MAX_FICHERO}). ` +
-              "Escribe el fichero en trozos: primero la estructura y las funciones base, y " +
-              "luego añade el resto con editar_fichero (busca/reemplaza) o con un segundo " +
-              "escribir_fichero a otro fichero si son cosas distintas.",
+              `Too long: ${contenido.length} characters (the cap is ${MAX_FICHERO}). ` +
+              "Write the file in pieces: first the structure and the base functions, and " +
+              "then add the rest with editar_fichero (search/replace) or with a second " +
+              "escribir_fichero to another file if they are different things.",
           };
         }
         const datos = await pedirJson("/api/fs/write", {
           path: args.path,
           contenido: args.contenido,
         });
-        // `nota` dice si el motor pasó el smoke test (o que en gpu/ sólo se ha
-        // comprobado la sintaxis): es la prueba de que el cambio es seguro.
+        // `nota` says whether the engine passed the smoke test (or that in gpu/ only the
+        // syntax has been checked): it is the proof that the change is safe.
         const nota = typeof datos.nota === "string" && datos.nota !== "" ? ` ${datos.nota}` : "";
-        return { ok: true, texto: `Escrito ${datos.path} (${datos.bytes} bytes).${nota}` };
+        return { ok: true, texto: `Wrote ${datos.path} (${datos.bytes} bytes).${nota}` };
       }
       case "leer_fichero": {
         const desde = Math.max(0, Math.trunc(Number(args.desde) || 0));
@@ -1038,7 +1037,7 @@ async function ejecutarCrudo(
           texto:
             String(datos.contenido ?? "") +
             (siguiente !== null
-              ? `\n[… sigue: ${Number(datos.total) - siguiente} caracteres más. leer_fichero(path, desde=${siguiente})]`
+              ? `\n[… continues: ${Number(datos.total) - siguiente} more characters. leer_fichero(path, desde=${siguiente})]`
               : ""),
         };
       }
@@ -1049,18 +1048,18 @@ async function ejecutarCrudo(
         const ficheros = (datos.ficheros ?? []) as { path: string; bytes: number }[];
         const donde = String(datos.carpeta ?? ".");
         if (ficheros.length === 0) {
-          return { ok: true, texto: `No hay ficheros en ${donde}/.` };
+          return { ok: true, texto: `There are no files in ${donde}/.` };
         }
         const total = ficheros.reduce((suma, f) => suma + f.bytes, 0);
         const truncado = datos.truncado === true;
         return {
           ok: true,
           texto:
-            `${ficheros.length}${truncado ? "+ (cortado)" : ""} fichero(s) en ${donde}/ ` +
+            `${ficheros.length}${truncado ? "+ (truncated)" : ""} file(s) in ${donde}/ ` +
             `(${(total / 1024).toFixed(0)} KB):\n` +
             ficheros.map((f) => `${f.path} (${f.bytes} B)`).join("\n") +
             (truncado
-              ? "\n[La lista está cortada: pide una carpeta más concreta (p. ej. 'salida').]"
+              ? "\n[The list is truncated: ask for a more specific folder (e.g. 'salida').]"
               : ""),
         };
       }
@@ -1071,7 +1070,7 @@ async function ejecutarCrudo(
           reemplaza: args.reemplaza,
           todas: args.todas,
         });
-        return { ok: true, texto: `Editado ${datos.path ?? args.path}: ${datos.reemplazos} reemplazo(s).` };
+        return { ok: true, texto: `Edited ${datos.path ?? args.path}: ${datos.reemplazos} replacement(s).` };
       }
       case "crear_proyecto": {
         const tonica = typeof args.tonica === "string" ? args.tonica.trim() : "";
@@ -1096,7 +1095,7 @@ async function ejecutarCrudo(
             }[];
           };
           const lineas = (datos.voces ?? []).map((voz) => {
-            if (voz.excluida) return `- ${voz.clave}: NO USABLE (${voz.excluida})`;
+            if (voz.excluida) return `- ${voz.clave}: NOT USABLE (${voz.excluida})`;
             const params = voz.params
               .map((p) =>
                 p.min === undefined ? p.clave : `${p.clave} ${p.min}..${p.max}${p.unidad ? " " + p.unidad : ""}`,
@@ -1104,20 +1103,20 @@ async function ejecutarCrudo(
               .join(", ");
             return `- ${voz.clave} [${voz.familia}${(voz as { destino?: string }).destino === "gpu" ? ", GPU" : ""}] ${voz.descripcion} (${params})`;
           });
-          return { ok: true, texto: `Voces del motor (${lineas.length}):\n${lineas.join("\n")}` };
+          return { ok: true, texto: `Engine voices (${lineas.length}):\n${lineas.join("\n")}` };
         } catch (error) {
           return {
             ok: false,
-            texto: "No pude leer el catalogo: " + (error instanceof Error ? error.message : String(error)),
+            texto: "I could not read the catalog: " + (error instanceof Error ? error.message : String(error)),
           };
         }
       }
       case "buscar_sonido": {
         const consulta = String(args.consulta ?? "").trim();
-        if (consulta === "") return { ok: false, texto: "falta la consulta" };
+        if (consulta === "") return { ok: false, texto: "missing query" };
         try {
-          // Medir las 16 voces cuesta ~2 s: sólo se pide si la consulta lleva una
-          // palabra de carácter (corto, brillante…), que es cuando hace falta.
+          // Measuring the 16 voices costs ~2 s: it is only requested if the query carries a
+          // character word (short, bright…), which is when it is needed.
           const pideCaracter = /\b(corto|largo|seco|brillante|oscuro|grave|agudo|sucio|limpio|redondo|apagado|chillon|metalico|short|long|dry|bright|dark|low|deep|high|dirty|clean)\b/i.test(
             consulta,
           );
@@ -1147,7 +1146,7 @@ async function ejecutarCrudo(
               destino: voz.destino === "gpu" ? "gpu" : "cpu",
               perfil: voz.perfil,
             }));
-          // La biblioteca CC0 (4.231 samples), buscada en el servidor.
+          // The CC0 library (4,231 samples), searched on the server.
           let biblioteca: string[] = [];
           try {
             const rc = await pedir("/api/catalogo/buscar", {
@@ -1175,12 +1174,12 @@ async function ejecutarCrudo(
                   .join(", ");
                 return (
                   `- ${r.archivo} (${r.instrumento}, ${r.familia}) [${medidas}]` +
-                  (r.strudel ? ` · en Strudel: s("${r.strudel}")` : "")
+                  (r.strudel ? ` · in Strudel: s("${r.strudel}")` : "")
                 );
               });
             }
           } catch {
-            /* sin biblioteca: se sigue con las voces del motor */
+            /* no library: continue with the engine voices */
           }
 
           const encontrados = buscarEnCatalogo(catalogo, consulta, {
@@ -1192,9 +1191,9 @@ async function ejecutarCrudo(
             return {
               ok: true,
               texto:
-                `No hay nada parecido a "${consulta}" en el catalogo` +
-                (etiquetas.length > 0 ? ` (lo mas cercano por etiqueta: ${etiquetas.join(", ")})` : "") +
-                ". Puedes crearlo con crear_sonido si existe una voz que sirva, o con crear_voz si no.",
+                `There is nothing like "${consulta}" in the catalog` +
+                (etiquetas.length > 0 ? ` (closest by tag: ${etiquetas.join(", ")})` : "") +
+                ". You can create it with crear_sonido if there is a suitable voice, or with crear_voz if not.",
             };
           }
           const lineas = encontrados.map((r) => {
@@ -1209,37 +1208,37 @@ async function ejecutarCrudo(
             return `- ${r.entrada.clave} (${r.entrada.familia}, ${r.entrada.destino}): ${r.entrada.descripcion} [${medidas}] (${r.motivos.join("; ")})`;
           });
           const partes = [
-            `Candidatos para "${consulta}":`,
+            `Candidates for "${consulta}":`,
             lineas.join("\n"),
             biblioteca.length > 0
-              ? `\nEn la biblioteca CC0 (${biblioteca.length}):\n${biblioteca.join("\n")}\nPara meterlo: usar_sample(archivo="...").`
+              ? `\nIn the CC0 library (${biblioteca.length}):\n${biblioteca.join("\n")}\nTo bring it in: usar_sample(archivo="...").`
               : "",
-            "Para sintetizar uno nuevo: crear_sonido con la voz que elijas.",
+            "To synthesize a new one: crear_sonido with the voice you choose.",
           ].filter((x) => x !== "");
           return { ok: true, texto: partes.join("\n") };
         } catch (error) {
-          return { ok: false, texto: "No pude buscar: " + (error instanceof Error ? error.message : String(error)) };
+          return { ok: false, texto: "I could not search: " + (error instanceof Error ? error.message : String(error)) };
         }
       }
       case "medir_referencia": {
         const origen = String(args.origen ?? "").trim();
-        if (!origen) return { ok: false, texto: "Falta el enlace o la ruta de la referencia." };
+        if (!origen) return { ok: false, texto: "Missing the reference link or path." };
         const res = await pedir("/api/referencia/medir", {
           cuerpo: { origen },
-          // Descargar de YouTube y analizar 4 minutos: el servidor da 900 s.
+          // Downloading from YouTube and analyzing 4 minutes: the server allows 900 s.
           limiteMs: 900000,
           senal,
         });
         const datos = (await res.json()) as Record<string, unknown> & { ok?: boolean; error?: string };
-        if (!datos.ok) return { ok: false, texto: `No se pudo medir: ${datos.error ?? res.status}` };
+        if (!datos.ok) return { ok: false, texto: `Could not measure: ${datos.error ?? res.status}` };
         const linea =
           `${datos.duracion_s} s · ${datos.tempo_bpm} BPM · ` +
           (datos.tonalidad && (datos.tonalidad as { tonica?: string }).tonica
             ? `${(datos.tonalidad as { tonica: string }).tonica} ${(datos.tonalidad as { modo: string }).modo}`
-            : "sin tonalidad clara") +
-          ` · ${datos.compases} compases\n` +
-          `carácter: ${(datos.palabras as string[])?.join(", ") ?? ""}\n` +
-          `forma (energía por 4 compases): ${JSON.stringify(datos.forma)}`;
+            : "no clear key") +
+          ` · ${datos.compases} bars\n` +
+          `character: ${(datos.palabras as string[])?.join(", ") ?? ""}\n` +
+          `shape (energy per 4 bars): ${JSON.stringify(datos.forma)}`;
         return { ok: true, texto: linea };
       }
       case "usar_instrumento":
@@ -1272,13 +1271,13 @@ async function ejecutarCrudo(
         const nombre = String(args.nombre ?? "").trim().toLowerCase();
         const fuente = String(args.fuente ?? "");
         if (nombre === "" || fuente.trim() === "") {
-          return { ok: false, texto: "faltan nombre o fuente" };
+          return { ok: false, texto: "missing name or source" };
         }
         try {
           const destino = args.destino === "gpu" ? "gpu" : "cpu";
           const res = await pedir("/api/voces/nueva", {
             cuerpo: { nombre, fuente, destino },
-            // En GPU la puerta renderiza en Lambda: 900 s de tope alli.
+            // On GPU the gate renders on Lambda: 900 s limit there.
             limiteMs: destino === "gpu" ? 960000 : 120000,
             senal,
           });
@@ -1293,24 +1292,24 @@ async function ejecutarCrudo(
           if (!res.ok || !datos.ok) {
             const perfil =
               datos.perfil && Object.keys(datos.perfil).length > 0
-                ? ` Medidas: ${Object.entries(datos.perfil)
+                ? ` Measurements: ${Object.entries(datos.perfil)
                     .map(([k, v]) => `${k}=${v}`)
                     .join(" ")}`
                 : "";
             return {
               ok: false,
-              texto: `La puerta la rechaza: ${(datos.motivos ?? [`HTTP ${res.status}`]).join("; ")}.${perfil}`,
+              texto: `The gate rejects it: ${(datos.motivos ?? [`HTTP ${res.status}`]).join("; ")}.${perfil}`,
             };
           }
           return {
             ok: true,
             texto:
-              `Voz "${datos.voz?.clave ?? nombre}" anadida al motor de ${destino.toUpperCase()} (familia ${datos.voz?.familia ?? "?"}, ` +
-              `parametros: ${(datos.voz?.params ?? []).map((p) => p.clave).join(", ")}). Catalogo: ${datos.total ?? "?"} voces. ` +
-              `Ya se puede usar con crear_sonido.`,
+              `Voice "${datos.voz?.clave ?? nombre}" added to the ${destino.toUpperCase()} engine (family ${datos.voz?.familia ?? "?"}, ` +
+              `parameters: ${(datos.voz?.params ?? []).map((p) => p.clave).join(", ")}). Catalog: ${datos.total ?? "?"} voices. ` +
+              `It can now be used with crear_sonido.`,
           };
         } catch (error) {
-          return { ok: false, texto: "No pude llamar a la puerta: " + (error instanceof Error ? error.message : String(error)) };
+          return { ok: false, texto: "I could not call the gate: " + (error instanceof Error ? error.message : String(error)) };
         }
       }
       case "igualar_clips":
@@ -1330,7 +1329,7 @@ async function ejecutarCrudo(
         });
       case "ajustar_pistas": {
         const lista = Array.isArray(args.pistas) ? (args.pistas as Record<string, unknown>[]) : [];
-        if (lista.length === 0) return { ok: false, texto: "No has dicho ninguna pista." };
+        if (lista.length === 0) return { ok: false, texto: "You have not named any track." };
         const pistas: AjustePista[] = lista.map((p) => {
           const ajuste: AjustePista = { nombre: String(p.nombre ?? "").trim() };
           if (typeof p.gainDb === "number") ajuste.gainDb = p.gainDb;
@@ -1358,7 +1357,7 @@ async function ejecutarCrudo(
         return local.leerProyecto(typeof args.clip === "string" && args.clip.trim() !== "" ? { clipId: args.clip.trim() } : {});
       case "editar_proyecto": {
         const ops = Array.isArray(args.ops) ? (args.ops as unknown[]) : [];
-        if (ops.length === 0) return { ok: false, texto: "Falta `ops`: una lista de operaciones (ver la descripción de la herramienta)." };
+        if (ops.length === 0) return { ok: false, texto: "Missing `ops`: a list of operations (see the tool description)." };
         return local.editarProyecto({ ops });
       }
       case "escribir_progresion": {
@@ -1386,7 +1385,7 @@ async function ejecutarCrudo(
       }
       case "escribir_notas": {
         if (typeof args.notas !== "string" || args.notas.trim() === "") {
-          return { ok: false, texto: "Falta `notas`: la frase en notación compacta." };
+          return { ok: false, texto: "Missing `notas`: the phrase in compact notation." };
         }
         return local.escribirNotas({
           ...escrituraDe(args),
@@ -1402,7 +1401,7 @@ async function ejecutarCrudo(
             : undefined;
         const patrones = filas(args.patrones);
         if (!patrones || Object.keys(patrones).length === 0) {
-          return { ok: false, texto: "Falta `patrones`: pieza → fila de pasos, p. ej. {\"kick\":\"x...x...\"}." };
+          return { ok: false, texto: "Missing `patrones`: piece → row of steps, e.g. {\"kick\":\"x...x...\"}." };
         }
         const final = filas(args.final);
         return local.escribirBateria({
@@ -1422,36 +1421,36 @@ async function ejecutarCrudo(
           biblioteca?: string;
         };
         const gm = datos.ruta
-          ? (datos.instrumentos ?? "(sin lista)")
-          : "No hay SoundFont General MIDI instalado (workspace/catalogo/gm/): las pistas MIDI suenan con los " +
-            "sintetizadores de openDAW.";
+          ? (datos.instrumentos ?? "(no list)")
+          : "There is no General MIDI SoundFont installed (workspace/catalogo/gm/): MIDI tracks sound with " +
+            "openDAW's synths.";
         return { ok: true, texto: [gm, datos.biblioteca ?? ""].filter(Boolean).join("\n\n") };
       }
       case "buscar_web": {
         const consulta = String(args.consulta ?? "").trim();
-        if (consulta === "") return { ok: false, texto: "Falta la consulta." };
+        if (consulta === "") return { ok: false, texto: "Missing the query." };
         const maximo = Math.min(10, Math.max(1, Math.round(Number(args.resultados) || 5)));
         const datos = (await pedirJson("/api/llm/api/web_search", { query: consulta, max_results: maximo }, 45000, senal)) as {
           results?: { title?: string; url?: string; content?: string }[];
         };
         const resultados = datos.results ?? [];
-        if (resultados.length === 0) return { ok: true, texto: `Sin resultados para «${consulta}».` };
+        if (resultados.length === 0) return { ok: true, texto: `No results for “${consulta}”.` };
         return {
           ok: true,
           texto: resultados
-            .map((r, i) => `${i + 1}. ${r.title ?? "(sin título)"}\n   ${r.url ?? ""}\n   ${(r.content ?? "").replace(/\s+/g, " ").slice(0, 500)}`)
+            .map((r, i) => `${i + 1}. ${r.title ?? "(no title)"}\n   ${r.url ?? ""}\n   ${(r.content ?? "").replace(/\s+/g, " ").slice(0, 500)}`)
             .join("\n"),
         };
       }
       case "leer_web": {
         const url = String(args.url ?? "").trim();
-        if (!/^https?:\/\//i.test(url)) return { ok: false, texto: "Hace falta una URL completa (https://…)." };
+        if (!/^https?:\/\//i.test(url)) return { ok: false, texto: "A full URL is needed (https://…)." };
         const datos = (await pedirJson("/api/llm/api/web_fetch", { url }, 60000, senal)) as {
           title?: string;
           content?: string;
         };
         const contenido = (datos.content ?? "").trim();
-        if (contenido === "") return { ok: false, texto: `La página no devolvió texto: ${url}` };
+        if (contenido === "") return { ok: false, texto: `The page returned no text: ${url}` };
         const desde = Math.max(0, Math.trunc(Number(args.desde) || 0));
         const trozo = contenido.slice(desde, desde + 6000);
         const resto = contenido.length - (desde + trozo.length);
@@ -1459,7 +1458,7 @@ async function ejecutarCrudo(
           ok: true,
           texto:
             `${datos.title ?? url}\n\n${trozo}` +
-            (resto > 0 ? `\n[… sigue: ${resto} caracteres más. leer_web(url, desde=${desde + trozo.length})]` : ""),
+            (resto > 0 ? `\n[… continues: ${resto} more characters. leer_web(url, desde=${desde + trozo.length})]` : ""),
         };
       }
       case "verificar_audio": {
@@ -1470,23 +1469,23 @@ async function ejecutarCrudo(
           Number.isFinite(tope) && tope > 0 ? tope * 1000 + 45000 : 225000,
           senal,
         );
-        return { ok: datos.ok === true, texto: String(datos.informe ?? "(sin informe)") };
+        return { ok: datos.ok === true, texto: String(datos.informe ?? "(no report)") };
       }
       case "ejecutar_python": {
         const segundos = Number(args.timeout_segundos) || 300;
-        // La GPU sólo si el modelo la PIDE y la persona la PERMITE en el selector. Antes
-        // bastaba con que el selector estuviera en GPU: el 27-oct un script que sólo
-        // buscaba ficheros encendió una A10 de pago.
+        // The GPU only if the model ASKS for it and the person ALLOWS it in the selector.
+        // Before, it was enough for the selector to be on GPU: on Oct 27 a script that only
+        // looked for files switched on a paid A10.
         if (args.destino === "lambda" && destinoPreferido !== "lambda") {
           return {
             ok: false,
             texto:
-              "La GPU no está permitida: el selector del chat está en CPU. Ejecuta en CPU, o pide a la " +
-              "persona que la active si de verdad hace falta (cuesta dinero por hora).",
+              "The GPU is not allowed: the chat selector is on CPU. Run on CPU, or ask the " +
+              "person to enable it if it is really needed (it costs money per hour).",
           };
         }
         const destino: Destino = args.destino === "lambda" ? "lambda" : "cpu";
-        // En Lambda el primer arranque son ~3 minutos: el limite del cliente lo cubre.
+        // On Lambda the first start is ~3 minutes: the client limit covers it.
         const margen = destino === "lambda" ? segundos * 1000 + 15 * 60 * 1000 : segundos * 1000 + 45000;
         const datos = await pedirJson(
           destino === "lambda" ? "/api/run/lambda" : "/api/run/python",
@@ -1507,36 +1506,36 @@ async function ejecutarCrudo(
           const info = (datos.lambda ?? {}) as { ip?: string; traidos?: string[]; nota?: string };
           const traidos = Array.isArray(info.traidos) ? info.traidos : [];
           partes.push(
-            `maquina ${String(info.ip ?? "?")} (${String(info.nota ?? "")})` +
-              (traidos.length > 0 ? `; devueltos: ${traidos.join(", ")}` : ""),
+            `machine ${String(info.ip ?? "?")} (${String(info.nota ?? "")})` +
+              (traidos.length > 0 ? `; returned: ${traidos.join(", ")}` : ""),
           );
         }
         const escritos = Array.isArray(datos.escritos) ? (datos.escritos as string[]) : [];
         if (escritos.length > 0) {
           partes.push(
-            `ficheros escritos: ${escritos.slice(0, 12).join(", ")}` +
-              (escritos.length > 12 ? ` y ${escritos.length - 12} mas` : ""),
+            `files written: ${escritos.slice(0, 12).join(", ")}` +
+              (escritos.length > 12 ? ` and ${escritos.length - 12} more` : ""),
           );
         }
-        if (salida !== "") partes.push(`salida:\n${salida}`);
-        if (errores !== "") partes.push(`errores:\n${errores}`);
+        if (salida !== "") partes.push(`output:\n${salida}`);
+        if (errores !== "") partes.push(`errors:\n${errores}`);
         return { ok: datos.ok === true, texto: partes.join("\n") };
       }
       default:
-        return { ok: false, texto: `Herramienta desconocida: ${nombre}` };
+        return { ok: false, texto: `Unknown tool: ${nombre}` };
     }
   } catch (error) {
     const abortado = error instanceof Error && error.name === "AbortError";
     return {
       ok: false,
       texto: abortado
-        ? "Se agoto el tiempo de espera de la herramienta y se corto el proceso."
+        ? "The tool's wait time ran out and the process was cut off."
         : `Error: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
 
-/** Campos comunes de las herramientas que escriben notas (pista, compás, instrumento). */
+/** Common fields of the tools that write notes (track, bar, instrument). */
 function escrituraDe(args: Record<string, unknown>): PeticionEscritura {
   const peticion: PeticionEscritura = { pista: String(args.pista ?? "").trim() || "Pista" };
   if (typeof args.desde_compas === "number") peticion.desdeCompas = args.desde_compas;
@@ -1546,12 +1545,12 @@ function escrituraDe(args: Record<string, unknown>): PeticionEscritura {
   return peticion;
 }
 
-/** Resumen de una llamada, para ensenarlo en el chat. */
+/** Summary of a call, to show it in the chat. */
 /**
- * Lo que se ve en la barra mientras corre una herramienta, en palabras (en inglés,
- * como toda la interfaz): «running
- * hacer_audio.py». Medido el 28-oct: con «ejecutar_python(proyectos/stahl/…)» un
- * render de 2,5 minutos parecía el modelo pensando.
+ * What is seen in the bar while a tool runs, in words (in English, like the whole
+ * interface): "running
+ * hacer_audio.py". Measured on Oct 28: with "ejecutar_python(proyectos/stahl/…)" a
+ * 2.5-minute render looked like the model thinking.
  */
 export function resumenLlamada(nombre: string, argumentosJson: string): string {
   try {
@@ -1589,12 +1588,12 @@ export function resumenLlamada(nombre: string, argumentosJson: string): string {
 }
 
 /**
- * Salida completa de una herramienta -> `_salidas/` en la raíz del espacio de
- * trabajo, NO dentro del proyecto: si el agente crea un proyecto nuevo a mitad de
- * turno, los ficheros de antes tienen que seguir encontrándose (pasó: 4 lecturas
- * «no existe» porque se habían escrito en el proyecto anterior). Se le pasa al
- * modelo sólo la cabeza y la cola: un render imprime cientos de líneas y
- * arrastrarlas en el contexto encarece cada turno y lo distrae.
+ * Full output of a tool -> `_salidas/` at the workspace root, NOT inside the project:
+ * if the agent creates a new project halfway through a turn, the earlier files must
+ * still be findable (it happened: 4 "does not exist" reads because they had been written
+ * in the previous project). Only the head and the tail are passed to the model: a render
+ * prints hundreds of lines and dragging them through the context makes every turn more
+ * expensive and distracts it.
  */
 async function guardarSalidaLarga(nombre: string, texto: string): Promise<string> {
   const fichero = `_salidas/${nombre}_${Date.now().toString(36)}.txt`;
@@ -1608,9 +1607,9 @@ async function guardarSalidaLarga(nombre: string, texto: string): Promise<string
 }
 
 /**
- * Ejecuta una herramienta y deja el resultado listo para el modelo: si la salida
- * es larga se recorta y el texto entero se guarda en el proyecto para poder
- * releerlo con `leer_fichero`.
+ * Runs a tool and leaves the result ready for the model: if the output is long it is
+ * trimmed and the whole text is saved in the project so it can be re-read with
+ * `leer_fichero`.
  */
 export async function ejecutarHerramienta(
   nombre: string,
@@ -1618,16 +1617,16 @@ export async function ejecutarHerramienta(
   senal?: AbortSignal,
 ): Promise<ResultadoHerramienta> {
   const resultado = await ejecutarCrudo(nombre, argumentosJson, senal);
-  // Las que ya leen por páginas no se recortan: si no, cada página se guardaba en
-  // otro fichero que al leerse se volvía a recortar (el agente leía en círculo).
+  // The ones that already read page by page are not trimmed: otherwise each page was saved in
+  // another file that, when read, was trimmed again (the agent read in circles).
   if (resultado.texto.length <= UMBRAL_SALIDA || PAGINADAS.has(nombre)) return resultado;
 
   let aviso: string;
   try {
     const fichero = await guardarSalidaLarga(nombre, resultado.texto);
-    aviso = `\n[Salida completa (${resultado.texto.length} caracteres) en ${fichero}: léela con leer_fichero si la necesitas]`;
+    aviso = `\n[Full output (${resultado.texto.length} characters) in ${fichero}: read it with leer_fichero if you need it]`;
   } catch {
-    aviso = `\n[Salida recortada de ${resultado.texto.length} caracteres: no se pudo guardar entera]`;
+    aviso = `\n[Output trimmed from ${resultado.texto.length} characters: it could not be saved whole]`;
   }
   return { ...resultado, texto: recortarSalida(resultado.texto) + aviso };
 }

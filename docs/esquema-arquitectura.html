@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>miuzika · esquema de arquitectura</title>
+<title>miuzika · architecture diagram</title>
 <style>
-  /* Paleta propia con prefijo --doc-: el fichero se abre con doble clic, sin el tema
-     de la app; con var(--doc-card) a secas las cajas salían negras y el texto negro. */
+  /* Own palette with the --doc- prefix: the file is opened by double-click, without the
+     app theme; with plain var(--doc-card) the boxes came out black and the text black. */
   :root{
     --doc-bg:#0c0e13; --doc-fg:#e6e8ee; --doc-muted:#8b91a1;
     --doc-accent:#ff5f6d; --doc-border:#2a2f3d; --doc-card:#141822;
@@ -66,13 +66,13 @@
 <div class="wrap">
 
   <div>
-    <h1>miuzika · arquitectura real (26-oct-2026)</h1>
-    <div class="sub">Todo dentro de <code>npm run dev</code>. No hay nada desplegado: si Vite no corre, no hay app.</div>
+    <h1>miuzika · real architecture (26-oct-2026)</h1>
+    <div class="sub">Everything inside <code>npm run dev</code>. Nothing is deployed: if Vite is not running, there is no app.</div>
     <div class="cifras">
-      <div class="cifra"><b>12.638</b><span>líneas TS</span></div>
+      <div class="cifra"><b>12.638</b><span>TS lines</span></div>
       <div class="cifra"><b>121</b><span>tests</span></div>
       <div class="cifra"><b>25</b><span>endpoints</span></div>
-      <div class="cifra"><b>17</b><span>herramientas</span></div>
+      <div class="cifra"><b>17</b><span>tools</span></div>
       <div class="cifra"><b>17</b><span>ops</span></div>
       <div class="cifra"><b>4.231</b><span>samples CC0</span></div>
     </div>
@@ -81,27 +81,27 @@
   <div class="capas">
 
     <div class="capa nav">
-      <header><b>Navegador</b><em>web/src · pinta y manda</em></header>
+      <header><b>Browser</b><em>web/src · renders and drives</em></header>
       <div class="cajas c3">
-        <div class="caja nucleo"><b>main.ts</b><span>orquestador: estado, ops, autoguardado, arranque</span></div>
-        <div class="caja"><b>timeline.ts</b><span>canvas: pistas, clips, onda</span></div>
-        <div class="caja"><b>chat.ts</b><span>panel del chat (no persiste)</span></div>
-        <div class="caja"><b>opendaw-engine.ts</b><span>playback WASM</span></div>
-        <div class="caja"><b>stem-player.ts</b><span>stems largos por &lt;audio&gt;</span></div>
-        <div class="caja"><b>audio-store.ts</b><span>caché de AudioBuffers</span></div>
-        <div class="caja"><b>agent/agent.ts</b><span>bucle del turno y sus cortes</span></div>
-        <div class="caja"><b>agent/tools.ts</b><span>17 herramientas: contrato con el LLM</span></div>
-        <div class="caja"><b>llm.ts</b><span>SSE, timeout, reintentos</span></div>
+        <div class="caja nucleo"><b>main.ts</b><span>orchestrator: state, ops, autosave, startup</span></div>
+        <div class="caja"><b>timeline.ts</b><span>canvas: tracks, clips, waveform</span></div>
+        <div class="caja"><b>chat.ts</b><span>chat panel (persists nothing)</span></div>
+        <div class="caja"><b>opendaw-engine.ts</b><span>WASM playback</span></div>
+        <div class="caja"><b>stem-player.ts</b><span>long stems via &lt;audio&gt;</span></div>
+        <div class="caja"><b>audio-store.ts</b><span>AudioBuffers cache</span></div>
+        <div class="caja"><b>agent/agent.ts</b><span>the turn loop and its cutoffs</span></div>
+        <div class="caja"><b>agent/tools.ts</b><span>17 tools: contract with the LLM</span></div>
+        <div class="caja"><b>llm.ts</b><span>SSE, timeout, retries</span></div>
       </div>
     </div>
 
-    <div class="flecha"><i></i><code>fetch /api/*</code> · 25 endpoints · la clave del LLM nunca entra en el bundle</div>
+    <div class="flecha"><i></i><code>fetch /api/*</code> · 25 endpoints · the LLM key never enters the bundle</div>
 
     <div class="capa srv">
-      <header><b>Servidor de desarrollo</b><em>vite.config.ts · 1.861 líneas</em></header>
+      <header><b>Dev server</b><em>vite.config.ts · 1.861 lines</em></header>
       <div class="cajas c2">
-        <div class="caja nucleo"><b>vite.config.ts</b><span>confina todo a workspace/ · escribe, lanza Python, sirve WAV con Range · puertas: smoke del motor, 409 de duplicados, ast.parse en gpu/ · proxy /api/llm con la clave del .env</span></div>
-        <div class="caja"><b>server/lambda.ts</b><span>encender · sincronizar por scp · ejecutar · traer lo nuevo</span></div>
+        <div class="caja nucleo"><b>vite.config.ts</b><span>confines everything to workspace/ · writes, launches Python, serves WAV with Range · gates: engine smoke, duplicate 409s, ast.parse on gpu/ · /api/llm proxy with the .env key</span></div>
+        <div class="caja"><b>server/lambda.ts</b><span>start · sync over scp · run · fetch what is new</span></div>
       </div>
     </div>
 
@@ -109,21 +109,21 @@
 
     <div class="cajas c2">
       <div class="capa">
-        <header><b>Motor numpy</b><em>workspace/codigo</em></header>
+        <header><b>numpy engine</b><em>workspace/codigo</em></header>
         <div class="cajas c2">
-          <div class="caja"><b>dsp.py</b><span>filtros, STFT, reverb, LUFS</span></div>
-          <div class="caja"><b>instruments.py</b><span>24 voces</span></div>
-          <div class="caja"><b>midi.py</b><span>escritor MIDI</span></div>
-          <div class="caja"><b>voces · gate_voz</b><span>catálogo y puerta</span></div>
-          <div class="caja"><b>render.py</b><span>utilidades de mezcla: place, reverb_st, StemWriter</span></div>
+          <div class="caja"><b>dsp.py</b><span>filters, STFT, reverb, LUFS</span></div>
+          <div class="caja"><b>instruments.py</b><span>24 voices</span></div>
+          <div class="caja"><b>midi.py</b><span>MIDI writer</span></div>
+          <div class="caja"><b>voces · gate_voz</b><span>catalog and gate</span></div>
+          <div class="caja"><b>render.py</b><span>mixing utilities: place, reverb_st, StemWriter</span></div>
         </div>
       </div>
       <div class="capa gpu">
-        <header><b>Motor torch</b><em>workspace/gpu · sólo Lambda</em></header>
+        <header><b>torch engine</b><em>workspace/gpu · Lambda only</em></header>
         <div class="cajas">
-          <div class="caja"><b>motor_gpu.py</b><span>saturar ×4, IR estéreo, reverb FFT, shimmer, granular, compresor multibanda</span></div>
-          <div class="caja"><b>voces_gpu.py</b><span>timbres pesados</span></div>
-          <div class="caja"><b>no escribe .mid</b><span>los MIDI salen de numpy</span></div>
+          <div class="caja"><b>motor_gpu.py</b><span>×4 saturation, stereo IR, FFT reverb, shimmer, granular, multiband compressor</span></div>
+          <div class="caja"><b>voces_gpu.py</b><span>heavy timbres</span></div>
+          <div class="caja"><b>does not write .mid</b><span>MIDI comes from numpy</span></div>
         </div>
       </div>
     </div>
@@ -131,68 +131,68 @@
   </div>
 
   <div class="capa" style="border-style:dashed">
-    <header><b>Obras</b><em>workspace/obras/&lt;slug&gt; · no es motor</em></header>
+    <header><b>Works</b><em>workspace/obras/&lt;slug&gt; · not the engine</em></header>
     <div class="cajas c2">
-      <div class="caja"><b>cancion.py</b><span>datos de UNA canción: 140 compases a 90 BPM, secciones, armonía</span></div>
-      <div class="caja"><b>tema.py</b><span>su arreglo: gen_* y master, con el tempo de ella</span></div>
+      <div class="caja"><b>cancion.py</b><span>data for ONE song: 140 bars at 90 BPM, sections, harmony</span></div>
+      <div class="caja"><b>tema.py</b><span>its arrangement: gen_* and master, with its own tempo</span></div>
     </div>
-    <div class="sub" style="margin-top:8px">Fuera del manifiesto a propósito: el agente no la ve como API. <code>dsp</code> ya no lleva tempo dentro.</div>
+    <div class="sub" style="margin-top:8px">Deliberately outside the manifest: the agent does not see it as an API. <code>dsp</code> no longer carries the tempo inside.</div>
   </div>
 
   <div>
-    <h2>Quién manda</h2>
+    <h2>Who is in charge</h2>
     <table>
-      <tr><th>pregunta</th><th>dueño</th><th>consecuencia</th></tr>
+      <tr><th>question</th><th>owner</th><th>consequence</th></tr>
       <tr>
-        <td>¿qué hay en la canción?</td>
+        <td>what is in the song?</td>
         <td><code>proyectos/&lt;slug&gt;/proyecto.json</code></td>
-        <td>lo escribe <b>sólo</b> la pestaña abierta (autoguardado 1,5 s). Editarlo desde fuera no sobrevive.</td>
+        <td>it is written by <b>only</b> the open tab (autosave 1.5 s). Editing it from outside does not survive.</td>
       </tr>
       <tr>
-        <td>¿cómo suena un sonido?</td>
-        <td>el render</td>
-        <td>pico, crest, centroide, duración. Se mide; no se declara.</td>
+        <td>what does a sound sound like?</td>
+        <td>the render</td>
+        <td>peak, crest, centroid, duration. It is measured; not declared.</td>
       </tr>
       <tr>
-        <td>¿qué recuerda el agente?</td>
+        <td>what does the agent remember?</td>
         <td><code>proyectos/&lt;slug&gt;/agente.json</code></td>
-        <td>8 turnos + resumen rodante, inyectados en el prompt al abrir el proyecto.</td>
+        <td>8 turns + rolling summary, injected into the prompt when the project opens.</td>
       </tr>
     </table>
   </div>
 
   <div>
-    <h2>Un turno, de principio a fin</h2>
+    <h2>A turn, from start to finish</h2>
     <ol class="pasos">
       <li><b>chat.ts</b><span>submit → onSend → main.responderAlUsuario</span></li>
-      <li><b>main.ts</b><span>pide /api/manifiesto y rehace el prompt: literal con huella + carpeta + manifiesto + memoria del proyecto</span></li>
-      <li><b>main.ts</b><span>latido de 1 s y burbuja «pensando · N s · N tokens» en el chat</span></li>
-      <li><b>agent.ts</b><span>bucle de hasta 12 pasos; cada paso es una llamada SSE al modelo</span></li>
-      <li><b>llm.ts</b><span><code>load</code> → calienta con 1 token · <code>sin_salida</code> → repite sin razonar</span></li>
-      <li><b>tools.ts</b><span>ejecuta cada herramienta pedida y le devuelve el texto al modelo</span></li>
-      <li><b>servidor</b><span>confina, escribe/ejecuta, devuelve <code>{ok, codigo, salida, errores, escritos}</code></span></li>
-      <li><b>main.ts</b><span>al cerrar: burbuja final + «✓ pasos · herramientas» + turno a agente.json</span></li>
+      <li><b>main.ts</b><span>requests /api/manifiesto and rebuilds the prompt: literal with fingerprint + folder + manifest + project memory</span></li>
+      <li><b>main.ts</b><span>1 s heartbeat and "thinking · N s · N tokens" bubble in the chat</span></li>
+      <li><b>agent.ts</b><span>loop of up to 12 steps; each step is an SSE call to the model</span></li>
+      <li><b>llm.ts</b><span><code>load</code> → warms up with 1 token · <code>sin_salida</code> → repeats without reasoning</span></li>
+      <li><b>tools.ts</b><span>runs each requested tool and returns the text to the model</span></li>
+      <li><b>server</b><span>confines, writes/runs, returns <code>{ok, codigo, salida, errores, escritos}</code></span></li>
+      <li><b>main.ts</b><span>on close: final bubble + "✓ steps · tools" + turn to agente.json</span></li>
     </ol>
   </div>
 
   <div>
-    <h2>Lo que se arregló hoy (medido)</h2>
+    <h2>What was fixed today (measured)</h2>
     <table>
-      <tr><th>qué</th><th>antes</th><th>después</th></tr>
-      <tr><td><code>listar_ficheros</code> metía el workspace entero en el contexto</td><td>586.682 B, recortados a cabeza y cola</td><td class="ok">11.097 B la raíz · 5.022 B el proyecto</td></tr>
-      <tr><td><code>ejecutar_python</code> devolvía el árbol en cada llamada</td><td>recorrido de 4.231 ficheros</td><td class="ok">sólo lo escrito en el proyecto</td></tr>
-      <tr><td>abrir 21 pistas / 11 WAV</td><td>38 s</td><td class="ok">16,8 s en frío · 0,5 s en caliente</td></tr>
-      <tr><td>reintento sin razonamiento</td><td>su texto se descartaba</td><td class="ok">se usa la respuesta del reintento</td></tr>
-      <tr><td>clip mal nombrado en pista de un solo clip</td><td>borraba el bueno</td><td class="ok">error con la lista de clips</td></tr>
-      <tr><td>biblioteca y obra mezcladas en el motor</td><td><code>cancion.py</code> y el <code>render.py</code> de una obra en el manifiesto; <code>dsp.BPM=90</code> blindado por el smoke</td><td class="ok">biblioteca en <code>codigo/</code>, obra en <code>obras/</code></td></tr>
+      <tr><th>what</th><th>before</th><th>after</th></tr>
+      <tr><td><code>listar_ficheros</code> put the whole workspace into the context</td><td>586.682 B, trimmed to head and tail</td><td class="ok">11.097 B the root · 5.022 B the project</td></tr>
+      <tr><td><code>ejecutar_python</code> returned the tree on every call</td><td>traversal of 4.231 files</td><td class="ok">only what was written in the project</td></tr>
+      <tr><td>opening 21 tracks / 11 WAV</td><td>38 s</td><td class="ok">16,8 s cold · 0,5 s warm</td></tr>
+      <tr><td>retry without reasoning</td><td>its text was discarded</td><td class="ok">the retry response is used</td></tr>
+      <tr><td>badly named clip in a single-clip track</td><td>deleted the good one</td><td class="ok">error with the list of clips</td></tr>
+      <tr><td>library and work mixed in the engine</td><td><code>cancion.py</code> and the <code>render.py</code> of a work in the manifest; <code>dsp.BPM=90</code> shielded by the smoke test</td><td class="ok">library in <code>codigo/</code>, work in <code>obras/</code></td></tr>
     </table>
   </div>
 
   <div class="pie">
-    Documento completo y deuda pendiente: <code>docs/ARCHITECTURE.md</code> ·
-    flujos de la app: <code>docs/flujo-aplicacion.html</code>.
-    Lo pendiente más gordo, en orden: la partitura como dato; y la mezcla (buses,
-    automatización, unidades reales).
+    Full document and pending debt: <code>docs/ARCHITECTURE.md</code> ·
+    app flows: <code>docs/flujo-aplicacion.html</code>.
+    The biggest pending items, in order: score as data; and mixing (buses,
+    automation, real units).
   </div>
 
 </div>

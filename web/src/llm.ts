@@ -1,9 +1,9 @@
 /**
- * Acceso al LLM desde el navegador.
+ * LLM access from the browser.
  *
- * No maneja credenciales: todo pasa por `/api/llm`, el proxy del servidor
- * (server/api/proveedores.ts), que lo reenvía al proveedor elegido en el menú
- * «Modelos» con su clave. Así ninguna clave entra en el bundle del cliente.
+ * It does not handle credentials: everything goes through `/api/llm`, the server
+ * proxy (server/api/proveedores.ts), which forwards it to the provider chosen in the
+ * "Models" menu with its key. That way no key enters the client bundle.
  */
 
 export type ChatRole = "system" | "user" | "assistant" | "tool";
@@ -26,15 +26,15 @@ export interface ToolSpec {
 export interface ChatMessage {
   role: ChatRole;
   content: string;
-  /** Solo en respuestas del modelo que pide herramientas. */
+  /** Only in model responses that request tools. */
   tool_calls?: ToolCall[];
-  /** Solo en mensajes de rol "tool". */
+  /** Only in messages with the "tool" role. */
   tool_call_id?: string;
 }
 
 export interface ChatResult {
   content: string;
-  /** Latencia de la llamada, en milisegundos. */
+  /** Latency of the call, in milliseconds. */
   ms: number;
   toolCalls: ToolCall[];
   finishReason: string;
@@ -48,29 +48,29 @@ export interface ChatOptions {
   temperature?: number;
   jsonMode?: boolean;
   signal?: AbortSignal;
-  /** Se llama con cada trozo que llega: sirve para enseñar que está trabajando. */
+  /** Called with each chunk that arrives: it is used to show that it is working. */
   onProgreso?: (progreso: { tokens: number; ms: number; texto: string }) => void;
-  /** Corta la petición si no contesta en este tiempo (por defecto 180 s). */
+  /** Cuts the request if it does not answer within this time (180 s by default). */
   timeoutMs?: number;
-  /** Repetir la petición pidiendo al modelo que NO razone (segunda pasada rápida). */
+  /** Repeats the request asking the model NOT to reason (quick second pass). */
   sinRazonamiento?: boolean;
-  /** Interno: cuántas veces se ha reintentado por 'load' (modelo cargando). */
+  /** Internal: how many times it has been retried because of 'load' (model loading). */
   reintentosPorCarga?: number;
-  /** Tope de tokens de salida. Sin él, un turno llegó a pedir 9.692 y el proveedor
-   *  contestó 'load' (saturado) en el turno siguiente, tres veces seguidas. */
+  /** Output token cap. Without it, one turn asked for 9,692 and the provider
+   *  answered 'load' (saturated) on the next turn, three times in a row. */
   maxTokens?: number;
 }
 
-/** Prefijo del proxy: el servidor de Vite pone la clave. */
+/** Proxy prefix: the Vite server sets the key. */
 export const LLM_BASE = "/api/llm";
 
 /**
- * Espera a que el modelo esté cargado.
+ * Waits for the model to be loaded.
  *
- * Ollama contesta `finish_reason: "load"` (cero tokens en ~250 ms) cuando la petición
- * llega mientras el modelo se está cargando: no es falta de contexto ni el modelo
- * callándose, es una instancia fría. Reintentar la petición grande no ayuda; lo que
- * ayuda es una petición diminuta hasta que contesta de verdad.
+ * Ollama answers `finish_reason: "load"` (zero tokens in ~250 ms) when the request
+ * arrives while the model is loading: it is not a lack of context nor the model
+ * going silent, it is a cold instance. Retrying the big request does not help; what
+ * helps is a tiny request until it really answers.
  */
 async function esperarModeloCargado(modelo: string, intentos = 12): Promise<boolean> {
   for (let i = 0; i < intentos; i += 1) {
@@ -93,18 +93,18 @@ async function esperarModeloCargado(modelo: string, intentos = 12): Promise<bool
         if (razon !== "load") return true;
       }
     } catch {
-      /* se reintenta */
+      /* it retries */
     }
     await new Promise((listo) => setTimeout(listo, 1500));
   }
   return false;
 }
 
-/** Cuántas peticiones al modelo hay en vuelo a la vez. Si pasa de 1, la app está
- *  pidiendo dos veces lo mismo y el proveedor contesta 'load' por saturación. */
+/** How many requests to the model are in flight at once. If it goes above 1, the app
+ *  is asking for the same thing twice and the provider answers 'load' due to overload. */
 let peticionesEnVuelo = 0;
 
-/** Cada turno se apunta en tmp/llm.log (via el servidor) para poder depurar. */
+/** Every turn is logged in tmp/llm.log (via the server) so it can be debugged. */
 function registrarTurno(registro: Record<string, unknown>): void {
   try {
     void fetch("/api/agent-log", {
@@ -113,17 +113,17 @@ function registrarTurno(registro: Record<string, unknown>): void {
       body: JSON.stringify({ t: new Date().toISOString(), ...registro }),
     }).catch(() => undefined);
   } catch {
-    /* el log no debe romper una respuesta */
+    /* logging must not break a response */
   }
 }
 
-/** Modelo por defecto si el servidor todavía no ha dicho cuál (Ollama Cloud). */
+/** Default model if the server has not said which one yet (Ollama Cloud). */
 export const DEFAULT_MODEL = "deepseek-v4.1-flash:1017";
 
-/** Proveedor y modelo activos: los guarda el servidor (menú «Modelos»). */
+/** Active provider and model: stored by the server ("Models" menu). */
 let activo: { proveedor: string; modelo: string } | null = null;
 
-/** Lee del servidor qué proveedor y qué modelo usa el agente. */
+/** Reads from the server which provider and which model the agent uses. */
 export async function cargarConfigLlm(): Promise<{ proveedor: string; modelo: string }> {
   try {
     const datos = (await (await fetch("/api/proveedores")).json()) as { activo?: string; modelo?: string };
@@ -134,7 +134,7 @@ export async function cargarConfigLlm(): Promise<{ proveedor: string; modelo: st
   return activo;
 }
 
-/** El menú «Modelos» avisa aquí al cambiar de proveedor o de modelo. */
+/** The "Models" menu notifies here when the provider or the model changes. */
 export function fijarActivo(proveedor: string, modelo: string): void {
   activo = { proveedor, modelo };
 }
@@ -147,7 +147,7 @@ export function getModel(): string {
   return activo?.modelo || DEFAULT_MODEL;
 }
 
-/** Cambia el modelo del proveedor activo (se guarda en el servidor). */
+/** Changes the active provider's model (stored on the server). */
 export function setModel(model: string): void {
   const proveedor = getProveedor();
   fijarActivo(proveedor, model.trim() || DEFAULT_MODEL);
@@ -158,7 +158,7 @@ export function setModel(model: string): void {
   }).catch(() => undefined);
 }
 
-/** Modelos que ofrece el proveedor activo. */
+/** Models offered by the active provider. */
 export async function listModels(signal?: AbortSignal): Promise<string[]> {
   const res = await fetch(`/api/proveedores/modelos?id=${encodeURIComponent(getProveedor())}`, { signal });
   const datos = (await res.json()) as { ok?: boolean; modelos?: string[]; error?: string };
@@ -172,24 +172,24 @@ export interface Health {
   model: string;
 }
 
-/** Comprobación de extremo a extremo: clave del servidor y LLM accesible. */
+/** End-to-end check: server key and LLM reachable. */
 export async function health(signal?: AbortSignal): Promise<Health> {
   const modelos = await listModels(signal);
   return { ok: modelos.length > 0, models: modelos.length, model: getModel() };
 }
 
-/** Una vuelta de conversación (sin streaming), compatible con tool calling. */
+/** One conversation turn (no streaming), compatible with tool calling. */
 /**
- * Una llamada al modelo, EN STREAMING.
+ * One call to the model, IN STREAMING.
  *
- * Por qué streaming y no una espera a ciegas: con `stream: false` el proveedor tiene
- * que generar todo antes de contestar; un turno largo con 10.000 tokens de entrada
- * acaba en `finish_reason: "load"` (cero palabras en 0,25 s) o en una petición
- * colgada. Con streaming llega el primer token enseguida, la conexión no se queda
- * muda y se puede enseñar el progreso: tokens y segundos en vivo.
+ * Why streaming instead of a blind wait: with `stream: false` the provider has to
+ * generate everything before answering; a long turn with 10,000 input tokens ends
+ * in `finish_reason: "load"` (zero words in 0.25 s) or in a hung request. With
+ * streaming the first token arrives right away, the connection does not go silent
+ * and progress can be shown: tokens and seconds live.
  *
- * `timeoutMs` corta una petición que no responde (antes podía quedarse colgada para
- * siempre: eso era el «sin respuesta final»).
+ * `timeoutMs` cuts a request that does not respond (before, it could hang forever:
+ * that was the "no final answer").
  */
 export async function chat(
   messages: ChatMessage[],
@@ -207,9 +207,9 @@ export async function chat(
   if (typeof options.temperature === "number") body.temperature = options.temperature;
   if (options.jsonMode) body.response_format = { type: "json_object" };
   if (typeof options.maxTokens === "number") body.max_tokens = options.maxTokens;
-  // Pensar está bien: el problema era cortarlo a mitad. Sólo cuando un turno se queda
-  // sin salida por haber razonado de más se repite SIN razonamiento (medido: pasa de
-  // 22.823 caracteres de razonamiento y 8.192 tokens a 0 y respuesta inmediata).
+  // Thinking is fine: the problem was cutting it off halfway. Only when a turn ends up
+  // with no output after reasoning too much is it repeated WITHOUT reasoning (measured:
+  // from 22,823 characters of reasoning and 8,192 tokens to 0 and an immediate answer).
   if (options.sinRazonamiento) body.reasoning_effort = "none";
 
   const t0 = Date.now();
@@ -220,7 +220,7 @@ export async function chat(
   const enVueloAlPedir = peticionesEnVuelo;
   const reloj = new AbortController();
   const temporizador = window.setTimeout(
-    () => reloj.abort(new Error("tiempo agotado")),
+    () => reloj.abort(new Error("timed out")),
     options.timeoutMs ?? 180_000,
   );
   const cualquier = (AbortSignal as unknown as { any?: (s: AbortSignal[]) => AbortSignal }).any;
@@ -248,7 +248,7 @@ export async function chat(
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
 
     const lector = res.body?.getReader();
-    if (!lector) throw new Error("la respuesta no trae cuerpo");
+    if (!lector) throw new Error("the response has no body");
     const decodificador = new TextDecoder();
     let buzon = "";
 
@@ -290,9 +290,9 @@ export async function chat(
         const eleccion = trozo.choices?.[0];
         if (!eleccion) continue;
         const delta = eleccion.delta ?? {};
-        // El modelo razona antes de contestar y ese texto llega en `delta.reasoning`.
-        // Se cuenta como progreso (es lo que está haciendo) y se mide, porque si el
-        // razonamiento se come el presupuesto la respuesta sale vacía.
+        // The model reasons before answering and that text arrives in `delta.reasoning`.
+        // It counts as progress (it is what it is doing) and it is measured, because if
+        // the reasoning eats the budget the answer comes out empty.
         const trozoRazon = (delta as { reasoning?: string }).reasoning;
         if (typeof trozoRazon === "string" && trozoRazon.length > 0) {
           razonamiento += trozoRazon;
@@ -305,8 +305,8 @@ export async function chat(
           options.onProgreso?.({ tokens, ms: Date.now() - t0, texto });
         }
         for (const llamada of delta.tool_calls ?? []) {
-          // Los trozos de argumentos también son progreso: cuando el modelo escribe un
-          // guion no manda texto, y sin esto la barra se quedaba muda mientras trabajaba.
+          // Argument chunks are progress too: when the model writes a script it sends no
+          // text, and without this the bar stayed silent while it worked.
           tokens += 1;
           options.onProgreso?.({ tokens, ms: Date.now() - t0, texto });
           const indice = llamada.index ?? 0;
@@ -321,8 +321,8 @@ export async function chat(
       }
     }
   } catch (error) {
-    // Un fallo (timeout, abort, 429) también se apunta: antes no quedaba rastro y sólo
-    // se veía el síntoma en la interfaz.
+    // A failure (timeout, abort, 429) is logged too: before, no trace was left and only
+    // the symptom was visible in the interface.
     registrarTurno({
       peticion,
       en_vuelo: enVueloAlPedir,
@@ -352,12 +352,12 @@ export async function chat(
 
   const ms = Date.now() - t0;
 
-  // Sin texto pero con razonamiento y cortado por longitud: se pasó el turno pensando.
+  // No text but with reasoning and cut off by length: the turn spent itself thinking.
   if (texto.trim() === "" && razonamiento.length > 0 && razon === "length") {
     razon = "sin_salida";
   }
 
-  // 'load' no es una respuesta: es el modelo cargándose. Se calienta y se repite.
+  // 'load' is not an answer: it is the model loading. It is warmed up and repeated.
   if (razon === "load" && (options.reintentosPorCarga ?? 0) < 4) {
     await esperarModeloCargado(modelo);
     return chat(messages, {

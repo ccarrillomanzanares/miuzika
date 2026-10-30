@@ -15,7 +15,7 @@ import {
 
 const VACIO = new Map<string, { name: string; durationBeats: number; src?: string }>();
 
-test("el slug de la carpeta quita acentos, signos y espacios", () => {
+test("the folder slug strips accents, punctuation and spaces", () => {
   assert.equal(slugDeNombre("Vitrina"), "vitrina");
   assert.equal(slugDeNombre("Mi Tema (v2)"), "mi-tema-v2");
   assert.equal(slugDeNombre("Ñandú Ácido"), "nandu-acido");
@@ -23,13 +23,13 @@ test("el slug de la carpeta quita acentos, signos y espacios", () => {
   assert.equal(slugDeNombre("---"), "proyecto");
 });
 
-test("la ruta del fichero maestro vive en la carpeta del proyecto", () => {
+test("the master file path lives in the project folder", () => {
   assert.equal(rutaDeProyecto("vitrina"), "proyectos/vitrina/proyecto.json");
   assert.equal(carpetaDeRuta("proyectos/vitrina/proyecto.json"), "vitrina");
   assert.equal(carpetaDeRuta("proyectos/vitrina/salida/x.wav"), "vitrina");
 });
 
-test("rutaRelativa quita la carpeta del proyecto y las barras sobrantes", () => {
+test("rutaRelativa strips the project folder and extra slashes", () => {
   assert.equal(rutaRelativa("salida/kick.wav"), "salida/kick.wav");
   assert.equal(rutaRelativa("/salida/kick.wav"), "salida/kick.wav");
   assert.equal(rutaRelativa("proyectos/vitrina/salida/kick.wav"), "salida/kick.wav");
@@ -37,7 +37,7 @@ test("rutaRelativa quita la carpeta del proyecto y las barras sobrantes", () => 
   assert.equal(rutaRelativa("../salida/kick.wav"), "salida/kick.wav");
 });
 
-test("serializarProyecto escribe la ruta de cada WAV dentro del proyecto", () => {
+test("serializarProyecto writes each WAV's path inside the project", () => {
   const proyecto = createProject({ name: "Vitrina", bpm: 90, lengthBars: 76 });
   proyecto.audioAssets = [
     { id: "aud_kick", name: "kick", durationBeats: 32 },
@@ -56,13 +56,13 @@ test("serializarProyecto escribe la ruta de cada WAV dentro del proyecto", () =>
   assert.equal(datos.proyecto.bpm, 90);
   assert.deepEqual(datos.proyecto.audioAssets, [
     { id: "aud_kick", name: "kick", durationBeats: 32, ruta: "salida/vitrina_kick.wav" },
-    // Sin ruta no se inventa nada: se avisa.
+    // Without a path nothing is invented: a warning is given.
     { id: "aud_pad", name: "pad", durationBeats: 64 },
   ]);
   assert.deepEqual(sinRuta, ["pad"]);
 });
 
-test("los assets citados sólo por un clip entran en el fichero maestro", () => {
+test("assets referenced only by a clip enter the master file", () => {
   const proyecto = createProject({ name: "Suelto" });
   proyecto.tracks = [
     {
@@ -95,7 +95,7 @@ test("los assets citados sólo por un clip entran en el fichero maestro", () => 
   assert.deepEqual(sinRuta, ["aud_x"]);
 });
 
-test("lo que se escribe se puede volver a leer tal cual", () => {
+test("what is written can be read back as is", () => {
   const proyecto = createProject({ name: "Vitrina", bpm: 90, lengthBars: 76 });
   proyecto.audioAssets = [{ id: "aud_kick", name: "kick", durationBeats: 32 }];
   const assets = new Map([["aud_kick", { name: "kick", durationBeats: 32, src: "salida/kick.wav" }]]);
@@ -111,13 +111,13 @@ test("lo que se escribe se puede volver a leer tal cual", () => {
   ]);
 });
 
-test("interpretarProyectoEnDisco acepta un Project suelto (json exportado a mano)", () => {
+test("interpretarProyectoEnDisco accepts a loose Project (json exported by hand)", () => {
   const proyecto = createProject({ name: "Suelto" });
   const leido = interpretarProyectoEnDisco(JSON.stringify(proyecto));
   assert.equal(leido.proyecto.name, "Suelto");
 });
 
-test("un fichero del formato anterior (assets[] aparte) conserva las rutas", () => {
+test("a file in the previous format (assets[] separate) keeps the paths", () => {
   const proyecto = createProject({ name: "Viejo" });
   proyecto.audioAssets = [{ id: "aud_tono", name: "tono", durationBeats: 6 }];
   const texto = JSON.stringify({
@@ -133,18 +133,18 @@ test("un fichero del formato anterior (assets[] aparte) conserva las rutas", () 
   ]);
 });
 
-test("interpretarProyectoEnDisco rechaza lo que no es un proyecto, con motivo", () => {
+test("interpretarProyectoEnDisco rejects what is not a project, with a reason", () => {
   assert.throws(() => interpretarProyectoEnDisco("{roto"), /is not valid JSON/);
   assert.throws(() => interpretarProyectoEnDisco("null"), /empty or is not an object/);
-  assert.throws(() => interpretarProyectoEnDisco('{"hola":1}'), /no es un proyecto de miuzika/);
+  assert.throws(() => interpretarProyectoEnDisco('{"hola":1}'), /not a miuzika project/);
   assert.throws(
     () => interpretarProyectoEnDisco(`{"formato":"${FORMATO}","version":1,"proyecto":{"schemaVersion":2}}`),
     /the project in the file is not valid/,
   );
 });
 
-test("el nombre del proyecto nuevo sale de la carpeta, no de «salida»", () => {
-  // Carpeta del selector: proyectos/vitrina/salida/*.wav
+test("the new project's name comes from the folder, not from “salida”", () => {
+  // Picker folder: proyectos/vitrina/salida/*.wav
   assert.equal(
     nombreDeProyectoDesdeFicheros([
       { name: "vitrina_kick.wav", webkitRelativePath: "vitrina/salida/vitrina_kick.wav" },
@@ -152,18 +152,18 @@ test("el nombre del proyecto nuevo sale de la carpeta, no de «salida»", () => 
     ]),
     "vitrina",
   );
-  // Sólo la carpeta de salida: no hay nada mejor que el nombre del fichero.
+  // Only the output folder: there is nothing better than the file name.
   assert.equal(
     nombreDeProyectoDesdeFicheros([{ name: "sacramento_stems.wav", webkitRelativePath: "salida/sacramento_stems.wav" }]),
     "sacramento",
   );
-  // Ficheros sueltos (sin carpeta): el nombre del primero, limpio.
+  // Loose files (no folder): the first one's name, cleaned.
   assert.equal(nombreDeProyectoDesdeFicheros([{ name: "Tema_Nuevo-master.wav" }]), "Tema Nuevo");
   assert.equal(nombreDeProyectoDesdeFicheros([{ name: "midi_vitrina_multitrack.mid" }]), "vitrina");
   assert.equal(nombreDeProyectoDesdeFicheros([]), "proyecto");
 });
 
-test("un proyecto guardado con efectos 0..1 se abre con unidades reales", () => {
+test("a project saved with 0..1 effects opens with real units", () => {
   const viejo = createProject({ name: "Viejo" });
   viejo.tracks.push({
     id: "trk_a",
@@ -179,6 +179,6 @@ test("un proyecto guardado con efectos 0..1 se abre con unidades reales", () => 
   });
   const texto = JSON.stringify({ formato: FORMATO, version: 1, guardadoEn: "", proyecto: viejo });
   const { proyecto } = interpretarProyectoEnDisco(texto);
-  // 20·1000^0.62 = 1.449 Hz: lo mismo que sonaba con el mapeo viejo.
+  // 20·1000^0.62 = 1,449 Hz: the same as what sounded with the old mapping.
   assert.deepEqual(proyecto.tracks[0]!.devices[0]!.params, { cutoffHz: 1449, q: 0.5 });
 });

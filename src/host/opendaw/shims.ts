@@ -1,6 +1,6 @@
 /**
- * Shims mínimos para poder construir proyectos de openDAW en Node.
- * En el navegador no se toca nada.
+ * Minimal shims to be able to build openDAW projects in Node.
+ * Nothing is touched in the browser.
  */
 
 export function installNodeShims(): void {

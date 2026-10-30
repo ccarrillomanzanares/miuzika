@@ -1,45 +1,45 @@
 /**
- * Composición como dato: de una progresión (símbolos o grados) a notas.
+ * Composition as data: from a progression (symbols or degrees) to notes.
  *
- * Es la otra mitad de `theory.ts`, que tenía acordes, grados y voicings con tests
- * pero nadie lo llamaba: el agente componía escribiendo un script de Python que
- * generaba un `.mid`. Aquí la armonía se escribe directamente en el proyecto, como
- * notas de una pista, y por tanto se ve en el piano roll, se deshace con Ctrl+Z y
- * se guarda en `proyecto.json` como cualquier otra edición.
+ * It is the other half of `theory.ts`, which had chords, degrees, and voicings with
+ * tests but nobody called it: the agent composed by writing a Python script that
+ * generated a `.mid`. Here the harmony is written directly into the project, as
+ * notes on a track, so it shows up in the piano roll, can be undone with Ctrl+Z, and
+ * is saved in `proyecto.json` like any other edit.
  *
- * Sin DOM y sin red: se prueba con `node --test`.
+ * No DOM and no network: tested with `node --test`.
  */
 
 import type { KeySignature, Note } from "./types.ts";
 import { chordToMidi, diatonicTriad, parseChord } from "./theory.ts";
 
-/** Cómo se toca cada acorde. */
+/** How each chord is played. */
 export const PATRONES = ["bloque", "pulso", "arpegio", "bajo", "alberti"] as const;
 export type Patron = (typeof PATRONES)[number];
 
 export interface PeticionProgresion {
-  /** Símbolos de acorde: "Am", "F", "C/E", "G7", "Bbmaj7". Tiene prioridad sobre `grados`. */
+  /** Chord symbols: "Am", "F", "C/E", "G7", "Bbmaj7". Takes priority over `grados`. */
   acordes?: string[];
-  /** Grados de la escala del proyecto, desde 1: [1, 6, 4, 5] = I-vi-IV-V en mayor. */
+  /** Degrees of the project scale, starting at 1: [1, 6, 4, 5] = I-vi-IV-V in major. */
   grados?: number[];
-  /** Compases que dura cada acorde (por defecto 1). */
+  /** Bars each chord lasts (defaults to 1). */
   compasesPorAcorde?: number;
-  /** Octava de referencia del acorde (C4 = 60). Por defecto 4; el patrón «bajo», 2. */
+  /** Reference octave for the chord (C4 = 60). Defaults to 4; the "bajo" pattern, 2. */
   octava?: number;
   patron?: Patron;
-  /** Paso de pulso y arpegio, en negras (0.5 = corcheas). Por defecto 0.5; «bajo», 1. */
+  /** Step for pulse and arpeggio, in quarter notes (0.5 = eighth notes). Defaults to 0.5; "bajo", 1. */
   paso?: number;
-  /** 1..127. Por defecto 90. */
+  /** 1..127. Defaults to 90. */
   velocidad?: number;
-  /** Repeticiones de la progresión entera (por defecto 1). */
+  /** Repetitions of the whole progression (defaults to 1). */
   repeticiones?: number;
 }
 
 export interface ResultadoProgresion {
   notas: Note[];
-  /** Los acordes tal como se han tocado, en orden (sin repeticiones). */
+  /** The chords as they were played, in order (without repetitions). */
   acordes: string[];
-  /** Duración total en negras. */
+  /** Total duration in quarter notes. */
   beats: number;
 }
 
@@ -47,28 +47,28 @@ function acotar(valor: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, valor));
 }
 
-/** Resuelve la lista de símbolos de acorde a partir de la petición y la tonalidad. */
+/** Resolves the list of chord symbols from the request and the key. */
 export function acordesDe(key: KeySignature, peticion: PeticionProgresion): string[] {
   if (peticion.acordes && peticion.acordes.length > 0) {
-    // parseChord lanza con un mensaje claro si un símbolo no se entiende.
+    // parseChord throws a clear message if a symbol is not understood.
     for (const simbolo of peticion.acordes) parseChord(simbolo);
     return peticion.acordes.map((simbolo) => simbolo.trim());
   }
   if (peticion.grados && peticion.grados.length > 0) {
     return peticion.grados.map((grado) => {
       if (!Number.isInteger(grado) || grado < 1 || grado > 7) {
-        throw new Error(`Grado no válido: ${grado} (van del 1 al 7)`);
+        throw new Error(`Invalid degree: ${grado} (they go from 1 to 7)`);
       }
       return diatonicTriad(key, grado - 1);
     });
   }
-  throw new Error("Hace falta `acordes` (p. ej. [\"Am\",\"F\",\"C\",\"G\"]) o `grados` (p. ej. [1,6,4,5]).");
+  throw new Error("You need `acordes` (e.g. [\"Am\",\"F\",\"C\",\"G\"]) or `grados` (e.g. [1,6,4,5]).");
 }
 
 /**
- * Voicing cercano al anterior: de todas las inversiones y desplazamientos de
- * octava, el que menos mueve el centro de gravedad. Es la conducción de voces
- * mínima que hace que una progresión de bloques no salte por el teclado.
+ * Voicing close to the previous one: of all inversions and octave shifts, the one
+ * that moves the center of gravity the least. It is the minimal voice leading that
+ * keeps a block progression from jumping around the keyboard.
  */
 function voicingCercano(simbolo: string, octava: number, centro: number | null): number[] {
   const acorde = parseChord(simbolo);
@@ -90,7 +90,7 @@ function voicingCercano(simbolo: string, octava: number, centro: number | null):
   return mejor;
 }
 
-/** Fundamental (o bajo del acorde con barra) en la octava pedida. */
+/** Root (or bass of the slash chord) in the requested octave. */
 function bajoDe(simbolo: string, octava: number): number {
   const acorde = parseChord(simbolo);
   const clase = acorde.bass ?? acorde.root;
@@ -98,8 +98,8 @@ function bajoDe(simbolo: string, octava: number): number {
 }
 
 /**
- * Notas de una progresión, con tiempos relativos al inicio del clip (en negras).
- * `beatsPorCompas` sale del compás del proyecto (4 en 4/4).
+ * Notes of a progression, with times relative to the start of the clip (in quarter
+ * notes). `beatsPorCompas` comes from the project time signature (4 in 4/4).
  */
 export function notasDeProgresion(
   key: KeySignature,
@@ -121,9 +121,9 @@ export function notasDeProgresion(
     notas.push({ pitch, start: Number(start.toFixed(4)), duration: Number(duration.toFixed(4)), velocity: vel });
   };
 
-  // El primer acorde se coloca alrededor del centro de la octava pedida (F4 con la
-  // octava 4), no con la fundamental en ella: un La menor en octava 4 suena en
-  // C4-E4-A4, no en A4-E5, que para un pad es demasiado agudo.
+  // The first chord is placed around the center of the requested octave (F4 for
+  // octave 4), not with its root there: an A minor in octave 4 sounds as C4-E4-A4,
+  // not A4-E5, which is too high for a pad.
   let centro: number | null = (octava + 1) * 12 + 5;
   let t = 0;
   for (let vuelta = 0; vuelta < repeticiones; vuelta += 1) {
@@ -138,7 +138,7 @@ export function notasDeProgresion(
           break;
         case "pulso":
           for (let g = 0; g < golpes; g += 1) {
-            // Acento suave en la primera de cada compás: suena a músico, no a rejilla.
+            // Gentle accent on the first beat of each bar: it sounds like a musician, not a grid.
             const acento = (g * paso) % beatsPorCompas === 0 ? 0 : -12;
             for (const nota of tonos) poner(nota, t + g * paso, paso * 0.85, acotar(velocidad + acento, 1, 127));
           }
@@ -149,7 +149,7 @@ export function notasDeProgresion(
           break;
         }
         case "alberti": {
-          // Grave-agudo-medio-agudo: el acompañamiento clásico de mano izquierda.
+          // Low-high-middle-high: the classic left-hand accompaniment.
           const [grave, medio, agudo] = [tonos[0]!, tonos[1] ?? tonos[0]!, tonos[tonos.length - 1]!];
           const figura = [grave, agudo, medio, agudo];
           for (let g = 0; g < golpes; g += 1) poner(figura[g % 4]!, t + g * paso, paso * 0.95);

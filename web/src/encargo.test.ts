@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ENCARGO_VACIO, textoDeEncargo } from "./encargo.ts";
 
-test("un encargo vacío deja todo al agente", () => {
+test("an empty brief leaves everything to the agent", () => {
   assert.equal(textoDeEncargo(ENCARGO_VACIO, "es"), "Una canción nueva, en un proyecto nuevo: ponle tú el nombre.");
   assert.equal(textoDeEncargo({ ...ENCARGO_VACIO, nombre: " Rebeldía " }, "es"), "Una canción nueva, en un proyecto nuevo llamado «Rebeldía».");
 });
 
-test("versión: a dónde se lleva, qué conserva y tempo relativo", () => {
+test("cover: where it is taken, what it keeps and relative tempo", () => {
   const texto = textoDeEncargo({
     ...ENCARGO_VACIO,
     tipo: "version",
@@ -40,7 +40,7 @@ test("versión: a dónde se lleva, qué conserva y tempo relativo", () => {
   );
 });
 
-test("versión sin conservar nada es sólo inspiración", () => {
+test("a cover keeping nothing is only inspiration", () => {
   const texto = textoDeEncargo({
     ...ENCARGO_VACIO,
     tipo: "version",
@@ -50,7 +50,7 @@ test("versión sin conservar nada es sólo inspiración", () => {
   assert.match(texto, /Sólo inspirada en ella: no copies su melodía ni sus acordes\./);
 });
 
-test("nueva: uso, imagen, referencias, gancho, groove", () => {
+test("new: use, image, references, hook, groove", () => {
   const texto = textoDeEncargo({
     ...ENCARGO_VACIO,
     estilo: "synthwave oscuro",
@@ -79,7 +79,7 @@ test("nueva: uso, imagen, referencias, gancho, groove", () => {
   );
 });
 
-test("en inglés y arreglando el proyecto abierto", () => {
+test("in English and reworking the open project", () => {
   const texto = textoDeEncargo(
     { ...ENCARGO_VACIO, tipo: "arreglo", estilo: "darker chorus", tonalidad: "otra", tonica: "F#", modo: "dorian" },
     "en",
@@ -88,7 +88,7 @@ test("en inglés y arreglando el proyecto abierto", () => {
   assert.equal(texto, "Work on the open project (“Stahl”): don't create a new one.\nWhat to change: darker chorus.\nF# dorian.");
 });
 
-test("sin idioma, el encargo sale en inglés", () => {
+test("without a language, the brief comes out in English", () => {
   assert.equal(textoDeEncargo(ENCARGO_VACIO), "A new song, in a new project: you name it.");
   assert.equal(
     textoDeEncargo({ ...ENCARGO_VACIO, nombre: " Rebeldía " }),

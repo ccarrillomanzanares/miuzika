@@ -1,4 +1,4 @@
-/** Codificador WAV PCM 16-bit little-endian. */
+/** 16-bit little-endian PCM WAV encoder. */
 
 export function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
   const channels = Math.min(2, buffer.numberOfChannels);

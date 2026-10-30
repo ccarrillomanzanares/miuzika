@@ -1,14 +1,14 @@
 /**
- * Aviso de «bundle viejo».
+ * Stale bundle warning.
  *
- * Cuando el servidor de dev se reinicia (o se edita código con la pestaña
- * abierta) el HMR se desconecta y la página sigue ejecutando el JavaScript
- * antiguo **sin decirlo**: el 23-oct eso hizo que el agente llamara a
- * `crear_proyecto` contra una versión que ya no existía, doce veces seguidas.
+ * When the dev server restarts (or code is edited with the tab open) HMR
+ * disconnects and the page keeps running the old JavaScript **without saying
+ * so**: on Oct 23 that made the agent call `crear_proyecto` against a version
+ * that no longer existed, twelve times in a row.
  *
- * El servidor publica un id (`mtime` más nuevo de web/), la pestaña lo compara
- * cada 20 s y, si cambia, avisa. No recarga sola: un turno en marcha se
- * perdería.
+ * The server publishes an id (the newest `mtime` under web/), the tab compares it
+ * every 20 s and, if it changes, warns. It does not reload on its own: a turn in
+ * progress would be lost.
  */
 
 const CADA_MS = 20_000;
@@ -21,8 +21,8 @@ async function idDelServidor(): Promise<string> {
 }
 
 /**
- * Vigila el id del servidor y llama a `alCambiar` una sola vez si detecta otro.
- * Devuelve la función para dejar de vigilar.
+ * Watches the server id and calls `alCambiar` once if it detects a different one.
+ * Returns the function to stop watching.
  */
 export function vigilarVersion(alCambiar: () => void, cadaMs = CADA_MS): () => void {
   let inicial = "";
@@ -43,7 +43,7 @@ export function vigilarVersion(alCambiar: () => void, cadaMs = CADA_MS): () => v
         alCambiar();
       }
     } catch {
-      // Sin servidor no hay nada que comparar; se reintenta al siguiente tick.
+      // Without a server there is nothing to compare; it retries on the next tick.
     }
   };
 

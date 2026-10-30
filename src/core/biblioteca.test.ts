@@ -16,23 +16,23 @@ const RUTAS = [
   `${RAIZ}/README.md`,
 ];
 
-test("la lista agrupa por familia y quita keyswitch y legacy", () => {
+test("the list groups by family and removes keyswitch and legacy", () => {
   const instrumentos = instrumentosDeSfz(RUTAS);
   assert.equal(instrumentos.length, 7);
   const texto = textoDeBiblioteca(instrumentos);
-  assert.match(texto, /Pianos y teclados: Grand Piano, Kawai · Grand Piano, Steinway B/);
-  assert.match(texto, /Órganos: Pipe Organ - Loud\/Quiet/);
-  assert.match(texto, /Láminas y campanas: Vibraphone - Soft Mallets/);
-  assert.match(texto, /Percusión: Conga/);
+  assert.match(texto, /Pianos and keyboards: Grand Piano, Kawai · Grand Piano, Steinway B/);
+  assert.match(texto, /Organs: Pipe Organ - Loud\/Quiet/);
+  assert.match(texto, /Mallets and bells: Vibraphone - Soft Mallets/);
+  assert.match(texto, /Percussion: Conga/);
   assert.doesNotMatch(texto, /Keyswitch|Legacy/);
 });
 
-test("el nombre se resuelve sin ruta, sin mayúsculas y por su base", () => {
+test("the name is resolved without a path, without case, and by its base", () => {
   const instrumentos = instrumentosDeSfz(RUTAS);
   assert.equal(resolverInstrumento("grand piano, steinway b", instrumentos).instrumento?.ruta, RUTAS[0]);
   assert.equal(resolverInstrumento("Pipe Organ", instrumentos).instrumento?.nombre, "Pipe Organ - Quiet");
   assert.equal(resolverInstrumento("steinway", instrumentos).instrumento?.nombre, "Grand Piano, Steinway B");
   assert.equal(resolverInstrumento(RUTAS[6]!, instrumentos).instrumento?.nombre, "Tenor Saxophone - Vibrato");
-  assert.match(resolverInstrumento("Grand Piano", instrumentos).error ?? "", /encaja con varios/);
-  assert.match(resolverInstrumento("theremin", instrumentos).error ?? "", /No hay ningún instrumento/);
+  assert.match(resolverInstrumento("Grand Piano", instrumentos).error ?? "", /matches several/);
+  assert.match(resolverInstrumento("theremin", instrumentos).error ?? "", /There is no instrument/);
 });

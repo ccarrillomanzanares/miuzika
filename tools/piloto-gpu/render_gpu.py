@@ -1,16 +1,16 @@
-"""Renderiza la MISMA nota con el motor (CPU) y con una version torch (CPU/GPU).
+"""Renders the SAME note with the engine (CPU) and with a torch version (CPU/GPU).
 
-Objetivo: poder comparar de verdad «la muestra de este portatil» con «la muestra de
-una instancia Lambda», y ademas medir que aporta el sobremuestreo temporal.
+Goal: to really compare "the sample from this laptop" with "the sample from
+a Lambda instance", and also measure what temporal oversampling contributes.
 
-    python render_gpu.py --motor /ruta/codigo --salida-dir out --todo
+    python render_gpu.py --motor /path/codigo --salida-dir out --todo
 
-Modos:
-  motor        bass_note del motor real, numpy, tal cual (referencia A)
-  torch        port fiel a torch del mismo calculo (B), device cpu o cuda
-  alta         mismo calculo con STFT mucho mas fina (C), cpu o cuda
+Modes:
+  motor        bass_note from the real engine, numpy, as is (reference A)
+  torch        faithful torch port of the same calculation (B), device cpu or cuda
+  alta         same calculation with a much finer STFT (C), cpu or cuda
 
-Las tablas de onda y la ventana se toman del motor para que A y B partan de lo mismo.
+The wavetables and the window are taken from the engine so that A and B start from the same thing.
 """
 
 import argparse
@@ -22,7 +22,7 @@ import time
 import numpy as np
 import torch
 
-SR = 48000  # se sobreescribe con instruments.SR al cargar el motor (el motor usa 44,1 kHz)
+SR = 48000  # overwritten with instruments.SR when the engine is loaded (the engine uses 44.1 kHz)
 NOTA = 33          # A1, 55 Hz
 DUR = 4.0
 VEL = 0.9
@@ -40,7 +40,7 @@ def cargar_motor(ruta):
     return dsp, instruments, render
 
 
-# ------------------------------------------------------------------ version torch
+# ------------------------------------------------------------------ torch version
 def osc_t(freq, n, tabla, device):
     f = torch.full((n,), float(freq), dtype=torch.float64, device=device)
     ph = (torch.cumsum(f, 0) / SR) % 1.0
@@ -111,14 +111,14 @@ def render_torch(instruments, dsp, device, n, hop, dur=DUR):
     amp = torch.clamp(t / 0.006, max=1.0) * torch.exp(-t / (dur * 0.9 + 0.12))
     rel = torch.clamp((dur + 0.2 - t) / 0.2, 0.0, 1.0)
     y = y * amp * rel
-    # los biquads estaticos son secuenciales: se quedan en CPU en las dos versiones
+    # static biquads are sequential: they stay on the CPU in both versions
     salida = y.detach().cpu().numpy()
     salida = dsp.lp(salida, 4200.0, 0.7)
     salida = dsp.hp(salida, 34.0, 0.7)
     return dsp.fade(salida * VEL, 1.0, 15.0)
 
 
-# ------------------------------------------------------------------ utilidades
+# ------------------------------------------------------------------ utilities
 _WIN = {}
 
 
@@ -128,8 +128,8 @@ def preparar_ventana(dsp):
 
 
 def guardar(render, ruta, onda):
-    # el motor entrega picos de +6 dBFS (se normaliza en el master); para poder
-    # escuchar sin distorsion se dejan las tres versiones a -1 dBFS.
+    # the engine delivers peaks at +6 dBFS (normalized in the master); to be able to
+    # listen without distortion all three versions are left at -1 dBFS.
     x = np.asarray(onda, dtype=np.float64)
     pico = np.max(np.abs(x)) or 1.0
     render.write_wav(str(ruta), x * (0.891 / pico), width=3)
@@ -161,8 +161,8 @@ def main():
 
     dsp, instruments, render = cargar_motor(args.motor)
     global SR
-    SR = float(instruments.SR)   # 44.100: el port tiene que usar la del motor
-    print(f"motor: SR={SR:.0f} Hz, nota={NOTA}, dur={args.dur} s")
+    SR = float(instruments.SR)   # 44,100: the port has to use the engine's one
+    print(f"engine: SR={SR:.0f} Hz, note={NOTA}, dur={args.dur} s")
     preparar_ventana(dsp)
     out = pathlib.Path(args.salida_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -170,7 +170,7 @@ def main():
     if args.device == "cuda":
         informe["gpu"] = torch.cuda.get_device_name(0)
 
-    # A: el motor real, numpy, tal como suena en el tema
+    # A: the real engine, numpy, as it sounds in the track
     t0 = time.time()
     a = instruments.bass_note(NOTA, args.dur, vel=VEL, seed=SEED, squelch=SQUELCH, bright=BRIGHT)
     info_a = time.time() - t0
@@ -178,7 +178,7 @@ def main():
     print(f"A motor (numpy): {info_a:.2f} s")
     informe["A_motor_s"] = round(info_a, 3)
 
-    # B: port a torch, misma resolucion que el motor (n=1024, hop=256)
+    # B: port to torch, same resolution as the engine (n=1024, hop=256)
     if args.device == "cuda":
         torch.cuda.synchronize()
     t0 = time.time()
@@ -190,7 +190,7 @@ def main():
     print(f"B torch ({args.device}, n={args.n} hop={args.hop}): {info_b:.2f} s")
     informe["B_torch_s"] = round(info_b, 3)
 
-    # C: mas resolucion de STFT (lo que en CPU se paga caro)
+    # C: more STFT resolution (what costs dearly on CPU)
     t0 = time.time()
     c = render_torch(instruments, dsp, args.device, args.n_alta, args.hop_alta, args.dur)
     if args.device == "cuda":
@@ -200,7 +200,7 @@ def main():
     print(f"C alta ({args.device}, n={args.n_alta} hop={args.hop_alta}): {info_c:.2f} s")
     informe["C_alta_s"] = round(info_c, 3)
 
-    print("\nDiferencias (null test):")
+    print("\nDifferences (null test):")
     informe["A_vs_B"] = comparar(a, b, "A motor  vs B torch ")
     informe["A_vs_C"] = comparar(a, c, "A motor  vs C alta  ")
     informe["B_vs_C"] = comparar(b, c, "B torch  vs C alta  ")

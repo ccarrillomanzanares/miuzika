@@ -1,20 +1,20 @@
 /**
- * El touchpad como instrumento: de la posición de cada dedo a notas.
+ * The touchpad as an instrument: from the position of each finger to notes.
  *
- * Viene del `Mapeo` de humseed (cliente_touchpad/mapeo.py), con un cambio: las
- * teclas siguen la TONALIDAD del proyecto (allí eran dos octavas de Do mayor).
- * La captura (workspace/herramientas/touchpad) sólo manda dedos: x, y en 0..1.
+ * It comes from humseed's `Mapeo` (cliente_touchpad/mapeo.py), with one change: the
+ * keys follow the project KEY (there they were two octaves of C major).
+ * The capture (workspace/herramientas/touchpad) only sends fingers: x, y in 0..1.
  *
- * Modos:
- *   teclas    el ancho del pad son dos octavas de la escala; deslizar el dedo de
- *             una tecla a otra toca la nueva (glissando) y nunca desafina.
- *   pads      rejilla de 4×2 con piezas de batería General MIDI.
- *   deslizar  altura continua, pegada a la escala.
+ * Modes:
+ *   teclas    the pad width is two octaves of the scale; sliding a finger from
+ *             one key to another plays the new one (glissando) and never goes out of tune.
+ *   pads      4×2 grid with General MIDI drum pieces.
+ *   deslizar  continuous pitch, snapped to the scale.
  *
- * El pad no tiene presión: la dinámica sale de la altura del dedo, abajo (cerca
- * de la persona) fuerte.
+ * The pad has no pressure: dynamics come from the finger's height, loud down low
+ * (close to the person).
  *
- * Sin DOM y sin red: se prueba con `node --test`.
+ * No DOM and no network: tested with `node --test`.
  */
 
 import type { KeySignature } from "./types.ts";
@@ -23,7 +23,7 @@ import { intervalosDe, pitchClass } from "./theory.ts";
 export const MODOS_PAD = ["teclas", "pads", "deslizar"] as const;
 export type ModoPad = (typeof MODOS_PAD)[number];
 
-/** Rejilla de pads: fila de arriba y fila de abajo, de izquierda a derecha. */
+/** Pad grid: top row and bottom row, from left to right. */
 export const PADS: readonly { nota: number; nombre: string }[] = [
   { nota: 36, nombre: "Bombo" },
   { nota: 38, nombre: "Caja" },
@@ -49,22 +49,22 @@ export function nombreCorto(nota: number): string {
 export interface OpcionesPad {
   modo: ModoPad;
   key: KeySignature;
-  /** Octava de la primera tecla (C4 = 60 está en la octava 4). */
+  /** Octave of the first key (C4 = 60 is in octave 4). */
   octava: number;
-  /** Octavas que cubre el ancho del pad. */
+  /** Octaves the pad width covers. */
   octavas?: number;
 }
 
 export interface NotaPad {
   accion: "on" | "off";
-  /** Dedo (id de contacto del pad). */
+  /** Finger (pad contact id). */
   dedo: number;
   nota: number;
-  /** 1..127 (0 en los off). */
+  /** 1..127 (0 on the off events). */
   velocidad: number;
 }
 
-/** Una zona del pad, para que la página dibuje lo mismo que suena. */
+/** A pad zone, so the page draws the same thing that sounds. */
 export interface ZonaPad {
   x0: number;
   x1: number;
@@ -74,7 +74,7 @@ export interface ZonaPad {
   nota: number;
 }
 
-/** Notas de las teclas de izquierda a derecha: la escala del proyecto y la tónica de arriba. */
+/** Notes of the keys from left to right: the project scale and the tonic on top. */
 export function notasDeTeclas(key: KeySignature, octava: number, octavas = 2): number[] {
   const tonica = (octava + 1) * 12 + pitchClass(key.tonic);
   const intervalos = intervalosDe(key.mode);
@@ -92,7 +92,7 @@ function velocidadDe(y: number): number {
 export class MapeoPad {
   private opciones: Required<OpcionesPad>;
   private notas: number[];
-  /** Dedo → nota que tiene sonando. */
+  /** Finger → note it currently has sounding. */
   private sonando = new Map<number, number>();
 
   constructor(opciones: OpcionesPad) {
@@ -104,7 +104,7 @@ export class MapeoPad {
     return this.opciones.modo;
   }
 
-  /** Cambia modo, tonalidad u octava. Suelta lo que estuviera sonando. */
+  /** Changes mode, key, or octave. Releases whatever was sounding. */
   configurar(cambios: Partial<OpcionesPad>): NotaPad[] {
     const soltadas = this.soltarTodo();
     this.opciones = { ...this.opciones, ...cambios };
@@ -118,7 +118,7 @@ export class MapeoPad {
     if (this.opciones.modo === "pads") {
       const columna = Math.min(Math.floor(cx * COLUMNAS), COLUMNAS - 1);
       const fila = Math.min(Math.floor(cy * FILAS), FILAS - 1);
-      // Dentro de cada pad, también: más abajo, más fuerte.
+      // Inside each pad as well: lower means louder.
       const dentro = cy * FILAS - fila;
       return { nota: PADS[fila * COLUMNAS + columna]!.nota, velocidad: velocidadDe(dentro) };
     }
@@ -132,13 +132,13 @@ export class MapeoPad {
     return { nota: this.notas[Math.max(0, indice)]!, velocidad: velocidadDe(cy) };
   }
 
-  /** Un evento de la captura → las notas que empiezan o acaban. */
+  /** One capture event → the notes that start or end. */
   dedo(tipo: "down" | "move" | "up", dedo: number, x: number, y: number): NotaPad[] {
     if (tipo === "up") return this.soltar(dedo);
     const { nota, velocidad } = this.notaEn(x, y);
     const anterior = this.sonando.get(dedo);
     if (anterior === nota) return [];
-    // En pads, moverse dentro del pad no repite el golpe; pasar a otro pad sí.
+    // In pads, moving inside the pad does not retrigger the hit; moving to another pad does.
     const salida: NotaPad[] = [];
     if (anterior !== undefined) salida.push({ accion: "off", dedo, nota: anterior, velocidad: 0 });
     this.sonando.set(dedo, nota);
@@ -179,22 +179,22 @@ export class MapeoPad {
 
 export interface NotaGrabada {
   pitch: number;
-  /** Negras desde el inicio de la grabación. */
+  /** Quarter notes since the start of the recording. */
   start: number;
   duration: number;
   velocity: number;
 }
 
 /**
- * Lo que se toca mientras se graba → notas para un clip. Los tiempos son los
- * reales (en negras): NO se cuadran a la rejilla. Medido en humseed: cuadrar una
- * toma la desviaba una mediana de 543 ms y destruía el ritmo.
+ * What is played while recording → notes for a clip. The times are the real ones
+ * (in quarter notes): they are NOT snapped to the grid. Measured in humseed:
+ * snapping a take shifted it by a median of 543 ms and destroyed the rhythm.
  */
 export class GrabadorPad {
   private abiertas = new Map<string, { pitch: number; start: number; velocity: number }>();
   private notas: NotaGrabada[] = [];
 
-  /** `beat`: negras desde el inicio de la grabación (puede ser negativo en la cuenta atrás). */
+  /** `beat`: quarter notes since the start of the recording (can be negative during the count-in). */
   registrar(nota: NotaPad, beat: number): void {
     const clave = `${nota.dedo}:${nota.nota}`;
     if (nota.accion === "on") {
@@ -211,7 +211,7 @@ export class GrabadorPad {
     this.abiertas.delete(clave);
     const inicio = Math.max(0, abierta.start);
     const fin = Math.max(inicio, beat);
-    if (fin - inicio < 1 / 64 && abierta.start < 0) return; // soltada antes de empezar
+    if (fin - inicio < 1 / 64 && abierta.start < 0) return; // released before starting
     this.notas.push({
       pitch: abierta.pitch,
       start: Number(inicio.toFixed(4)),
@@ -220,7 +220,7 @@ export class GrabadorPad {
     });
   }
 
-  /** Cierra lo que siga pulsado en `beat` y devuelve las notas, en orden. */
+  /** Closes whatever is still held at `beat` and returns the notes, in order. */
   terminar(beat: number): NotaGrabada[] {
     for (const clave of [...this.abiertas.keys()]) this.cerrar(clave, beat);
     const notas = this.notas.sort((a, b) => a.start - b.start || a.pitch - b.pitch);

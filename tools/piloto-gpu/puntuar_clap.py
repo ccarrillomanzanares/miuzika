@@ -1,10 +1,10 @@
-"""Puntua audio contra descripciones de texto con CLAP (Apache-2.0, LAION).
+"""Scores audio against text descriptions with CLAP (Apache-2.0, LAION).
 
-Uso:
-    python puntuar_clap.py --audio a.wav b.wav --textos "texto 1" "texto 2"
+Usage:
+    python puntuar_clap.py --audio a.wav b.wav --textos "text 1" "text 2"
 
-Imprime una matriz de similitud (audio x texto) y la mejor pareja de cada audio.
-Sirve para medir «cuanto se parece este render al brief» con un numero, no a oido.
+Prints a similarity matrix (audio x text) and the best pair for each audio.
+It is useful to measure "how much this render resembles the brief" with a number, not by ear.
 """
 
 import argparse
@@ -17,7 +17,7 @@ MODELO = "laion/larger_clap_music_and_speech"
 
 
 def a_tensor(salida):
-    """transformers 4.x devuelve un tensor; 5.x devuelve un objeto con pooler_output."""
+    """transformers 4.x returns a tensor; 5.x returns an object with pooler_output."""
     if isinstance(salida, torch.Tensor):
         return salida
     for atributo in ("pooler_output", "text_embeds", "audio_embeds"):
@@ -27,14 +27,14 @@ def a_tensor(salida):
     estado = getattr(salida, "last_hidden_state", None)
     if estado is not None:
         return estado.mean(dim=1)
-    raise TypeError(f"no se pudo sacar el embedding de {type(salida).__name__}")
+    raise TypeError(f"could not extract the embedding from {type(salida).__name__}")
 
 
 def cargar_audio(ruta: str, sr: int = 48000):
     import soundfile as sf
 
     datos, origen = sf.read(ruta, dtype="float32", always_2d=True)
-    # CLAP exige 1-D: con audio mono, always_2d devuelve (n, 1) y hay que aplanar.
+    # CLAP requires 1-D: with mono audio, always_2d returns (n, 1) and it has to be flattened.
     if datos.ndim > 1:
         datos = datos.mean(axis=1)
     if origen != sr:
@@ -52,14 +52,14 @@ def main() -> None:
     args = ap.parse_args()
 
     dispositivo = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"dispositivo: {dispositivo}")
+    print(f"device: {dispositivo}")
     if dispositivo == "cuda":
         print(f"gpu: {torch.cuda.get_device_name(0)}")
 
     t0 = time.time()
     modelo = ClapModel.from_pretrained(args.modelo).to(dispositivo).eval()
     procesador = ClapProcessor.from_pretrained(args.modelo)
-    print(f"modelo cargado en {time.time() - t0:.1f} s")
+    print(f"model loaded in {time.time() - t0:.1f} s")
 
     t1 = time.time()
     with torch.no_grad():
@@ -76,7 +76,7 @@ def main() -> None:
         emb_audio = torch.cat(emb_audios, dim=0)
 
     similitud = (emb_audio @ emb_texto.T).cpu().numpy()
-    print(f"inferencia en {time.time() - t1:.2f} s para {len(args.audio)} audio(s) x {len(args.textos)} texto(s)")
+    print(f"inference in {time.time() - t1:.2f} s for {len(args.audio)} audio(s) x {len(args.textos)} text(s)")
 
     ancho = max(len(t) for t in args.textos) + 2
     cabecera = "audio".ljust(28) + "".join(t[:ancho].ljust(ancho) for t in args.textos)
@@ -91,7 +91,7 @@ def main() -> None:
     print()
     for i, ruta in enumerate(args.audio):
         mejor = int(similitud[i].argmax())
-        print(f"mejor pareja de {ruta.split('/')[-1]}: «{args.textos[mejor]}» -> {similitud[i, mejor]:.4f}")
+        print(f"best pair for {ruta.split('/')[-1]}: \"{args.textos[mejor]}\" -> {similitud[i, mejor]:.4f}")
 
 
 if __name__ == "__main__":

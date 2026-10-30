@@ -1,13 +1,13 @@
-"""Convierte un instrumento de VCSL (.sfz) en un .sf2 dentro del proyecto.
+"""Converts a VCSL instrument (.sfz) into an .sf2 inside the project.
 
-    python sfz_a_proyecto.py "<ruta/al.sfz>" "<carpeta del proyecto>" "<nombre>"
+    python sfz_a_proyecto.py "<path/to.sfz>" "<project folder>" "<name>"
 
-Por qué existe: la alternativa —coger UN sample y estirarlo para cubrir dos
-octavas— suena a armónica y desafina (medido: +1054 cents, formantes arrastrados).
-Un instrumento se toca con sus regiones: 46 muestras, una cada dos semitonos, cada
-una con la raíz que declara el SFZ.
+Why it exists: the alternative —taking ONE sample and stretching it to cover two
+octaves— sounds like a harmonica and goes out of tune (measured: +1054 cents, dragged formants).
+An instrument is played through its regions: 46 samples, one every two semitones, each
+one with the root it declares in the SFZ.
 
-Escribe `instrumentos/<nombre>.sf2` y devuelve el JSON que espera la herramienta:
+Writes `instrumentos/<name>.sf2` and returns the JSON the tool expects:
     {ok, nombre, archivo, zonas, notas, bytes}
 """
 
@@ -19,11 +19,11 @@ import sys
 
 def main(argv):
     if len(argv) < 3:
-        print(json.dumps({"ok": False, "error": "uso: sfz_a_proyecto.py <sfz> <carpeta> <nombre>"}))
+        print(json.dumps({"ok": False, "error": "usage: sfz_a_proyecto.py <sfz> <folder> <name>"}))
         return 1
     sfz, carpeta, nombre = argv[0], argv[1], argv[2]
     if not os.path.exists(sfz):
-        print(json.dumps({"ok": False, "error": f"no existe el SFZ: {sfz}"}))
+        print(json.dumps({"ok": False, "error": f"the SFZ does not exist: {sfz}"}))
         return 1
     destino_dir = os.path.join(carpeta, "instrumentos")
     os.makedirs(destino_dir, exist_ok=True)

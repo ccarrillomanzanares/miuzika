@@ -12,18 +12,18 @@ import {
 
 const paso = (nombre: string, ms: number, ok = true): PasoHerramienta => ({ nombre, ms, ok });
 
-test("segundos usa punto decimal y un solo decimal", () => {
+test("segundos uses a decimal point and a single decimal", () => {
   assert.equal(segundos(0), "0.0 s");
   assert.equal(segundos(940), "0.9 s");
   assert.equal(segundos(42_140), "42.1 s");
   assert.equal(segundos(1_234), "1.2 s");
 });
 
-test("segundos no imprime tiempos negativos", () => {
+test("segundos does not print negative times", () => {
   assert.equal(segundos(-5), "0.0 s");
 });
 
-test("agrupar suma por nombre y ordena por tiempo descendente", () => {
+test("agrupar sums by name and sorts by descending time", () => {
   const grupos = agrupar([
     paso("leer_fichero", 300),
     paso("ejecutar_python", 30_000),
@@ -40,7 +40,7 @@ test("agrupar suma por nombre y ordena por tiempo descendente", () => {
   );
 });
 
-test("agrupar cuenta fallos y los empates mantienen el orden de aparicion", () => {
+test("agrupar counts failures and ties keep the order of appearance", () => {
   const grupos = agrupar([
     paso("b", 1_000, false),
     paso("a", 1_000),
@@ -55,11 +55,11 @@ test("agrupar cuenta fallos y los empates mantienen el orden de aparicion", () =
   );
 });
 
-test("agrupar de una lista vacia no inventa grupos", () => {
+test("agrupar on an empty list invents no groups", () => {
   assert.deepEqual(agrupar([]), []);
 });
 
-test("lineaResumen lleva cabecera, desglose y marca de veces", () => {
+test("lineaResumen carries header, breakdown and a times marker", () => {
   const linea = lineaResumen({
     pasos: 2,
     llamadas: 4,
@@ -77,7 +77,7 @@ test("lineaResumen lleva cabecera, desglose y marca de veces", () => {
   );
 });
 
-test("lineaResumen avisa de los fallos de una herramienta", () => {
+test("lineaResumen warns about a tool's failures", () => {
   const linea = lineaResumen({
     pasos: 1,
     llamadas: 2,
@@ -87,12 +87,12 @@ test("lineaResumen avisa de los fallos de una herramienta", () => {
   assert.match(linea, /ejecutar_python 2\.0 s ×2 ⚠1 fail\(s\)/);
 });
 
-test("lineaResumen sin herramientas no deja raya colgando", () => {
+test("lineaResumen without tools leaves no dangling dash", () => {
   const linea = lineaResumen({ pasos: 1, llamadas: 0, ms: 1_500, herramientas: [] });
   assert.equal(linea, "1 step(s) · 0 tool(s) · 1.5 s");
 });
 
-test("lineaResumen nombra 4 y resume el resto con +N mas", () => {
+test("lineaResumen names 4 and summarizes the rest with +N more", () => {
   const linea = lineaResumen({
     pasos: 6,
     llamadas: 6,
@@ -109,7 +109,7 @@ test("lineaResumen nombra 4 y resume el resto con +N mas", () => {
   assert.match(linea, /— f 6\.0 s · e 5\.0 s · d 4\.0 s · c 3\.0 s · \+2 more$/);
 });
 
-test("fraseBarra muestra el paso en curso y el reloj del turno", () => {
+test("fraseBarra shows the step in progress and the turn clock", () => {
   assert.equal(fraseBarra("Agent: thinking", null, 12_400), "Agent: thinking · turn 12 s");
   assert.equal(
     fraseBarra("ejecutar_python(a.py)", 8_600, 41_000),
@@ -121,7 +121,7 @@ test("fraseBarra muestra el paso en curso y el reloj del turno", () => {
   );
 });
 
-test("pasoTerminado marca el visto bueno para no confundirlo con uno en curso", () => {
+test("pasoTerminado marks the tick so it is not confused with one in progress", () => {
   assert.equal(pasoTerminado("leer_fichero", 40), "✓ leer_fichero 0.0 s");
   assert.equal(pasoTerminado("ejecutar_python", 38_500), "✓ ejecutar_python 38.5 s");
 });

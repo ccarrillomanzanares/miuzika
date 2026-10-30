@@ -1,4 +1,4 @@
-// Strudel no publica tipos; el compilador solo usa una API muy pequeña.
+// Strudel does not publish types; the compiler only uses a very small API.
 declare module "@strudel/core";
 declare module "@strudel/mini";
 declare module "@strudel/transpiler";

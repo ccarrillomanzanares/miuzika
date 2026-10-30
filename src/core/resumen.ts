@@ -1,13 +1,13 @@
 /**
- * Lo que el agente ve del proyecto: un resumen compacto y con ids.
+ * What the agent sees of the project: a compact summary with ids.
  *
- * Antes el agente no podía mirar el proyecto: sólo veía lo que el usuario pegara
- * con el botón «Plantilla». No sabía qué pistas había, ni sus ids, ni qué
- * dispositivos tenían, así que no podía editar nada con precisión. Esto es lo que
- * devuelve la herramienta `leer_proyecto`.
+ * Before, the agent could not look at the project: it only saw what the user pasted
+ * with the "Template" button. It did not know which tracks existed, their ids, or
+ * which devices they had, so it could not edit anything precisely. This is what the
+ * `leer_proyecto` tool returns.
  *
- * Los nombres de campo están en inglés a propósito: son los mismos que esperan las
- * ops de `editar_proyecto` (trackId, clipId, gainDb…), sin traducción intermedia.
+ * Field names are in English on purpose: they are the same ones the `editar_proyecto`
+ * ops expect (trackId, clipId, gainDb…), with no intermediate translation.
  */
 
 import type { Clip, Device, Project, Track } from "./types.ts";
@@ -29,11 +29,11 @@ function redondear(valor: number, decimales = 2): string {
 function lineaClip(clip: Clip, barBeats: number): string {
   const desde = clip.start / barBeats + 1;
   const compases = clip.length / barBeats;
-  const partes = [`${clip.id} «${clip.name}» compás ${redondear(desde)} · ${redondear(compases)} compás(es)`];
+  const partes = [`${clip.id} «${clip.name}» bar ${redondear(desde)} · ${redondear(compases)} bar(s)`];
   if (clip.notes.length > 0) {
     const alturas = clip.notes.map((nota) => nota.pitch);
     partes.push(
-      `${clip.notes.length} notas ${nombreDeNota(Math.min(...alturas))}-${nombreDeNota(Math.max(...alturas))}`,
+      `${clip.notes.length} notes ${nombreDeNota(Math.min(...alturas))}-${nombreDeNota(Math.max(...alturas))}`,
     );
   }
   if (clip.audio) partes.push(`audio ${clip.audio.assetId}${clip.audio.gainDb ? ` ${clip.audio.gainDb} dB` : ""}`);
@@ -47,15 +47,15 @@ function lineaPista(track: Track, indice: number, barBeats: number): string[] {
     track.muted ? "MUTE" : "",
     track.solo ? "SOLO" : "",
   ].filter((x) => x !== "");
-  // Con `archivo` suena el instrumento de la biblioteca, no el programa GM.
+  // With `archivo`, the library instrument plays, not the GM program.
   const instrumento = track.instrument.archivo
-    ? `biblioteca «${track.instrument.preset ?? track.instrument.archivo}»`
+    ? `library «${track.instrument.preset ?? track.instrument.archivo}»`
     : (track.instrument.preset ? `${track.instrument.type}:${track.instrument.preset}` : track.instrument.type) +
       (track.instrument.program !== undefined ? ` GM ${track.instrument.program}` : "");
   const lineas = [`${indice + 1}. ${track.id} «${track.name}» [${track.kind}, ${instrumento}] ${estado.join(" · ")}`];
   lineas.push(...lineasEfectos(track.devices));
   if (track.sends?.length) {
-    lineas.push(`    envíos: ${track.sends.map((send) => `${send.busId} ${redondear(send.levelDb, 1)} dB`).join(", ")}`);
+    lineas.push(`    sends: ${track.sends.map((send) => `${send.busId} ${redondear(send.levelDb, 1)} dB`).join(", ")}`);
   }
   for (const clip of track.clips) lineas.push(lineaClip(clip, barBeats));
   return lineas;
@@ -66,14 +66,14 @@ function lineasEfectos(devices: Device[]): string[] {
     const params = Object.entries(device.params)
       .map(([clave, valor]) => `${clave}=${redondear(valor, 3)}`)
       .join(" ");
-    return `    fx ${device.id} ${device.type}${device.enabled ? "" : " (apagado)"}: ${params}`;
+    return `    fx ${device.id} ${device.type}${device.enabled ? "" : " (off)"}: ${params}`;
   });
 }
 
 /**
- * Sólo un clip: su pista, dónde está y sus notas. Medido el 27-oct: con `clip`
- * se devolvía el resumen entero (6 pistas, 50 clips) MÁS las notas; pasaba de 4000
- * caracteres, se recortaba y el agente gastaba otro paso en leer el resto.
+ * Only one clip: its track, where it is, and its notes. Measured on Oct 27: with
+ * `clip`, the whole summary was returned (6 tracks, 50 clips) PLUS the notes; it went
+ * past 4,000 characters, was trimmed, and the agent spent another step reading the rest.
  */
 function resumenDeClip(project: Project, clipId: string, maxNotas: number): string {
   const barBeats = beatsPerBar(project);
@@ -81,35 +81,35 @@ function resumenDeClip(project: Project, clipId: string, maxNotas: number): stri
   const clip = pista?.clips.find((candidato) => candidato.id === clipId);
   if (!pista || !clip) {
     const ids = project.tracks.flatMap((track) => track.clips.map((c) => c.id)).slice(0, 60).join(", ");
-    return `No hay ningún clip con id ${clipId}. Clips: ${ids || "ninguno"}.`;
+    return `There is no clip with id ${clipId}. Clips: ${ids || "none"}.`;
   }
   const lineas = [
     `${project.key.tonic} ${project.key.mode} · ${project.bpm} BPM · ${project.timeSignature.numerator}/${project.timeSignature.denominator}`,
-    `Pista ${pista.id} «${pista.name}» · ${lineaClip(clip, barBeats)}`,
+    `Track ${pista.id} «${pista.name}» · ${lineaClip(clip, barBeats)}`,
   ];
   if (clip.notes.length === 0) {
-    lineas.push("(sin notas)");
+    lineas.push("(no notes)");
     return lineas.join("\n");
   }
-  // En la misma notación compacta con la que escribe escribir_notas, si se puede:
-  // ocupa una fracción y el modelo la lee como una partitura.
+  // In the same compact notation escribir_notas uses, when possible: it takes a
+  // fraction of the space and the model reads it like a score.
   const compacta = aNotacion(clip.notes);
   if (compacta !== null) {
-    lineas.push("Notas en notación compacta (negras desde el inicio del clip):", compacta);
+    lineas.push("Notes in compact notation (quarter notes from the start of the clip):", compacta);
     return lineas.join("\n");
   }
-  lineas.push("Notas (pitch, start, duration, velocity; tiempos en negras desde el inicio del clip):");
+  lineas.push("Notes (pitch, start, duration, velocity; times in quarter notes from the start of the clip):");
   const notas = [...clip.notes].sort((a, b) => a.start - b.start || a.pitch - b.pitch);
   for (const nota of notas.slice(0, maxNotas)) {
     lineas.push(`${nota.pitch} ${nombreDeNota(nota.pitch)} ${redondear(nota.start, 3)} ${redondear(nota.duration, 3)} ${nota.velocity}`);
   }
-  if (notas.length > maxNotas) lineas.push(`… y ${notas.length - maxNotas} más.`);
+  if (notas.length > maxNotas) lineas.push(`… and ${notas.length - maxNotas} more.`);
   return lineas.join("\n");
 }
 
 /**
- * Resumen del proyecto. Con `clipId`, SÓLO ese clip y sus notas (hasta `maxNotas`),
- * que es lo que hace falta para reescribirlo.
+ * Project summary. With `clipId`, ONLY that clip and its notes (up to `maxNotas`),
+ * which is what is needed to rewrite it.
  */
 export function resumenParaAgente(project: Project, opciones: { clipId?: string; maxNotas?: number } = {}): string {
   if (opciones.clipId) return resumenDeClip(project, opciones.clipId, opciones.maxNotas ?? 400);
@@ -119,18 +119,18 @@ export function resumenParaAgente(project: Project, opciones: { clipId?: string;
   const segundos = String(Math.round(stats.seconds % 60)).padStart(2, "0");
   const lineas = [
     `«${project.name}» · ${project.bpm} BPM · ${project.timeSignature.numerator}/${project.timeSignature.denominator} · ` +
-      `${project.key.tonic} ${project.key.mode} · ${project.lengthBars} compases (${minutos}:${segundos}) · ` +
+      `${project.key.tonic} ${project.key.mode} · ${project.lengthBars} bars (${minutos}:${segundos}) · ` +
       `master ${project.master.gainDb} dB`,
-    `Pistas (${project.tracks.length}). Tiempos en compases desde 1; en las ops, startBar empieza en 0 y las notas van en negras.`,
+    `Tracks (${project.tracks.length}). Times in bars from 1; in the ops, startBar starts at 0 and notes are in quarter notes.`,
   ];
   project.tracks.forEach((track, indice) => lineas.push(...lineaPista(track, indice, barBeats)));
-  if (project.tracks.length === 0) lineas.push("(sin pistas)");
+  if (project.tracks.length === 0) lineas.push("(no tracks)");
   const buses = project.buses ?? [];
   if (buses.length > 0) {
-    lineas.push(`Buses (${buses.length}): retornos de efecto que suenan en el master; las pistas les mandan señal con set_send.`);
+    lineas.push(`Buses (${buses.length}): effect returns that play through the master; tracks send them signal with set_send.`);
     for (const bus of buses) {
       const fuentes = project.tracks.filter((track) => track.sends?.some((send) => send.busId === bus.id)).map((track) => track.name);
-      lineas.push(`  ${bus.id} «${bus.name}» ${redondear(bus.gainDb, 1)} dB · le mandan: ${fuentes.join(", ") || "nadie"}`);
+      lineas.push(`  ${bus.id} «${bus.name}» ${redondear(bus.gainDb, 1)} dB · fed by: ${fuentes.join(", ") || "nobody"}`);
       lineas.push(...lineasEfectos(bus.devices));
     }
   }
@@ -139,7 +139,7 @@ export function resumenParaAgente(project: Project, opciones: { clipId?: string;
     [...project.tracks, ...buses].flatMap((cadena) => cadena.devices.map((device) => device.type)),
   );
   if (usados.size > 0) {
-    lineas.push("Rangos de los fx usados (sufijo Ms/Hz/Db = esa unidad; sin sufijo, 0..1 o lo indicado):");
+    lineas.push("Ranges of the fx used (Ms/Hz/Db suffix = that unit; no suffix, 0..1 or as indicated):");
     for (const tipo of usados) {
       const rangos = Object.entries(DEVICE_PARAMS[tipo])
         .map(([clave, [min, max]]) => `${clave} ${min}..${max}`)

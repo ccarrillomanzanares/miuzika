@@ -15,7 +15,7 @@ import {
 } from "./sonidos.ts";
 import type { VozSonido } from "./sonidos.ts";
 
-/** Catálogo de mentira con la misma forma que el que sirve /api/voces. */
+/** Fake catalog with the same shape as the one served by /api/voces. */
 const CATALOGO: VozSonido[] = [
   {
     clave: "kick",
@@ -67,12 +67,12 @@ const CATALOGO: VozSonido[] = [
   },
 ];
 
-test("el catálogo es un dato: las voces se buscan en lo que sirve el motor", () => {
+test("the catalog is data: voices are looked up in what the engine serves", () => {
   assert.equal(vozPorClave(CATALOGO, "kick")?.familia, "percusión");
   assert.equal(vozPorClave(CATALOGO, "no_existe"), undefined);
 });
 
-test("una receta nueva copia los valores por defecto que declara el motor", () => {
+test("a new recipe copies the default values declared by the engine", () => {
   const receta = recetaNueva("Bombo Gordo", "kick", CATALOGO);
   assert.equal(receta.nombre, "bombo-gordo");
   assert.equal(receta.voz, "kick");
@@ -81,20 +81,20 @@ test("una receta nueva copia los valores por defecto que declara el motor", () =
   assert.deepEqual(Object.keys(argsPorDefecto(vozPorClave(CATALOGO, "kick"))).sort(), ["seed", "vel"]);
 });
 
-test("normalizar rellena lo que falta y recorta lo que se sale", () => {
+test("normalizing fills in what is missing and trims what is out of range", () => {
   const { receta, avisos } = normalizarReceta({ nombre: "Caja", voz: "metal_hit", args: { vel: 7 } }, CATALOGO);
   assert.equal(receta.args.vel, 1);
   assert.equal(receta.args.dur, 0.9);
   assert.equal(receta.post.cola, 1);
-  assert.ok(avisos.some((a) => a.includes("fuera de rango")), avisos.join(" | "));
+  assert.ok(avisos.some((a) => a.includes("out of range")), avisos.join(" | "));
 });
 
-test("una voz desconocida o excluida no produce un sonido vacío", () => {
-  assert.throws(() => normalizarReceta({ voz: "violin" }, CATALOGO), /Voz desconocida/);
-  assert.throws(() => normalizarReceta({ voz: "guitar_loop" }, CATALOGO), /no se puede usar así/);
+test("an unknown or excluded voice does not produce an empty sound", () => {
+  assert.throws(() => normalizarReceta({ voz: "violin" }, CATALOGO), /Unknown voice/);
+  assert.throws(() => normalizarReceta({ voz: "guitar_loop" }, CATALOGO), /cannot be used like this/);
 });
 
-test("los acordes recortan la lista de notas al máximo declarado", () => {
+test("chords trim the note list to the declared maximum", () => {
   const { receta } = normalizarReceta(
     { voz: "organ_chord", args: { midis: [40, 47, 52, 55, 59, 64, 67, 71, 74, 79] } },
     CATALOGO,
@@ -102,7 +102,7 @@ test("los acordes recortan la lista de notas al máximo declarado", () => {
   assert.equal((receta.args.midis as number[]).length, 8);
 });
 
-test("el post-proceso se acota y acepta las palabras nuevas", () => {
+test("post-processing is bounded and accepts the new words", () => {
   const { receta } = normalizarReceta(
     { voz: "kick", post: { brillo: 9, suciedad: -3, cola: 99, cuerpo: -9, repeticiones: 3 } },
     CATALOGO,
@@ -114,14 +114,14 @@ test("el post-proceso se acota y acepta las palabras nuevas", () => {
   assert.equal(receta.post.repeticiones, 3);
 });
 
-test("el nombre del fichero se limpia y nunca queda vacío", () => {
+test("the file name is cleaned and never left empty", () => {
   assert.equal(nombreDeSonido("  Bombo  GORDO!! "), "bombo-gordo");
   assert.equal(nombreDeSonido("ñandú/ácido"), "nandu-acido");
   assert.equal(nombreDeSonido("***"), "sonido");
   assert.equal(nombreDeSonido(""), "sonido");
 });
 
-test("literalPython escribe True/False y listas como Python, no como JSON", () => {
+test("literalPython writes True/False and lists like Python, not like JSON", () => {
   assert.equal(literalPython(true), "True");
   assert.equal(literalPython(false), "False");
   assert.equal(literalPython(40), "40");
@@ -130,7 +130,7 @@ test("literalPython escribe True/False y listas como Python, no como JSON", () =
   assert.equal(literalPython("metal_hit"), '"metal_hit"');
 });
 
-test("el script lleva la voz, los args, el post y la salida del proyecto", () => {
+test("the script carries the voice, the args, the post, and the project output", () => {
   const { receta } = normalizarReceta(
     {
       nombre: "bombo seco",
@@ -142,7 +142,7 @@ test("el script lleva la voz, los args, el post y la salida del proyecto", () =>
     CATALOGO,
   );
   const script = scriptDeSonido(receta, { slug: "stahl" });
-  assert.match(script, /^"""Sonido «bombo-seco»/);
+  assert.match(script, /^"""Sound "bombo-seco"/);
   assert.match(script, /VOZ = "kick"/);
   assert.match(script, /"vel": 0\.8,/);
   assert.match(script, /REPETICIONES = 2/);
@@ -150,34 +150,34 @@ test("el script lleva la voz, los args, el post y la salida del proyecto", () =>
   assert.match(script, /SUCIEDAD = 0\.4/);
   assert.match(script, /COLA = 0\.6/);
   assert.match(script, /CUERPO = 0\.5/);
-  assert.match(script, /palabras: corto, sucio/);
-  // El WAV sale junto al script, dentro de proyectos/<slug>/sonidos/.
+  assert.match(script, /words: corto, sucio/);
+  // The WAV comes out next to the script, inside proyectos/<slug>/sonidos/.
   assert.match(script, /SALIDA = os\.path\.join\(AQUI, "bombo-seco\.wav"\)/);
   assert.match(script, /proyectos\/stahl\/sonidos\/bombo-seco\.json/);
-  // El bloque ARGS tiene que ser Python válido: nada de JSON.
+  // The ARGS block has to be valid Python: no JSON.
   const bloque = script.slice(script.indexOf("ARGS = {"), script.indexOf("}", script.indexOf("ARGS = {")));
   assert.doesNotMatch(bloque, /None|true|false/);
-  // El post-proceso tiene que existir y aplicarse antes de normalizar.
+  // The post-processing has to exist and be applied before normalizing.
   assert.match(script, /def postproceso\(x\):/);
   assert.match(script, /dsp\.soft_clip/);
 });
 
-test("las rutas del script y del WAV no se salen de su sitio", () => {
+test("the script and WAV paths do not leave their place", () => {
   const receta = recetaNueva("Rugido", "metal_hit", CATALOGO);
-  // Script, WAV y ficha juntos en el proyecto; nada dentro del motor compartido.
+  // Script, WAV, and metadata together in the project; nothing inside the shared engine.
   assert.equal(rutaScriptDeSonido(receta), "sonidos/rugido.py");
   assert.equal(rutaWavDeSonido(receta), "sonidos/rugido.wav");
   const script = scriptDeSonido(receta, { slug: "p" });
   assert.match(script, /SALIDA = os\.path\.join\(AQUI, "rugido\.wav"\)/);
 });
 
-test("la misma receta da el mismo script (el sonido es reproducible)", () => {
+test("the same recipe gives the same script (the sound is reproducible)", () => {
   const a = scriptDeSonido(recetaNueva("x", "metal_hit", CATALOGO), { slug: "p" });
   const b = scriptDeSonido(recetaNueva("x", "metal_hit", CATALOGO), { slug: "p" });
   assert.equal(a, b);
 });
 
-test("argsPorDefecto copia la lista: tocar una receta no cambia el catálogo", () => {
+test("argsPorDefecto copies the list: touching a recipe does not change the catalog", () => {
   const args = argsPorDefecto(vozPorClave(CATALOGO, "organ_chord"));
   (args.midis as number[]).push(99);
   assert.deepEqual(argsPorDefecto(vozPorClave(CATALOGO, "organ_chord")).midis, [40, 47, 52]);
