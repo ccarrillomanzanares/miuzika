@@ -208,6 +208,20 @@ export function initChat(): ChatApi {
       /* no persistence */
     }
     selectorDestino.value = aplicarDestino(guardado);
+    // If the server has no GPU (disabled with MIUZIKA_LAMBDA or missing keys) the
+    // "GPU (Lambda)" option is greyed out and a saved choice falls back to CPU.
+    const opcionGpu = selectorDestino.querySelector<HTMLOptionElement>('option[value="lambda"]');
+    void fetch("/api/gpu/estado")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((estado: { configurado?: boolean } | null) => {
+        if (estado?.configurado === true || !opcionGpu) return;
+        opcionGpu.disabled = true;
+        opcionGpu.title = "GPU disabled on the server";
+        if (selectorDestino.value === "lambda") selectorDestino.value = aplicarDestino("cpu");
+      })
+      .catch(() => {
+        /* status unknown: the server still refuses Lambda if it is off */
+      });
     selectorDestino.addEventListener("change", () => {
       const destino = aplicarDestino(selectorDestino.value);
       try {

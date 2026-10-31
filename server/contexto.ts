@@ -16,8 +16,17 @@ import { slugDe } from "../src/core/nombres.ts";
 import { configDesdeEnv } from "./lambda.ts";
 
 export function crearContexto(env: Record<string, string>) {
-  const { cfg: cfgLambda, faltan: faltanLambda } = configDesdeEnv(env as Record<string, string>);
-  if (cfgLambda === null) {
+  // Lambda is OFF unless MIUZIKA_LAMBDA=on: Carlos asked on 31-Oct to stop using the
+  // paid GPU for now without deleting the code or the LAMBDA_* keys in .env. With the
+  // switch off every route behaves as "not configured" (no instance can be started).
+  const lambdaActivo = (env.MIUZIKA_LAMBDA ?? "").trim().toLowerCase() === "on";
+  const leido = lambdaActivo
+    ? configDesdeEnv(env as Record<string, string>)
+    : { cfg: null, faltan: ["MIUZIKA_LAMBDA=on (Lambda is disabled for now)"] };
+  const { cfg: cfgLambda, faltan: faltanLambda } = leido;
+  if (!lambdaActivo) {
+    console.warn("[miuzika] Lambda disabled (set MIUZIKA_LAMBDA=on in .env to enable it). The CPU will be used.");
+  } else if (cfgLambda === null) {
     console.warn(`[miuzika] Lambda not configured: missing ${faltanLambda.join(", ")}. The CPU will be used.`);
   }
 
