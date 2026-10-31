@@ -1,0 +1,78 @@
+<!doctype html>
+<!-- Source of site/og.png (1200x630), the preview image social networks show for
+     ccmai.org/miuzika/. They don't render SVG, so it is rasterised with
+     scripts/make-og.sh. Same palette and piano roll as the landing hero. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0f0e15; --bg-2:#17151f; --panel:#1d1a27; --line:#2c2839; --text:#ece9f3; --muted:#9b95ad;
+          --a1:#ff8a5c; --a2:#ffc15c; --a3:#a98bff; --a4:#5ce1c6; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+  body { background: radial-gradient(900px 500px at 85% 0%, #2a1f45 0%, transparent 60%), var(--bg);
+         color: var(--text); font-family: "Space Grotesk", system-ui, sans-serif; padding: 52px 60px; }
+  .top { display: flex; align-items: center; gap: 14px; font-weight: 700; font-size: 34px; letter-spacing: -.02em; }
+  .top svg { width: 46px; height: 46px; }
+  .top .url { margin-left: auto; font: 500 20px "JetBrains Mono", monospace; color: var(--muted); }
+  h1 { font-size: 64px; line-height: 1.02; letter-spacing: -.035em; margin: 30px 0 12px; }
+  h1 em { font-style: normal; background: linear-gradient(90deg, var(--a1), var(--a2) 35%, var(--a3) 70%, var(--a4));
+          -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { font-size: 25px; color: var(--muted); margin: 0 0 30px; }
+  .roll { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--panel);
+          display: grid; grid-template-columns: 1fr 380px; height: 262px; }
+  .roll svg { width: 100%; height: 100%; display: block; }
+  .chat { border-left: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 10px; font-size: 15px; }
+  .msg { padding: 9px 12px; border-radius: 10px; line-height: 1.35; }
+  .you { background: #2a2540; align-self: flex-end; max-width: 92%; }
+  .bot { background: var(--bg-2); border: 1px solid var(--line); }
+  .who { display: block; font: 500 11px "JetBrains Mono", monospace; color: var(--muted); text-transform: uppercase; margin-bottom: 2px; }
+  .ops { font: 12px "JetBrains Mono", monospace; color: var(--a4); margin-top: 5px; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#1d1a27"/><rect x="6" y="18" width="4" height="8" rx="1" fill="#ff8a5c"/><rect x="12" y="10" width="4" height="16" rx="1" fill="#ffc15c"/><rect x="18" y="14" width="4" height="12" rx="1" fill="#a98bff"/><rect x="24" y="6" width="4" height="20" rx="1" fill="#5ce1c6"/></svg>
+    miuzika
+    <span class="url">ccmai.org/miuzika</span>
+  </div>
+  <h1>A DAW in your browser with an AI agent that <em>produces with you</em>.</h1>
+  <p class="lead">Composes, arranges and mixes straight into the project. Open source.</p>
+  <div class="roll">
+    <svg viewBox="0 0 780 300" preserveAspectRatio="none">
+      <defs><pattern id="cols" width="48.75" height="300" patternUnits="userSpaceOnUse"><line x1="0" y1="0" x2="0" y2="300" stroke="#2c2839" stroke-width="1"/></pattern></defs>
+      <rect width="780" height="300" fill="#17151f"/><rect width="780" height="300" fill="url(#cols)"/>
+      <g stroke="#221f2e"><line x1="0" y1="60" x2="780" y2="60"/><line x1="0" y1="120" x2="780" y2="120"/><line x1="0" y1="180" x2="780" y2="180"/><line x1="0" y1="240" x2="780" y2="240"/></g>
+      <g fill="#a98bff" opacity=".85">
+        <rect x="4" y="150" width="190" height="12" rx="3"/><rect x="4" y="130" width="190" height="12" rx="3"/><rect x="4" y="110" width="190" height="12" rx="3"/>
+        <rect x="199" y="170" width="190" height="12" rx="3"/><rect x="199" y="150" width="190" height="12" rx="3"/><rect x="199" y="120" width="190" height="12" rx="3"/>
+        <rect x="394" y="160" width="190" height="12" rx="3"/><rect x="394" y="140" width="190" height="12" rx="3"/><rect x="394" y="110" width="190" height="12" rx="3"/>
+        <rect x="589" y="150" width="187" height="12" rx="3"/><rect x="589" y="130" width="187" height="12" rx="3"/><rect x="589" y="100" width="187" height="12" rx="3"/>
+      </g>
+      <g fill="#ffc15c">
+        <rect x="4" y="50" width="70" height="12" rx="3"/><rect x="78" y="40" width="44" height="12" rx="3"/><rect x="126" y="30" width="68" height="12" rx="3"/>
+        <rect x="199" y="44" width="92" height="12" rx="3"/><rect x="296" y="56" width="44" height="12" rx="3"/><rect x="344" y="66" width="44" height="12" rx="3"/>
+        <rect x="394" y="40" width="44" height="12" rx="3"/><rect x="442" y="30" width="44" height="12" rx="3"/><rect x="491" y="20" width="92" height="12" rx="3"/>
+        <rect x="589" y="30" width="44" height="12" rx="3"/><rect x="637" y="44" width="139" height="12" rx="3"/>
+      </g>
+      <g fill="#ff8a5c">
+        <rect x="4" y="262" width="92" height="12" rx="3"/><rect x="101" y="262" width="92" height="12" rx="3"/><rect x="199" y="276" width="190" height="12" rx="3"/>
+        <rect x="394" y="252" width="92" height="12" rx="3"/><rect x="491" y="266" width="92" height="12" rx="3"/><rect x="589" y="270" width="187" height="12" rx="3"/>
+      </g>
+      <g fill="#5ce1c6">
+        <rect x="4" y="218" width="10" height="10" rx="2"/><rect x="101" y="218" width="10" height="10" rx="2"/><rect x="199" y="218" width="10" height="10" rx="2"/><rect x="296" y="218" width="10" height="10" rx="2"/>
+        <rect x="394" y="218" width="10" height="10" rx="2"/><rect x="491" y="218" width="10" height="10" rx="2"/><rect x="589" y="218" width="10" height="10" rx="2"/><rect x="686" y="218" width="10" height="10" rx="2"/>
+        <rect x="52" y="200" width="10" height="10" rx="2"/><rect x="150" y="200" width="10" height="10" rx="2"/><rect x="247" y="200" width="10" height="10" rx="2"/><rect x="345" y="200" width="10" height="10" rx="2"/>
+        <rect x="442" y="200" width="10" height="10" rx="2"/><rect x="540" y="200" width="10" height="10" rx="2"/><rect x="637" y="200" width="10" height="10" rx="2"/><rect x="735" y="200" width="10" height="10" rx="2"/>
+      </g>
+      <line x1="300" y1="0" x2="300" y2="300" stroke="#ece9f3" stroke-width="1.5" opacity=".7"/>
+    </svg>
+    <div class="chat">
+      <div class="msg you"><span class="who">You</span>A ballad in D major, with a bass that breathes and very soft drums.</div>
+      <div class="msg bot"><span class="who">Agent</span>Done: I–vi–IV–V in D, a melody over the pentatonic, half-note bass and soft drums.
+        <div class="ops">+ progression · + 4 tracks · mix</div></div>
+    </div>
+  </div>
+</body>
+</html>
