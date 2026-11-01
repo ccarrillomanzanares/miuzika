@@ -51,4 +51,17 @@ test("the report flags the track with notes that does not play", () => {
   assert.match(texto, /"Piano" does not play in ANY span/);
   assert.doesNotMatch(texto, /"Pad"/);
   assert.match(texto, /Could not load instrumentos\/piano\.sf2/);
+  // No muted track: no explanation about muted rows.
+  assert.doesNotMatch(texto, /rendered ALONE/);
+});
+
+test("the report explains that (muted) rows are measured alone with mute off", () => {
+  const texto = informeEscucha({
+    compasesPorTramo: 4,
+    mezcla: [{ rmsDb: -20, picoDb: -6 }],
+    pistas: [{ nombre: "Grand Piano", muted: true, notas: [5], niveles: [{ rmsDb: -22, picoDb: -10 }] }],
+  });
+  assert.match(texto, /Grand Piano \(muted\)\s+-22/);
+  assert.match(texto, /Rows marked \(muted\) are rendered ALONE with mute off/);
+  assert.match(texto, /No problems/);
 });

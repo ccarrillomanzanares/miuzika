@@ -1254,12 +1254,19 @@ setAbrirEncargo(() => void formularioEncargo.abrir());
  * Brief export: the project to MIDI and/or the mix to WAV, in
  * `proyectos/<carpeta>/salida/`. The WAV is rendered by the same engine as Play.
  */
-async function exportarProyecto(formatos: { midi: boolean; wav: boolean }): Promise<{ ok: boolean; texto: string }> {
+async function exportarProyecto(formatos: { midi: boolean; wav: boolean }, senal?: AbortSignal): Promise<{ ok: boolean; texto: string }> {
   const view = project;
   if (!view) return { ok: false, texto: "There is no open project." };
   const slug = slugDeProyecto(view);
   const hechos: string[] = [];
+  // Cancel used to be ignored here: the turn waited for the whole render (28-Oct). The
+  // offline renderer has no abort, so the check is before each costly step.
+  const cancelado = (): { ok: false; texto: string } => ({
+    ok: false,
+    texto: `${hechos.join("\n")}${hechos.length ? "\n" : ""}Cancelled by the user before finishing the export.`,
+  });
   try {
+    if (senal?.aborted) return cancelado();
     if (formatos.midi) {
       const bytes = midiDeProyecto(view);
       const fichero = new File([bytes as unknown as BlobPart], `${slug}.mid`, { type: "audio/midi" });
@@ -1268,7 +1275,9 @@ async function exportarProyecto(formatos: { midi: boolean; wav: boolean }): Prom
       hechos.push(`MIDI: proyectos/${slug}/${path} (${pistas} track(s), ${view.bpm} BPM).`);
     }
     if (formatos.wav) {
+      if (senal?.aborted) return cancelado();
       const render = await prepararRender(view, slug);
+      if (senal?.aborted) return cancelado();
       const mezcla = await render.renderizar(view);
       const canales = mezcla.canales.slice(0, 2);
       if (canales.length === 0 || canales[0]!.length === 0) throw new Error("the render came out empty");
@@ -1328,9 +1337,15 @@ async function prepararRender(view: Project, slug: string) {
  * rendered with openDAW. It is what really sounds, not the agent's numpy render
  * (STATUS Oct 28, pending 7).
  */
-async function escucharMezcla(opciones: { pistas?: string[]; compasesPorTramo?: number }): Promise<{ ok: boolean; texto: string }> {
+async function escucharMezcla(opciones: { pistas?: string[]; compasesPorTramo?: number }, senal?: AbortSignal): Promise<{ ok: boolean; texto: string }> {
   const view = project;
   if (!view) return { ok: false, texto: "There is no open project." };
+  // Cancel is checked between renders: with 8 tracks that is 9 renders and the turn
+  // used to wait for all of them (28-Oct). A render in flight cannot be interrupted.
+  const cancelado = (hechas: number, total: number): { ok: false; texto: string } => ({
+    ok: false,
+    texto: `Cancelled by the user while listening (${hechas} of ${total} tracks measured; no report).`,
+  });
   try {
     const compasesPorTramo = Math.max(1, Math.min(16, Math.trunc(opciones.compasesPorTramo ?? 4)));
     const tiemposTramo = compasesPorTramo * beatsPerBar(view);
@@ -1342,13 +1357,16 @@ async function escucharMezcla(opciones: { pistas?: string[]; compasesPorTramo?: 
     if (pedidas.length > 0 && elegidas.length === 0) {
       return { ok: false, texto: `No tracks named ${pedidas.join(", ")}. Tracks: ${view.tracks.map((t) => t.name).join(", ")}.` };
     }
+    if (senal?.aborted) return cancelado(0, elegidas.length);
     const render = await prepararRender(view, slugDeProyecto(view));
     const medir = (r: { sampleRate: number; canales: Float32Array[] }) =>
       nivelesPorTramo(r.canales.slice(0, 2), r.sampleRate, view.bpm, tiemposTramo, tramos);
+    if (senal?.aborted) return cancelado(0, elegidas.length);
     setStatus("Listening: rendering the mix…");
     const mezcla = medir(await render.renderizar(view));
     const pistas: PistaEscuchada[] = [];
     for (const [i, pista] of elegidas.entries()) {
+      if (senal?.aborted) return cancelado(i, elegidas.length);
       setStatus(`Listening: track ${i + 1}/${elegidas.length} (${pista.name})…`);
       // The track alone, without mute or solo: it measures whether its instrument produces signal.
       const sola: Project = { ...view, tracks: [{ ...pista, muted: false, solo: false }] };

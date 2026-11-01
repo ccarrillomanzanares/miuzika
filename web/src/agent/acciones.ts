@@ -62,9 +62,10 @@ export interface Estudio {
   /** Notice in the chat for the person (not the model). */
   avisar(texto: string): void;
   /** Exports the project to MIDI and/or the mix to WAV in salida/. */
-  exportar?(formatos: { midi: boolean; wav: boolean }): Promise<ResultadoAccion>;
+  /** `senal` is the turn's Cancel: the tab checks it between renders (a render in flight finishes). */
+  exportar?(formatos: { midi: boolean; wav: boolean }, senal?: AbortSignal): Promise<ResultadoAccion>;
   /** Renders with openDAW and measures the level per bar range of the mix and of each track alone. */
-  escuchar?(opciones: { pistas?: string[]; compasesPorTramo?: number }): Promise<ResultadoAccion>;
+  escuchar?(opciones: { pistas?: string[]; compasesPorTramo?: number }, senal?: AbortSignal): Promise<ResultadoAccion>;
 }
 
 /** Project name from the delivered file (salida/sacramento_multitrack.mid -> sacramento). */
@@ -829,7 +830,10 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     const trozos: Note[][] = [];
     for (let i = 0; i < notas.length; i += 2000) trozos.push(notas.slice(i, i + 2000));
     try {
-      const nombreClip = `${(peticion.nombreClip ?? peticion.pista).slice(0, 40)} ${startBar + 1}`;
+      // The bar goes at the end of the clip name; if the agent already wrote it
+      // ("Pre - batería 33" came out as "Pre - batería 33 33" on 28-Oct) it is not repeated.
+      const baseClip = (peticion.nombreClip ?? peticion.pista).slice(0, 40).trim();
+      const nombreClip = new RegExp(`(^|\\s)${startBar + 1}$`).test(baseClip) ? baseClip : `${baseClip} ${startBar + 1}`;
       let siguiente = applyOps(project, [
         ...ops,
         { op: "add_notes", trackId, startBar, name: nombreClip, notes: trozos[0]! },
@@ -1113,15 +1117,15 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     }
   }
 
-  async function exportar(peticion: { midi: boolean; wav: boolean }): Promise<ResultadoAccion> {
+  async function exportar(peticion: { midi: boolean; wav: boolean }, senal?: AbortSignal): Promise<ResultadoAccion> {
     if (!e.exportar) return { ok: false, texto: "This tab does not know how to export." };
     if (!peticion.midi && !peticion.wav) return { ok: false, texto: "Ask for midi, wav or both." };
-    return e.exportar(peticion);
+    return e.exportar(peticion, senal);
   }
 
-  async function escuchar(opciones: { pistas?: string[]; compasesPorTramo?: number }): Promise<ResultadoAccion> {
+  async function escuchar(opciones: { pistas?: string[]; compasesPorTramo?: number }, senal?: AbortSignal): Promise<ResultadoAccion> {
     if (!e.escuchar) return { ok: false, texto: "This tab does not know how to listen to the mix." };
-    return e.escuchar(opciones);
+    return e.escuchar(opciones, senal);
   }
 
   return {

@@ -160,20 +160,20 @@ None of this has been heard in previous sessions:
 ## 3. Pending work
 
 1. Draw buses and sends in the interface (mixer).
-2. Seen on 28-Oct with the agent:
-   - `escribir_notas`/`escribir_bateria` without `pista` create a new track
-     (`trk_pista_...`); they should error (required in the schema and the code does not
-     check it).
-   - Clip names repeat the bar ("Pre - batería 33 33").
-   - `escuchar_mezcla`: the "(muted)" row is measured alone and without mute on purpose,
-     but it does not say so; the agent twice concluded that mute did not work. State it
-     in the report.
-   - Cancel does not stop `escuchar_mezcla`/`exportar` midway: it waits for the renders
-     to finish. Check the signal between render and render.
-   - VCSL instruments play ~12 dB below GM (measured by the agent): check the level in
-     `sfz2sf2.py`.
-   - `llm.log` truncates tool results and `agente.json` does not save them: reviewing a
-     listening pass needs the whole table.
+2. Seen on 28-Oct with the agent. Fixed on 1-Nov (not yet exercised in a browser):
+   - `escribir_notas`/`escribir_bateria`/`escribir_progresion` without `pista` now fail
+     with "Missing `pista`" instead of creating a track "Pista".
+   - Clip names no longer repeat the bar ("Pre - batería 33 33").
+   - The `escuchar_mezcla` report says that "(muted)" rows are rendered alone with mute
+     off, and that the MIX row already excludes them.
+   - Cancel is checked before every render in `escuchar_mezcla` and `exportar` (a render
+     in flight still finishes: the offline renderer has no abort).
+   - Tool results are now whole in the trajectory files (`trayectorias/`).
+   Still open:
+   - VCSL instruments play ~12 dB below GM (measured by the agent). Checked on 1-Nov:
+     the Steinway samples themselves peak at a median −6 dBFS (24 of 351 measured), so
+     the samples are not quiet; look at velocity layers → attenuation in `sfz2sf2.py`
+     and at how openDAW applies `initialAttenuation`. Needs listening to confirm.
 3. If the Python box falls short: another Windows user or a container. GPU (Lambda)
    scripts do not go through the box.
 

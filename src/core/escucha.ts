@@ -119,9 +119,15 @@ export function informeEscucha(datos: {
   const fila = (nombre: string, celdas: string[]): string =>
     `${nombre.slice(0, anchoNombre).padEnd(anchoNombre)} ${celdas.map((c) => c.padStart(ancho)).join(" ")}`;
 
+  const hayMuteadas = datos.pistas.some((p) => p.muted);
   const lineas = [
     `Listening through the openDAW engine (the same one as Play). RMS in dBFS per span of ${datos.compasesPorTramo} bars; ` +
-      `SILENT = there are notes and no sound comes out; · = neither notes nor sound.`,
+      `SILENT = there are notes and no sound comes out; · = neither notes nor sound.` +
+      // On 28-Oct the agent twice concluded that mute "did not work" because the muted
+      // track showed levels: each track row is rendered alone with mute off on purpose.
+      (hayMuteadas
+        ? ` Rows marked (muted) are rendered ALONE with mute off: their numbers say whether the instrument produces signal, not what the mix plays (the MIX row already excludes them).`
+        : ""),
     fila("bars", rotulos),
     fila("MIX", datos.mezcla.map((n) => celda(n, 1))),
     ...datos.pistas.map((p) => fila(nombres[datos.pistas.indexOf(p) + 2]!, p.niveles.map((n, i) => celda(n, p.notas[i] ?? 0)))),

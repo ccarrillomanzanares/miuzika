@@ -230,8 +230,8 @@ export interface PeticionNotas extends PeticionEscritura {
 export interface PeticionBateriaPista extends PeticionBateria, PeticionEscritura {}
 
 export interface AccionesEstudio {
-  exportar(peticion: { midi: boolean; wav: boolean }): Promise<ResultadoAccion>;
-  escuchar(peticion: { pistas?: string[]; compasesPorTramo?: number }): Promise<ResultadoAccion>;
+  exportar(peticion: { midi: boolean; wav: boolean }, senal?: AbortSignal): Promise<ResultadoAccion>;
+  escuchar(peticion: { pistas?: string[]; compasesPorTramo?: number }, senal?: AbortSignal): Promise<ResultadoAccion>;
   versiones(peticion: { accion: string; version?: string; pistas?: string[] }): Promise<ResultadoAccion>;
   leerProyecto(peticion: { clipId?: string }): ResultadoAccion;
   editarProyecto(peticion: { ops: unknown[] }): ResultadoAccion;
@@ -1341,12 +1341,15 @@ async function ejecutarCrudo(
         return local.ajustarPistas({ pistas });
       }
       case "exportar":
-        return await local.exportar({ midi: args.midi === true, wav: args.wav === true });
+        return await local.exportar({ midi: args.midi === true, wav: args.wav === true }, senal);
       case "escuchar_mezcla":
-        return await local.escuchar({
-          pistas: Array.isArray(args.pistas) ? args.pistas.map(String) : undefined,
-          compasesPorTramo: Number(args.compases_por_tramo) > 0 ? Number(args.compases_por_tramo) : undefined,
-        });
+        return await local.escuchar(
+          {
+            pistas: Array.isArray(args.pistas) ? args.pistas.map(String) : undefined,
+            compasesPorTramo: Number(args.compases_por_tramo) > 0 ? Number(args.compases_por_tramo) : undefined,
+          },
+          senal,
+        );
       case "versiones":
         return await local.versiones({
           accion: String(args.accion ?? "listar"),
@@ -1361,6 +1364,7 @@ async function ejecutarCrudo(
         return local.editarProyecto({ ops });
       }
       case "escribir_progresion": {
+        if (sinPista(args)) return SIN_PISTA;
         const lista = (valor: unknown): unknown[] | undefined => (Array.isArray(valor) ? valor : undefined);
         const numero = (valor: unknown): number | undefined =>
           typeof valor === "number" && Number.isFinite(valor) ? valor : undefined;
@@ -1384,6 +1388,7 @@ async function ejecutarCrudo(
         return local.escribirProgresion(peticion);
       }
       case "escribir_notas": {
+        if (sinPista(args)) return SIN_PISTA;
         if (typeof args.notas !== "string" || args.notas.trim() === "") {
           return { ok: false, texto: "Missing `notas`: the phrase in compact notation." };
         }
@@ -1399,6 +1404,7 @@ async function ejecutarCrudo(
           typeof valor === "object" && valor !== null
             ? Object.fromEntries(Object.entries(valor as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
             : undefined;
+        if (sinPista(args)) return SIN_PISTA;
         const patrones = filas(args.patrones);
         if (!patrones || Object.keys(patrones).length === 0) {
           return { ok: false, texto: "Missing `patrones`: piece → row of steps, e.g. {\"kick\":\"x...x...\"}." };
@@ -1536,6 +1542,17 @@ async function ejecutarCrudo(
 }
 
 /** Common fields of the tools that write notes (track, bar, instrument). */
+/**
+ * `pista` is required in the three writing tools' schemas, but the code used to fall
+ * back to "Pista": a call without it created a track "Pista" (`trk_pista_…`) instead of
+ * failing, seen twice on 28-Oct. Now it fails and says what was expected.
+ */
+const sinPista = (args: Record<string, unknown>): boolean => String(args.pista ?? "").trim() === "";
+const SIN_PISTA = {
+  ok: false,
+  texto: "Missing `pista`: the id or name of an existing track, or a new name to create it. See leer_proyecto for the tracks.",
+};
+
 function escrituraDe(args: Record<string, unknown>): PeticionEscritura {
   const peticion: PeticionEscritura = { pista: String(args.pista ?? "").trim() || "Pista" };
   if (typeof args.desde_compas === "number") peticion.desdeCompas = args.desde_compas;
