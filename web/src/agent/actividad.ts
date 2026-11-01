@@ -10,6 +10,10 @@ export interface PasoHerramienta {
   nombre: string;
   ms: number;
   ok: boolean;
+  /** The whole call, for the trajectory file (src/core/trayectoria.ts): the id, the
+   *  arguments as the model wrote them (the loop summarises long ones afterwards) and
+   *  the full result. Optional so the activity-bar tests keep building bare steps. */
+  detalle?: { id: string; argumentos: string; resultado: string };
 }
 
 export interface HerramientaAgrupada {

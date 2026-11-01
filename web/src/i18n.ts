@@ -108,6 +108,7 @@ const ES: Diccionario = {
   "coste.sinEscrituras": "La API no informa de las escrituras en caché y no se cuentan.",
   "coste.preciosDe": "Precios de OpenRouter, descargados el",
   "coste.sinListaDetalle": "El servidor aún no tiene lista de precios (¿sin red al arrancar?).",
+  "coste.estimado": "Estimación: este proveedor cobra una suscripción, no tokens. La cifra es el precio del modelo en OpenRouter, para comparar modelos.",
 };
 
 const DICCIONARIOS: Partial<Record<Idioma, Diccionario>> = { es: ES };

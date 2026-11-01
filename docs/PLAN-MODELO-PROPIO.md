@@ -36,6 +36,9 @@ Shared by both tiers (first):
 2. **Full trajectory capture** in a file apart from `llm.log`: messages, tool calls,
    tool results, and the verdict of `escuchar_mezcla` (valid project, muted tracks).
    This is the dataset for the local tier and the audit trail for the paid one.
+   Done on 1-Nov: `proyectos/<slug>/trayectorias/`, one file per turn
+   (`src/core/trayectoria.ts`, `/api/trayectorias`). From now on every session with
+   the agent adds to the dataset; the 28-Oct sessions are lost (only summaries).
 3. **The evaluator**: share of briefs that end in a valid project with no muted tracks,
    run with the same verifiers for the local model, DeepSeek and Claude. It puts a
    quality number next to each price.

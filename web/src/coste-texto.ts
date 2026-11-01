@@ -32,6 +32,15 @@ export interface Acumulado {
 
 export const ACUMULADO_CERO: Acumulado = { usd: 0, llamadas: 0, turnos: 0, tokensNuevos: 0, tokensCache: 0, tokensSalida: 0 };
 
+/**
+ * Providers that bill a subscription, not tokens: the number shown is what the same
+ * model costs at OpenRouter's per-token price (Carlos, 1-Nov: OpenRouter is the
+ * reference), useful to compare models, but it is not this month's bill.
+ */
+export const PROVEEDORES_SUSCRIPCION = new Set(["ollama-cloud"]);
+
+export const esEstimado = (proveedor: string): boolean => PROVEEDORES_SUSCRIPCION.has(proveedor);
+
 /** Dollars with enough digits to see a cheap call: $0.0036, $0.04, $1.21. */
 export function usd(valor: number): string {
   const decimales = valor !== 0 && Math.abs(valor) < 0.01 ? 4 : 2;
@@ -57,7 +66,7 @@ export function avisoPrecios(fechaPrecios: string | null, ahora = Date.now()): s
 export function textoCosteLlm(e: EstadoCosteLlm, ahora = Date.now()): string {
   if (e.tarifa === null) return `LLM ${t("coste.desconocido", "price unknown")} · ${e.modelo}`;
   if (e.tarifa.id === "local") return `LLM ${t("coste.local", "local, free")}`;
-  const partes = [`LLM ${usd(e.turno.usd)}`];
+  const partes = [`LLM ${esEstimado(e.proveedor) ? "~" : ""}${usd(e.turno.usd)}`];
   if (e.sesion.turnos > 1 || e.sesion.usd !== e.turno.usd) partes.push(`${usd(e.sesion.usd)} ${t("gpu.sesion", "session")}`);
   const aviso = avisoPrecios(e.fechaPrecios, ahora);
   if (aviso) partes.push(`⚠ ${aviso}`);
@@ -87,6 +96,9 @@ export function detalleCosteLlm(e: EstadoCosteLlm, ahora = Date.now()): string {
         `${t("coste.tarifa", "Rate")} ${e.tarifa.id}: ${porMillon(e.tarifa.prompt)} ${t("coste.entrada", "in")} · ${porMillon(e.tarifa.cacheRead)} ${t("coste.cache", "cache")} · ${porMillon(e.tarifa.completion)} ${t("coste.salida", "out")}`,
       );
       lineas.push(t("coste.sinEscrituras", "Cache writes are not reported by the API and are not counted."));
+      if (esEstimado(e.proveedor)) {
+        lineas.push(t("coste.estimado", "Estimate: this provider bills a subscription, not tokens. The number is the model's OpenRouter price, to compare models."));
+      }
     }
   }
   if (e.fechaPrecios) {

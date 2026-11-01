@@ -103,7 +103,26 @@ history, humseed, is on the `humseed` branch). On the laptop, the folder follows
 - Measured on the 28-Oct log before this: a composing turn is 23 to 46 calls, 1.0 to
   1.7 M input tokens (99% cache reads), 12 to 97 k output. At 1-Nov prices that is
   ~0.04 $ with DeepSeek V4.1 Flash and ~1.2 $ with Claude Sonnet 4.5 per turn.
+- Ollama Cloud bills a subscription, not tokens: with it the counter shows "~$0.04" and the
+  tooltip says it is the model's OpenRouter price, to compare models (OpenRouter is the
+  reference, agreed 1-Nov).
 - NOT seen in a browser yet (no browser from this session): the counter itself.
+
+**1-Nov: trajectories** (step 2 of the plan: the dataset for a model of our own).
+- Every agent turn, finished, cancelled or failed, is saved whole in
+  `proyectos/<slug>/trayectorias/<date>_<request>.json` (same naming as `versiones/`,
+  so the snapshot taken before the turn sorts next to it and is named inside as
+  `versionAntes`). It holds: the conversation as the model saw it (system prompt with
+  manifest and context block included), every tool call with the arguments the model
+  REALLY wrote (the loop replaces long ones with `_omitido` after applying them; the
+  file restores them from the step records), the full tool results (not the 12,000-
+  character cut), the project after the turn, the turn's cost, and a verdict read from
+  the last `escuchar_mezcla` report (silent tracks, clipping, "No problems").
+- `src/core/trayectoria.ts` (pure, tests), `server/api/trayectorias.ts` (48 MB body
+  limit, name validated, logged in `herramientas.log`), `main.ts` `guardarTrayectoria`.
+  `trayectorias` is a hidden folder for `listar_ficheros`, like `versiones`.
+- Verified live: the route writes the file and rejects a bad name. A real turn end to
+  end has NOT been run yet (needs the browser): check that a file appears after a turn.
 
 ## 2. Pending browser checks (Carlos)
 
@@ -122,6 +141,8 @@ None of this has been heard in previous sessions:
 9. **Talking to the agent without a project**, F5, and the conversation is still there.
 10. **The LLM cost counter** (1-Nov) appears in the chat header after the first call,
     the tooltip shows tokens and the price date, and the end-of-turn line has the cost.
+11. **A trajectory file** (1-Nov) appears in `proyectos/<slug>/trayectorias/` after a
+    turn, with the tool calls, their results and `proyectoDespues`; also after Cancel.
 
 ## 3. Pending work
 

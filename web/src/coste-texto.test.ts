@@ -34,15 +34,19 @@ test("tokens: k and M", () => {
   olvidarIdioma();
 });
 
-test("textoCosteLlm: turn and session, no warning with fresh prices", () => {
+test("textoCosteLlm: turn and session, no warning with fresh prices; Ollama Cloud is an estimate", () => {
   fijarIdioma("en");
-  assert.equal(textoCosteLlm(base, AHORA), "LLM $0.04 · $0.31 session");
+  assert.equal(textoCosteLlm(base, AHORA), "LLM ~$0.04 · $0.31 session");
+  assert.match(detalleCosteLlm(base, AHORA), /Estimate: this provider bills a subscription/);
+  const directo = { ...base, proveedor: "deepseek" };
+  assert.equal(textoCosteLlm(directo, AHORA), "LLM $0.04 · $0.31 session");
+  assert.doesNotMatch(detalleCosteLlm(directo, AHORA), /Estimate/);
   olvidarIdioma();
 });
 
 test("textoCosteLlm: the first turn of a session shows one number", () => {
   fijarIdioma("en");
-  const e = { ...base, sesion: { ...base.turno, turnos: 1 } };
+  const e = { ...base, proveedor: "anthropic", sesion: { ...base.turno, turnos: 1 } };
   assert.equal(textoCosteLlm(e, AHORA), "LLM $0.04");
   olvidarIdioma();
 });
@@ -66,7 +70,7 @@ test("avisoPrecios: warns from 72 h, and when there is no list", () => {
   assert.equal(avisoPrecios("2026-11-01T10:00:00Z", AHORA), null);
   assert.equal(avisoPrecios("2026-10-28T10:00:00Z", AHORA), "prices 4 d old");
   assert.equal(avisoPrecios(null, AHORA), "no price list");
-  assert.equal(textoCosteLlm({ ...base, fechaPrecios: "2026-10-28T10:00:00Z" }, AHORA), "LLM $0.04 · $0.31 session · ⚠ prices 4 d old");
+  assert.equal(textoCosteLlm({ ...base, proveedor: "openai", fechaPrecios: "2026-10-28T10:00:00Z" }, AHORA), "LLM $0.04 · $0.31 session · ⚠ prices 4 d old");
   olvidarIdioma();
 });
 

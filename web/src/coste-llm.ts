@@ -24,6 +24,8 @@ export interface CosteLlm {
   textoTurno(): string;
   /** Re-reads the rate (the "Models" menu changed provider or model). */
   refrescar(): Promise<void>;
+  /** The turn's numbers for the trajectory file; null when the rate is unknown. */
+  turno(): { usd: number; tokensNuevos: number; tokensCache: number; tokensSalida: number; tarifa: string | null } | null;
 }
 
 interface RespuestaPrecios {
@@ -33,7 +35,7 @@ interface RespuestaPrecios {
 }
 
 export function initCosteLlm(elemento: HTMLElement | null): CosteLlm {
-  if (!elemento) return { nuevoTurno: () => {}, textoTurno: () => "", refrescar: async () => {} };
+  if (!elemento) return { nuevoTurno: () => {}, textoTurno: () => "", refrescar: async () => {}, turno: () => null };
 
   let turno: Acumulado = { ...ACUMULADO_CERO };
   let sesion: Acumulado = { ...ACUMULADO_CERO };
@@ -137,6 +139,12 @@ export function initCosteLlm(elemento: HTMLElement | null): CosteLlm {
     refrescar: async () => {
       tarifas.clear();
       await pintar();
+    },
+    turno: () => {
+      const k = tarifas.get(clave(getProveedor(), getModel()));
+      if (!k?.tarifa) return null;
+      const { usd, tokensNuevos, tokensCache, tokensSalida } = turno;
+      return { usd, tokensNuevos, tokensCache, tokensSalida, tarifa: k.tarifa.id };
     },
   };
 }

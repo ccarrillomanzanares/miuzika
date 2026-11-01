@@ -31,7 +31,8 @@ export const CARPETAS_COMPARTIDAS = [
  * are—was not visible). It is queried with `buscar_sonido`, not by listing.
  */
 // "versiones": the per-turn snapshots (src/core/versiones.ts) are viewed with the `versiones` tool.
-export const CARPETAS_OCULTAS = ["catalogo", "node_modules", ".git", "__pycache__", "dist-web", "_referencias", "versiones"] as const;
+// "trayectorias" (1-Nov): one whole turn per file, for the dataset; the agent does not browse them either.
+export const CARPETAS_OCULTAS = ["catalogo", "node_modules", ".git", "__pycache__", "dist-web", "_referencias", "versiones", "trayectorias"] as const;
 
 /** Does the path start with a shared folder? */
 export function esRutaCompartida(ruta: string): boolean {

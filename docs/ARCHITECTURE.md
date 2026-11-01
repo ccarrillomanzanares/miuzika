@@ -234,7 +234,7 @@ in **a single place**: `src/core/rutas.ts` (read by the server and the browser).
 
 ---
 
-## 6. The 26 endpoints
+## 6. The 27 endpoints
 
 All of them are dev-server middlewares, one or more per module in
 `server/api/`; none exist in production because there is no production.
@@ -245,6 +245,7 @@ All of them are dev-server middlewares, one or more per module in
 | `/api/proveedores` | GET, POST | providers, key (never returned), model; `/modelos`, `/probar` | `ajustes-modelos.ts` |
 | `/api/agent-log` | POST | one line per request in `tmp/llm.log`, priced (`coste_usd`, `tarifa`) | `llm.ts` |
 | `/api/precios` | GET, POST | OpenRouter price list cached in `.miuzika/precios.json` (daily); `?proveedor=&modelo=` gives the rate; `/refrescar` | `coste-llm.ts` |
+| `/api/trayectorias` | POST | one whole turn (conversation, real tool arguments, full results, project after, cost, listening verdict) → `proyectos/<slug>/trayectorias/` | `main.ts` |
 | `/api/build` | GET | id of the served code (stale bundle warning) | `build.ts` |
 | `/api/fs/write` | POST | writes to workspace; 409 if it duplicates the engine or is `patch*.py` | `escribir_fichero` |
 | `/api/fs/read` | POST | reads up to 20,000 characters | `leer_fichero` |

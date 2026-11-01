@@ -224,7 +224,14 @@ export async function ejecutarAgente(
       const tHerramienta = Date.now();
       const resultado = await ejecutarHerramienta(nombre, argumentos, senal);
       const msHerramienta = Date.now() - tHerramienta;
-      herramientas.push({ nombre, ms: msHerramienta, ok: resultado.ok });
+      // `argumentos` is the string the model wrote: below, long ones are replaced in the
+      // history with a summary, and the trajectory file needs the real thing.
+      herramientas.push({
+        nombre,
+        ms: msHerramienta,
+        ok: resultado.ok,
+        detalle: { id: llamada.id ?? `call_${pasos}_${i}`, argumentos, resultado: resultado.texto },
+      });
       alEvento?.({
         tipo: "aviso",
         texto: resultado.texto.split("\n")[0].slice(0, 160),

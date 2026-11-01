@@ -61,6 +61,10 @@ import { fraseBarra, lineaResumen, pasoTerminado, segundos } from "./agent/activ
 import { cabeceraDeProyecto, registrarAcciones, setProyectoActivo } from "./agent/tools.ts";
 import { crearAcciones } from "./agent/acciones.ts";
 import { CARPETA_VERSIONES, nombreDeVersion } from "../../src/core/versiones.ts";
+import { construirTrayectoria, nombreDeTrayectoria, type DetallePaso, type EstadoTurno } from "../../src/core/trayectoria.ts";
+import { HUELLA_PROMPT } from "./agente-prompt.ts";
+import { getProveedor } from "./llm.ts";
+import type { ResultadoAgente } from "./agent/agent.ts";
 import { ejecutarHerramienta } from "./agent/tools.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 import { PanelPad } from "./pad.ts";
@@ -193,18 +197,23 @@ async function responderAlUsuario(texto: string): Promise<void> {
   cancelador = new AbortController();
   $<HTMLButtonElement>("cancelar").hidden = false;
   await refrescarManifiesto();
-  await guardarVersion(texto);
+  const versionAntes = await guardarVersion(texto);
+  // Where this turn starts in the history: the trajectory file keeps what precedes it as context.
+  const desde = conversacion.length;
   conversacion.push({ role: "user", content: texto });
   const burbuja = chat.add("assistant", "…");
   const t0 = Date.now();
   ultimoEventoMs = t0;
   costeLlm.nuevoTurno();
+  const senalTurno = cancelador.signal;
+  let resultadoTurno: ResultadoAgente | null = null;
+  let errorTurno: string | undefined;
   pasoActual = `Agent ${getModel()}: thinking`;
   pasoDesde = null;
   arrancarLatido(t0);
   try {
     const resultado = await ejecutarAgente(conversacion, {
-      signal: cancelador.signal,
+      signal: senalTurno,
       alEvento: (evento) => {
         // Any event counts as a sign of life for the turn.
         ultimoEventoMs = Date.now();
@@ -232,6 +241,7 @@ async function responderAlUsuario(texto: string): Promise<void> {
         setStatus(fraseBarra(pasoActual, null, Date.now() - t0));
       },
     });
+    resultadoTurno = resultado;
     chat.ocultarProgreso();
     chat.update(burbuja, resultado.texto || "(no final answer)");
     pararLatido();
@@ -258,6 +268,7 @@ async function responderAlUsuario(texto: string): Promise<void> {
     );
   } catch (error) {
     const mensaje = error instanceof Error ? error.message : String(error);
+    errorTurno = mensaje;
     pararLatido();
     if (cancelador?.signal.aborted) {
       chat.update(
@@ -278,9 +289,71 @@ async function responderAlUsuario(texto: string): Promise<void> {
     $<HTMLButtonElement>("cancelar").hidden = true;
     chat.setBusy(false);
   }
+  // The whole turn to disk BEFORE trimming the history: finished, cancelled or failed.
+  void guardarTrayectoria({
+    t0: new Date(t0),
+    pedido: texto,
+    desde,
+    estado: senalTurno.aborted ? "cancelado" : errorTurno !== undefined ? "error" : "ok",
+    error: errorTurno,
+    resultado: resultadoTurno,
+    versionAntes,
+  });
   // The history cannot grow without limit: system + the last turns, always cutting
   // at a user message (never between a call and its result).
   recortarConversacion(conversacion, 25);
+}
+
+/**
+ * One file per turn in `proyectos/<slug>/trayectorias/` (src/core/trayectoria.ts): the
+ * conversation as the model saw it, every tool call with its real arguments and its
+ * whole result, the project after the turn, the cost and the listening verdict. It is
+ * the dataset for a model of our own and the audit of what a turn costs
+ * (docs/PLAN-MODELO-PROPIO.md). Nothing here can break a turn.
+ */
+async function guardarTrayectoria(d: {
+  t0: Date;
+  pedido: string;
+  desde: number;
+  estado: EstadoTurno;
+  error?: string;
+  resultado: ResultadoAgente | null;
+  versionAntes: string | null;
+}): Promise<void> {
+  try {
+    const vista = project;
+    const slug = vista ? slugDeProyecto(vista) : slugAgente || "sin-proyecto";
+    const herramientas: DetallePaso[] = (d.resultado?.herramientas ?? []).flatMap((p) =>
+      p.detalle ? [{ id: p.detalle.id, nombre: p.nombre, argumentos: p.detalle.argumentos, resultado: p.detalle.resultado, ok: p.ok, ms: p.ms }] : [],
+    );
+    const trayectoria = construirTrayectoria({
+      t0: d.t0,
+      t1: new Date(),
+      proyecto: slug,
+      proveedor: getProveedor(),
+      modelo: getModel(),
+      huellaPrompt: HUELLA_PROMPT,
+      estado: d.estado,
+      error: d.error,
+      pedido: d.pedido,
+      respuesta: d.resultado?.texto ?? "",
+      pasos: d.resultado?.pasos ?? 0,
+      llamadas: d.resultado?.llamadas ?? herramientas.length,
+      desde: d.desde,
+      mensajes: conversacion,
+      herramientas,
+      coste: costeLlm.turno(),
+      versionAntes: d.versionAntes,
+      proyectoDespues: vista ? serializarProyecto(vista, audioAssets).datos : null,
+    });
+    await fetch("/api/trayectorias", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...cabeceraDeProyecto(slug) },
+      body: JSON.stringify({ nombre: nombreDeTrayectoria(d.t0, d.pedido), trayectoria }),
+    });
+  } catch {
+    /* the dataset cannot break a turn */
+  }
 }
 
 chat.onSend((texto) => {
@@ -384,21 +457,25 @@ async function cargarAgenteDelProyecto(vista: Project | null): Promise<void> {
  * what lets the agent (the `versiones` tool) go back one track or the whole project.
  * The server keeps the last MAX_VERSIONES.
  */
-async function guardarVersion(pedido: string): Promise<void> {
+async function guardarVersion(pedido: string): Promise<string | null> {
   const vista = project;
-  if (!vista) return;
+  if (!vista) return null;
+  const nombre = nombreDeVersion(new Date(), pedido);
   try {
     const { datos } = serializarProyecto(vista, audioAssets);
     await fetch(`/api/fs/write`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        path: `proyectos/${slugDeProyecto(vista)}/${CARPETA_VERSIONES}/${nombreDeVersion(new Date(), pedido)}`,
+        path: `proyectos/${slugDeProyecto(vista)}/${CARPETA_VERSIONES}/${nombre}`,
         contenido: JSON.stringify(datos),
       }),
     });
+    // The trajectory file names it, so the "before" state of a turn can be found.
+    return nombre;
   } catch {
     /* a snapshot that fails cannot stop the turn */
+    return null;
   }
 }
 
