@@ -59,6 +59,12 @@ export interface OpcionesAgente {
   alEvento?: (evento: EventoAgente) => void;
   /** Cancel the turn ("Cancel" button): cuts the model and the tool in flight. */
   signal?: AbortSignal;
+  /**
+   * Asked before every model call: a text ends the turn with that notice (the cost
+   * cap set in Models, tope-coste.ts); null lets it go on. Checked between calls and
+   * not inside one because a call in flight is already paid for.
+   */
+  debeParar?: () => string | null;
 }
 
 /** Runs the loop over `mensajes` (they are modified: the history continues). */
@@ -103,6 +109,12 @@ export async function ejecutarAgente(
 
   while (pasos < maxPasos) {
     if (senal?.aborted) return cancelado();
+    const motivo = opciones.debeParar?.() ?? null;
+    if (motivo !== null) {
+      alEvento?.({ tipo: "aviso", texto: motivo.split(".")[0].slice(0, 160) });
+      mensajes.push({ role: "assistant", content: motivo });
+      return { texto: motivo, pasos, llamadas, ms: Date.now() - t0, herramientas };
+    }
     pasos += 1;
     let ultimoAviso = 0;
     let respuesta = await chat(mensajes, {

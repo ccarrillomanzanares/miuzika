@@ -109,6 +109,12 @@ const ES: Diccionario = {
   "coste.preciosDe": "Precios de OpenRouter, descargados el",
   "coste.sinListaDetalle": "El servidor aún no tiene lista de precios (¿sin red al arrancar?).",
   "coste.estimado": "Estimación: este proveedor cobra una suscripción, no tokens. La cifra es el precio del modelo en OpenRouter, para comparar modelos.",
+  "coste.estimadoCorto": "Estimación: este proveedor cobra una suscripción.",
+  // Cost cap per turn (tope-coste.ts).
+  "tope.parado": "Me he parado: este turno ya ha costado",
+  "tope.limite": "y el tope puesto en Modelos es",
+  "tope.cola": "Lo que ya se escribió en disco se queda. Sube el tope en Modelos o dime «continúa».",
+  "coste.porTurno": "por turno típico (27 llamadas, 1,3 M entrada, 99% en caché, 50 k salida)",
 };
 
 const DICCIONARIOS: Partial<Record<Idioma, Diccionario>> = { es: ES };

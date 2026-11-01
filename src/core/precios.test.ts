@@ -6,6 +6,7 @@ import {
   antiguedadHoras,
   claveModelo,
   costeDe,
+  costeTurnoTipico,
   tarifaDesdeOpenRouter,
   tarifaPara,
   tarifaVigente,
@@ -162,6 +163,15 @@ test("tarifaPara: OpenRouter ids are looked up as they are; local providers are 
   assert.equal(tarifaPara("openrouter", "deepseek-v4.1-flash:batch", LISTA), null);
   assert.equal(tarifaPara("ollama-local", "qwen3:8b", LISTA), TARIFA_LOCAL);
   assert.equal(tarifaPara("lmstudio", "", []), TARIFA_LOCAL);
+});
+
+test("costeTurnoTipico: ~0.04 $ with DeepSeek Flash, ~1.2 $ with Sonnet 4.5, 0 locally", () => {
+  const fecha = new Date("2026-11-01T12:00:00Z");
+  const flash = costeTurnoTipico(tarifaDesdeOpenRouter(DEEPSEEK_FLASH)!, fecha);
+  assert.ok(flash > 0.03 && flash < 0.05, String(flash));
+  const sonnet = costeTurnoTipico(tarifaDesdeOpenRouter(SONNET)!, fecha);
+  assert.ok(sonnet > 1.0 && sonnet < 1.4, String(sonnet));
+  assert.equal(costeTurnoTipico(TARIFA_LOCAL, fecha), 0);
 });
 
 test("antiguedadHoras", () => {

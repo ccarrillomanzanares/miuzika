@@ -487,6 +487,7 @@ list, in `docs/REVISION-2026-10-27.md`.
 | `api.ts` | 36 | mounts the routes |
 | `contexto.ts` | 480 | shared paths, Python, bodies and logs; prices each `llm.log` line |
 | `precios.ts` | 120 | price store: downloads OpenRouter's list, keeps a dated copy, answers rates |
+| `api/trayectorias.ts` | 60 | writes one whole agent turn per file in `proyectos/<slug>/trayectorias/` |
 | `api/ficheros.ts` | 287 | fs/*, manifest, build, agent-log |
 | `api/proyectos.ts` | 88 | proyecto.json |
 | `api/audio.ts` | 215 | upload, serve, peaks, MIDI, verify, reference |

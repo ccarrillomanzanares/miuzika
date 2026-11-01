@@ -1248,6 +1248,26 @@ button.active {
   font-size: 13px;
 }
 
+.dialogo-modelos .modelos-tope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+.dialogo-modelos .modelos-tope input {
+  width: 72px;
+  font: inherit;
+  padding: 2px 4px;
+}
+.dialogo-modelos .modelos-tope .ayuda {
+  flex-basis: 100%;
+  margin: 0;
+}
+.modelos-detalle .modelos-precio {
+  min-height: 1.2em;
+}
 .modelos-detalle .fila-modelo {
   display: flex;
   gap: 8px;

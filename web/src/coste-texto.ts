@@ -6,7 +6,7 @@
  * counter warns when the list is older than HORAS_PRECIOS_VIEJOS.
  */
 
-import { HORAS_PRECIOS_VIEJOS, type Tarifa } from "../../src/core/precios.ts";
+import { HORAS_PRECIOS_VIEJOS, costeTurnoTipico, type Tarifa } from "../../src/core/precios.ts";
 import { locale, t } from "./i18n.ts";
 
 /** What the counter knows about the current turn and the session. */
@@ -73,6 +73,30 @@ export function textoCosteLlm(e: EstadoCosteLlm, ahora = Date.now()): string {
   return partes.join(" · ");
 }
 
+const porMillon = (x: number): string => `$${(x * 1e6).toLocaleString(locale(), { maximumFractionDigits: 3 })}/M`;
+
+/**
+ * The rate line shown under the model field in "Models": prices per million tokens and
+ * what a typical turn costs, so the model is chosen knowing the price. null rate =
+ * not in the list; "local" = free.
+ */
+export function textoTarifa(proveedor: string, tarifa: Tarifa | null, fechaPrecios: string | null, ahora = Date.now()): string {
+  if (tarifa === null) return t("coste.desconocidoDetalle", "Not in the OpenRouter price list: no cost is estimated.");
+  if (tarifa.id === "local") return t("coste.localDetalle", "Runs on this machine: nothing to pay.");
+  const turno = costeTurnoTipico(tarifa, new Date(ahora));
+  const partes = [
+    `${porMillon(tarifa.prompt)} ${t("coste.entrada", "in")} · ${porMillon(tarifa.cacheRead)} ${t("coste.cache", "cache")} · ${porMillon(tarifa.completion)} ${t("coste.salida", "out")}`,
+    `${esEstimado(proveedor) ? "~" : "≈"}${usd(turno)} ${t("coste.porTurno", "per typical turn (27 calls, 1.3 M in, 99% cached, 50 k out)")}`,
+  ];
+  const aviso = avisoPrecios(fechaPrecios, ahora);
+  if (aviso) partes.push(`⚠ ${aviso}`);
+  else if (fechaPrecios) {
+    partes.push(`${t("coste.preciosDe", "Prices from OpenRouter, downloaded")} ${new Date(fechaPrecios).toLocaleDateString(locale(), { day: "numeric", month: "short" })}`);
+  }
+  if (esEstimado(proveedor)) partes.push(t("coste.estimadoCorto", "Estimate: this provider bills a subscription."));
+  return partes.join(" · ");
+}
+
 const porcentajeCache = (a: Acumulado): string => {
   const entrada = a.tokensNuevos + a.tokensCache;
   return entrada === 0 ? "" : ` (${Math.round((a.tokensCache / entrada) * 100)}% ${t("coste.cacheados", "cached")})`;
@@ -91,7 +115,6 @@ export function detalleCosteLlm(e: EstadoCosteLlm, ahora = Date.now()): string {
     if (e.tarifa.id === "local") {
       lineas.push(t("coste.localDetalle", "Runs on this machine: nothing to pay."));
     } else {
-      const porMillon = (x: number): string => `$${(x * 1e6).toLocaleString(locale(), { maximumFractionDigits: 3 })}/M`;
       lineas.push(
         `${t("coste.tarifa", "Rate")} ${e.tarifa.id}: ${porMillon(e.tarifa.prompt)} ${t("coste.entrada", "in")} · ${porMillon(e.tarifa.cacheRead)} ${t("coste.cache", "cache")} · ${porMillon(e.tarifa.completion)} ${t("coste.salida", "out")}`,
       );

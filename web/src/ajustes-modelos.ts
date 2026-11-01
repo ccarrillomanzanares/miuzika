@@ -7,6 +7,9 @@
 
 import { fijarActivo } from "./llm.ts";
 import { idioma } from "./i18n.ts";
+import { textoTarifa } from "./coste-texto.ts";
+import { guardarTope, leerTope } from "./tope-coste.ts";
+import type { Tarifa } from "../../src/core/precios.ts";
 
 interface ProveedorVista {
   id: string;
@@ -85,6 +88,13 @@ export class AjustesModelos {
       <p class="modelos-actual">${tx("El agente usa", "The agent uses")} <b>${escapar(
         estado.proveedores.find((x) => x.id === estado.activo)?.nombre ?? estado.activo,
       )}</b> · <code>${escapar(estado.modelo || "—")}</code></p>
+      <label class="modelos-tope">${tx("Tope de coste por turno", "Cost cap per turn")}
+        <span class="fila-modelo"><input name="tope" type="number" min="0" step="0.05" inputmode="decimal" value="${leerTope() ?? ""}" placeholder="${tx("sin tope", "no cap")}"> $</span>
+        <small class="ayuda">${tx(
+          "El turno se corta con un aviso al llegar a esta cifra (precios de OpenRouter). Vacío = sin tope.",
+          "The turn stops with a notice when it reaches this amount (OpenRouter prices). Empty = no cap.",
+        )}</small>
+      </label>
       <div class="modelos">
         <ul class="modelos-lista">
           ${estado.proveedores
@@ -123,6 +133,7 @@ export class AjustesModelos {
             <datalist id="modelos-${p.id}">${lista.map((m) => `<option value="${escapar(m)}"></option>`).join("")}</datalist>
           </label>
           ${lista.length > 0 ? `<small class="ayuda">${lista.length} ${tx("modelos disponibles", "models available")}</small>` : ""}
+          <p class="ayuda modelos-precio" data-precio>…</p>
           <p class="modelos-mensaje" data-mensaje></p>
           <div class="dialogo-acciones">
             ${p.necesitaClave && p.tieneClave && !p.claveDelEnv ? `<button type="button" data-borrar>${tx("Borrar clave", "Remove key")}</button>` : ""}
@@ -159,6 +170,39 @@ export class AjustesModelos {
     };
 
     this.dialogo.querySelectorAll("[data-cerrar]").forEach((b) => b.addEventListener("click", () => this.dialogo.close()));
+
+    // The cap is global (one number for whichever model is active) and lives in this browser.
+    q<HTMLInputElement>("[name=tope]")?.addEventListener("change", (ev) => {
+      const valor = Number((ev.target as HTMLInputElement).value);
+      guardarTope(Number.isFinite(valor) && valor > 0 ? valor : null);
+    });
+
+    // The rate of what is typed in the model field, so the choice is made knowing the price.
+    const precio = q<HTMLElement>("[data-precio]");
+    let pedidoPrecio = 0;
+    const pintarPrecio = async (): Promise<void> => {
+      const modelo = q<HTMLInputElement>("[name=modelo]")?.value.trim() ?? "";
+      const n = ++pedidoPrecio;
+      if (!precio) return;
+      if (modelo === "" && p.necesitaClave) {
+        precio.textContent = "";
+        return;
+      }
+      try {
+        const res = await fetch(`/api/precios?proveedor=${encodeURIComponent(p.id)}&modelo=${encodeURIComponent(modelo)}`, { cache: "no-store" });
+        const datos = (await res.json()) as { tarifa?: Tarifa | null; fecha?: string | null };
+        if (n !== pedidoPrecio) return;
+        precio.textContent = textoTarifa(p.id, datos.tarifa ?? null, datos.fecha ?? null);
+      } catch {
+        if (n === pedidoPrecio) precio.textContent = "";
+      }
+    };
+    void pintarPrecio();
+    let esperaPrecio = 0;
+    q<HTMLInputElement>("[name=modelo]")?.addEventListener("input", () => {
+      window.clearTimeout(esperaPrecio);
+      esperaPrecio = window.setTimeout(() => void pintarPrecio(), 400);
+    });
     this.dialogo.querySelectorAll<HTMLButtonElement>("[data-prov]").forEach((b) =>
       b.addEventListener("click", () => {
         this.elegido = b.dataset.prov!;

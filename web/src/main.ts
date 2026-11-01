@@ -63,6 +63,7 @@ import { crearAcciones } from "./agent/acciones.ts";
 import { CARPETA_VERSIONES, nombreDeVersion } from "../../src/core/versiones.ts";
 import { construirTrayectoria, nombreDeTrayectoria, type DetallePaso, type EstadoTurno } from "../../src/core/trayectoria.ts";
 import { HUELLA_PROMPT } from "./agente-prompt.ts";
+import { leerTope, motivoDeTope } from "./tope-coste.ts";
 import { getProveedor } from "./llm.ts";
 import type { ResultadoAgente } from "./agent/agent.ts";
 import { ejecutarHerramienta } from "./agent/tools.ts";
@@ -214,6 +215,8 @@ async function responderAlUsuario(texto: string): Promise<void> {
   try {
     const resultado = await ejecutarAgente(conversacion, {
       signal: senalTurno,
+      // Cost cap per turn (Models): the counter prices each call as it ends.
+      debeParar: () => motivoDeTope(costeLlm.turno()?.usd ?? null, leerTope()),
       alEvento: (evento) => {
         // Any event counts as a sign of life for the turn.
         ultimoEventoMs = Date.now();

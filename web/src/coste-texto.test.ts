@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { ACUMULADO_CERO, avisoPrecios, detalleCosteLlm, textoCosteLlm, tokens, usd, type EstadoCosteLlm } from "./coste-texto.ts";
+import { ACUMULADO_CERO, avisoPrecios, detalleCosteLlm, textoCosteLlm, textoTarifa, tokens, usd, type EstadoCosteLlm } from "./coste-texto.ts";
 import { TARIFA_LOCAL, type Tarifa } from "../../src/core/precios.ts";
 import { fijarIdioma, olvidarIdioma } from "./i18n.ts";
 
@@ -93,6 +93,21 @@ test("detalleCosteLlm: in Spanish", () => {
   assert.match(d, /Este turno: 27 llamadas/);
   assert.equal(textoCosteLlm({ ...base, tarifa: null }, AHORA), "LLM precio desconocido · deepseek-v4.1-flash:1017");
   assert.equal(avisoPrecios("2026-10-28T10:00:00Z", AHORA), "precios de hace 4 d");
+  olvidarIdioma();
+});
+
+test("textoTarifa: the line under the model field in Models", () => {
+  fijarIdioma("en");
+  const linea = textoTarifa("deepseek", DEEPSEEK, "2026-11-01T10:00:00Z", AHORA);
+  assert.match(linea, /^\$0.15\/M in · \$0.003\/M cache · \$0.6\/M out · ≈\$0.04 per typical turn/);
+  assert.match(linea, /Prices from OpenRouter, downloaded/);
+  assert.doesNotMatch(linea, /Estimate/);
+  const nube = textoTarifa("ollama-cloud", DEEPSEEK, "2026-11-01T10:00:00Z", AHORA);
+  assert.match(nube, /~\$0.04 per typical turn/);
+  assert.match(nube, /Estimate: this provider bills a subscription/);
+  assert.equal(textoTarifa("groq", null, "2026-11-01T10:00:00Z", AHORA), "Not in the OpenRouter price list: no cost is estimated.");
+  assert.equal(textoTarifa("ollama-local", TARIFA_LOCAL, null, AHORA), "Runs on this machine: nothing to pay.");
+  assert.match(textoTarifa("deepseek", DEEPSEEK, "2026-10-20T10:00:00Z", AHORA), /⚠ prices 12 d old/);
   olvidarIdioma();
 });
 

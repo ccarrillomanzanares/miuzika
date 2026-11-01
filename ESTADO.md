@@ -124,6 +124,16 @@ history, humseed, is on the `humseed` branch). On the laptop, the folder follows
 - Verified live: the route writes the file and rejects a bad name. A real turn end to
   end has NOT been run yet (needs the browser): check that a file appears after a turn.
 
+**1-Nov: prices in "Models" and a cost cap per turn.**
+- Under the model field, the rate of what is typed: $/M in, cache and out, and what a
+  typical turn costs (`TURNO_TIPICO` in `src/core/precios.ts`: 27 calls of 48 k with 99%
+  cached and 1.9 k out, the middle of the 28-Oct measurements). "~" with Ollama Cloud
+  (subscription), "≈" otherwise; "price unknown" when not in the list.
+- "Cost cap per turn" ($, this browser, `tope-coste.ts`): the loop asks `debeParar`
+  before every model call and ends the turn with a notice naming both numbers when the
+  turn's cost reaches the cap. Empty = no cap. With an unknown rate nothing can be
+  measured, so nothing stops (said in the Models help). Not seen in a browser yet.
+
 ## 2. Pending browser checks (Carlos)
 
 None of this has been heard in previous sessions:
@@ -143,6 +153,9 @@ None of this has been heard in previous sessions:
     the tooltip shows tokens and the price date, and the end-of-turn line has the cost.
 11. **A trajectory file** (1-Nov) appears in `proyectos/<slug>/trayectorias/` after a
     turn, with the tool calls, their results and `proyectoDespues`; also after Cancel.
+12. **"Models"** (1-Nov): the rate line appears under the model field and changes while
+    typing; a cap of e.g. 0.01 $ with DeepSeek stops a composing turn after a few calls
+    with the notice, and the counter in the header agrees with the number in the notice.
 
 ## 3. Pending work
 

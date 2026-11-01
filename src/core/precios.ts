@@ -215,6 +215,29 @@ export function tarifaPara(proveedor: string, modelo: string, tarifas: readonly 
   return null;
 }
 
+/**
+ * A typical composing turn, measured on the 28-Oct "Hard" session (tmp/llm.log, 8
+ * turns): 23 to 46 calls, 1.0 to 1.7 M input tokens of which 99% were cache reads, 12
+ * to 97 k output. The middle of that range, used to show "about X $ per turn" when a
+ * model is chosen in "Models". Per call (not per turn) so size-based overrides apply
+ * as they would in practice: ~27 calls of 48 k.
+ */
+export const TURNO_TIPICO = { llamadas: 27, promptPorLlamada: 48_148, cachePorLlamada: 47_667, salidaPorLlamada: 1_852 } as const;
+
+/** Estimated cost in USD of a typical turn (TURNO_TIPICO) at this rate, at `fecha`. */
+export function costeTurnoTipico(tarifa: Tarifa, fecha = new Date()): number {
+  const porLlamada = costeDe(
+    tarifa,
+    {
+      prompt_tokens: TURNO_TIPICO.promptPorLlamada,
+      completion_tokens: TURNO_TIPICO.salidaPorLlamada,
+      prompt_tokens_details: { cached_tokens: TURNO_TIPICO.cachePorLlamada },
+    },
+    fecha,
+  );
+  return porLlamada.usd * TURNO_TIPICO.llamadas;
+}
+
 /** Hours since the list was downloaded (null if there is no date). */
 export function antiguedadHoras(fecha: string | null | undefined, ahora = Date.now()): number | null {
   if (!fecha) return null;
