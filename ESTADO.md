@@ -84,6 +84,27 @@ history, humseed, is on the `humseed` branch). On the laptop, the folder follows
   still needs to be written again. Drum, bass and bus effects still have default
   values.
 
+**1-Nov: model-cost counter** (towards a paid "advanced" mode and a local model, see
+`docs/PLAN-MODELO-PROPIO.md`). Carlos asked that any cost shown update by itself.
+- `src/core/precios.ts`: pure pricing. Rates come from OpenRouter's public model list
+  (452 models on 1-Nov, cached-input price and DeepSeek's UTC time windows included);
+  `tarifaPara(proveedor, modelo)` maps our provider/model names to an OpenRouter id
+  (`claude-sonnet-5-5` = `anthropic/claude-sonnet-5.5`, `deepseek-v4.1-flash:1017` =
+  `deepseek/deepseek-v4.1-flash-1017`), local providers are free, unknown models give
+  null and the interface says "price unknown" (never a made-up number). Cache writes
+  are not reported by the OpenAI-compatible `usage` and are not counted (lower bound).
+- `server/precios.ts` + `/api/precios`: list downloaded at start-up if the copy is older
+  than a day, then daily, kept in `.miuzika/precios.json`; a failed download keeps the
+  copy. Every `tmp/llm.log` line now carries `proveedor`, `coste_usd` and `tarifa`
+  (verified live: a 48 k call with 47.9 k cached = 0.000218 $).
+- Chat header: "LLM $0.04 · $0.31 session" next to the GPU counter, tooltip with tokens,
+  cache share, the rate per million and the date of the price list (warns at 72 h); the
+  end-of-turn line adds the turn's cost. Session total survives F5 (localStorage).
+- Measured on the 28-Oct log before this: a composing turn is 23 to 46 calls, 1.0 to
+  1.7 M input tokens (99% cache reads), 12 to 97 k output. At 1-Nov prices that is
+  ~0.04 $ with DeepSeek V4.1 Flash and ~1.2 $ with Claude Sonnet 4.5 per turn.
+- NOT seen in a browser yet (no browser from this session): the counter itself.
+
 ## 2. Pending browser checks (Carlos)
 
 None of this has been heard in previous sessions:
@@ -99,6 +120,8 @@ None of this has been heard in previous sessions:
 8. **A project with long stems** (e.g. "hurt-instrumental"): it opens and memory holds
    with the 400 MB budget.
 9. **Talking to the agent without a project**, F5, and the conversation is still there.
+10. **The LLM cost counter** (1-Nov) appears in the chat header after the first call,
+    the tooltip shows tokens and the price date, and the end-of-turn line has the cost.
 
 ## 3. Pending work
 

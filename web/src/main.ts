@@ -42,6 +42,7 @@ import {
 import { TimelineView, escapeHtml } from "./timeline.ts";
 import { initChat } from "./chat.ts";
 import { initCosteGpu } from "./gpu-coste.ts";
+import { initCosteLlm } from "./coste-llm.ts";
 import { minutosYsegundos, sinSenales } from "./gpu-texto.ts";
 import { vigilarVersion } from "./build.ts";
 import { cargarConfigLlm, getModel, health, listModels, setModel } from "./llm.ts";
@@ -86,6 +87,7 @@ const songInfo = $("song-info");
 const chat = initChat();
 /** GPU spending counter (generic: fed by /api/gpu/estado). */
 const costeGpu = initCosteGpu(document.getElementById("gpu-coste"));
+const costeLlm = initCosteLlm(document.getElementById("llm-coste"));
 
 const timeline = new TimelineView(canvas, wrap, heads);
 
@@ -196,6 +198,7 @@ async function responderAlUsuario(texto: string): Promise<void> {
   const burbuja = chat.add("assistant", "…");
   const t0 = Date.now();
   ultimoEventoMs = t0;
+  costeLlm.nuevoTurno();
   pasoActual = `Agent ${getModel()}: thinking`;
   pasoDesde = null;
   arrancarLatido(t0);
@@ -233,7 +236,9 @@ async function responderAlUsuario(texto: string): Promise<void> {
     chat.update(burbuja, resultado.texto || "(no final answer)");
     pararLatido();
     // A discreet line at the end of the history: where the turn's time went.
-    chat.add("meta", `✓ ${lineaResumen(resultado)} · ${getModel()}`);
+    // The turn's cost at the end too, so the history says what each request cost.
+    const coste = costeLlm.textoTurno();
+    chat.add("meta", `✓ ${lineaResumen(resultado)} · ${getModel()}${coste ? ` · ${coste}` : ""}`);
     // The turn goes into the project history ALWAYS, even if there was no final
     // answer: otherwise the user's brief was lost and the next turn did not know
     // what had been asked.

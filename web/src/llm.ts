@@ -64,6 +64,24 @@ export interface ChatOptions {
 /** Proxy prefix: the Vite server sets the key. */
 export const LLM_BASE = "/api/llm";
 
+/** Fired on `window` as `miuzika:llm-uso` after every call: the cost counter prices it. */
+export interface UsoLlmEvento {
+  t: string;
+  proveedor: string;
+  modelo: string;
+  usage: NonNullable<ChatResult["usage"]>;
+}
+
+function avisarUso(modelo: string, usage: ChatResult["usage"]): void {
+  if (!usage || typeof window === "undefined") return;
+  try {
+    const detalle: UsoLlmEvento = { t: new Date().toISOString(), proveedor: getProveedor(), modelo, usage };
+    window.dispatchEvent(new CustomEvent("miuzika:llm-uso", { detail: detalle }));
+  } catch {
+    /* the counter must not break a response */
+  }
+}
+
 /**
  * Waits for the model to be loaded.
  *
@@ -110,7 +128,9 @@ function registrarTurno(registro: Record<string, unknown>): void {
     void fetch("/api/agent-log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ t: new Date().toISOString(), ...registro }),
+      // The provider goes along: the server prices the call (tmp/llm.log, coste_usd)
+      // and the same model name costs differently per provider.
+      body: JSON.stringify({ t: new Date().toISOString(), proveedor: getProveedor(), ...registro }),
     }).catch(() => undefined);
   } catch {
     /* logging must not break a response */
@@ -137,6 +157,8 @@ export async function cargarConfigLlm(): Promise<{ proveedor: string; modelo: st
 /** The "Models" menu notifies here when the provider or the model changes. */
 export function fijarActivo(proveedor: string, modelo: string): void {
   activo = { proveedor, modelo };
+  // The cost counter re-reads the rate: the same model costs differently per provider.
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("miuzika:llm-modelo"));
 }
 
 export function getProveedor(): string {
@@ -379,6 +401,7 @@ export async function chat(
     finish_reason: razon,
     usage: uso ?? null,
   });
+  avisarUso(modeloDevuelto, uso);
   return {
     content: texto,
     ms,

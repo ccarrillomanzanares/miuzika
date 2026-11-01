@@ -234,7 +234,7 @@ in **a single place**: `src/core/rutas.ts` (read by the server and the browser).
 
 ---
 
-## 6. The 25 endpoints
+## 6. The 26 endpoints
 
 All of them are dev-server middlewares, one or more per module in
 `server/api/`; none exist in production because there is no production.
@@ -243,7 +243,8 @@ All of them are dev-server middlewares, one or more per module in
 |---|---|---|---|
 | `/api/llm/*` | proxy | `v1/…` to the active provider with its key; `api/…` (web search) to Ollama Cloud | `llm.ts` |
 | `/api/proveedores` | GET, POST | providers, key (never returned), model; `/modelos`, `/probar` | `ajustes-modelos.ts` |
-| `/api/agent-log` | POST | one line per request in `tmp/llm.log` | `llm.ts` |
+| `/api/agent-log` | POST | one line per request in `tmp/llm.log`, priced (`coste_usd`, `tarifa`) | `llm.ts` |
+| `/api/precios` | GET, POST | OpenRouter price list cached in `.miuzika/precios.json` (daily); `?proveedor=&modelo=` gives the rate; `/refrescar` | `coste-llm.ts` |
 | `/api/build` | GET | id of the served code (stale bundle warning) | `build.ts` |
 | `/api/fs/write` | POST | writes to workspace; 409 if it duplicates the engine or is `patch*.py` | `escribir_fichero` |
 | `/api/fs/read` | POST | reads up to 20,000 characters | `leer_fichero` |
@@ -483,7 +484,8 @@ list, in `docs/REVISION-2026-10-27.md`.
 | file | lines | what it owns |
 |---|---|---|
 | `api.ts` | 36 | mounts the routes |
-| `contexto.ts` | 458 | shared paths, Python, bodies and logs |
+| `contexto.ts` | 480 | shared paths, Python, bodies and logs; prices each `llm.log` line |
+| `precios.ts` | 120 | price store: downloads OpenRouter's list, keeps a dated copy, answers rates |
 | `api/ficheros.ts` | 287 | fs/*, manifest, build, agent-log |
 | `api/proyectos.ts` | 88 | proyecto.json |
 | `api/audio.ts` | 215 | upload, serve, peaks, MIDI, verify, reference |

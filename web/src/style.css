@@ -661,6 +661,13 @@ button.active {
 .chat-head .coste.activo {
   color: var(--accent);
 }
+/* Model-cost counter sits first; the GPU one follows without a second auto margin. */
+.chat-head .coste + .coste {
+  margin-left: 8px;
+}
+.chat-head .coste.desconocido {
+  opacity: 0.7;
+}
 
 /* Execution target: the laptop CPU or a GPU on Lambda Cloud. */
 .chat-head .destino select {

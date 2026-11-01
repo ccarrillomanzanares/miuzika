@@ -14,6 +14,8 @@ import { relative, resolve, sep } from "node:path";
 import { CARPETAS_OCULTAS, rutaEnWorkspace } from "../src/core/rutas.ts";
 import { slugDe } from "../src/core/nombres.ts";
 import { configDesdeEnv } from "./lambda.ts";
+import { crearAlmacenPrecios } from "./precios.ts";
+import { costeDe } from "../src/core/precios.ts";
 
 export function crearContexto(env: Record<string, string>) {
   // Lambda is OFF unless MIUZIKA_LAMBDA=on: Carlos asked on 31-Oct to stop using the
@@ -81,7 +83,31 @@ export function crearContexto(env: Record<string, string>) {
     }
   };
 
-  const registrarTurno = (linea: string): void => anotar(ficheroLog, compactarTurno(linea));
+  /** Model prices (OpenRouter list, cached in .miuzika/precios.json, refreshed daily). */
+  const precios = crearAlmacenPrecios();
+
+  /**
+   * Adds the cost of the call to a log line: `coste_usd` from its `usage` and the
+   * price in force at that moment, plus which OpenRouter rate was used. Without a
+   * known rate nothing is added (the browser says "price unknown" for the same reason:
+   * a wrong number is worse than none). The log is the audit trail of what a turn
+   * cost: the browser's counter is derived from the same function.
+   */
+  const tarifarLinea = (linea: string): string => {
+    try {
+      const datos = JSON.parse(linea) as { t?: string; proveedor?: string; modelo?: string; usage?: unknown };
+      if (!datos.usage || typeof datos.modelo !== "string") return linea;
+      const tarifa = precios.tarifaPara(String(datos.proveedor ?? "ollama-cloud"), datos.modelo);
+      if (!tarifa) return linea;
+      const fecha = datos.t && Number.isFinite(Date.parse(datos.t)) ? new Date(datos.t) : new Date();
+      const coste = costeDe(tarifa, datos.usage as Parameters<typeof costeDe>[1], fecha);
+      return JSON.stringify({ ...datos, coste_usd: Math.round(coste.usd * 1e6) / 1e6, tarifa: tarifa.id });
+    } catch {
+      return linea;
+    }
+  };
+
+  const registrarTurno = (linea: string): void => anotar(ficheroLog, compactarTurno(tarifarLinea(linea)));
 
   const ficheroHerramientas = resolve(carpetaTmp, "herramientas.log");
   /** Everything the agent writes or runs lives here, and cannot leave it. */
@@ -410,6 +436,7 @@ export function crearContexto(env: Record<string, string>) {
     anotar,
     compactarTurno,
     registrarTurno,
+    precios,
     ficheroHerramientas,
     carpetaTrabajo,
     interprete,

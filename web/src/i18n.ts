@@ -88,6 +88,26 @@ const ES: Diccionario = {
   "gpu.tarifa": "tarifa",
   "gpu.hora": "hora",
   "gpu.sesionNavegador": "Esta sesión del navegador",
+  // Model-cost counter (coste-texto.ts).
+  "coste.desconocido": "precio desconocido",
+  "coste.local": "local, gratis",
+  "coste.sinLista": "sin lista de precios",
+  "coste.precios": "precios de hace",
+  "coste.viejos": "",
+  "coste.modelo": "Modelo",
+  "coste.desconocidoDetalle": "No está en la lista de precios de OpenRouter: no se estima coste.",
+  "coste.llamadas": "llamadas",
+  "coste.entrada": "entrada",
+  "coste.salida": "salida",
+  "coste.cacheados": "en caché",
+  "coste.cache": "caché",
+  "coste.turno": "Este turno",
+  "coste.turnos": "turnos",
+  "coste.localDetalle": "Corre en este equipo: no hay nada que pagar.",
+  "coste.tarifa": "Tarifa",
+  "coste.sinEscrituras": "La API no informa de las escrituras en caché y no se cuentan.",
+  "coste.preciosDe": "Precios de OpenRouter, descargados el",
+  "coste.sinListaDetalle": "El servidor aún no tiene lista de precios (¿sin red al arrancar?).",
 };
 
 const DICCIONARIOS: Partial<Record<Idioma, Diccionario>> = { es: ES };
