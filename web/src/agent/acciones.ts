@@ -24,6 +24,7 @@ import {
 import { normalizarReceta, rutaScriptDeSonido, rutaWavDeSonido, scriptDeSonido, vozPorClave } from "../../../src/core/sonidos.ts";
 import type { RecetaSonido, VozSonido } from "../../../src/core/sonidos.ts";
 import { aplicarPalabras } from "../../../src/core/palabras.ts";
+import { esNombreGenerico, instrumentoGm, nombrePistaMidi } from "../../../src/core/gm-nombres.ts";
 import { OpError, applyOps } from "../../../src/core/ops.ts";
 import type { Op } from "../../../src/core/ops.ts";
 import { notasDeProgresion } from "../../../src/core/composicion.ts";
@@ -237,7 +238,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
                   ? "lead"
                   : "synth";
           const id = `trk_ag_${contador++}`;
-          const nombre = pista.name.slice(0, 60);
+          // MIDI-LLM tracks come unnamed ("Track 1"): the instrument says more (2-Nov).
+          const nombre = nombrePistaMidi(pista).slice(0, 60);
           current = applyOps(current, [
             { op: "add_track", id, name: nombre, kind: "midi", instrument: { type: tipo, program: prog } },
           ]).project;
@@ -750,8 +752,9 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
    * Nothing enters the project: each proposal is summarised (tracks, notes, tempo, share of
    * notes in the project's key) and the agent decides what to bring in with anadir_pistas.
    * Measured 2-Nov-2026 on the A10: 4 proposals in 37.5 s including the model load; the
-   * first run on a fresh instance adds ~30 s of install. The model writes absolute times at
-   * a nominal 120 BPM, so anadir_pistas will warn about the tempo: expected.
+   * first run on a fresh instance adds ~30 s of install. The model writes at a nominal
+   * 120 BPM; the script stamps the project's tempo on the .mid (ticks unchanged), so the
+   * material is read in beats at the song's tempo and anadir_pistas has nothing to warn.
    */
   async function proponerMidi(peticion: PeticionPropuestaMidi, senal?: AbortSignal): Promise<ResultadoAccion> {
     const project = e.proyecto();
@@ -760,7 +763,10 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     const slug = carpetaDeProyecto(project);
     const nombre = slugDe(peticion.nombre, { max: 40, defecto: "propuesta" });
     const variantes = Math.min(8, Math.max(1, Math.trunc(peticion.variantes ?? 2)));
-    const argumentos = ["--prompt", peticion.prompt.trim(), "--variantes", String(variantes), "--nombre", nombre, "--salida", "propuestas"];
+    const argumentos = [
+      "--prompt", peticion.prompt.trim(), "--variantes", String(variantes), "--nombre", nombre,
+      "--salida", "propuestas", "--bpm", String(project.bpm),
+    ];
 
     let corrida: { codigo?: number | null; salida?: string; errores?: string; error?: string; por_timeout?: boolean };
     try {
@@ -806,7 +812,11 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         const fin = Math.max(0, ...pistas.flatMap((t) => t.notes.map((n) => n.start + n.duration)));
         const dentro = notas.length === 0 ? 0 : Math.round((100 * notas.filter((n) => enTono.has(n.pitch % 12)).length) / notas.length);
         const resumen = pistas
-          .map((t) => `${t.channel === 9 ? "drums" : t.name || `prog ${t.program ?? 0}`} ${t.notes.length}n`)
+          // By GM instrument, not "Track 1": on 2-Nov the agent took the channel-10 kit for a piano.
+          .map((t) => {
+            const gm = instrumentoGm(t.program, t.channel);
+            return `${esNombreGenerico(t.name) ? gm : `${t.name} (${gm})`} ${t.notes.length}n`;
+          })
           .join(", ");
         lineas.push(
           `- ${ruta}: ${d.bpm ?? "?"} BPM, ${(fin / beatsPerBar(project)).toFixed(1)} bars, ${pistas.length} tracks (${resumen}); ` +

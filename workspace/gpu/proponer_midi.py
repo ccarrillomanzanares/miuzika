@@ -88,6 +88,26 @@ def commit_del_repo():
         return "unknown"
 
 
+def poner_tempo(ruta, bpm):
+    """Stamp the project tempo on a .mid, leaving every tick where it is.
+
+    MIDI-LLM writes no set_tempo (so readers assume 120) at 50 ticks per beat. The notes
+    are meant in beats, so a 125 BPM project should read them at 125: on 2-Nov the 120-vs-125
+    mismatch made anadir_pistas warn and the agent re-timed the material by hand.
+    """
+    import mido
+
+    midi = mido.MidiFile(str(ruta))
+    for pista in midi.tracks:
+        for i in [i for i, m in enumerate(pista) if m.type == "set_tempo"][::-1]:
+            # Keep the delta of a removed event on the next one, so nothing moves.
+            if i + 1 < len(pista):
+                pista[i + 1].time += pista[i].time
+            del pista[i]
+    midi.tracks[0].insert(0, mido.MetaMessage("set_tempo", tempo=mido.bpm2tempo(bpm), time=0))
+    midi.save(str(ruta))
+
+
 def proponer(args):
     import torch
 
@@ -117,6 +137,8 @@ def proponer(args):
     for k, mid in enumerate(mids, 1):
         destino = salida / f"{args.nombre}-{k}.mid"
         shutil.move(str(mid), str(destino))
+        if args.bpm:
+            poner_tempo(destino, args.bpm)
         ficheros.append(destino.name)
     stats = next(temporal.rglob("generation_stats.json"), None)
     estadisticas = json.loads(stats.read_text()) if stats else {}
@@ -127,7 +149,7 @@ def proponer(args):
         "kind": "generated-midi",
         "generator": {"name": "MIDI-LLM", "model": MODELO, "license": "Llama 3.2 Community License",
                       "repo": REPO_URL, "commit": commit_del_repo(), "backend": "transformers"},
-        "inputs": {"prompt": args.prompt, "temperature": args.temperatura, "top_p": args.top_p,
+        "inputs": {"prompt": args.prompt, "bpm": args.bpm, "temperature": args.temperatura, "top_p": args.top_p,
                    "max_tokens": args.max_tokens, "n_outputs": args.variantes},
         "outputs": ficheros,
         "hardware": {"gpu": gpu},
@@ -148,6 +170,7 @@ def main():
     ap.add_argument("--top_p", type=float, default=0.98)
     ap.add_argument("--max_tokens", type=int, default=2046)
     ap.add_argument("--nombre", default="propuesta")
+    ap.add_argument("--bpm", type=float, default=None, help="Project tempo stamped on the .mid (ticks unchanged)")
     ap.add_argument("--salida", default="propuestas", help="Output folder, relative to the project")
     args = ap.parse_args()
     if os.environ.get(DENTRO) != "1":
