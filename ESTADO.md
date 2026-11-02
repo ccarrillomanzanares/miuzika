@@ -213,6 +213,30 @@ None of this has been heard in previous sessions:
        renderers; the tool summary is already trustworthy; material to compare goes in
        solo/mute at the song's start, not stacked after the last bar (2-Nov: bars 81, 90,
        112, 121, song grew 80 → 136 bars).
+    Browser run of items 1-3, 2-Nov night ("Stahl", DeepSeek v4.1 flash): `proponer_midi` on
+    Lambda wrote both proposals at 125 BPM with the kit on channel 10; `transcribir_audio` wrote
+    125 BPM, last onset at beat 303.5; `generar_audio` gave a 30.000 s WAV. The imports and the
+    mix could not be checked: the dev server had been started from the Claude Code shell and
+    could not spawn Python (Windows exit 0xC0000142 for every child, empty stderr). Start
+    `npm run dev` from Carlos's own terminal. Still to see in the app: the take as "audio" with
+    level in `escuchar_mezcla`, and the GM track names after `anadir_pistas`.
+16. **"Vidrio" run, 2-Nov night** (new project, no GPU, 0.027 $, 89 model calls):
+    - VCSL converts and plays per the table: Steinway B (84 zones) and Concert Harp (45 zones).
+      Nobody has listened yet.
+    - VCSL vs GM, same 48 notes, both at 0 dB: Steinway −32 dBFS, GM piano −17 dBFS. The gap
+      is 15 dB (pending item 3.2 said ~12).
+    - Muted rows are labelled "(muted)", rendered alone and left out of MIX, as fixed on 1-Nov.
+      Clip names come out as "Progresión VCSL 1", without the doubled bar.
+    - `exportar` MIDI works. **WAV fails every time**: "Failed to execute 'copyToChannel' on
+      'AudioBuffer': The provided Float32Array value must not be shared". The offline render
+      returns channels backed by SharedArrayBuffer; `main.ts` casts them and passes them as they
+      are. Fix: copy each channel to a plain Float32Array first (waiting for Carlos: it reloads
+      the page).
+    - The agent retried `exportar` about 20 times, toggling mutes and sends in between, so the
+      three-identical-errors stop never fired. `escuchar_mezcla` cannot measure a bus ("No tracks
+      named sala"), so the reverb tail was not checked.
+    - `usar_instrumento` answered "Could not convert: " with nothing after it when Python died
+      silently; the message should carry the exit code.
     Parked: `generar_audio` default of 2 takes; "Castilian Spanish accent" in the caption;
     Lambda persistent filesystem so cold starts do not reinstall the weights.
 
