@@ -242,7 +242,12 @@ None of this has been heard in previous sessions:
       named sala"), so the reverb tail was not checked.
     - `usar_instrumento` answered "Could not convert: " with nothing after it when Python died
       silently. Fixed 2-Nov night: the server's runner now gives the exit code.
-    Parked: `generar_audio` default of 2 takes; "Castilian Spanish accent" in the caption;
+17. **"Vacío", 2-Nov night**: a 120 s sung song in Spanish, 2 takes (cold A10: boot 270 s,
+    model load 52 s, generation 43 s for both). Both entered as "audio"; the WAV export works.
+    Carlos: the accent is still Latin American even with "Castilian Spanish accent" in the
+    caption, so the caption does not steer it. Transcribing a full mix was dropped: basic-pitch
+    puts voice, guitars and drums in one track. Stem separation comes first.
+    Parked: `generar_audio` default of 2 takes;
     Lambda persistent filesystem so cold starts do not reinstall the weights.
 
 ## 3. Pending work
