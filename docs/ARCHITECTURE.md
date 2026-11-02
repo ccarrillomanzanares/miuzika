@@ -267,12 +267,13 @@ All of them are dev-server middlewares, one or more per module in
 | `/api/voces/nueva` | POST | gate: renders, measures and bakes the voice into `instruments.py` | `crear_voz` |
 | `/api/run/python` | POST | runs a script on the laptop | `ejecutar_python` |
 | `/api/run/lambda` | POST | the same contract on the GPU (409 if the script is pure numpy) | `ejecutar_python` |
+| `/api/transcribir` | POST | WAV → MIDI with basic-pitch (`.miuzika/bp`), into `transcripciones/` | `transcribir_audio` |
 | `/api/gpu/estado` | GET | phase, real rate and spend | `gpu-coste.ts` |
 | `/api/gpu/encender` · `/apagar` | POST | instance lifecycle | header button |
 
 ---
 
-## 7. The agent's 20 tools
+## 7. The agent's tools
 
 `web/src/agent/tools.ts` is the contract with the model (schemas and dispatch);
 `web/src/agent/acciones.ts`, the implementation of those that touch the project.
@@ -280,12 +281,18 @@ All of them are dev-server middlewares, one or more per module in
 **Composing and producing in the project (they run in the tab):**
 `leer_proyecto` · `editar_proyecto` · `escribir_progresion` · `crear_proyecto` ·
 `anadir_pistas` · `ajustar_pistas` · `igualar_clips` · `usar_sample` ·
-`usar_instrumento` · `crear_sonido`
+`usar_instrumento` · `crear_sonido` · `generar_audio` · `transcribir_audio` · `proponer_midi`
 
 **Those that talk to the server:**
 `escribir_fichero` · `leer_fichero` · `listar_ficheros` · `editar_fichero` ·
 `ejecutar_python` · `verificar_audio` · `buscar_sonido` · `listar_voces` ·
 `crear_voz` · `medir_referencia`
+
+**Music models (2-Nov-2026, `docs/PLAN-MODELOS-MUSICA.md`):** `generar_audio` and
+`proponer_midi` run `workspace/gpu/generar_audio.py` (ACE-Step 1.5) and
+`workspace/gpu/proponer_midi.py` (MIDI-LLM) on Lambda through `/api/run/lambda`; both
+scripts bootstrap their own environment on the instance and print a `RESULT {...}` line
+that `src/core/generacion.ts` reads. `transcribir_audio` runs basic-pitch on the laptop.
 
 Why that division: the project **can only be changed by the tab** (it owns
 the master file). The tab registers its actions once with

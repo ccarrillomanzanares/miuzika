@@ -14,6 +14,7 @@ import type { PeticionProgresion } from "../../../src/core/composicion.ts";
 import type { PeticionBateria } from "../../../src/core/bateria.ts";
 import { PATRONES } from "../../../src/core/composicion.ts";
 import { PALABRAS } from "../../../src/core/palabras.ts";
+import type { PeticionGeneracion } from "../../../src/core/generacion.ts";
 import { DEVICE_PARAMS, DEVICE_TYPES, INSTRUMENT_TYPES } from "../../../src/core/types.ts";
 import { firmasDeOps } from "../../../src/core/ops.ts";
 import { MODE_NAMES } from "../../../src/core/theory.ts";
@@ -192,6 +193,34 @@ export interface PeticionSonido {
   args?: Record<string, number | boolean | number[]>;
 }
 
+/** Generate audio with a music model on the GPU and place it as a clip. */
+export interface PeticionGenerar extends PeticionGeneracion {
+  /** Bar where the clip starts (default 0). */
+  inicioCompas?: number;
+  /** Clip length in bars (default: what the audio lasts). */
+  compases?: number;
+}
+
+/** WAV → MIDI with basic-pitch and, optionally, straight into the project. */
+export interface PeticionTranscripcion {
+  /** Path of the audio inside the project (salida/x.wav, entrada/x.wav) or workspace. */
+  archivo: string;
+  /** Name of the .mid and of the track; by default the audio's. */
+  nombre?: string;
+  /** Put the result in the project as a MIDI track (default true). */
+  importar?: boolean;
+  /** Bar where the clip starts when importing (default 0). */
+  inicioCompas?: number;
+}
+
+/** Text → MIDI proposals with MIDI-LLM on the GPU; nothing enters the project by itself. */
+export interface PeticionPropuestaMidi {
+  prompt: string;
+  nombre: string;
+  /** How many proposals (1-8, default 2). */
+  variantes?: number;
+}
+
 /** Put a library sample into the project (clip + asset, normalized). */
 export interface PeticionSample {
   /** Path inside workspace/catalogo/ (the one buscar_sonido returns). */
@@ -245,6 +274,9 @@ export interface AccionesEstudio {
   crearSonido(peticion: PeticionSonido): Promise<ResultadoAccion>;
   usarSample(peticion: PeticionSample): Promise<ResultadoAccion>;
   usarInstrumento(peticion: PeticionInstrumento): Promise<ResultadoAccion>;
+  generarAudio(peticion: PeticionGenerar, senal?: AbortSignal): Promise<ResultadoAccion>;
+  transcribirAudio(peticion: PeticionTranscripcion, senal?: AbortSignal): Promise<ResultadoAccion>;
+  proponerMidi(peticion: PeticionPropuestaMidi, senal?: AbortSignal): Promise<ResultadoAccion>;
 }
 
 /**
@@ -281,6 +313,9 @@ const HERRAMIENTAS_DEL_PROYECTO = new Set([
   "crear_sonido",
   "usar_sample",
   "usar_instrumento",
+  "generar_audio",
+  "transcribir_audio",
+  "proponer_midi",
 ]);
 
 /** "reverb(wet 0..1, decay 0..1, …); eq(low -24..24, …)": what each effect accepts. */
@@ -804,6 +839,93 @@ export const HERRAMIENTAS: ToolSpec[] = [
   {
     type: "function",
     function: {
+      name: "generar_audio",
+      description:
+        "Generates REAL audio (a riff, a texture, a pad, a full passage, with or without voice) with a music " +
+        "model (ACE-Step 1.5) on the Lambda GPU and puts it in the project as an audio track in " +
+        "generado/<nombre>.wav, with a lineage record next to it. Tempo, key and time signature are " +
+        "taken from the project unless given. It costs GPU time: ~3 min to start the instance the " +
+        "first time, ~2.5 min to load the model, then ~15 s per 30 s of audio (measured 2-Nov on an A10). " +
+        "Use it when the engine's voices and the libraries do not have the sound; not for things " +
+        "escribir_notas does better. Never say it sounds good: tell the user to listen.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: {
+            type: "string",
+            description:
+              "Caption in English for the model, max 512 characters: style, instruments, mood, era " +
+              "(e.g. '90s industrial rock, distorted guitar riffs, metallic percussion, dark synth drone').",
+          },
+          nombre: { type: "string", description: "Name of the file and the track (e.g. 'riff-industrial')" },
+          letra: {
+            type: "string",
+            description: "Lyrics with [Verse]/[Chorus] tags for a sung part; omit for instrumental.",
+          },
+          idioma: { type: "string", description: "Language code of the lyrics (es, en...), only with letra" },
+          duracion: { type: "number", description: "Seconds, 10-600 (default 30)" },
+          bpm: { type: "integer", description: "Only to override the project's tempo" },
+          tonalidad: { type: "string", description: "Only to override the project's key, e.g. 'A minor'" },
+          variantes: { type: "integer", description: "Takes of the same prompt, 1-8 (default 1); each one is a track" },
+          semilla: { type: "integer", description: "Fixed seed to repeat a take; omit for a new one" },
+          inicio_compas: { type: "integer", description: "Bar where the clip starts (default 0)" },
+          compases: { type: "integer", description: "Clip length in bars (default: what the audio lasts)" },
+        },
+        required: ["prompt", "nombre"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "transcribir_audio",
+      description:
+        "Extracts the notes of an audio file (WAV/MP3) into MIDI with basic-pitch, on this computer, and " +
+        "puts them in the project as a MIDI track in transcripciones/<nombre>.mid. It is what medir_referencia " +
+        "cannot do: get the melody or the riff out of a stem. ONLY on the user's own recordings or CC " +
+        "material (never a commercial song: LEGAL.md). Measured on miuzika's own stems with the real notes as " +
+        "ground truth: bass F1 0.85, guitar riff 0.89 with some octave errors, polyphonic synth 0.66, " +
+        "~8 s per 2.5 min of audio. Treat the result as a draft: read it with leer_proyecto and fix what is off.",
+      parameters: {
+        type: "object",
+        properties: {
+          archivo: { type: "string", description: "Audio path inside the project (salida/x.wav, entrada/x.wav) or workspace" },
+          nombre: { type: "string", description: "Name of the .mid and of the track (default: the audio's)" },
+          importar: { type: "boolean", description: "false = only write the .mid, do not add a track (default true)" },
+          inicio_compas: { type: "integer", description: "Bar where the clip starts (default 0)" },
+        },
+        required: ["archivo"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "proponer_midi",
+      description:
+        "Asks a music model (MIDI-LLM, Llama 3.2 1B with MIDI tokens) on the Lambda GPU for multitrack MIDI " +
+        "proposals from a text description, and writes them to propuestas/<nombre>-<k>.mid WITHOUT touching " +
+        "the project: it returns a summary of each (tracks, notes, tempo, fit to the key) so you choose. " +
+        "Then anadir_pistas(midis=[...]) brings in the one you like, or you read it with leer_fichero and " +
+        "rewrite the material with escribir_notas. It is raw material for ideas, not a finished " +
+        "arrangement: measured 2-Nov, 4 proposals in ~40 s on a warm instance; cold, add ~3 min boot and ~30 s install.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: {
+            type: "string",
+            description: "Description in English with style, instruments, tempo and key, e.g. '90s industrial rock in E minor at 125 BPM: distorted guitar riff, heavy drums, bass'",
+          },
+          nombre: { type: "string", description: "Base name for the files (e.g. 'riff-ideas')" },
+          variantes: { type: "integer", description: "How many proposals, 1-8 (default 2)" },
+        },
+        required: ["prompt", "nombre"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "crear_sonido",
       description:
         "Creates a real sound and saves it in the project: it picks a voice from the catalog, applies the " +
@@ -1255,6 +1377,46 @@ async function ejecutarCrudo(
             : {}),
           ...(Number(args.compases) > 0 ? { compases: Math.trunc(Number(args.compases)) } : {}),
         });
+      case "generar_audio": {
+        const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+        const txt = (v: unknown): string | undefined => (typeof v === "string" && v.trim() !== "" ? v.trim() : undefined);
+        const entero = (v: unknown): number | undefined => (num(v) === undefined ? undefined : Math.trunc(num(v) as number));
+        return local.generarAudio(
+          {
+            prompt: String(args.prompt ?? ""),
+            nombre: String(args.nombre ?? ""),
+            ...(txt(args.letra) ? { letra: txt(args.letra) } : {}),
+            ...(txt(args.idioma) ? { idioma: txt(args.idioma) } : {}),
+            ...(txt(args.tonalidad) ? { tonalidad: txt(args.tonalidad) } : {}),
+            ...(num(args.duracion) !== undefined ? { duracion: num(args.duracion) } : {}),
+            ...(entero(args.bpm) !== undefined ? { bpm: entero(args.bpm) } : {}),
+            ...(entero(args.variantes) !== undefined ? { variantes: entero(args.variantes) } : {}),
+            ...(entero(args.semilla) !== undefined ? { semilla: entero(args.semilla) } : {}),
+            ...(entero(args.inicio_compas) !== undefined ? { inicioCompas: entero(args.inicio_compas) } : {}),
+            ...((entero(args.compases) ?? 0) > 0 ? { compases: entero(args.compases) } : {}),
+          },
+          senal,
+        );
+      }
+      case "transcribir_audio":
+        return local.transcribirAudio(
+          {
+            archivo: String(args.archivo ?? "").trim(),
+            ...(typeof args.nombre === "string" && args.nombre.trim() !== "" ? { nombre: args.nombre.trim() } : {}),
+            ...(typeof args.importar === "boolean" ? { importar: args.importar } : {}),
+            ...(typeof args.inicio_compas === "number" ? { inicioCompas: Math.trunc(args.inicio_compas) } : {}),
+          },
+          senal,
+        );
+      case "proponer_midi":
+        return local.proponerMidi(
+          {
+            prompt: String(args.prompt ?? ""),
+            nombre: String(args.nombre ?? ""),
+            ...(typeof args.variantes === "number" && args.variantes >= 1 ? { variantes: Math.trunc(args.variantes) } : {}),
+          },
+          senal,
+        );
       case "crear_sonido": {
         const argsSonido =
           typeof args.args === "object" && args.args !== null

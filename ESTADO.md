@@ -134,6 +134,20 @@ history, humseed, is on the `humseed` branch). On the laptop, the folder follows
   turn's cost reaches the cap. Empty = no cap. With an unknown rate nothing can be
   measured, so nothing stops (said in the Models help). Not seen in a browser yet.
 
+**2-Nov: music models** (`docs/PLAN-MODELOS-MUSICA.md`, `fable.md` for the handoff).
+Carlos decided: generation on Lambda first (the laptop has no CUDA and 7.7 GB RAM), ACE-Step
+1.5 as the first model, basic-pitch and MIDI-LLM approved, LoRA / Magenta RT2 / the rest
+parked. Built and measured, nothing heard:
+- `generar_audio` (ACE-Step 1.5 XL turbo on the A10): cold 7.3 min end to end, warm 1.8 min;
+  13 s per 30 s of audio, 16 GB VRAM. Three takes in `proyectos/spike-generacion/generado/`.
+- `transcribir_audio` (basic-pitch, `.miuzika/bp` venv): F1 0.85 bass / 0.89 riff / 0.66 synth
+  against the "Stahl" source MIDI; 8 s per stem.
+- `proponer_midi` (MIDI-LLM 1B on the A10): 4 multitrack proposals in 38 s, 92-100 % of notes
+  in the asked key, nominal 120 BPM. In `proyectos/spike-generacion/propuestas/`.
+- `.env`: `MIUZIKA_LAMBDA=on` again (31-Oct it was turned off). The instance was shut down
+  at the end of the session; the next cold start reinstalls (~2.5 min).
+- Authorship layer (`autoria/`, Spike B) from the morning: see `autoria/CONCEPT.md`.
+
 ## 2. Pending browser checks (Carlos)
 
 None of this has been heard in previous sessions:
@@ -156,6 +170,13 @@ None of this has been heard in previous sessions:
 12. **"Models"** (1-Nov): the rate line appears under the model field and changes while
     typing; a cap of e.g. 0.01 $ with DeepSeek stops a composing turn after a few calls
     with the notice, and the counter in the header agrees with the number in the notice.
+13. **Listen to the generated takes** (2-Nov): `proyectos/spike-generacion/generado/*.wav`
+    (ACE-Step, 30 s and 2 × 60 s, plus a sung one in Spanish if `stahl-voz-es.wav` exists).
+    Nobody has heard them; the plan doc only has levels.
+14. **`generar_audio` from the agent** (2-Nov): with "Stahl" open, ask for a texture; the GPU
+    counter should move, the WAV should appear as a track, and `generado/<nombre>.lineage.json`
+    next to it. Same for `transcribir_audio` on `salida/stahl_bajo.wav` (a MIDI track with
+    ~540 notes) and `proponer_midi` (a summary, nothing added).
 
 ## 3. Pending work
 

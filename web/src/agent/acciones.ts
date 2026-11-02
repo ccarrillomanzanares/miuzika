@@ -14,6 +14,13 @@ import type { InstrumentType, Mode, Note, Project } from "../../../src/core/type
 import { INSTRUMENT_TYPES, beatsPerBar } from "../../../src/core/types.ts";
 import { carpetaDeNombre, carpetaDeProyecto, createProject } from "../../../src/core/project.ts";
 import { compasesDeAudio } from "../../../src/core/tiempo.ts";
+import {
+  CARPETA_GENERADO,
+  argumentosGeneracion,
+  leerResultadoGeneracion,
+  resumenTiempos,
+  validarGeneracion,
+} from "../../../src/core/generacion.ts";
 import { normalizarReceta, rutaScriptDeSonido, rutaWavDeSonido, scriptDeSonido, vozPorClave } from "../../../src/core/sonidos.ts";
 import type { RecetaSonido, VozSonido } from "../../../src/core/sonidos.ts";
 import { aplicarPalabras } from "../../../src/core/palabras.ts";
@@ -24,7 +31,7 @@ import { leerNotacion, tramosIrregulares } from "../../../src/core/notacion.ts";
 import { notasDeBateria } from "../../../src/core/bateria.ts";
 import { nombreDeNota, resumenParaAgente } from "../../../src/core/resumen.ts";
 import { normalizarTexto, slugDe } from "../../../src/core/nombres.ts";
-import { MODE_NAMES } from "../../../src/core/theory.ts";
+import { MODE_NAMES, intervalosDe, pitchClass } from "../../../src/core/theory.ts";
 import {
   SEGUNDOS_STREAMING,
   loadAudioFile,
@@ -46,6 +53,9 @@ import type {
   PeticionNotas,
   PeticionProgresionPista,
   PeticionProyecto,
+  PeticionGenerar,
+  PeticionPropuestaMidi,
+  PeticionTranscripcion,
   PeticionSample,
   PeticionSonido,
   ResultadoAccion,
@@ -611,6 +621,202 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
   }
 
   /**
+   * Generates audio with ACE-Step 1.5 on the Lambda GPU and places it as an audio track.
+   *
+   * The script (`workspace/gpu/generar_audio.py`) runs through the same `/api/run/lambda`
+   * route as the GPU voices: the server powers the instance on, syncs, runs and brings
+   * `generado/<nombre>.wav` plus `<nombre>.lineage.json` back. Then the WAVs enter the
+   * project exactly like `anadir_pistas` would. Measured 2-Nov-2026 on the A10: first call
+   * on a cold instance ~7 min (boot 207 s, install 21 s, model 142 s, 13 s of generation);
+   * warm, the generation alone. Hence the 25-minute limit and the explicit warnings.
+   */
+  async function generarAudio(peticion: PeticionGenerar, senal?: AbortSignal): Promise<ResultadoAccion> {
+    const project = e.proyecto();
+    if (!project) return { ok: false, texto: "There is no open project: the generated audio has to go into one." };
+    const problema = validarGeneracion(peticion);
+    if (problema) return { ok: false, texto: problema };
+    const slug = carpetaDeProyecto(project);
+    const nombre = slugDe(peticion.nombre, { max: 40, defecto: "generado" });
+    const argumentos = argumentosGeneracion({ ...peticion, nombre }, project);
+
+    let corrida: { ok?: boolean; codigo?: number | null; salida?: string; errores?: string; error?: string; por_timeout?: boolean };
+    try {
+      const r = await fetch("/api/run/lambda", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...cabeceraDeProyecto(slug) },
+        body: JSON.stringify({ path: "gpu/generar_audio.py", argumentos, timeout_segundos: 1500 }),
+        ...(senal ? { signal: senal } : {}),
+      });
+      corrida = (await r.json()) as typeof corrida;
+      if (r.status === 400 && corrida.error) {
+        return {
+          ok: false,
+          texto:
+            `Generation is off: ${corrida.error}. The user has to enable the GPU in .env ` +
+            "(MIUZIKA_LAMBDA=on) and restart the server; tell them, do not retry.",
+        };
+      }
+      if (!r.ok && corrida.error) throw new Error(corrida.error);
+    } catch (error) {
+      if (senal?.aborted) return { ok: false, texto: "Cancelled by the user while the GPU was working." };
+      return { ok: false, texto: `I could not run the model: ${error instanceof Error ? error.message : String(error)}` };
+    }
+
+    const resultado = leerResultadoGeneracion(corrida.salida ?? "");
+    if ((corrida.codigo ?? 1) !== 0 || !resultado) {
+      const cola = (corrida.errores || corrida.salida || "").trim().slice(-700);
+      return {
+        ok: false,
+        texto:
+          (corrida.por_timeout ? "The model ran out of time (25 min). " : "The model did not produce audio. ") +
+          (cola ? `Last lines:\n${cola}` : "No output."),
+      };
+    }
+
+    const inicio = Math.max(0, Math.trunc(peticion.inicioCompas ?? 0));
+    const puesto = await importarPistas({
+      midis: [],
+      wavs: resultado.ficheros.map((f) => `${CARPETA_GENERADO}/${f}`),
+      inicioCompas: inicio,
+      ...(peticion.compases && peticion.compases > 0 ? { compases: peticion.compases } : {}),
+    });
+    return {
+      ok: puesto.ok,
+      texto:
+        `Generated with ACE-Step 1.5 (${resumenTiempos(resultado.tiempos)}): ` +
+        `${resultado.ficheros.map((f) => `proyectos/${slug}/${CARPETA_GENERADO}/${f}`).join(", ")}. ` +
+        `Lineage: ${CARPETA_GENERADO}/${nombre}.lineage.json. NOT heard by anyone yet: ask the user to listen ` +
+        "before building on it.\n" +
+        puesto.texto,
+    };
+  }
+
+  /**
+   * WAV → MIDI with basic-pitch on this CPU (`/api/transcribir`), then into the project as a
+   * MIDI track unless asked not to. Measured 2-Nov-2026 on the "Stahl" stems (which have their
+   * source MIDI): F1 at 50 ms 0.85 bass, 0.89 guitar riff, 0.66 polyphonic synth, so the
+   * text calls it a draft and points the agent at leer_proyecto.
+   */
+  async function transcribirAudio(peticion: PeticionTranscripcion, senal?: AbortSignal): Promise<ResultadoAccion> {
+    const project = e.proyecto();
+    if (!project) return { ok: false, texto: "There is no open project: the transcription has to go into one." };
+    const archivo = peticion.archivo.trim();
+    if (archivo === "") return { ok: false, texto: "Missing `archivo`: the audio to transcribe." };
+    const slug = carpetaDeProyecto(project);
+    const nombre = slugDe((peticion.nombre ?? archivo.split("/").pop() ?? "transcripcion").replace(/\.[^.]+$/, ""), {
+      max: 40,
+      defecto: "transcripcion",
+    });
+    let datos: { ok?: boolean; ruta?: string; ms?: number; error?: string };
+    try {
+      const r = await fetch("/api/transcribir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...cabeceraDeProyecto(slug) },
+        body: JSON.stringify({ archivo, nombre }),
+        ...(senal ? { signal: senal } : {}),
+      });
+      datos = (await r.json()) as typeof datos;
+      if (!r.ok || !datos.ok || !datos.ruta) {
+        return { ok: false, texto: `I could not transcribe it: ${datos.error ?? `HTTP ${r.status}`}` };
+      }
+    } catch (error) {
+      if (senal?.aborted) return { ok: false, texto: "Cancelled by the user." };
+      return { ok: false, texto: `I could not transcribe it: ${error instanceof Error ? error.message : String(error)}` };
+    }
+    const cabecera =
+      `Transcribed ${archivo} → proyectos/${slug}/${datos.ruta} in ${((datos.ms ?? 0) / 1000).toFixed(1)} s. ` +
+      "Draft quality (measured F1 0.66-0.89 on our own stems; octave errors happen on guitars): " +
+      "read the notes and correct what is off.";
+    if (peticion.importar === false) return { ok: true, texto: cabecera };
+    const puesto = await importarPistas({
+      midis: [datos.ruta],
+      wavs: [],
+      inicioCompas: Math.max(0, Math.trunc(peticion.inicioCompas ?? 0)),
+    });
+    return { ok: puesto.ok, texto: `${cabecera}\n${puesto.texto}` };
+  }
+
+  /**
+   * Text → MIDI proposals with MIDI-LLM on the Lambda GPU (`workspace/gpu/proponer_midi.py`).
+   * Nothing enters the project: each proposal is summarised (tracks, notes, tempo, share of
+   * notes in the project's key) and the agent decides what to bring in with anadir_pistas.
+   * Measured 2-Nov-2026 on the A10: 4 proposals in 37.5 s including the model load; the
+   * first run on a fresh instance adds ~30 s of install. The model writes absolute times at
+   * a nominal 120 BPM, so anadir_pistas will warn about the tempo: expected.
+   */
+  async function proponerMidi(peticion: PeticionPropuestaMidi, senal?: AbortSignal): Promise<ResultadoAccion> {
+    const project = e.proyecto();
+    if (!project) return { ok: false, texto: "There is no open project: the proposals are written inside one." };
+    if (peticion.prompt.trim() === "") return { ok: false, texto: "Missing `prompt`." };
+    const slug = carpetaDeProyecto(project);
+    const nombre = slugDe(peticion.nombre, { max: 40, defecto: "propuesta" });
+    const variantes = Math.min(8, Math.max(1, Math.trunc(peticion.variantes ?? 2)));
+    const argumentos = ["--prompt", peticion.prompt.trim(), "--variantes", String(variantes), "--nombre", nombre, "--salida", "propuestas"];
+
+    let corrida: { codigo?: number | null; salida?: string; errores?: string; error?: string; por_timeout?: boolean };
+    try {
+      const r = await fetch("/api/run/lambda", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...cabeceraDeProyecto(slug) },
+        body: JSON.stringify({ path: "gpu/proponer_midi.py", argumentos, timeout_segundos: 900 }),
+        ...(senal ? { signal: senal } : {}),
+      });
+      corrida = (await r.json()) as typeof corrida;
+      if (r.status === 400 && corrida.error) {
+        return {
+          ok: false,
+          texto: `The GPU is off: ${corrida.error}. The user has to set MIUZIKA_LAMBDA=on in .env and restart; tell them, do not retry.`,
+        };
+      }
+      if (!r.ok && corrida.error) throw new Error(corrida.error);
+    } catch (error) {
+      if (senal?.aborted) return { ok: false, texto: "Cancelled by the user while the GPU was working." };
+      return { ok: false, texto: `I could not run the model: ${error instanceof Error ? error.message : String(error)}` };
+    }
+    const resultado = leerResultadoGeneracion(corrida.salida ?? "");
+    if ((corrida.codigo ?? 1) !== 0 || !resultado) {
+      const cola = (corrida.errores || corrida.salida || "").trim().slice(-700);
+      return { ok: false, texto: `The model produced no MIDI.${cola ? `\nLast lines:\n${cola}` : ""}` };
+    }
+
+    // Summary per proposal, read through the same route anadir_pistas uses.
+    const raiz = pitchClass(project.key.tonic);
+    const enTono = new Set(intervalosDe(project.key.mode).map((i) => (raiz + i) % 12));
+    const lineas: string[] = [];
+    for (const fichero of resultado.ficheros) {
+      const ruta = `propuestas/${fichero}`;
+      try {
+        const res = await fetch(`/api/midi?path=${encodeURIComponent(ruta)}`, { headers: cabeceraDeProyecto(slug) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const d = (await res.json()) as {
+          bpm?: number;
+          tracks?: { name: string; program?: number; channel?: number; notes: { pitch: number; start: number; duration: number }[] }[];
+        };
+        const pistas = (d.tracks ?? []).filter((t) => t.notes.length > 0);
+        const notas = pistas.flatMap((t) => (t.channel === 9 ? [] : t.notes));
+        const fin = Math.max(0, ...pistas.flatMap((t) => t.notes.map((n) => n.start + n.duration)));
+        const dentro = notas.length === 0 ? 0 : Math.round((100 * notas.filter((n) => enTono.has(n.pitch % 12)).length) / notas.length);
+        const resumen = pistas
+          .map((t) => `${t.channel === 9 ? "drums" : t.name || `prog ${t.program ?? 0}`} ${t.notes.length}n`)
+          .join(", ");
+        lineas.push(
+          `- ${ruta}: ${d.bpm ?? "?"} BPM, ${(fin / beatsPerBar(project)).toFixed(1)} bars, ${pistas.length} tracks (${resumen}); ` +
+            `${dentro}% of pitched notes in ${project.key.tonic} ${project.key.mode}`,
+        );
+      } catch (error) {
+        lineas.push(`- ${ruta}: could not read it (${error instanceof Error ? error.message : String(error)})`);
+      }
+    }
+    return {
+      ok: true,
+      texto:
+        `MIDI-LLM wrote ${resultado.ficheros.length} proposal(s) in ${(resultado.tiempos.generate_s ?? 0).toFixed(0)} s ` +
+        `(lineage: propuestas/${nombre}.lineage.json). Nothing was added to the project:\n${lineas.join("\n")}\n` +
+        "Pick with anadir_pistas(midis=[...]) or rewrite the material with escribir_notas. Nobody has heard them.",
+    };
+  }
+
+  /**
    * Matches the clip durations: all to the same number of bars.
    *
    * Clips are measured in bars, so the MIDI of an instrument and the WAV of the same
@@ -1144,5 +1350,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     crearSonido,
     usarSample,
     usarInstrumento: instrumentar,
+    generarAudio,
+    transcribirAudio,
+    proponerMidi,
   };
 }

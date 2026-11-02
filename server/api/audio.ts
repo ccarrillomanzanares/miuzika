@@ -1,12 +1,13 @@
 /** Project audio: upload, serve with Range, waveform peaks, MIDI to notes, measurements of a WAV and of a reference. */
 
-import { existsSync, mkdirSync, statSync, writeFileSync, createReadStream } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, renameSync, statSync, writeFileSync, createReadStream } from "node:fs";
 import { basename, resolve } from "node:path";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 
 export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
-  const { anotar, ficheroHerramientas, responderJson, leerCuerpo, leerCuerpoBinario, slugProyecto, carpetaProyecto, resolverEnTrabajo, correr } = ctx;
+  const { anotar, ficheroHerramientas, responderJson, leerCuerpo, leerCuerpoBinario, slugProyecto, carpetaProyecto, resolverEnTrabajo, correr, carpetaTrabajo } = ctx;
 
   // WAV from the browser to disk: what the user imports with "Audio" is
   // copied to proyectos/<slug>/entrada/ so the master file can reference it
@@ -219,6 +220,101 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
         });
       } catch (error) {
         responderJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
+      }
+    });
+  });
+
+  // transcribir_audio: WAV → MIDI with basic-pitch (Spotify, Apache-2.0), on this CPU.
+  // The model lives in its own venv (`.miuzika/bp`, outside git) because basic-pitch 0.4
+  // pins an old numpy with no Python 3.12 wheel: it is installed with --no-deps and the
+  // ONNX runtime (the default backend on Windows). Measured 2-Nov-2026 on the i5-1035G1:
+  // 8 s per 2.5-minute stem; on miuzika's own "Stahl" stems (MIDI ground truth) F1 at
+  // 50 ms: bass 0.85, guitar riff 0.89 (48 octave errors), synth 0.66. Good for "take the
+  // melody from my stem", not a score. Only the user's own or CC audio (LEGAL.md §4).
+  const basicPitch =
+    process.env.MIUZIKA_BASIC_PITCH ||
+    resolve(process.cwd(), ".miuzika", "bp", process.platform === "win32" ? "Scripts/basic-pitch.exe" : "bin/basic-pitch");
+  server.middlewares.use("/api/transcribir", (req, res) => {
+    if (req.method !== "POST") {
+      responderJson(res, 405, { error: "use POST" });
+      return;
+    }
+    leerCuerpo(req, res, async (cuerpo) => {
+      try {
+        const d = JSON.parse(cuerpo) as { archivo?: string; nombre?: string };
+        const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
+        const origen = d.archivo ? resolverEnTrabajo(d.archivo, slug) : null;
+        if (!origen) {
+          responderJson(res, 403, { error: "path outside workspace/" });
+          return;
+        }
+        if (!existsSync(origen)) {
+          responderJson(res, 404, { error: `${d.archivo} does not exist` });
+          return;
+        }
+        if (!existsSync(basicPitch)) {
+          responderJson(res, 501, {
+            error:
+              `basic-pitch is not installed (${basicPitch}). Install it once: python -m venv .miuzika/bp && ` +
+              ".miuzika/bp/Scripts/pip install --no-deps basic-pitch && .miuzika/bp/Scripts/pip install " +
+              "numpy scipy librosa onnxruntime pretty_midi mir_eval resampy mido; or set MIUZIKA_BASIC_PITCH.",
+          });
+          return;
+        }
+        const nombre = String(d.nombre ?? basename(origen).replace(/\.[^.]+$/, ""))
+          .replace(/[^a-z0-9_-]+/gi, "-")
+          .toLowerCase()
+          .slice(0, 40) || "transcripcion";
+        const carpeta = resolve(carpetaProyecto(slug), "transcripciones");
+        mkdirSync(carpeta, { recursive: true });
+        const t0 = Date.now();
+        const r = await new Promise<{ codigo: number | null; salida: string; errores: string }>((listo) => {
+          // PYTHONUTF8: the CLI prints a unicode banner and dies on the Windows code page without it.
+          const hijo = spawn(basicPitch, [carpeta, origen, "--model-serialization", "onnx"], {
+            cwd: carpetaTrabajo,
+            env: { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" },
+            windowsHide: true,
+          });
+          let salida = "";
+          let errores = "";
+          let cerrado = false;
+          const terminar = (codigo: number | null): void => {
+            if (cerrado) return;
+            cerrado = true;
+            clearTimeout(temporizador);
+            listo({ codigo, salida, errores });
+          };
+          const temporizador = setTimeout(() => {
+            if (hijo.pid) {
+              if (process.platform === "win32") spawn("taskkill", ["/PID", String(hijo.pid), "/T", "/F"]);
+              else hijo.kill("SIGKILL");
+            }
+            errores += "\n[miuzika] basic-pitch cut off after 300 s\n";
+            setTimeout(() => terminar(null), 2000);
+          }, 300_000);
+          hijo.stdout.on("data", (t: Buffer) => { salida += t.toString("utf8"); });
+          hijo.stderr.on("data", (t: Buffer) => { errores += t.toString("utf8"); });
+          hijo.on("close", (codigo) => terminar(codigo));
+          hijo.on("error", (error) => { errores += error.message; terminar(null); });
+        });
+        // basic-pitch names the file <stem>_basic_pitch.mid; the project wants <nombre>.mid.
+        const base = basename(origen).replace(/\.[^.]+$/, "");
+        const escrito = resolve(carpeta, `${base}_basic_pitch.mid`);
+        const destino = resolve(carpeta, `${nombre}.mid`);
+        if (r.codigo === 0 && existsSync(escrito)) renameSync(escrito, destino);
+        const ok = r.codigo === 0 && existsSync(destino);
+        anotar(
+          ficheroHerramientas,
+          JSON.stringify({ t: new Date().toISOString(), tool: "transcribir", archivo: d.archivo, nombre, codigo: r.codigo, ms: Date.now() - t0 }),
+        );
+        if (!ok) {
+          const sobrantes = readdirSync(carpeta).filter((f) => f.endsWith("_basic_pitch.mid"));
+          responderJson(res, 500, { ok: false, error: (r.errores || r.salida).slice(-800), sobrantes });
+          return;
+        }
+        responderJson(res, 200, { ok: true, ruta: `transcripciones/${nombre}.mid`, ms: Date.now() - t0 });
+      } catch (error) {
+        responderJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
       }
     });
   });
