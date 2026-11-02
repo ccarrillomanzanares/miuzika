@@ -139,7 +139,9 @@ Carlos decided: generation on Lambda first (the laptop has no CUDA and 7.7 GB RA
 1.5 as the first model, basic-pitch and MIDI-LLM approved, LoRA / Magenta RT2 / the rest
 parked. Built and measured, nothing heard:
 - `generar_audio` (ACE-Step 1.5 XL turbo on the A10): cold 7.3 min end to end, warm 1.8 min;
-  13 s per 30 s of audio, 16 GB VRAM. Three takes in `proyectos/spike-generacion/generado/`.
+  13 s per 30 s of audio, 16 GB VRAM. Four takes in `proyectos/spike-generacion/generado/`;
+  Carlos heard them the same evening: one of the 60 s takes is "very industrial, very good",
+  the others fine, the sung one sings its Spanish lyrics with a Latin American accent.
 - `transcribir_audio` (basic-pitch, `.miuzika/bp` venv): F1 0.85 bass / 0.89 riff / 0.66 synth
   against the "Stahl" source MIDI; 8 s per stem.
 - `proponer_midi` (MIDI-LLM 1B on the A10): 4 multitrack proposals in 38 s, 92-100 % of notes
@@ -170,9 +172,9 @@ None of this has been heard in previous sessions:
 12. **"Models"** (1-Nov): the rate line appears under the model field and changes while
     typing; a cap of e.g. 0.01 $ with DeepSeek stops a composing turn after a few calls
     with the notice, and the counter in the header agrees with the number in the notice.
-13. **Listen to the generated takes** (2-Nov): `proyectos/spike-generacion/generado/*.wav`
-    (ACE-Step, 30 s and 2 × 60 s, plus a sung one in Spanish if `stahl-voz-es.wav` exists).
-    Nobody has heard them; the plan doc only has levels.
+13. ~~Listen to the generated takes~~ Done 2-Nov evening: `60s-1` very industrial, Rammstein-
+    like, very good; the other two instrumental takes fine; the sung one has an audible
+    voice singing the lyrics, Latin American accent (`docs/PLAN-MODELOS-MUSICA.md`).
 14. **`generar_audio` from the agent** (2-Nov): with "Stahl" open, ask for a texture; the GPU
     counter should move, the WAV should appear as a track, and `generado/<nombre>.lineage.json`
     next to it. Same for `transcribir_audio` on `salida/stahl_bajo.wav` (a MIDI track with

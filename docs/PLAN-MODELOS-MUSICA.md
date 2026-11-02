@@ -74,13 +74,18 @@ industrial), driven through `server/lambda.ts` exactly as the tool will:
 
 Run 6, a sung take with Spanish lyrics (`--letra` with [Verse]/[Chorus], `--idioma es`,
 40 s): 11.5 s of generation on the warm instance, 8.3 s of it in the LM; file
-`stahl-voz-es.wav`, RMS −17 dBFS. Whether it sings the words, and in tune, is unknown
-until Carlos listens.
+`stahl-voz-es.wav`, RMS −17 dBFS. Heard: it sings the words (see below).
 
 Output: 48 kHz stereo 16-bit WAV, peak −1.0 dBFS, RMS −14 to −19 dBFS, signal in every
 10-second block (no silent takes). The LM echoed the metadata (bpm 125, E minor). Files in
-`workspace/proyectos/spike-generacion/generado/` with their `.lineage.json`. **Not heard by
-anyone**: Carlos has to listen before any of this is called good. Cost of the whole
+`workspace/proyectos/spike-generacion/generado/` with their `.lineage.json`.
+
+**Heard by Carlos (2-Nov, evening):** `stahl-xl-turbo-60s-1.wav` "sounds very industrial,
+Rammstein-like, very good"; the 30 s take and `60s-2` are fine but below it. So one prompt
+gives takes of uneven quality: the tool should default to 2 takes, not 1, and let the agent
+or the user pick. `stahl-voz-es.wav`: the voice is clearly there and sings the lyrics, with
+a **Latin American Spanish accent**. `vocal_language="es"` has no regional control; to try
+next: ask for the accent in the caption ("Castilian Spanish accent, Spain") and compare. Cost of the whole
 afternoon (6 runs, ~1 h of A10): about 1.3 $.
 
 Lessons: an instance that is terminated loses the install and the weights (~2.5 min to
