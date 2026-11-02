@@ -237,7 +237,7 @@ def shaker(n=None, vel=1.0):
 
 # ------------------------------------------------------------------------- filters
 def stft(x, n=1024, hop=256):
-    """STFT batcheada: (V, L) -> (V, F, T)."""
+    """Batched STFT: (V, L) -> (V, F, T)."""
     ventana = torch.hann_window(n, device=DISPOSITIVO)
     return torch.stft(x, n_fft=n, hop_length=hop, window=ventana, center=True,
                       pad_mode="reflect", return_complex=True)

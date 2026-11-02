@@ -1,7 +1,7 @@
 {
- "generado": "2026-10-28T19:53:20",
+ "generado": "2026-11-02T17:41:03",
  "raiz": "workspace/",
- "regla": "Estos simbolos YA existen. Reutilizalos con 'from <modulo> import <simbolo>'. Escribir un fichero nuevo que los redefina sera rechazado (409).",
+ "regla": "These symbols ALREADY exist. Reuse them with 'from <module> import <symbol>'. Writing a new file that redefines them will be rejected (409).",
  "modulos": {
   "dsp": {
    "archivo": "codigo/dsp.py",
@@ -75,12 +75,12 @@
     "tv_filter": {
      "tipo": "funcion",
      "firma": "(x, env_func, n=1024, hop=256, chunk=1024)",
-     "doc": "Filtro variante en el tiempo: env_func(times, freqs) -> (nframes, nbins)."
+     "doc": "Time-varying filter: env_func(times, freqs) -> (nframes, nbins)."
     },
     "pan": {
      "tipo": "funcion",
      "firma": "(x, p)",
-     "doc": "Mono -> estéreo con ley de potencia constante. Si ya es estéreo (N, 2),"
+     "doc": "Mono -> stereo with a constant-power law. If it is already stereo (N, 2),"
     },
     "soft_clip": {
      "tipo": "funcion",
@@ -110,7 +110,7 @@
     "reverb": {
      "tipo": "funcion",
      "firma": "(x, ir)",
-     "doc": "Convolución con la respuesta `ir`. Acepta mono o estéreo (N, 2): cada canal"
+     "doc": "Convolution with the `ir` response. Accepts mono or stereo (N, 2): each channel"
     },
     "delay": {
      "tipo": "funcion",
@@ -166,82 +166,82 @@
     "kick": {
      "tipo": "funcion",
      "firma": "(vel=1.0, seed=0)",
-     "doc": "Bombo sintético: seno con caída de tono rápida y golpe de aire."
+     "doc": "Synthetic kick drum: sine with a fast pitch drop and a burst of air."
     },
     "snare": {
      "tipo": "funcion",
      "firma": "(vel=1.0, seed=0)",
-     "doc": "Caja: cuerpo tonal corto y ruido filtrado con cola."
+     "doc": "Snare: short tonal body and filtered noise with a tail."
     },
     "hat": {
      "tipo": "funcion",
      "firma": "(vel=1.0, seed=0, open_=False)",
-     "doc": "Charles de ruido metálico filtrado, cerrado o abierto."
+     "doc": "Hi-hat of filtered metallic noise, closed or open."
     },
     "metal_hit": {
      "tipo": "funcion",
      "firma": "(vel=1.0, seed=0, pitch=1.0, dur=0.9)",
-     "doc": "Chapa metálica con parciales inarmónicos: el golpe industrial."
+     "doc": "Metal sheet with inharmonic partials: the industrial hit."
     },
     "shaker": {
      "tipo": "funcion",
      "firma": "(vel=1.0, seed=0)",
-     "doc": "Cascabel: ruido corto con envolvente suave."
+     "doc": "Shaker: short noise with a soft envelope."
     },
     "bass_note": {
      "tipo": "funcion",
      "firma": "(midi=40, dur=0.5, vel=1.0, seed=0, squelch=0.0, bright=1.0)",
-     "doc": "Bajo sintético con filtro: del seno limpio al squelch ácido."
+     "doc": "Synthetic bass with a filter: from clean sine to acid squelch."
     },
     "drone_note": {
      "tipo": "funcion",
      "firma": "(midi=40, dur=4.0, vel=1.0, seed=0, cutoff=320.0)",
-     "doc": "Zumbido sostenido de dientes de sierra filtrados."
+     "doc": "Sustained buzz of filtered sawtooths."
     },
     "organ_chord": {
      "tipo": "funcion",
      "firma": "(midis=(40, 47, 52), dur=2.0, vel=1.0, seed=0)",
-     "doc": "Acorde de órgano con registro de dientes y vibrato."
+     "doc": "Organ chord with drawbar registration and vibrato."
     },
     "guitar_loop": {
      "tipo": "funcion",
      "firma": "(beats, bpm, pattern, vel=1.0, seed=0, drive=7.0)",
-     "doc": "Riff de guitarra completo: no es un one-shot, pide patrón y tempo."
+     "doc": "Full guitar riff: it is not a one-shot, it needs a pattern and a tempo."
     },
     "piano_note": {
      "tipo": "funcion",
      "firma": "(midi=60, dur=1.0, vel=1.0, seed=0, detune=0.0)",
-     "doc": "Piano sintético con parciales y desafinado ajustable."
+     "doc": "Synthetic piano with partials and adjustable detuning."
     },
     "reverse_swell": {
      "tipo": "funcion",
      "firma": "(src, dur=None)",
-     "doc": "Inversión de un sonido dado: pide material de origen."
+     "doc": "Reversal of a given sound: needs source material."
     },
     "squelch": {
      "tipo": "funcion",
      "firma": "(vel=1.0, seed=0, dur=0.35, f_lo=180.0, f_hi=1800.0)",
-     "doc": "Barrido de resonancia con subida de tono: el blip del techno."
+     "doc": "Resonance sweep with a rising pitch: the techno blip."
     },
     "feedback_growl": {
      "tipo": "funcion",
      "firma": "(vel=1.0, seed=0, dur=1.6, f0=196.0)",
-     "doc": "Rugido de realimentación con formantes: cola industrial."
+     "doc": "Feedback growl with formants: industrial tail."
     },
     "voice": {
      "tipo": "funcion",
      "firma": "(syllables, seed=0, f0_base=98.0, breath=0.1, drive=1.0, whisper=False, jitter=0.35, tail=0.35, tilt=1.0)",
-     "doc": "Voz sintética por sílabas: pide una lista de sílabas."
+     "doc": "Synthetic voice by syllables: needs a list of syllables."
     },
     "cowbell": {
      "tipo": "funcion",
      "firma": "(vel=1.0, pitch=1.0, dur=0.45, seed=0)",
-     "doc": "Cencerro metálico de dos tonos, tipo industrial."
+     "doc": "Two-tone metallic cowbell, industrial style."
     },
     "palmada": {
      "tipo": "funcion",
      "firma": "(vel=1.0, pitch=1.0, dur=0.3, seed=0)",
-     "doc": "Palmada de manos: tres golpes de ruido muy juntos y cola corta."
+     "doc": "Handclap: three bursts of noise very close together and a short tail."
     }
    }
   },
@@ -252,7 +252,7 @@
     "write_midi": {
      "tipo": "funcion",
      "firma": "(path, tracks, bpm=90.0, ppq=480, name='miuzika')",
-     "doc": "tracks: lista de dicts {name, channel, program, notes=[(start_beats, dur_beats, pitch, vel)]}"
+     "doc": "tracks: list of dicts {name, channel, program, notes=[(start_beats, dur_beats, pitch, vel)]}"
     }
    }
   },
@@ -288,17 +288,17 @@
     "write_wav": {
      "tipo": "funcion",
      "firma": "(path, x, width=3, pico_db=-1.0)",
-     "doc": "Escribe un WAV estéreo. Si la señal pasa de 0 dBFS, la baja a `pico_db`"
+     "doc": "Writes a stereo WAV. If the signal goes above 0 dBFS, it brings it down to `pico_db`"
     },
     "a_nivel": {
      "tipo": "funcion",
      "firma": "(x, pico_db=-6.0)",
-     "doc": "La señal con su pico en `pico_db` (por defecto -6 dBFS: margen para sumar)."
+     "doc": "The signal with its peak at `pico_db` (default -6 dBFS: headroom for summing)."
     },
     "stem": {
      "tipo": "funcion",
      "firma": "(ruta, fn, *claves, pico_db=None)",
-     "doc": "Renderiza un stem SOLO si ha cambiado: si `ruta` existe y la huella del"
+     "doc": "Renders a stem ONLY if it has changed: if `ruta` exists and the fingerprint of"
     },
     "env_fn": {
      "tipo": "funcion",
@@ -308,7 +308,7 @@
     "place": {
      "tipo": "funcion",
      "firma": "(dst, sig, t, gain=1.0, panp=0.0)",
-     "doc": "Suma `sig` (mono o estéreo) en `dst` a partir de `t` segundos. `dst` puede"
+     "doc": "Adds `sig` (mono or stereo) into `dst` starting at `t` seconds. `dst` can be"
     },
     "reverb_st": {
      "tipo": "funcion",
@@ -334,27 +334,27 @@
     "voces": {
      "tipo": "funcion",
      "firma": "(excluidas=None)",
-     "doc": "Lista de voces del motor, con sus parámetros tal como están en el código."
+     "doc": "List of engine voices, with their parameters as they are in the code."
     },
     "voces_gpu": {
      "tipo": "funcion",
      "firma": "(ruta=None)",
-     "doc": "Voces del motor de GPU, leídas del código con `ast` (sin torch)."
+     "doc": "GPU engine voices, read from the code with `ast` (no torch)."
     },
     "perfil": {
      "tipo": "funcion",
      "firma": "(x)",
-     "doc": "Perfil acústico medible de un render: lo que no admite opinión."
+     "doc": "Measurable acoustic profile of a render: what admits no opinion."
     },
     "medir_voz": {
      "tipo": "funcion",
      "firma": "(nombre, args=None, timeout_s=10.0)",
-     "doc": "Renderiza una voz con sus valores por defecto y devuelve su perfil."
+     "doc": "Renders a voice with its default values and returns its profile."
     },
     "catalogo": {
      "tipo": "funcion",
      "firma": "(con_perfil=False)",
-     "doc": "Catálogo completo: voces (las excluidas, marcadas) y su perfil si se pide."
+     "doc": "Full catalogue: voices (the excluded ones, marked) and their profile if requested."
     }
    }
   },
@@ -380,17 +380,17 @@
     "fir_sinc": {
      "tipo": "funcion",
      "firma": "(corte_hz, taps=127, dispositivo=None, ventana='hann')",
-     "doc": "FIR paso bajo (sinc con ventana de Hann), corte en Hz."
+     "doc": "Low-pass FIR (sinc with Hann window), cutoff in Hz."
     },
     "filtrar": {
      "tipo": "funcion",
      "firma": "(x, h)",
-     "doc": "Convolucion 1-D de (..., L) con un FIR, mismo tamano."
+     "doc": "1-D convolution of (..., L) with a FIR, same size."
     },
     "eq_fft": {
      "tipo": "funcion",
      "firma": "(x, forma)",
-     "doc": "Filtro estatico en el dominio de la frecuencia: exacto y sin diseno de FIR."
+     "doc": "Static filter in the frequency domain: exact and with no FIR design."
     },
     "paso_alto": {
      "tipo": "funcion",
@@ -405,7 +405,7 @@
     "pasa_banda": {
      "tipo": "funcion",
      "firma": "(x, f_lo, f_hi, taps=127)",
-     "doc": "Paso banda por diferencia de dos pasos bajo (suficiente y barato)."
+     "doc": "Band-pass as the difference of two low-passes (good enough and cheap)."
     },
     "normalizar_pico": {
      "tipo": "funcion",
@@ -415,12 +415,12 @@
     "osc": {
      "tipo": "funcion",
      "firma": "(f0, n, tipo='sierra', fase_ini=0.0, vibrato=0.0)",
-     "doc": "Oscilador batcheado: f0 de forma (V,) -> (V, n)."
+     "doc": "Batched oscillator: f0 of shape (V,) -> (V, n)."
     },
     "percusion": {
      "tipo": "funcion",
      "firma": "(f0, n, modos, taus, ruido=0.0, ruido_tau=0.02, ruido_corte=6000.0, ataque=0.001)",
-     "doc": "Sintesis modal: (V, n) sumando sinusoides con decaimiento + ruido opcional."
+     "doc": "Modal synthesis: (V, n) summing decaying sinusoids + optional noise."
     },
     "bombo": {
      "tipo": "funcion",
@@ -440,7 +440,7 @@
     "metal": {
      "tipo": "funcion",
      "firma": "(n=None, vel=1.0, pitch=1.0)",
-     "doc": "Golpe metalico inarmonico: los 'clangs' del industrial."
+     "doc": "Inharmonic metallic hit: the 'clangs' of industrial."
     },
     "shaker": {
      "tipo": "funcion",
@@ -450,7 +450,7 @@
     "stft": {
      "tipo": "funcion",
      "firma": "(x, n=1024, hop=256)",
-     "doc": "STFT batcheada: (V, L) -> (V, F, T)."
+     "doc": "Batched STFT: (V, L) -> (V, F, T)."
     },
     "istft": {
      "tipo": "funcion",
@@ -460,87 +460,87 @@
     "tv_filter": {
      "tipo": "funcion",
      "firma": "(x, forma, n=2048, hop=256)",
-     "doc": "Filtro variable en el tiempo, batcheado."
+     "doc": "Time-varying filter, batched."
     },
     "saturar": {
      "tipo": "funcion",
      "firma": "(x, drive=6.0, veces=4, asimetrico=True)",
-     "doc": "tanh con drive alto calculada a 'veces' x y filtrada al bajar. Sin aliasing."
+     "doc": "tanh with high drive computed at 'veces' x and filtered on the way down. No aliasing."
     },
     "ir_estereo": {
      "tipo": "funcion",
      "firma": "(dur=3.5, decay=0.6, corte_ini=9000.0, corte_fin=1800.0, predelay=0.02, seed=1)",
-     "doc": "IR por bandas con damping progresivo y decorrelacion estereo."
+     "doc": "Band IR with progressive damping and stereo decorrelation."
     },
     "convolucion": {
      "tipo": "funcion",
      "firma": "(x, ir)",
-     "doc": "Convolucion FFT con IR estereo: x (2, L) -> (2, L)."
+     "doc": "FFT convolution with a stereo IR: x (2, L) -> (2, L)."
     },
     "reverb": {
      "tipo": "funcion",
      "firma": "(x, ir, mix=0.25)",
-     "doc": "x (2, L); devuelve seco+humedo recortado al largo original."
+     "doc": "x (2, L); returns dry+wet trimmed to the original length."
     },
     "shimmer": {
      "tipo": "funcion",
      "firma": "(x, ir, mix=0.18, feedback=0.35, vueltas=3)",
-     "doc": "+12 semitonos realimentado en la reverb: el 'casi psicodelico'."
+     "doc": "+12 semitones fed back into the reverb: the 'almost psychedelic'."
     },
     "congelar": {
      "tipo": "funcion",
      "firma": "(x, inicio, dur, ventana=0.25)",
-     "doc": "Congelado espectral: toma un tramo, fija la magnitud y hace derivar la fase."
+     "doc": "Spectral freeze: takes a stretch, fixes the magnitude and lets the phase drift."
     },
     "granular": {
      "tipo": "funcion",
      "firma": "(x, tam=0.06, densidad=60.0, dur=None, jitter=0.4)",
-     "doc": "Nube granular batcheada: miles de granos de una vez (index_add)."
+     "doc": "Batched granular cloud: thousands of grains at once (index_add)."
     },
     "compresor": {
      "tipo": "funcion",
      "firma": "(x, umbral_db=-18.0, ratio=2.5, ataque_ms=12.0, salida_ms=90.0)",
-     "doc": "Compresor con envolvente paralela y suavizado exponencial aproximado."
+     "doc": "Compressor with a parallel envelope and approximate exponential smoothing."
     },
     "compresor_multibanda": {
      "tipo": "funcion",
      "firma": "(x, cortes=(180.0, 1800.0), umbrales=(-20.0, -18.0, -16.0), ratio=2.2)",
-     "doc": "3 bandas complementarias por FFT; cada una con su compresor."
+     "doc": "3 complementary bands via FFT; each one with its own compressor."
     },
     "limitador": {
      "tipo": "funcion",
      "firma": "(x, techo_db=-1.0, lookahead_ms=3.0)",
-     "doc": "Limitador con lookahead: max-pool centrado + suavizado de la ganancia."
+     "doc": "Limiter with lookahead: centred max-pool + gain smoothing."
     },
     "master": {
      "tipo": "funcion",
      "firma": "(x, crest_objetivo=13.0, comprimir=True, tilt_db=0.0, bajo_db=0.0)",
-     "doc": "Cadena final: HP, tilt, compresion multibanda suave y limitador."
+     "doc": "Final chain: HP, tilt, gentle multiband compression and limiter."
     },
     "escribir_wav": {
      "tipo": "funcion",
      "firma": "(ruta, x, pico_db=-1.0, sr=SR)",
-     "doc": "WAV 24 bits entrelazado. Vectorizado: 208 s de audio se escriben en ~0,2 s"
+     "doc": "24-bit interleaved WAV. Vectorized: 208 s of audio are written in ~0.2 s"
     },
     "sumar": {
      "tipo": "funcion",
      "firma": "(bus, senales, inicios)",
-     "doc": "Deposita (V, L) en un bus 1-D en las posiciones dadas. Una sola operacion."
+     "doc": "Deposits (V, L) into a 1-D bus at the given positions. A single operation."
     },
     "panear": {
      "tipo": "funcion",
      "firma": "(mono, p, ganancia=1.0)",
-     "doc": "(L,) mono -> (2, L) con paneo constante potencia."
+     "doc": "(L,) mono -> (2, L) with constant-power panning."
     },
     "mezclar": {
      "tipo": "funcion",
      "firma": "(pistas, largo)",
-     "doc": "pistas: lista de (2, L) o (L,). Devuelve (2, largo)."
+     "doc": "pistas: list of (2, L) or (L,). Returns (2, largo)."
     },
     "prueba": {
      "tipo": "funcion",
      "firma": "()",
-     "doc": "Autotest rapido de cada primitiva (se lanza antes del render)."
+     "doc": "Quick self-test of each primitive (run before the render)."
     }
    }
   },
@@ -551,42 +551,42 @@
     "kit_bombo": {
      "tipo": "funcion",
      "firma": "(vel=1.0, pitch=1.0, dur=0.9, seed=0)",
-     "doc": "Bombo de batería: cuerpo con caída de tono, click y saturación."
+     "doc": "Bass drum: body with pitch drop, click and saturation."
     },
     "kit_caja": {
      "tipo": "funcion",
      "firma": "(vel=1.0, pitch=1.0, dur=0.55, seed=0)",
-     "doc": "Caja de batería: dos cuerpos tonales, bordona y cola corta."
+     "doc": "Snare drum: two tonal bodies, snare wires and short tail."
     },
     "kit_tom": {
      "tipo": "funcion",
      "firma": "(vel=1.0, pitch=1.0, dur=1.3, seed=0)",
-     "doc": "Tom de batería: parche grande con caída de tono lenta y algo de aire."
+     "doc": "Tom drum: large head with a slow pitch drop and some air."
     },
     "kit_charles": {
      "tipo": "funcion",
      "firma": "(vel=1.0, pitch=1.0, dur=0.35, seed=0)",
-     "doc": "Charles cerrado: ruido muy agudo y corto con un toque metálico."
+     "doc": "Closed hi-hat: very bright, short noise with a metallic touch."
     },
     "kit_crash": {
      "tipo": "funcion",
      "firma": "(vel=1.0, pitch=1.0, dur=2.5, seed=0)",
-     "doc": "Plato crash: parciales inarmónicos y cola larga con aire."
+     "doc": "Crash cymbal: inharmonic partials and a long tail with air."
     },
     "kit_china": {
      "tipo": "funcion",
      "firma": "(vel=1.0, pitch=1.0, dur=2.0, seed=0)",
-     "doc": "Plato china: más sucio y agresivo que el crash, con cola gated."
+     "doc": "China cymbal: dirtier and more aggressive than the crash, with a gated tail."
     },
     "kit_ride": {
      "tipo": "funcion",
      "firma": "(vel=1.0, pitch=1.0, dur=2.0, seed=0)",
-     "doc": "Plato ride: campana definida (ping) y cola metálica limpia."
+     "doc": "Ride cymbal: defined bell (ping) and a clean metallic tail."
     },
     "campana_fm": {
      "tipo": "funcion",
      "firma": "(note=69, dur=4.0, ratio=3.5, index=2.0, seed=0)",
-     "doc": "Campana FM grande con cola larga y parciales inarmónicos."
+     "doc": "Large FM bell with a long tail and inharmonic partials."
     }
    }
   }
