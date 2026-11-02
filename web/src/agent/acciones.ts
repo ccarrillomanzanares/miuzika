@@ -33,7 +33,7 @@ import { nombreDeNota, resumenParaAgente } from "../../../src/core/resumen.ts";
 import { normalizarTexto, slugDe } from "../../../src/core/nombres.ts";
 import { MODE_NAMES, intervalosDe, pitchClass } from "../../../src/core/theory.ts";
 import {
-  SEGUNDOS_STREAMING,
+  reservarDecodificado,
   loadAudioFile,
   metadatosWav,
   registrarAssetStreaming,
@@ -283,10 +283,13 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         const recortado = prefijo && sinExt.startsWith(prefijo) ? sinExt.slice(prefijo.length) : sinExt;
         const nombre = (recortado || sinExt || "Audio").slice(0, 60);
 
-        // Long stems are NOT decoded: streaming with <audio> and peaks from the
-        // server. That way many fit at once (RAM does not grow with duration).
+        // Same rule as the Audio button and project load (reservarDecodificado):
+        // decoded when ≤ 30 s or when it fits the memory budget; only the rest streams.
+        // Measured on 2-Nov: this used to have its own `>= 30 s` check, so a 30.000 s
+        // generar_audio take streamed and was SILENT for escuchar_mezcla and the export.
         const meta = await metadatosWav(rutaEnProyecto(ruta, carpetaDeProyecto(project)));
-        if (meta.duracionSeg >= SEGUNDOS_STREAMING) {
+        const soltar = reservarDecodificado(meta.duracionSeg);
+        if (!soltar) {
           const durationBeats = (meta.duracionSeg * current.bpm) / 60;
           const assetId = `aud_st_${Date.now().toString(36)}_${contador++}`;
           registrarAssetStreaming({
@@ -352,12 +355,17 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
           continue;
         }
 
-        const res = await fetch(`/api/audio?path=${encodeURIComponent(rutaEnProyecto(ruta, carpetaDeProyecto(project)))}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const blob = await res.blob();
-        const file = new File([blob], fichero, { type: "audio/wav" });
-        // The asset points to its path on disk: the project is portable with no more.
-        const asset = await loadAudioFile(file, current.bpm, ruta);
+        let asset: Awaited<ReturnType<typeof loadAudioFile>>;
+        try {
+          const res = await fetch(`/api/audio?path=${encodeURIComponent(rutaEnProyecto(ruta, carpetaDeProyecto(project)))}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          const file = new File([blob], fichero, { type: "audio/wav" });
+          // The asset points to its path on disk: the project is portable with no more.
+          asset = await loadAudioFile(file, current.bpm, ruta);
+        } finally {
+          soltar();
+        }
         current = applyOps(current, [
           {
             op: "register_audio_asset",
