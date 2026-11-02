@@ -1282,7 +1282,10 @@ async function exportarProyecto(formatos: { midi: boolean; wav: boolean }, senal
       const canales = mezcla.canales.slice(0, 2);
       if (canales.length === 0 || canales[0]!.length === 0) throw new Error("the render came out empty");
       const buffer = new AudioBuffer({ length: canales[0]!.length, numberOfChannels: canales.length, sampleRate: mezcla.sampleRate });
-      canales.forEach((datos, i) => buffer.copyToChannel(datos as Float32Array<ArrayBuffer>, i));
+      // The offline render hands back channels backed by SharedArrayBuffer, and copyToChannel
+      // refuses shared memory ("The provided Float32Array value must not be shared"): measured
+      // on 2-Nov night, every WAV export of "Vidrio" failed. Copy each one to a plain array.
+      canales.forEach((datos, i) => buffer.copyToChannel(new Float32Array(datos), i));
       let pico = 0;
       for (const datos of canales) for (let i = 0; i < datos.length; i += 1) pico = Math.max(pico, Math.abs(datos[i]!));
       const fichero = new File([audioBufferToWav(buffer)], `${slug}.wav`, { type: "audio/wav" });

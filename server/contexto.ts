@@ -16,6 +16,7 @@ import { slugDe } from "../src/core/nombres.ts";
 import { configDesdeEnv } from "./lambda.ts";
 import { crearAlmacenPrecios } from "./precios.ts";
 import { costeDe } from "../src/core/precios.ts";
+import { explicarFalloMudo } from "./fallo-proceso.ts";
 
 export function crearContexto(env: Record<string, string>) {
   // Lambda is OFF unless MIUZIKA_LAMBDA=on: Carlos asked on 31-Oct to stop using the
@@ -370,7 +371,7 @@ export function crearContexto(env: Record<string, string>) {
         if (listo) return;
         listo = true;
         if (temporizador) clearTimeout(temporizador);
-        resolvePromise({ codigo, salida, errores });
+        resolvePromise({ codigo, salida, errores: explicarFalloMudo(codigo, salida, errores) });
       };
       const temporizador = setTimeout(() => {
         if (hijo.pid) {
