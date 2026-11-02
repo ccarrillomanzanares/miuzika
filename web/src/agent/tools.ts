@@ -1130,7 +1130,10 @@ async function ejecutarCrudo(
         // A file of 9,700 tokens in one go (measured on Oct 25) makes the
         // provider cut the next turn with finish_reason 'load'. The cap is
         // mechanical on purpose: asking for it in the prompt did not work.
-        const contenido = String(args.contenido ?? "");
+        const contenido = contenidoDeFichero(args);
+        if (contenido === null) {
+          return { ok: false, texto: "Missing `contenido`: the text of the file (a string)." };
+        }
         if (contenido.length > MAX_FICHERO) {
           return {
             ok: false,
@@ -1143,7 +1146,7 @@ async function ejecutarCrudo(
         }
         const datos = await pedirJson("/api/fs/write", {
           path: args.path,
-          contenido: args.contenido,
+          contenido,
         });
         // `nota` says whether the engine passed the smoke test (or that in gpu/ only the
         // syntax has been checked): it is the proof that the change is safe.
@@ -1731,12 +1734,23 @@ function escrituraDe(args: Record<string, unknown>): PeticionEscritura {
  * hacer_audio.py". Measured on Oct 28: with "ejecutar_python(proyectos/stahl/…)" a
  * 2.5-minute render looked like the model thinking.
  */
+/**
+ * The text of an escribir_fichero call. `content` is accepted as an alias: measured on
+ * 2-Nov, DeepSeek v4.1 flash sent `content` instead of `contenido` six times, and three in
+ * a row aborted the generar_audio turn. null when neither is a string.
+ */
+export function contenidoDeFichero(args: Record<string, unknown>): string | null {
+  if (typeof args.contenido === "string") return args.contenido;
+  if (typeof args.content === "string") return args.content;
+  return null;
+}
+
 export function resumenLlamada(nombre: string, argumentosJson: string): string {
   try {
     const args = JSON.parse(argumentosJson === "" ? "{}" : argumentosJson) as Record<string, unknown>;
     const fichero = String(args.path ?? "").split("/").pop() || String(args.path ?? "");
     if (nombre === "escribir_fichero") {
-      return `writing ${fichero} (${String(args.contenido ?? "").length} chars)`;
+      return `writing ${fichero} (${(contenidoDeFichero(args) ?? "").length} chars)`;
     }
     if (nombre === "ejecutar_python") {
       const extra = Array.isArray(args.argumentos) && args.argumentos.length > 0 ? ` ${args.argumentos.join(" ")}` : "";
