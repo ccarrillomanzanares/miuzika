@@ -230,13 +230,12 @@ None of this has been heard in previous sessions:
     - `exportar` MIDI works. **WAV fails every time**: "Failed to execute 'copyToChannel' on
       'AudioBuffer': The provided Float32Array value must not be shared". The offline render
       returns channels backed by SharedArrayBuffer; `main.ts` casts them and passes them as they
-      are. Fix: copy each channel to a plain Float32Array first (waiting for Carlos: it reloads
-      the page).
+      are. Fixed 2-Nov night (each channel copied to a plain Float32Array); not yet re-run.
     - The agent retried `exportar` about 20 times, toggling mutes and sends in between, so the
       three-identical-errors stop never fired. `escuchar_mezcla` cannot measure a bus ("No tracks
       named sala"), so the reverb tail was not checked.
     - `usar_instrumento` answered "Could not convert: " with nothing after it when Python died
-      silently; the message should carry the exit code.
+      silently. Fixed 2-Nov night: the server's runner now gives the exit code.
     Parked: `generar_audio` default of 2 takes; "Castilian Spanish accent" in the caption;
     Lambda persistent filesystem so cold starts do not reinstall the weights.
 
