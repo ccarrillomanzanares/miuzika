@@ -175,10 +175,19 @@ None of this has been heard in previous sessions:
 13. ~~Listen to the generated takes~~ Done 2-Nov evening: `60s-1` very industrial, Rammstein-
     like, very good; the other two instrumental takes fine; the sung one has an audible
     voice singing the lyrics, Latin American accent (`docs/PLAN-MODELOS-MUSICA.md`).
-14. **`generar_audio` from the agent** (2-Nov): with "Stahl" open, ask for a texture; the GPU
-    counter should move, the WAV should appear as a track, and `generado/<nombre>.lineage.json`
-    next to it. Same for `transcribir_audio` on `salida/stahl_bajo.wav` (a MIDI track with
-    ~540 notes) and `proponer_midi` (a summary, nothing added).
+14. ~~The three tools from the agent~~ Done 2-Nov evening in "Stahl" with DeepSeek v4.1 flash
+    (`docs/PLAN-MODELOS-MUSICA.md`, "Exercised in the browser"). All three ran; Carlos:
+    `transcribir_audio` fine, `generar_audio` "the quality of the last track is very good".
+    Five defects found, none in the GPU path itself; fixes pending below.
+15. **Fixes from check 14** (pending, touch `web/` and `server/`, need the app idle):
+    `anadir_pistas` streams any WAV of 30 s or more (`>=` in acciones.ts against `<=` in
+    audio-store.ts: a 30 s take, the default, does not enter the mixer or the export);
+    `/api/transcribir` must pass `--midi-tempo <project bpm>` to basic-pitch (the MIDI
+    came at 120 and the import goes by beats: 4 % drift in a 125 BPM project);
+    `proponer_midi.py` should write the project tempo into the .mid and the summary name
+    tracks by GM program ("drums, GM kit" instead of "Track 3"); `escribir_fichero` should
+    accept `content` as an alias of `contenido` (DeepSeek sent `content` 6 times, 3 in a
+    row stopped a turn); and a prompt line about the three tools (house rule 1).
 
 ## 3. Pending work
 

@@ -118,7 +118,7 @@ on the i5-1035G1. Scored against the MIDI miuzika rendered the stems from (note-
 Every reference pitch appears in the transcription; the misses are extra notes and some
 octave doubling on the guitar. The CLI needs `PYTHONUTF8=1` on Windows (unicode banner).
 
-## What was built (2-Nov-2026, not yet exercised in a browser)
+## What was built (2-Nov-2026)
 
 - `generar_audio` tool: `src/core/generacion.ts` (pure: arguments from the project, RESULT
   parsing, tests), `web/src/agent/acciones.ts` `generarAudio` → `/api/run/lambda` with
@@ -132,3 +132,44 @@ octave doubling on the guitar. The CLI needs `PYTHONUTF8=1` on Windows (unicode 
   leaves the choice to the agent (`anadir_pistas`).
 - None of the three is mentioned in the agent prompt (house rule 1): the model only sees
   the tool schemas. Ask Carlos before adding a line to the prompt.
+
+## Exercised in the browser (2-Nov-2026, evening, Carlos driving, DeepSeek v4.1 flash)
+
+Project "Stahl" (125 BPM, E minor, ten 2.5-minute audio stems). Read back from
+`tmp/herramientas.log` and the four trajectories in `proyectos/stahl/trayectorias/`.
+
+| tool | GPU | tool time | turn | cost | outcome |
+|---|---|---|---|---|---|
+| `transcribir_audio` on `salida/stahl_bajo.wav` | no | 11 s | 2.3 min | 0.016 $ | 541 notes in; the agent re-scaled 120→125 BPM itself and cleaned to 434 |
+| `proponer_midi`, 2 proposals | cold A10: boot 267 s, run 100 s | 6.1 min | 7.4 min | 0.012 $ | 2 .mid + lineage; agent summarised and did not import |
+| `generar_audio`, 30 s drone | warm: install 19 s, load 61 s, gen 6.6 s | 152 s | 3.5 min | 0.009 $ | WAV in as a track; Carlos: "the quality of the last track is very good" |
+
+**Defects found (none in the GPU path):**
+
+1. **A 30 s WAV enters as streaming through `anadir_pistas`.** `acciones.ts` uses
+   `>= SEGUNDOS_STREAMING` while `audio-store.ts` decodes `<= 30`, and the action never
+   consults the 400 MB budget. A 30 s take (the tool's default) is heard through the
+   streaming `<audio>` element but is outside the mixer: `escuchar_mezcla` reports SILENT
+   and the export would not have it. The agent "fixed" it twice by splitting WAVs into
+   sub-30 s pieces with its own scripts.
+2. **Transcription drift.** basic-pitch writes its MIDI at 120 BPM; the import places notes
+   by beats, so in a 125 BPM project every onset lands 4 % early (agent's measurement: last
+   onset 291.3 vs 303.5 beats). Fix: `--midi-tempo <project bpm>` (the CLI has it).
+3. **The agent misread the proposals.** It did not trust the summary, wrote its own MIDI
+   readers, called the channel-10 drum track (program 0 = GM standard kit, verified with
+   mido) "a piano on channel 16", judged both proposals bad without hearing them, and when
+   asked to make them audible rendered them to WAV with the numpy engine, drums as piano,
+   instead of `anadir_pistas(midis=...)`. Carlos's "riff 1 is fine" was heard on that
+   render. Summary should name tracks by GM program so there is less to re-derive, and the
+   .mid should carry the project tempo so the 120-vs-125 warning disappears.
+4. **Placement.** The agent put every new thing after the last material (bars 81, 90, 112,
+   121), "so it can be judged alone", and the song grew from 80 to 136 bars. Tool behaviour
+   is correct (it obeys `inicio_compas`); the staircase is the agent's judgement, prompt
+   territory (house rule 1).
+5. **`escribir_fichero` parameter name.** DeepSeek sent `content` instead of `contenido`
+   six times; three in a row aborted the `generar_audio` turn after the WAV was already in.
+   Accepting the alias costs nothing.
+
+Also seen: the proposals' MIDI duplicates note-ons (380 raw events vs 151 after the
+server's dedupe on riff 1), and `gtr_riff_l/r` were already muted before the session began.
+The instance stayed on after the tests (no auto-stop; Carlos turns it off from the header).

@@ -1,5 +1,5 @@
 {
- "generado": "2026-11-02T17:41:03",
+ "generado": "2026-11-02T19:46:48",
  "raiz": "workspace/",
  "regla": "These symbols ALREADY exist. Reuse them with 'from <module> import <symbol>'. Writing a new file that redefines them will be rejected (409).",
  "modulos": {
