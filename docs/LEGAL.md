@@ -5,16 +5,21 @@
 > property lawyer. What is firm: which data goes in and which acts are performed, because
 > we decide that and it is recorded here.
 
-Last review: 2026-10-23.
+Last review: 2026-11-02 (license corrected, §6 and §9 added).
 
 ---
 
 ## 1. Project license
 
-Miuzika is distributed under **MIT**. It requires including the copyright notice and the
-license text in copies or substantial portions of the software. In practice:
+Miuzika is distributed under **AGPL-3.0-or-later**. That is what `LICENSE`, `package.json`
+and `README.md` say; an earlier version of this note said MIT, which was wrong (corrected
+2026-11-02 after the four files were compared). openDAW, our engine, is itself AGPL/commercial
+dual-licensed, which is the reason. In practice:
 
-- `LICENSE` at the root, unmodified.
+- `LICENSE` at the root, unmodified. Anyone who runs a modified miuzika as a network
+  service must offer its source (AGPL §13).
+- GPLv3 code (e.g. audiowmark) may be combined with AGPLv3 code (GPLv3 §13 / AGPLv3 §13);
+  LGPL, MIT, BSD and Apache-2.0 too. CC-BY-SA *content* is a separate question from code.
 - Files derived from third parties keep their notice (see §6).
 - A `CREDITS.md` with attribution for models, datasets and samples (still to be created).
 
@@ -99,7 +104,8 @@ Banned for the product:
 | MUSDB18 / MUSDB18-HQ | research license; not commercial |
 | Mixing Secrets multitracks | educational use |
 | Slakh2100 | CC-BY 4.0 dataset, but its audio comes from sample libraries with their own licenses: **verify before use** |
-| Anything **CC-BY-NC** or **CC-BY-SA** | non-commercial / copyleft incompatible with MIT |
+| Anything **CC-BY-NC** | non-commercial: cannot feed a paid product |
+| **CC-BY-SA** audio | share-alike spreads to the derived audio; the code license (AGPL) does not help here. Avoid for training sets |
 
 ## 6. Models and their licenses
 
@@ -109,7 +115,17 @@ Banned for the product:
 | Demucs | MIT (code) | ✅ the tool; ❌ separating other people's music for the product |
 | CLAP (`laion/larger_clap_music_and_speech`) | **Apache-2.0** (verified 2026-10-23) | ✅ |
 | MusicGen (Meta) | weights **CC-BY-NC 4.0** | ❌ |
-| Stable Audio | Stability license, not open | ❌ |
+| Stable Audio Open 2.0 | CC-BY-NC | ❌ |
+| **Stable Audio 3.0 Small / Medium** (20-May-2026) | Stability AI Community License: outputs are yours, commercial use free below **$1M annual revenue**, Enterprise above (checked 2026-11-02 against press coverage, not the license text) | ✅ candidate for local generation; read the license text and the model card before shipping |
+| **ACE-Step 1.5** | MIT (checked 2026-11-02 against the repo README) | ✅ candidate; training data described, not published |
+| c2patool / c2pa-rs (signing) | Apache-2.0 / MIT | ✅ tool, used as a CLI (2026-11-02) |
+| opentimestamps (npm client) | LGPL-3.0 | ✅ library, used unmodified |
+| audiowmark | GPLv3 | ✅ as a separate CLI process; also linkable under AGPL (§1) |
+| **ACE-Step 1.5** DiT + 5Hz LM weights | MIT (repo README, checked 2026-11-02; weights on HF under the same repo) | ✅ first generation model on Lambda (2-Nov); training data described, not published |
+| basic-pitch (Spotify, audio→MIDI) | Apache-2.0 code, no separate weight terms (repo, checked 2026-11-02) | ✅ transcription of the user's own or CC audio only (§4) |
+| MIDI-LLM (`slseanwu/MIDI-LLM_Llama-3.2-1B`) | Llama 3.2 Community License (HF card, checked 2026-11-02): commercial use allowed, "Built with Llama" notice on redistribution | ✅ candidate for text→MIDI material; trained on LakhMIDI + MidiCaps, GigaMIDI, MusicPile |
+| Magenta RealTime 2 (Google) | code Apache-2.0, weights CC-BY-4.0 + usage terms (HF card, checked 2026-11-02) | ✅ phase-2 candidate (real-time); parked |
+| MuScriptor (Kyutai/Mirelo, transcription) | **CC-BY-NC-4.0** (HF card, checked 2026-11-02) | ❌ non-commercial |
 
 Rule: **before putting a model into the product, its license and the date it was
 checked are noted here.** If it is not clear, it does not go in.
@@ -120,7 +136,11 @@ checked are noted here.** If it is not clear, it does not go in.
 |---|---|---|
 | 2026-10-23 | Do not analyze or train with commercial phonograms | §3, §4 |
 | 2026-10-23 | Mixing knowledge is extracted from CC material and from our own renders | §2 |
-| 2026-10-23 | Do not use MusicGen/Stable Audio in the product | §6 |
+| 2026-10-23 | Do not use MusicGen/Stable Audio (Open) in the product | §6 |
+| 2026-11-02 | The project license is AGPL-3.0-or-later; the MIT statement here was an error | §1 |
+| 2026-11-02 | Stable Audio 3 and ACE-Step 1.5 are candidates for local generation, pending a read of the license text | §6 |
+| 2026-11-02 | Generation runs on Lambda first (laptop has no CUDA, 7.7 GB RAM); ACE-Step 1.5 is the first model; basic-pitch and MIDI-LLM approved; LoRA, Magenta RT2 and the rest parked (`docs/PLAN-MODELOS-MUSICA.md`) | §6 |
+| 2026-11-02 | Exports carry a C2PA manifest, a `cawg.training-mining` assertion (generative training and data mining **notAllowed** by default, inference allowed) and an OpenTimestamps proof; no NFT, no blockchain beyond the OTS anchor | §9 |
 | 2026-10-23 | CLAP allowed: Apache-2.0 verified | §6 |
 | 2026-10-23 | The scoring pilot uses **only our own audio** (no third-party phonograms) | §3, §4 |
 
@@ -132,3 +152,38 @@ checked are noted here.** If it is not clear, it does not go in.
 - [ ] Confirm the license of every model that is integrated (DDSP: Apache-2.0, check).
 - [ ] Review whether the Pro service requires terms of use and a data policy
       (it uploads the user's audio: we must state what is stored and for how long).
+- [ ] Read the Stability AI Community License text and the Stable Audio 3 model cards;
+      note the revenue threshold and any output-marking clause.
+- [ ] Decide the default consent posture per export with Carlos (§9) and where the
+      artist key lives.
+- [ ] Article 50 checklist against the Commission Code of Practice (10-Jun-2026) before
+      2-Dec-2026, if any generative model ships.
+
+## 9. Authorship, consent and Article 50 (added 2026-11-02)
+
+Spike B (`autoria/spike-b/`) showed on 2-Nov-2026 that a miuzika WAV can carry a signed
+C2PA manifest with an artist key, a machine-readable consent assertion and a lineage
+record, plus an OpenTimestamps proof, with the audio bit-identical. What that is and is
+not, legally:
+
+- **The signature and timestamp are evidence, not registration.** They show that this
+  exact file existed and was signed with this key at this time. They do not create or
+  register copyright (which exists from creation, TRLPI art. 1) and are not a deposit
+  in the Registro de la Propiedad Intelectual. A judge weighs them as any other evidence.
+- **`cawg.training-mining` is a signal, not a right.** It expresses the rights holder's
+  wish ("not for generative training"). The enforceable reservation under art. 4 DSM /
+  art. 67 bis TRLPI is the machine-readable opt-out *where the work is made available*,
+  which is what TDMRep (`/.well-known/tdmrep.json`, HTTP header) is for. Publish both.
+- **Who can be identified.** The manifest names the signer (certificate CN). Do not put
+  an email or address in it without the artist's say; the identity assertion (CAWG
+  Identity 1.2) is optional and a later decision.
+- **Article 50 EU AI Act** (in force 2-Aug-2026; deployed systems by 2-Dec-2026, per the
+  brainstorm report, not re-verified here): generated audio must be marked in a
+  machine-readable way. The Code of Practice asks for metadata (C2PA) **and** a
+  watermark. The C2PA half exists; the watermark half (audiowmark, then a music-specific
+  one) is the open track. Hand-made music is not covered by Art. 50, but the same
+  manifest is useful to it ("this is mine, dated, here is what I allow").
+- **Platforms strip metadata.** Measured 2-Nov: every ffmpeg pass, even a stream copy
+  with `-map_metadata 0`, removes the embedded manifest from WAV, MP3 and FLAC. That is
+  why there is a sidecar, a timestamp of the hash, and why the watermark matters.
+- **Not legal advice**; this section too goes to the IP lawyer before any commercial use.

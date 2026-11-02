@@ -1,0 +1,9 @@
+{
+  "name": "miuzika-autoria-spike-b",
+  "private": true,
+  "type": "module",
+  "description": "Spike B: sign a miuzika WAV with a C2PA manifest, stamp it with OpenTimestamps, verify, and measure what survives re-encoding.",
+  "dependencies": {
+    "opentimestamps": "^0.4.9"
+  }
+}
