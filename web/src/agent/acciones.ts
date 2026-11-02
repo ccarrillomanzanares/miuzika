@@ -720,7 +720,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       const r = await fetch("/api/transcribir", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...cabeceraDeProyecto(slug) },
-        body: JSON.stringify({ archivo, nombre }),
+        // The project tempo goes into the .mid, so the notes land on the right beats.
+        body: JSON.stringify({ archivo, nombre, bpm: project.bpm }),
         ...(senal ? { signal: senal } : {}),
       });
       datos = (await r.json()) as typeof datos;

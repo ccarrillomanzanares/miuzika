@@ -6,6 +6,19 @@ import { basename, resolve } from "node:path";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 
+/**
+ * basic-pitch arguments. `--midi-tempo` is the project's tempo: basic-pitch keeps note
+ * times in seconds and writes 120 BPM by default, and the import places notes by beats.
+ * Measured on 2-Nov in "Stahl" (125 BPM): every onset landed 4 % early (last onset 291.3
+ * vs 303.5 beats) and the agent re-scaled by hand. Out-of-range or missing bpm keeps 120.
+ */
+export function argumentosBasicPitch(carpeta: string, origen: string, bpm: unknown): string[] {
+  const args = [carpeta, origen, "--model-serialization", "onnx"];
+  const tempo = Number(bpm);
+  if (Number.isFinite(tempo) && tempo >= 20 && tempo <= 400) args.push("--midi-tempo", String(tempo));
+  return args;
+}
+
 export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
   const { anotar, ficheroHerramientas, responderJson, leerCuerpo, leerCuerpoBinario, slugProyecto, carpetaProyecto, resolverEnTrabajo, correr, carpetaTrabajo } = ctx;
 
@@ -241,7 +254,7 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
     }
     leerCuerpo(req, res, async (cuerpo) => {
       try {
-        const d = JSON.parse(cuerpo) as { archivo?: string; nombre?: string };
+        const d = JSON.parse(cuerpo) as { archivo?: string; nombre?: string; bpm?: number };
         const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
         const origen = d.archivo ? resolverEnTrabajo(d.archivo, slug) : null;
         if (!origen) {
@@ -270,7 +283,7 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
         const t0 = Date.now();
         const r = await new Promise<{ codigo: number | null; salida: string; errores: string }>((listo) => {
           // PYTHONUTF8: the CLI prints a unicode banner and dies on the Windows code page without it.
-          const hijo = spawn(basicPitch, [carpeta, origen, "--model-serialization", "onnx"], {
+          const hijo = spawn(basicPitch, argumentosBasicPitch(carpeta, origen, d.bpm), {
             cwd: carpetaTrabajo,
             env: { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" },
             windowsHide: true,
