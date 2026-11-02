@@ -218,8 +218,9 @@ None of this has been heard in previous sessions:
     125 BPM, last onset at beat 303.5; `generar_audio` gave a 30.000 s WAV. The imports and the
     mix could not be checked: the dev server had been started from the Claude Code shell and
     could not spawn Python (Windows exit 0xC0000142 for every child, empty stderr). Start
-    `npm run dev` from Carlos's own terminal. Still to see in the app: the take as "audio" with
-    level in `escuchar_mezcla`, and the GM track names after `anadir_pistas`.
+    `npm run dev` from Carlos's own terminal. Seen in the app later that night ("vidrio-4"):
+    the 30 s take entered as "audio" and measured −11 dBFS muted-alone; the proposal's tracks
+    came in as "Distortion guitar", "Electric bass (pick)", "Drums", "Fx 5 (brightness)".
 16. **"Vidrio" run, 2-Nov night** (new project, no GPU, 0.027 $, 89 model calls):
     - VCSL converts and plays per the table: Steinway B (84 zones) and Concert Harp (45 zones).
       Nobody has listened yet.
@@ -230,7 +231,12 @@ None of this has been heard in previous sessions:
     - `exportar` MIDI works. **WAV fails every time**: "Failed to execute 'copyToChannel' on
       'AudioBuffer': The provided Float32Array value must not be shared". The offline render
       returns channels backed by SharedArrayBuffer; `main.ts` casts them and passes them as they
-      are. Fixed 2-Nov night (each channel copied to a plain Float32Array); not yet re-run.
+      are. Fixed 2-Nov night (each channel copied to a plain Float32Array). Re-run on "vidrio-3":
+      55.3 s WAV, peak −7.7 dBFS, RMS −28 dBFS; the last 2.3 s after the song's 53 s carry the
+      release and reverb tail (−46 dBFS). Nobody has listened to it yet.
+    - Minor, seen on "vidrio-4": exporting an empty project writes 10 s of silence and reports
+      "peak -Infinity dBFS" instead of saying there is nothing to export; and anadir_pistas warns
+      "MIDI and WAV of the same song" whenever both come in one call, even unrelated material.
     - The agent retried `exportar` about 20 times, toggling mutes and sends in between, so the
       three-identical-errors stop never fired. `escuchar_mezcla` cannot measure a bus ("No tracks
       named sala"), so the reverb tail was not checked.
