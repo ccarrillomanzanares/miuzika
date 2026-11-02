@@ -179,15 +179,39 @@ None of this has been heard in previous sessions:
     (`docs/PLAN-MODELOS-MUSICA.md`, "Exercised in the browser"). All three ran; Carlos:
     `transcribir_audio` fine, `generar_audio` "the quality of the last track is very good".
     Five defects found, none in the GPU path itself; fixes pending below.
-15. **Fixes from check 14** (pending, touch `web/` and `server/`, need the app idle):
-    `anadir_pistas` streams any WAV of 30 s or more (`>=` in acciones.ts against `<=` in
-    audio-store.ts: a 30 s take, the default, does not enter the mixer or the export);
-    `/api/transcribir` must pass `--midi-tempo <project bpm>` to basic-pitch (the MIDI
-    came at 120 and the import goes by beats: 4 % drift in a 125 BPM project);
-    `proponer_midi.py` should write the project tempo into the .mid and the summary name
-    tracks by GM program ("drums, GM kit" instead of "Track 3"); `escribir_fichero` should
-    accept `content` as an alias of `contenido` (DeepSeek sent `content` 6 times, 3 in a
-    row stopped a turn); and a prompt line about the three tools (house rule 1).
+15. **Fixes from check 14**, agreed with Carlos on 2-Nov night, in this order. Items 1-4
+    are code (they touch `web/` and `server/`, so the app must be idle: house rule 2); item 5
+    touches the prompt (house rule 1: Carlos must say yes to the exact wording first).
+    1. **A 30 s WAV must enter the mixer.** Two copies of the streaming rule disagree:
+       `audio-store.ts` (`reservarDecodificado`: decode when ≤ 30 s, or when it fits the
+       400 MB budget) is what the Audio button and project load use; `acciones.ts`
+       `importarPistas` has its own `>= SEGUNDOS_STREAMING` and never looks at the budget.
+       So a 30.000 s take (the `generar_audio` default) is heard through the streaming
+       `<audio>` element but is SILENT for `escuchar_mezcla` and missing from the export;
+       a 35 s WAV streams even with memory to spare. Fix: `importarPistas` calls
+       `reservarDecodificado` like `main.ts` does and drops its own rule; unit test that a
+       30.0 s WAV ends up decoded through the action. Seen 2-Nov: the drone at bar 121 was
+       SILENT in 121-136 and the agent started splitting it in two.
+    2. **`/api/transcribir` passes `--midi-tempo <project bpm>`** (the action sends the bpm).
+       basic-pitch writes 120 BPM; the import places notes by beats; in Stahl (125) every
+       onset landed 4 % early (agent measured last onset 291.3 vs 303.5 beats) and it
+       re-scaled by hand.
+    3. **`proponer_midi`**: `proponer_midi.py` gets `--bpm` and rewrites the .mid tempo to
+       the project's (ticks unchanged) so the 120-vs-125 warning disappears; the summary in
+       `acciones.ts` names tracks by GM program ("distortion guitar 151n, electric bass
+       77n, drums (GM kit) 208n") instead of "Track 1". On 2-Nov the agent re-read the files
+       with its own scripts, called the channel-10 drum track "a piano on channel 16" and
+       rendered it as piano.
+    4. **`escribir_fichero` accepts `content` as an alias of `contenido`** in the tools.ts
+       dispatch (server keeps `contenido`). DeepSeek v4.1 flash sent `content` six times on
+       2-Nov; three in a row aborted the `generar_audio` turn.
+    5. **Prompt line (needs consent)** about the three tools: hear `proponer_midi` and
+       `transcribir_audio` results with `anadir_pistas(midis=...)`, not with home-made
+       renderers; the tool summary is already trustworthy; material to compare goes in
+       solo/mute at the song's start, not stacked after the last bar (2-Nov: bars 81, 90,
+       112, 121, song grew 80 → 136 bars).
+    Parked: `generar_audio` default of 2 takes; "Castilian Spanish accent" in the caption;
+    Lambda persistent filesystem so cold starts do not reinstall the weights.
 
 ## 3. Pending work
 
