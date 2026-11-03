@@ -8,7 +8,6 @@ import { compasesDeAudio } from "../../src/core/tiempo.ts";
 import { applyOps } from "../../src/core/ops.ts";
 import type { Op } from "../../src/core/ops.ts";
 import {
-  assetsPorStreaming,
   audioAssets,
   cargarWavDeDisco,
   computePeaks,
@@ -67,9 +66,7 @@ import type { ResultadoAgente } from "./agent/agent.ts";
 import { ejecutarHerramienta } from "./agent/tools.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 import { PanelPad } from "./pad.ts";
-import { audioBufferToWav } from "./wav.ts";
-import { midiDeProyecto } from "../../src/core/midi-export.ts";
-import { informeEscucha, nivelesPorTramo, notasPorTramo, type PistaEscuchada } from "../../src/core/escucha.ts";
+import { crearRenderEscucha } from "./render-escucha.ts";
 import { locale, traducirPagina } from "./i18n.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -1251,153 +1248,21 @@ setAbrirEncargo(() => void formularioEncargo.abrir());
 
 // The agent tools that touch the project (agent/acciones.ts) work on THIS tab through a
 // small contract.
-/**
- * Brief export: the project to MIDI and/or the mix to WAV, in
- * `proyectos/<carpeta>/salida/`. The WAV is rendered by the same engine as Play.
- */
-async function exportarProyecto(formatos: { midi: boolean; wav: boolean }, senal?: AbortSignal): Promise<{ ok: boolean; texto: string }> {
-  const view = project;
-  if (!view) return { ok: false, texto: "There is no open project." };
-  const slug = slugDeProyecto(view);
-  const hechos: string[] = [];
-  // Cancel used to be ignored here: the turn waited for the whole render (28-Oct). The
-  // offline renderer has no abort, so the check is before each costly step.
-  const cancelado = (): { ok: false; texto: string } => ({
-    ok: false,
-    texto: `${hechos.join("\n")}${hechos.length ? "\n" : ""}Cancelled by the user before finishing the export.`,
-  });
-  try {
-    if (senal?.aborted) return cancelado();
-    if (formatos.midi) {
-      const bytes = midiDeProyecto(view);
-      const fichero = new File([bytes as unknown as BlobPart], `${slug}.mid`, { type: "audio/midi" });
-      const { path } = await subirAudio(fichero, slug, "salida");
-      const pistas = view.tracks.filter((t) => t.kind === "midi").length;
-      hechos.push(`MIDI: proyectos/${slug}/${path} (${pistas} track(s), ${view.bpm} BPM).`);
-    }
-    if (formatos.wav) {
-      if (senal?.aborted) return cancelado();
-      const render = await prepararRender(view, slug);
-      if (senal?.aborted) return cancelado();
-      const mezcla = await render.renderizar(view);
-      const canales = mezcla.canales.slice(0, 2);
-      if (canales.length === 0 || canales[0]!.length === 0) throw new Error("the render came out empty");
-      const buffer = new AudioBuffer({ length: canales[0]!.length, numberOfChannels: canales.length, sampleRate: mezcla.sampleRate });
-      // The offline render hands back channels backed by SharedArrayBuffer, and copyToChannel
-      // refuses shared memory ("The provided Float32Array value must not be shared"): measured
-      // on 2-Nov night, every WAV export of "Vidrio" failed. Copy each one to a plain array.
-      canales.forEach((datos, i) => buffer.copyToChannel(new Float32Array(datos), i));
-      let pico = 0;
-      for (const datos of canales) for (let i = 0; i < datos.length; i += 1) pico = Math.max(pico, Math.abs(datos[i]!));
-      const fichero = new File([audioBufferToWav(buffer)], `${slug}.wav`, { type: "audio/wav" });
-      const { path } = await subirAudio(fichero, slug, "salida");
-      const segundos = buffer.length / buffer.sampleRate;
-      const picoDb = pico > 0 ? 20 * Math.log10(pico) : -Infinity;
-      hechos.push(
-        `WAV: proyectos/${slug}/${path} (${Math.floor(segundos / 60)}:${String(Math.round(segundos % 60)).padStart(2, "0")}, ` +
-          `peak ${picoDb.toFixed(1)} dBFS${pico > 1 ? " — CLIPPING: lower the master" : ""}).`,
-      );
-    }
-    const fuera = formatos.wav ? assetsPorStreaming(view) : [];
-    if (fuera.length > 0) {
-      hechos.push(`Not in the WAV (long, played by streaming, outside openDAW): ${fuera.join(", ")}.`);
-    }
-    return { ok: true, texto: hechos.join("\n") || "No format was requested." };
-  } catch (error) {
-    return {
-      ok: false,
-      texto: `${hechos.join("\n")}${hechos.length ? "\n" : ""}Could not export: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-}
-
-/**
- * What the engine needs to render the project without playing it: WAVs, the project's
- * SoundFonts and the GM. It is loaded once and serves several renders (the mix and each
- * track alone in `escuchar_mezcla`).
- */
-async function prepararRender(view: Project, slug: string) {
-  const { faltan } = await hidratarAssets(view, slug);
-  warnMissingAudio(faltan);
-  const paraEngine = new Map<string, { name: string; buffer: AudioBuffer }>();
-  for (const [id, asset] of audioAssets) {
-    if (asset.buffer) paraEngine.set(id, { name: asset.name, buffer: asset.buffer });
-  }
-  const soundfonts = await cargarSoundfontsDelProyecto(view);
-  const gm = await cargarGm(view);
-  // `cargarSoundfontsDelProyecto` silently skips the .sf2 files that do not arrive: here
-  // they are noted, because a track without its instrument is exactly what has to be diagnosed.
-  const sinCargar = [
-    ...new Set(
-      view.tracks.flatMap((t) => (t.instrument.type === "soundfont" && t.instrument.archivo && !soundfonts.has(t.instrument.archivo) ? [t.instrument.archivo] : [])),
-    ),
-  ];
-  const { renderizarMezcla } = await import("./opendaw-engine.ts");
-  return { sinCargar, renderizar: (vista: Project) => renderizarMezcla(vista, paraEngine, soundfonts, gm) };
-}
-
-/**
- * `escuchar_mezcla`: the level of the mix and of each track alone, by bar ranges,
- * rendered with openDAW. It is what really sounds, not the agent's numpy render
- * (STATUS Oct 28, pending 7).
- */
-async function escucharMezcla(opciones: { pistas?: string[]; compasesPorTramo?: number }, senal?: AbortSignal): Promise<{ ok: boolean; texto: string }> {
-  const view = project;
-  if (!view) return { ok: false, texto: "There is no open project." };
-  // Cancel is checked between renders: with 8 tracks that is 9 renders and the turn
-  // used to wait for all of them (28-Oct). A render in flight cannot be interrupted.
-  const cancelado = (hechas: number, total: number): { ok: false; texto: string } => ({
-    ok: false,
-    texto: `Cancelled by the user while listening (${hechas} of ${total} tracks measured; no report).`,
-  });
-  try {
-    const compasesPorTramo = Math.max(1, Math.min(16, Math.trunc(opciones.compasesPorTramo ?? 4)));
-    const tiemposTramo = compasesPorTramo * beatsPerBar(view);
-    const tramos = Math.max(1, Math.ceil(view.lengthBars / compasesPorTramo));
-    const pedidas = (opciones.pistas ?? []).map((p) => p.trim().toLowerCase()).filter(Boolean);
-    const elegidas = view.tracks.filter(
-      (t) => pedidas.length === 0 || pedidas.includes(t.id.toLowerCase()) || pedidas.includes(t.name.toLowerCase()),
-    );
-    if (pedidas.length > 0 && elegidas.length === 0) {
-      return { ok: false, texto: `No tracks named ${pedidas.join(", ")}. Tracks: ${view.tracks.map((t) => t.name).join(", ")}.` };
-    }
-    if (senal?.aborted) return cancelado(0, elegidas.length);
-    const render = await prepararRender(view, slugDeProyecto(view));
-    const medir = (r: { sampleRate: number; canales: Float32Array[] }) =>
-      nivelesPorTramo(r.canales.slice(0, 2), r.sampleRate, view.bpm, tiemposTramo, tramos);
-    if (senal?.aborted) return cancelado(0, elegidas.length);
-    setStatus("Listening: rendering the mix…");
-    const mezcla = medir(await render.renderizar(view));
-    const pistas: PistaEscuchada[] = [];
-    for (const [i, pista] of elegidas.entries()) {
-      if (senal?.aborted) return cancelado(i, elegidas.length);
-      setStatus(`Listening: track ${i + 1}/${elegidas.length} (${pista.name})…`);
-      // The track alone, without mute or solo: it measures whether its instrument produces signal.
-      const sola: Project = { ...view, tracks: [{ ...pista, muted: false, solo: false }] };
-      // Streaming WAV clips do not go through openDAW: counting them would give a false MUTE.
-      const enMotor = pista.clips.filter((clip) => !(clip.audio && audioAssets.get(clip.audio.assetId)?.streaming));
-      pistas.push({
-        nombre: pista.name,
-        muted: pista.muted,
-        notas: notasPorTramo({ clips: enMotor }, tiemposTramo, tramos),
-        niveles: medir(await render.renderizar(sola)),
-      });
-    }
-    const fuera = assetsPorStreaming(view);
-    const nota = fuera.length > 0 ? `\nNOT measured (long WAVs through streaming, outside openDAW; they sound in Play): ${fuera.join(", ")}.` : "";
-    return { ok: true, texto: informeEscucha({ compasesPorTramo, mezcla, pistas, sinCargar: render.sinCargar }) + nota };
-  } catch (error) {
-    return { ok: false, texto: `Could not listen to the mix: ${error instanceof Error ? error.message : String(error)}` };
-  }
-}
+const renderEscucha = crearRenderEscucha({
+  proyecto: () => project,
+  cargarSoundfonts: (view) => cargarSoundfontsDelProyecto(view),
+  cargarGm: (view) => cargarGm(view),
+  avisarFaltan: (faltan) => warnMissingAudio(faltan),
+  estado: (texto) => setStatus(texto),
+});
 
 const acciones = crearAcciones({
   proyecto: () => project,
   fijar: (siguiente) => setProject(siguiente),
   enVivo: (siguiente) => commitLive(siguiente),
   avisar: (texto) => addMessage("system", texto),
-  exportar: exportarProyecto,
-  escuchar: escucharMezcla,
+  exportar: renderEscucha.exportar,
+  escuchar: renderEscucha.escuchar,
 });
 registrarAcciones(acciones);
 

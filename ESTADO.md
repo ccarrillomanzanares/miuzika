@@ -263,7 +263,8 @@ commit each with a test); section 9 lists the decisions only Carlos can take. Ba
 
 **3-Nov, bugs 1-5 of the review fixed** (one commit each, with tests; 262 unit tests green,
 openDAW contract OK, smoke OK). Step 2 of section 10 (one WAV intake) was done the same day;
-step 3 (tool table with zod) is next.
+step 3 too (handler table; export and listening out of main.ts; zod left for later).
+Step 4 (server plumbing: spawn helper, route wrapper, path resolver) is next.
 - `2d4f787` a gpu/ write or edit that does not parse keeps the old file (`escribirComprobando`).
 - `ea6df8f` the server's own Python scripts run in `caja.py` too; the agent can no longer write
   `herramientas/` or the non-engine `codigo/` files. All ten server scripts were run boxed by hand.
