@@ -173,3 +173,66 @@ Project "Stahl" (125 BPM, E minor, ten 2.5-minute audio stems). Read back from
 Also seen: the proposals' MIDI duplicates note-ons (380 raw events vs 151 after the
 server's dedupe on riff 1), and `gtr_riff_l/r` were already muted before the session began.
 The instance stayed on after the tests (no auto-stop; Carlos turns it off from the header).
+
+## ACE-Step tasks in the architecture (3-Nov-2026, design, nothing built)
+
+Carlos asked on 3-Nov whether ACE-Step can take a miuzika song (WAV and MIDI) and make it
+sound professional, and then that every ACE-Step task should be planned into the
+architecture. Only `text2music` has run here. The task list below comes from the ACE-Step
+1.5 README, not from a run: the exact `task_type` strings, parameter names and which
+checkpoint supports each task must be read in `~/generadores/ACE-Step-1.5` on the instance
+before writing code.
+
+| task | input from miuzika | output back | model | use |
+|---|---|---|---|---|
+| `text2music` (built) | caption, lyrics, bpm, key | 1-8 full takes | XL turbo | new material |
+| `cover` | the mix (or a section) + caption + strength | one full mix | turbo? | hear the song "produced"; may change notes, melody and lyrics |
+| `repaint` | the mix + a time range + caption | the mix with that range redone | turbo? | redo a weak bar range |
+| `lego` | the mix as context + the instrument wanted | one new stem | base | replace a GM/VCSL track with a real-sounding one, keeping the composition |
+| `complete` | one track (e.g. the melody) | accompaniment | base | arrange from a sketch |
+| `extract` | a mix | one stem | base | stem separation (blocked "Vacío" transcription) |
+
+What ACE-Step is not: mastering. The finish of a mix that is already right comes from EQ,
+compression, a limiter and loudness (about −14 LUFS), done to our own WAV: an openDAW or
+Python chain, or Matchering (GPLv3, match a reference track; run as a separate tool). That
+is a stage on axis 4 of the review (listening and measuring), not an ACE-Step task.
+
+How the tasks fit the five axes of `docs/REVISION-2026-11-03.md` §8, without a new path:
+
+1. **One request type in `src/core/generacion.ts`.** `PeticionGeneracion` becomes a union
+   keyed by `tarea`, and `argumentosGeneracion` validates each one (range inside the song,
+   strength 0..1, base model where required) with tests, like today. Bars, not seconds, in
+   the request: the core converts with the project's tempo (one `tiempo.ts`, review §4).
+2. **Inputs are a new step: render to a file.** Today only the whole mix can be written
+   (`exportar`), and `escuchar_mezcla` renders each track alone but only in memory. The
+   tasks need "this track alone" and "these bars" as WAV files in
+   `proyectos/<slug>/entradas/`, made by the axis-4 render module the review wants out of
+   `main.ts`. MIDI tracks enter as audio rendered by openDAW: ACE-Step does not read MIDI.
+3. **Lambda must upload the inputs explicitly.** `sincronizar` in `server/lambda.ts` skips
+   `salida/` (where `exportar` writes) and any file over 50 MB, and uploads every other
+   project file on every run. A 16-bit stereo 48 kHz WAV is 192 KB/s, so a 4:20 song
+   already passes 50 MB. The run request gets `entradas: string[]`: those files are uploaded,
+   whatever their size, and nothing else of the project is needed by the GPU scripts.
+4. **One GPU script.** `gpu/generar_audio.py` gets `--tarea`, `--audio`, `--fuerza`,
+   `--desde/--hasta` and `--pista`, plus `--modelo acestep-v15-xl-base`. Its bootstrap,
+   re-exec, lineage and `RESULT` line are the skeleton the review wants shared with
+   `proponer_midi.py`. The lineage records the SHA-256 of every input file: a cover or a lego
+   stem is derived from our song, and the authorship layer must be able to say so.
+5. **One door back.** Every output enters through `importarPistas`, which step 2 of the
+   review makes the only WAV intake: `lego`, `complete` and `extract` as a new audio track at
+   the input's first bar; `repaint` as a clip over its range on a new track; `cover` as a
+   muted track at bar 1 to compare, never stacked after the last bar (check 15, item 5).
+6. **One tool for the agent.** `generar_audio` gets `tarea` and `fuente` ("mix", a track
+   name or a WAV path) and `desde_compas/hasta_compas`, instead of six new tools (31
+   already). All of it goes through the GPU gate of 3-Nov (selector on GPU). Tool
+   descriptions can change; a line in the prompt cannot without Carlos's yes (house rule 1).
+
+To measure before building on it: VRAM with the base XL model plus the LM on the A10
+(the turbo took 16 of 24 GB; `--lm none` may be needed for base); whether `cover` and
+`lego` keep the project's tempo (the output must line up with the bars, measured like the
+basic-pitch onsets on 2-Nov); how long a full-song `cover` takes warm. First listening test
+proposed: "Vidrio" mix with two `cover` strengths, one `lego` drum stem, and the same mix
+through a mastering chain, the four heard by Carlos.
+
+Order: after steps 1-6 of the review §10, as its step 7 says. Steps 2 (one WAV intake) and
+the axis-4 render module are prerequisites; the explicit Lambda inputs (point 3) are new.

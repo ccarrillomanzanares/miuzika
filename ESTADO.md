@@ -279,6 +279,9 @@ Not run in a browser (the dev server was off): a GPU tool with the selector on C
 `tmp/herramientas.log` and the instance stops at the step it was in; `usar_instrumento`,
 `usar_sample` and `medir_referencia` still work (they now run boxed).
 
+ACE-Step tasks (cover, repaint, lego, complete, extract) planned into the architecture on 3-Nov,
+nothing built: `docs/PLAN-MODELOS-MUSICA.md`, last section. Mastering is a separate stage.
+
 Carlos, 3-Nov: "la exportación wav funcionó ayer" (the 2-Nov fix of check 16 works in the app).
 
 
