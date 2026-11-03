@@ -91,3 +91,39 @@ test("crear_sonido refuses a GPU voice when the selector does not allow the GPU 
     globalThis.fetch = original;
   }
 });
+
+test("a cancelled anadir_pistas leaves the project untouched (3-Nov bug 5)", async () => {
+  const restaurar = servidorFalso(30);
+  let proyecto: Project = createProject({ name: "Stahl", bpm: 125, lengthBars: 8 });
+  const antes = proyecto;
+  let fijado = false;
+  try {
+    const acciones = crearAcciones({ proyecto: () => proyecto, fijar: (p) => ((fijado = true), (proyecto = p)), enVivo: (p) => (proyecto = p), avisar: () => {} });
+    const corte = new AbortController();
+    corte.abort();
+    const r = await acciones.anadirPistas({ midis: [], wavs: ["salida/toma.wav"], inicioCompas: 0 }, corte.signal);
+    assert.equal(r.texto, "Cancelled by the user.");
+    assert.equal(fijado, false);
+    assert.equal(proyecto, antes);
+  } finally {
+    restaurar();
+  }
+});
+
+test("Cancel cuts usar_sample while the server converts, instead of waiting up to 300 s (3-Nov bug 5)", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = ((_url: string | URL, init?: RequestInit) =>
+    new Promise<Response>((_listo, fallo) => {
+      init?.signal?.addEventListener("abort", () => fallo(new DOMException("aborted", "AbortError")));
+    })) as typeof fetch;
+  let proyecto: Project = createProject({ name: "Stahl", bpm: 125, lengthBars: 8 });
+  try {
+    const acciones = crearAcciones({ proyecto: () => proyecto, fijar: (p) => (proyecto = p), enVivo: (p) => (proyecto = p), avisar: () => {} });
+    const corte = new AbortController();
+    setTimeout(() => corte.abort(), 20);
+    const r = await acciones.usarSample({ archivo: "catalogo/kick.wav" }, corte.signal);
+    assert.equal(r.texto, "Cancelled by the user.");
+  } finally {
+    globalThis.fetch = original;
+  }
+});

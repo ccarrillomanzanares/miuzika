@@ -289,19 +289,19 @@ export interface PeticionBateriaPista extends PeticionBateria, PeticionEscritura
 export interface AccionesEstudio {
   exportar(peticion: { midi: boolean; wav: boolean }, senal?: AbortSignal): Promise<ResultadoAccion>;
   escuchar(peticion: { pistas?: string[]; compasesPorTramo?: number }, senal?: AbortSignal): Promise<ResultadoAccion>;
-  versiones(peticion: { accion: string; version?: string; pistas?: string[] }): Promise<ResultadoAccion>;
+  versiones(peticion: { accion: string; version?: string; pistas?: string[] }, senal?: AbortSignal): Promise<ResultadoAccion>;
   leerProyecto(peticion: { clipId?: string }): ResultadoAccion;
   editarProyecto(peticion: { ops: unknown[] }): ResultadoAccion;
   escribirProgresion(peticion: PeticionProgresionPista): ResultadoAccion;
   escribirNotas(peticion: PeticionNotas): ResultadoAccion;
   escribirBateria(peticion: PeticionBateriaPista): ResultadoAccion;
   crearProyecto(peticion: PeticionProyecto): Promise<ResultadoAccion>;
-  anadirPistas(peticion: PeticionPistas): Promise<ResultadoAccion>;
+  anadirPistas(peticion: PeticionPistas, senal?: AbortSignal): Promise<ResultadoAccion>;
   ajustarPistas(peticion: { pistas: AjustePista[] }): ResultadoAccion;
   igualarClips(peticion: PeticionIgualar): ResultadoAccion;
-  crearSonido(peticion: PeticionSonido): Promise<ResultadoAccion>;
-  usarSample(peticion: PeticionSample): Promise<ResultadoAccion>;
-  usarInstrumento(peticion: PeticionInstrumento): Promise<ResultadoAccion>;
+  crearSonido(peticion: PeticionSonido, senal?: AbortSignal): Promise<ResultadoAccion>;
+  usarSample(peticion: PeticionSample, senal?: AbortSignal): Promise<ResultadoAccion>;
+  usarInstrumento(peticion: PeticionInstrumento, senal?: AbortSignal): Promise<ResultadoAccion>;
   generarAudio(peticion: PeticionGenerar, senal?: AbortSignal): Promise<ResultadoAccion>;
   transcribirAudio(peticion: PeticionTranscripcion, senal?: AbortSignal): Promise<ResultadoAccion>;
   proponerMidi(peticion: PeticionPropuestaMidi, senal?: AbortSignal): Promise<ResultadoAccion>;
@@ -1176,10 +1176,8 @@ async function ejecutarCrudo(
               "escribir_fichero to another file if they are different things.",
           };
         }
-        const datos = await pedirJson("/api/fs/write", {
-          path: args.path,
-          contenido,
-        });
+        // The engine smoke test can take 120 s on the server: the cancel must reach it.
+        const datos = await pedirJson("/api/fs/write", { path: args.path, contenido }, 45000, senal);
         // `nota` says whether the engine passed the smoke test (or that in gpu/ only the
         // syntax has been checked): it is the proof that the change is safe.
         const nota = typeof datos.nota === "string" && datos.nota !== "" ? ` ${datos.nota}` : "";
@@ -1187,7 +1185,7 @@ async function ejecutarCrudo(
       }
       case "leer_fichero": {
         const desde = Math.max(0, Math.trunc(Number(args.desde) || 0));
-        const datos = await pedirJson("/api/fs/read", { path: args.path, desde });
+        const datos = await pedirJson("/api/fs/read", { path: args.path, desde }, 45000, senal);
         const siguiente = typeof datos.siguiente === "number" ? datos.siguiente : null;
         return {
           ok: true,
@@ -1221,12 +1219,12 @@ async function ejecutarCrudo(
         };
       }
       case "editar_fichero": {
-        const datos = await pedirJson("/api/fs/edit", {
-          path: args.path,
-          busca: args.busca,
-          reemplaza: args.reemplaza,
-          todas: args.todas,
-        });
+        const datos = await pedirJson(
+          "/api/fs/edit",
+          { path: args.path, busca: args.busca, reemplaza: args.reemplaza, todas: args.todas },
+          45000,
+          senal,
+        );
         return { ok: true, texto: `Edited ${datos.path ?? args.path}: ${datos.reemplazos} replacement(s).` };
       }
       case "crear_proyecto": {
@@ -1403,7 +1401,7 @@ async function ejecutarCrudo(
           sfz: String(args.sfz ?? "").trim(),
           nombre: String(args.nombre ?? "").trim(),
           ...(typeof args.pista === "string" && args.pista.trim() !== "" ? { pista: args.pista.trim() } : {}),
-        });
+        }, senal);
       case "usar_sample":
         return local.usarSample({
           archivo: String(args.archivo ?? "").trim(),
@@ -1411,7 +1409,7 @@ async function ejecutarCrudo(
             ? { nombre: args.nombre.trim() }
             : {}),
           ...(Number(args.compases) > 0 ? { compases: Math.trunc(Number(args.compases)) } : {}),
-        });
+        }, senal);
       case "generar_audio": {
         const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
         const txt = (v: unknown): string | undefined => (typeof v === "string" && v.trim() !== "" ? v.trim() : undefined);
@@ -1463,7 +1461,7 @@ async function ejecutarCrudo(
           ...(Array.isArray(args.palabras) ? { palabras: (args.palabras as unknown[]).map(String) } : {}),
           ...(argsSonido ? { args: argsSonido } : {}),
           gpuPermitida: destinoPreferido === "lambda",
-        });
+        }, senal);
       }
       case "crear_voz": {
         const nombre = String(args.nombre ?? "").trim().toLowerCase();
@@ -1524,7 +1522,7 @@ async function ejecutarCrudo(
           ...(typeof args.nombre_proyecto === "string" && args.nombre_proyecto.trim() !== ""
             ? { nombreProyecto: args.nombre_proyecto.trim() }
             : {}),
-        });
+        }, senal);
       case "ajustar_pistas": {
         const lista = Array.isArray(args.pistas) ? (args.pistas as Record<string, unknown>[]) : [];
         if (lista.length === 0) return { ok: false, texto: "You have not named any track." };
@@ -1553,7 +1551,7 @@ async function ejecutarCrudo(
           accion: String(args.accion ?? "listar"),
           version: args.version === undefined ? undefined : String(args.version),
           pistas: Array.isArray(args.pistas) ? args.pistas.map(String) : undefined,
-        });
+        }, senal);
       case "leer_proyecto":
         return local.leerProyecto(typeof args.clip === "string" && args.clip.trim() !== "" ? { clipId: args.clip.trim() } : {});
       case "editar_proyecto": {
@@ -1723,6 +1721,9 @@ async function ejecutarCrudo(
     }
   } catch (error) {
     const abortado = error instanceof Error && error.name === "AbortError";
+    // Cancel and a timeout both arrive as AbortError; only the turn's signal tells them
+    // apart. Until 3-Nov a Cancel was reported as a timeout (review 3-Nov, bug 5).
+    if (abortado && senal?.aborted) return { ok: false, texto: "Cancelled by the user." };
     return {
       ok: false,
       texto: abortado

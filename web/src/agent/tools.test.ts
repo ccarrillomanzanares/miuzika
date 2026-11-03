@@ -79,3 +79,23 @@ test("with the selector on GPU the same calls pass the gate", async () => {
     setDestino("cpu");
   }
 });
+
+test("Cancel reaches leer_fichero in flight and is reported as a cancel, not a timeout (3-Nov bug 5)", async () => {
+  const original = globalThis.fetch;
+  let recibioSenal = false;
+  globalThis.fetch = ((_url: string | URL, init?: RequestInit) =>
+    new Promise<Response>((_listo, fallo) => {
+      recibioSenal = init?.signal instanceof AbortSignal;
+      init?.signal?.addEventListener("abort", () => fallo(new DOMException("aborted", "AbortError")));
+    })) as typeof fetch;
+  try {
+    const corte = new AbortController();
+    setTimeout(() => corte.abort(), 20);
+    const r = await ejecutarHerramienta("leer_fichero", JSON.stringify({ path: "notas.txt" }), corte.signal);
+    assert.equal(recibioSenal, true);
+    assert.equal(r.ok, false);
+    assert.equal(r.texto, "Cancelled by the user.");
+  } finally {
+    globalThis.fetch = original;
+  }
+});

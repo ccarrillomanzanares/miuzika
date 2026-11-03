@@ -106,6 +106,12 @@ function pistaPorNombre(project: Project, nombre: string) {
 
 const mensajeDe = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
+/**
+ * The answer when Cancel stopped an action. Until 3-Nov five actions ignored the turn's
+ * signal and kept converting, rendering or importing after Cancel (review 3-Nov, bug 5).
+ */
+const CANCELADO: ResultadoAccion = { ok: false, texto: "Cancelled by the user." };
+
 export function crearAcciones(e: Estudio): AccionesEstudio {
   /**
    * Creates real tracks in the project from files in workspace/: the .mid as MIDI tracks
@@ -114,6 +120,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
    */
   async function importarPistas(
     peticion: PeticionPistas,
+    senal?: AbortSignal,
   ): Promise<ResultadoAccion> {
     const inicio = Math.max(0, Math.min(511, Math.trunc(peticion.inicioCompas)));
     const MAX_NOTAS = 2000; // cap of the add_notes op
@@ -168,6 +175,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       try {
         const res = await fetch(`/api/midi?path=${encodeURIComponent(ruta)}`, {
           headers: cabecerasProyecto(),
+          signal: senal,
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const datos = (await res.json()) as { bpm?: number; tracks?: PistaMidi[] };
@@ -279,6 +287,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     }
 
     for (const ruta of peticion.wavs) {
+      if (senal?.aborted) return CANCELADO;
       try {
         const fichero = ruta.split("/").pop() ?? "audio.wav";
         const sinExt = fichero.replace(/\.[^.]+$/, "");
@@ -359,7 +368,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
 
         let asset: Awaited<ReturnType<typeof loadAudioFile>>;
         try {
-          const res = await fetch(`/api/audio?path=${encodeURIComponent(rutaEnProyecto(ruta, carpetaDeProyecto(project)))}`);
+          const res = await fetch(`/api/audio?path=${encodeURIComponent(rutaEnProyecto(ruta, carpetaDeProyecto(project)))}`, { signal: senal });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const blob = await res.blob();
           const file = new File([blob], fichero, { type: "audio/wav" });
@@ -433,6 +442,8 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       ]).project;
     }
 
+    // Nothing is applied after Cancel: the project stays as it was before the call.
+    if (senal?.aborted) return CANCELADO;
     if (hechas.length > 0) {
       e.fijar(current);
       e.avisar(`Tracks added to the project: ${hechas.length}.`);
@@ -462,6 +473,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
    */
   async function crearSonido(
     peticion: PeticionSonido,
+    senal?: AbortSignal,
   ): Promise<ResultadoAccion> {
     const project = e.proyecto();
     if (!project) {
@@ -472,7 +484,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
 
     let catalogo: VozSonido[] = [];
     try {
-      const res = await fetch("/api/voces");
+      const res = await fetch("/api/voces", { signal: senal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       catalogo = ((await res.json()) as { voces?: VozSonido[] }).voces ?? [];
     } catch (error) {
@@ -518,6 +530,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         method: "POST",
         headers: { "Content-Type": "application/json", ...cabeceraDeProyecto(slug) },
         body: JSON.stringify({ path: ruta, contenido }),
+        signal: senal,
       });
 
     try {
@@ -530,6 +543,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
           path: rutaScript,
           timeout_segundos: destino === "gpu" ? 600 : 180,
         }),
+        signal: senal,
       });
       const corrida = (await r.json()) as { codigo?: number; salida?: string; errores?: string };
       if (!r.ok || (corrida.codigo ?? 1) !== 0) {
@@ -550,6 +564,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ path: rutaWav }),
+          signal: senal,
         });
         if (v.ok) informe = String(((await v.json()) as { informe?: string }).informe ?? "");
       } catch {
@@ -574,6 +589,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         .join("\n");
       return { ok: true, texto };
     } catch (error) {
+      if (senal?.aborted) return CANCELADO;
       return { ok: false, texto: error instanceof Error ? error.message : String(error) };
     }
   }
@@ -587,6 +603,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
    */
   async function usarSample(
     peticion: PeticionSample,
+    senal?: AbortSignal,
   ): Promise<ResultadoAccion> {
     const project = e.proyecto();
     if (!project) return { ok: false, texto: "There is no open project: the sample has to go into one." };
@@ -604,6 +621,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         // through `setProyectoActivo`, and if not, the sample ends up in "sin-proyecto".
         headers: { "Content-Type": "application/json", ...cabeceraDeProyecto(carpetaDeProyecto(project)) },
         body: JSON.stringify({ archivo, nombre }),
+        signal: senal,
       });
       const datos = (await res.json()) as {
         ok?: boolean;
@@ -620,7 +638,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         wavs: [datos.ruta],
         inicioCompas: 0,
         ...(peticion.compases && peticion.compases > 0 ? { compases: peticion.compases } : {}),
-      });
+      }, senal);
       return {
         ok: puesto.ok,
         texto:
@@ -629,6 +647,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
           puesto.texto,
       };
     } catch (error) {
+      if (senal?.aborted) return CANCELADO;
       return { ok: false, texto: error instanceof Error ? error.message : String(error) };
     }
   }
@@ -692,7 +711,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       wavs: resultado.ficheros.map((f) => `${CARPETA_GENERADO}/${f}`),
       inicioCompas: inicio,
       ...(peticion.compases && peticion.compases > 0 ? { compases: peticion.compases } : {}),
-    });
+    }, senal);
     return {
       ok: puesto.ok,
       texto:
@@ -746,7 +765,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       midis: [datos.ruta],
       wavs: [],
       inicioCompas: Math.max(0, Math.trunc(peticion.inicioCompas ?? 0)),
-    });
+    }, senal);
     return { ok: puesto.ok, texto: `${cabecera}\n${puesto.texto}` };
   }
 
@@ -1243,7 +1262,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
    * The .sf2 comes with its 46 regions and the root note declared by the SFZ, which is
    * what avoids the "sounds like a harmonic" of stretching a single sample.
    */
-  async function instrumentar(peticion: { sfz: string; nombre: string; pista?: string }): Promise<ResultadoAccion> {
+  async function instrumentar(peticion: { sfz: string; nombre: string; pista?: string }, senal?: AbortSignal): Promise<ResultadoAccion> {
     // It is checked BEFORE converting: otherwise a 46-region SFZ was converted for
     // nothing and then it warned that there was no project.
     if (!e.proyecto()) return { ok: false, texto: "Open or create a project before adding an instrument." };
@@ -1252,6 +1271,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         method: "POST",
         headers: cabecerasProyecto({ "Content-Type": "application/json" }),
         body: JSON.stringify(peticion),
+        signal: senal,
       });
       const datos = (await res.json()) as {
         ok?: boolean;
@@ -1290,6 +1310,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
           `or escribir_progresion (pista = its id).`,
       };
     } catch (error) {
+      if (senal?.aborted) return CANCELADO;
       return { ok: false, texto: `Could not convert: ${error instanceof Error ? error.message : String(error)}` };
     }
   }
@@ -1297,12 +1318,12 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
    * Project snapshots taken at the start of each turn (main.ts, guardarVersion):
    * `listar` shows them; `restaurar` copies the requested tracks (or everything) from one.
    */
-  async function versiones(peticion: { accion: string; version?: string; pistas?: string[] }): Promise<ResultadoAccion> {
+  async function versiones(peticion: { accion: string; version?: string; pistas?: string[] }, senal?: AbortSignal): Promise<ResultadoAccion> {
     const project = e.proyecto();
     if (!project) return { ok: false, texto: "There is no open project." };
     const carpeta = `proyectos/${carpetaDeProyecto(project)}/${CARPETA_VERSIONES}`;
     try {
-      const lista = await fetch(`/api/fs/list?carpeta=${encodeURIComponent(carpeta)}`, { headers: cabecerasProyecto() });
+      const lista = await fetch(`/api/fs/list?carpeta=${encodeURIComponent(carpeta)}`, { headers: cabecerasProyecto(), signal: senal });
       const datos = (await lista.json()) as { ficheros?: { path: string }[] };
       const nombres = (datos.ficheros ?? [])
         .map((f) => f.path.split("/").pop() ?? "")
@@ -1330,17 +1351,20 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         method: "POST",
         headers: cabecerasProyecto({ "Content-Type": "application/json" }),
         body: JSON.stringify({ path: `${carpeta}/${nombre}` }),
+        signal: senal,
       });
       if (!res.ok) return { ok: false, texto: `Could not read ${nombre} (HTTP ${res.status}).` };
       const { contenido } = (await res.json()) as { contenido: string };
       const antigua = interpretarProyectoEnDisco(contenido).proyecto;
       const { project: siguiente, hechas } = restaurarVersion(project, antigua, peticion.pistas ?? []);
+      if (senal?.aborted) return CANCELADO;
       e.fijar(siguiente);
       return {
         ok: true,
         texto: `From ${nombre} (${describirVersion(nombre)}):\n${hechas.join("\n")}\nIt is undone with Ctrl+Z.`,
       };
     } catch (error) {
+      if (senal?.aborted) return CANCELADO;
       return { ok: false, texto: `Error with the versions: ${mensajeDe(error)}` };
     }
   }
