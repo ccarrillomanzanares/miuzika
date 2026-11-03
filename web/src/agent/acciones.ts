@@ -106,6 +106,24 @@ const mensajeDe = (error: unknown): string => (error instanceof Error ? error.me
  */
 const CANCELADO: ResultadoAccion = { ok: false, texto: "Cancelled by the user." };
 
+/**
+ * MIDI and WAV that look like the same material: same file name once the extension and the
+ * usual suffixes are gone ("stahl.mid" / "stahl.wav", "bajo_basic_pitch.mid" / "bajo.wav").
+ * Seen 2-Nov on "vidrio-4": the warning fired for ANY call bringing both, unrelated ones too.
+ */
+export function paresMismaCancion(midis: readonly string[], wavs: readonly string[]): [string, string][] {
+  const base = (ruta: string): string =>
+    (ruta.split(/[\\/]/).pop() ?? "")
+      .replace(/\.[^.]+$/, "")
+      .replace(/_basic_pitch$/i, "")
+      .replace(/[-_ ](mix|master|stem|full|midi|audio)$/i, "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, "");
+  const pares: [string, string][] = [];
+  for (const m of midis) for (const w of wavs) if (base(m) !== "" && base(m) === base(w)) pares.push([m, w]);
+  return pares;
+}
+
 export function crearAcciones(e: Estudio): AccionesEstudio {
   /**
    * Creates real tracks in the project from files in workspace/: the .mid as MIDI tracks
@@ -369,9 +387,10 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
       ...(fallos.length > 0 ? ["Failures:", ...fallos.map((linea) => `- ${linea}`)] : []),
       ...avisos,
       // The same material twice sounds double: it warns on the spot, not afterwards.
-      ...(peticion.midis.length > 0 && peticion.wavs.length > 0
+      ...(paresMismaCancion(peticion.midis, peticion.wavs).length > 0
         ? [
-            "WARNING: you have added MIDI and WAV of the same song. They both sound at once (double level and phase). " +
+            `WARNING: ${paresMismaCancion(peticion.midis, peticion.wavs).map(([m, w]) => `${m} and ${w}`).join("; ")} look like ` +
+              "the same song as MIDI and WAV. Both sound at once (double level and phase). " +
               "Ask the user which one to keep and silence the other set with ajustar_pistas.",
           ]
         : []),

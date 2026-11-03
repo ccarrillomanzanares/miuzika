@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createProject } from "../../../src/core/project.ts";
 import type { Project } from "../../../src/core/types.ts";
 import { assetsPorStreaming } from "../audio-store.ts";
-import { crearAcciones } from "./acciones.ts";
+import { crearAcciones, paresMismaCancion } from "./acciones.ts";
 
 /**
  * A WAV of `segundos` behind a fake server and a fake decoder: /api/picos gives the
@@ -142,4 +142,12 @@ test("re-importing a decoded take replaces its clips instead of duplicating the 
   } finally {
     restaurar();
   }
+});
+
+test("the MIDI+WAV warning only pairs files that look like the same song", () => {
+  // 2-Nov "vidrio-4": it fired for a generated take next to an unrelated MIDI proposal.
+  assert.deepEqual(paresMismaCancion(["propuestas/prop-1.mid"], ["generado/vidrio-1.wav"]), []);
+  assert.deepEqual(paresMismaCancion(["entrada/stahl.mid"], ["entrada/Stahl.wav"]), [["entrada/stahl.mid", "entrada/Stahl.wav"]]);
+  assert.deepEqual(paresMismaCancion(["transcripciones/bajo_basic_pitch.mid"], ["entrada/bajo.wav"]).length, 1);
+  assert.deepEqual(paresMismaCancion(["a/hurt-mix.mid"], ["b\\hurt.wav"]).length, 1);
 });
