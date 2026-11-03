@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { ejecutarHerramienta, resumenLlamada, setDestino } from "./tools.ts";
+import { HERRAMIENTAS, MANEJADORES, ejecutarHerramienta, resumenLlamada, setDestino } from "./tools.ts";
 
 /** Runs escribir_fichero against a fake /api/fs/write and returns what the server got. */
 async function escribir(args: Record<string, unknown>): Promise<{ ok: boolean; texto: string; cuerpo: unknown }> {
@@ -97,5 +97,19 @@ test("Cancel reaches leer_fichero in flight and is reported as a cancel, not a t
     assert.equal(r.texto, "Cancelled by the user.");
   } finally {
     globalThis.fetch = original;
+  }
+});
+
+test("every declared tool has a handler and every handler is declared (3-Nov step 3)", () => {
+  const declaradas = HERRAMIENTAS.map((h) => h.function.name).sort();
+  assert.deepEqual(Object.keys(MANEJADORES).sort(), declaradas);
+  assert.equal(declaradas.length, 31);
+});
+
+test("an unknown tool name is refused, also one that names an Object method", async () => {
+  for (const nombre of ["no_existe", "toString", "constructor"]) {
+    const r = await ejecutarHerramienta(nombre, "{}");
+    assert.equal(r.ok, false);
+    assert.match(r.texto, /Unknown tool/, nombre);
   }
 });

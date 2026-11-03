@@ -1132,6 +1132,589 @@ export const HERRAMIENTAS: ToolSpec[] = [
   },
 ];
 
+/** What a tool receives: its parsed arguments, the turn's Cancel and the tab's actions. */
+type Manejador = (
+  args: Record<string, unknown>,
+  senal: AbortSignal | undefined,
+  local: AccionesEstudio,
+) => Promise<ResultadoHerramienta>;
+
+/**
+ * One handler per tool, by name. Until 3-Nov this was one 598-line `switch` inside
+ * ejecutarCrudo (review 3-Nov, step 3); the bodies moved here unchanged. A test checks
+ * that every tool declared in HERRAMIENTAS has a handler and the other way round.
+ */
+export const MANEJADORES: Record<string, Manejador> = {
+  escribir_fichero: async (args, senal, _local) => {
+    // A file of 9,700 tokens in one go (measured on Oct 25) makes the
+    // provider cut the next turn with finish_reason 'load'. The cap is
+    // mechanical on purpose: asking for it in the prompt did not work.
+    const contenido = contenidoDeFichero(args);
+    if (contenido === null) {
+      return { ok: false, texto: "Missing `contenido`: the text of the file (a string)." };
+    }
+    if (contenido.length > MAX_FICHERO) {
+      return {
+        ok: false,
+        texto:
+          `Too long: ${contenido.length} characters (the cap is ${MAX_FICHERO}). ` +
+          "Write the file in pieces: first the structure and the base functions, and " +
+          "then add the rest with editar_fichero (search/replace) or with a second " +
+          "escribir_fichero to another file if they are different things.",
+      };
+    }
+    // The engine smoke test can take 120 s on the server: the cancel must reach it.
+    const datos = await pedirJson("/api/fs/write", { path: args.path, contenido }, 45000, senal);
+    // `nota` says whether the engine passed the smoke test (or that in gpu/ only the
+    // syntax has been checked): it is the proof that the change is safe.
+    const nota = typeof datos.nota === "string" && datos.nota !== "" ? ` ${datos.nota}` : "";
+    return { ok: true, texto: `Wrote ${datos.path} (${datos.bytes} bytes).${nota}` };
+  },
+  leer_fichero: async (args, senal, _local) => {
+    const desde = Math.max(0, Math.trunc(Number(args.desde) || 0));
+    const datos = await pedirJson("/api/fs/read", { path: args.path, desde }, 45000, senal);
+    const siguiente = typeof datos.siguiente === "number" ? datos.siguiente : null;
+    return {
+      ok: true,
+      texto:
+        String(datos.contenido ?? "") +
+        (siguiente !== null
+          ? `\n[… continues: ${Number(datos.total) - siguiente} more characters. leer_fichero(path, desde=${siguiente})]`
+          : ""),
+    };
+  },
+  listar_ficheros: async (args, senal, _local) => {
+    const carpeta = typeof args.carpeta === "string" ? args.carpeta.trim() : "";
+    const consulta = carpeta === "" ? "/api/fs/list" : `/api/fs/list?carpeta=${encodeURIComponent(carpeta)}`;
+    const datos = await pedirJson(consulta, undefined, 30000, senal);
+    const ficheros = (datos.ficheros ?? []) as { path: string; bytes: number }[];
+    const donde = String(datos.carpeta ?? ".");
+    if (ficheros.length === 0) {
+      return { ok: true, texto: `There are no files in ${donde}/.` };
+    }
+    const total = ficheros.reduce((suma, f) => suma + f.bytes, 0);
+    const truncado = datos.truncado === true;
+    return {
+      ok: true,
+      texto:
+        `${ficheros.length}${truncado ? "+ (truncated)" : ""} file(s) in ${donde}/ ` +
+        `(${(total / 1024).toFixed(0)} KB):\n` +
+        ficheros.map((f) => `${f.path} (${f.bytes} B)`).join("\n") +
+        (truncado
+          ? "\n[The list is truncated: ask for a more specific folder (e.g. 'salida').]"
+          : ""),
+    };
+  },
+  editar_fichero: async (args, senal, _local) => {
+    const datos = await pedirJson(
+      "/api/fs/edit",
+      { path: args.path, busca: args.busca, reemplaza: args.reemplaza, todas: args.todas },
+      45000,
+      senal,
+    );
+    return { ok: true, texto: `Edited ${datos.path ?? args.path}: ${datos.reemplazos} replacement(s).` };
+  },
+  crear_proyecto: async (args, _senal, local) => {
+    const tonica = typeof args.tonica === "string" ? args.tonica.trim() : "";
+    const modo = typeof args.modo === "string" ? args.modo.trim() : "";
+    return local.crearProyecto({
+      nombre: String(args.nombre ?? "").trim(),
+      bpm: Number(args.bpm ?? 120) || 120,
+      compases: Number(args.compases ?? 8) || 8,
+      ...(tonica ? { tonica } : {}),
+      ...(modo ? { modo } : {}),
+    });
+  },
+  listar_voces: async (_args, senal, _local) => {
+    try {
+      const datos = (await pedirJson("/api/voces", undefined, 240000, senal)) as {
+        voces?: {
+          clave: string;
+          familia: string;
+          descripcion: string;
+          excluida?: string | null;
+          params: { clave: string; min?: number; max?: number; unidad?: string }[];
+        }[];
+      };
+      const lineas = (datos.voces ?? []).map((voz) => {
+        if (voz.excluida) return `- ${voz.clave}: NOT USABLE (${voz.excluida})`;
+        const params = voz.params
+          .map((p) =>
+            p.min === undefined ? p.clave : `${p.clave} ${p.min}..${p.max}${p.unidad ? " " + p.unidad : ""}`,
+          )
+          .join(", ");
+        return `- ${voz.clave} [${voz.familia}${(voz as { destino?: string }).destino === "gpu" ? ", GPU" : ""}] ${voz.descripcion} (${params})`;
+      });
+      return { ok: true, texto: `Engine voices (${lineas.length}):\n${lineas.join("\n")}` };
+    } catch (error) {
+      return {
+        ok: false,
+        texto: "I could not read the catalog: " + (error instanceof Error ? error.message : String(error)),
+      };
+    }
+  },
+  buscar_sonido: async (args, senal, _local) => {
+    const consulta = String(args.consulta ?? "").trim();
+    if (consulta === "") return { ok: false, texto: "missing query" };
+    try {
+      // Measuring the 16 voices costs ~2 s: it is only requested if the query carries a
+      // character word (short, bright…), which is when it is needed.
+      const pideCaracter = /\b(corto|largo|seco|brillante|oscuro|grave|agudo|sucio|limpio|redondo|apagado|chillon|metalico|short|long|dry|bright|dark|low|deep|high|dirty|clean)\b/i.test(
+        consulta,
+      );
+      const datos = (await pedirJson(
+        pideCaracter ? "/api/voces?medir=1" : "/api/voces",
+        undefined,
+        240000,
+        senal,
+      )) as {
+        voces?: {
+          clave: string;
+          etiqueta: string;
+          familia: string;
+          descripcion: string;
+          destino?: string;
+          excluida?: string | null;
+          perfil?: Record<string, number>;
+        }[];
+      };
+      const catalogo: EntradaCatalogo[] = (datos.voces ?? [])
+        .filter((voz) => !voz.excluida)
+        .map((voz) => ({
+          clave: voz.clave,
+          etiqueta: voz.etiqueta,
+          familia: voz.familia,
+          descripcion: voz.descripcion,
+          destino: voz.destino === "gpu" ? "gpu" : "cpu",
+          perfil: voz.perfil,
+        }));
+      // The CC0 library (4,231 samples), searched on the server.
+      let biblioteca: string[] = [];
+      try {
+        const rc = await pedir("/api/catalogo/buscar", {
+          cuerpo: { consulta, limite: 6 },
+          limiteMs: 30000,
+          senal,
+        });
+        if (rc.ok) {
+          const dc = (await rc.json()) as {
+            resultados?: {
+              archivo: string;
+              instrumento: string;
+              familia: string;
+              strudel: string | null;
+              perfil?: Record<string, number>;
+            }[];
+          };
+          biblioteca = (dc.resultados ?? []).map((r) => {
+            const p = r.perfil ?? {};
+            const medidas = [
+              p.duracion_s !== undefined ? `${p.duracion_s} s` : "",
+              p.centroide_hz !== undefined ? `${Math.round(p.centroide_hz)} Hz` : "",
+            ]
+              .filter((x) => x !== "")
+              .join(", ");
+            return (
+              `- ${r.archivo} (${r.instrumento}, ${r.familia}) [${medidas}]` +
+              (r.strudel ? ` · in Strudel: s("${r.strudel}")` : "")
+            );
+          });
+        }
+      } catch {
+        /* no library: continue with the engine voices */
+      }
+
+      const encontrados = buscarEnCatalogo(catalogo, consulta, {
+        ...(typeof args.familia === "string" ? { familia: args.familia } : {}),
+        limite: 6,
+      });
+      const etiquetas = etiquetasEnFrase(consulta).map((e) => e.id);
+      if (encontrados.length === 0) {
+        return {
+          ok: true,
+          texto:
+            `There is nothing like "${consulta}" in the catalog` +
+            (etiquetas.length > 0 ? ` (closest by tag: ${etiquetas.join(", ")})` : "") +
+            ". You can create it with crear_sonido if there is a suitable voice, or with crear_voz if not.",
+        };
+      }
+      const lineas = encontrados.map((r) => {
+        const p = r.entrada.perfil ?? {};
+        const medidas = [
+          p.duracion_s !== undefined ? `${p.duracion_s} s` : "",
+          p.centroide_hz !== undefined ? `${Math.round(p.centroide_hz)} Hz` : "",
+          p.crest_db !== undefined ? `crest ${p.crest_db} dB` : "",
+        ]
+          .filter((x) => x !== "")
+          .join(", ");
+        return `- ${r.entrada.clave} (${r.entrada.familia}, ${r.entrada.destino}): ${r.entrada.descripcion} [${medidas}] (${r.motivos.join("; ")})`;
+      });
+      const partes = [
+        `Candidates for "${consulta}":`,
+        lineas.join("\n"),
+        biblioteca.length > 0
+          ? `\nIn the CC0 library (${biblioteca.length}):\n${biblioteca.join("\n")}\nTo bring it in: usar_sample(archivo="...").`
+          : "",
+        "To synthesize a new one: crear_sonido with the voice you choose.",
+      ].filter((x) => x !== "");
+      return { ok: true, texto: partes.join("\n") };
+    } catch (error) {
+      return { ok: false, texto: "I could not search: " + (error instanceof Error ? error.message : String(error)) };
+    }
+  },
+  medir_referencia: async (args, senal, _local) => {
+    const origen = String(args.origen ?? "").trim();
+    if (!origen) return { ok: false, texto: "Missing the reference link or path." };
+    const res = await pedir("/api/referencia/medir", {
+      cuerpo: { origen },
+      // Downloading from YouTube and analyzing 4 minutes: the server allows 900 s.
+      limiteMs: 900000,
+      senal,
+    });
+    const datos = (await res.json()) as Record<string, unknown> & { ok?: boolean; error?: string };
+    if (!datos.ok) return { ok: false, texto: `Could not measure: ${datos.error ?? res.status}` };
+    const linea =
+      `${datos.duracion_s} s · ${datos.tempo_bpm} BPM · ` +
+      (datos.tonalidad && (datos.tonalidad as { tonica?: string }).tonica
+        ? `${(datos.tonalidad as { tonica: string }).tonica} ${(datos.tonalidad as { modo: string }).modo}`
+        : "no clear key") +
+      ` · ${datos.compases} bars\n` +
+      `character: ${(datos.palabras as string[])?.join(", ") ?? ""}\n` +
+      `shape (energy per 4 bars): ${JSON.stringify(datos.forma)}`;
+    return { ok: true, texto: linea };
+  },
+  usar_instrumento: async (args, senal, local) => {
+    return local.usarInstrumento({
+      sfz: String(args.sfz ?? "").trim(),
+      nombre: String(args.nombre ?? "").trim(),
+      ...(typeof args.pista === "string" && args.pista.trim() !== "" ? { pista: args.pista.trim() } : {}),
+    }, senal);
+  },
+  usar_sample: async (args, senal, local) => {
+    return local.usarSample({
+      archivo: String(args.archivo ?? "").trim(),
+      ...(typeof args.nombre === "string" && args.nombre.trim() !== ""
+        ? { nombre: args.nombre.trim() }
+        : {}),
+      ...(Number(args.compases) > 0 ? { compases: Math.trunc(Number(args.compases)) } : {}),
+    }, senal);
+  },
+  generar_audio: async (args, senal, local) => {
+    const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+    const txt = (v: unknown): string | undefined => (typeof v === "string" && v.trim() !== "" ? v.trim() : undefined);
+    const entero = (v: unknown): number | undefined => (num(v) === undefined ? undefined : Math.trunc(num(v) as number));
+    return local.generarAudio(
+      {
+        prompt: String(args.prompt ?? ""),
+        nombre: String(args.nombre ?? ""),
+        ...(txt(args.letra) ? { letra: txt(args.letra) } : {}),
+        ...(txt(args.idioma) ? { idioma: txt(args.idioma) } : {}),
+        ...(txt(args.tonalidad) ? { tonalidad: txt(args.tonalidad) } : {}),
+        ...(num(args.duracion) !== undefined ? { duracion: num(args.duracion) } : {}),
+        ...(entero(args.bpm) !== undefined ? { bpm: entero(args.bpm) } : {}),
+        ...(entero(args.variantes) !== undefined ? { variantes: entero(args.variantes) } : {}),
+        ...(entero(args.semilla) !== undefined ? { semilla: entero(args.semilla) } : {}),
+        ...(entero(args.inicio_compas) !== undefined ? { inicioCompas: entero(args.inicio_compas) } : {}),
+        ...((entero(args.compases) ?? 0) > 0 ? { compases: entero(args.compases) } : {}),
+      },
+      senal,
+    );
+  },
+  transcribir_audio: async (args, senal, local) => {
+    return local.transcribirAudio(
+      {
+        archivo: String(args.archivo ?? "").trim(),
+        ...(typeof args.nombre === "string" && args.nombre.trim() !== "" ? { nombre: args.nombre.trim() } : {}),
+        ...(typeof args.importar === "boolean" ? { importar: args.importar } : {}),
+        ...(typeof args.inicio_compas === "number" ? { inicioCompas: Math.trunc(args.inicio_compas) } : {}),
+      },
+      senal,
+    );
+  },
+  proponer_midi: async (args, senal, local) => {
+    return local.proponerMidi(
+      {
+        prompt: String(args.prompt ?? ""),
+        nombre: String(args.nombre ?? ""),
+        ...(typeof args.variantes === "number" && args.variantes >= 1 ? { variantes: Math.trunc(args.variantes) } : {}),
+      },
+      senal,
+    );
+  },
+  crear_sonido: async (args, senal, local) => {
+    const argsSonido =
+      typeof args.args === "object" && args.args !== null
+        ? (args.args as Record<string, number | boolean | number[]>)
+        : undefined;
+    return local.crearSonido({
+      nombre: String(args.nombre ?? "").trim(),
+      voz: String(args.voz ?? "").trim(),
+      ...(Array.isArray(args.palabras) ? { palabras: (args.palabras as unknown[]).map(String) } : {}),
+      ...(argsSonido ? { args: argsSonido } : {}),
+      gpuPermitida: destinoPreferido === "lambda",
+    }, senal);
+  },
+  crear_voz: async (args, senal, _local) => {
+    const nombre = String(args.nombre ?? "").trim().toLowerCase();
+    const fuente = String(args.fuente ?? "");
+    if (nombre === "" || fuente.trim() === "") {
+      return { ok: false, texto: "missing name or source" };
+    }
+    try {
+      const destino = args.destino === "gpu" ? "gpu" : "cpu";
+      const res = await pedir("/api/voces/nueva", {
+        cuerpo: { nombre, fuente, destino },
+        // On GPU the gate renders on Lambda: 900 s limit there.
+        limiteMs: destino === "gpu" ? 960000 : 120000,
+        senal,
+      });
+      const datos = (await res.json()) as {
+        ok?: boolean;
+        motivos?: string[];
+        voz?: { clave?: string; familia?: string; params?: { clave: string }[] };
+        perfil?: Record<string, number>;
+        total?: number;
+        traza?: string | null;
+      };
+      if (!res.ok || !datos.ok) {
+        const perfil =
+          datos.perfil && Object.keys(datos.perfil).length > 0
+            ? ` Measurements: ${Object.entries(datos.perfil)
+                .map(([k, v]) => `${k}=${v}`)
+                .join(" ")}`
+            : "";
+        return {
+          ok: false,
+          texto: `The gate rejects it: ${(datos.motivos ?? [`HTTP ${res.status}`]).join("; ")}.${perfil}`,
+        };
+      }
+      return {
+        ok: true,
+        texto:
+          `Voice "${datos.voz?.clave ?? nombre}" added to the ${destino.toUpperCase()} engine (family ${datos.voz?.familia ?? "?"}, ` +
+          `parameters: ${(datos.voz?.params ?? []).map((p) => p.clave).join(", ")}). Catalog: ${datos.total ?? "?"} voices. ` +
+          `It can now be used with crear_sonido.`,
+      };
+    } catch (error) {
+      return { ok: false, texto: "I could not call the gate: " + (error instanceof Error ? error.message : String(error)) };
+    }
+  },
+  igualar_clips: async (args, _senal, local) => {
+    return local.igualarClips({
+      ...(Number(args.compases) > 0 ? { compases: Math.trunc(Number(args.compases)) } : {}),
+      ...(Array.isArray(args.pistas) ? { pistas: (args.pistas as unknown[]).map(String) } : {}),
+    });
+  },
+  anadir_pistas: async (args, senal, local) => {
+    return local.anadirPistas({
+      midis: Array.isArray(args.midis) ? (args.midis as unknown[]).map(String) : [],
+      wavs: Array.isArray(args.wavs) ? (args.wavs as unknown[]).map(String) : [],
+      inicioCompas: Number(args.inicio_compas ?? 0) || 0,
+      ...(Number(args.compases) > 0 ? { compases: Math.trunc(Number(args.compases)) } : {}),
+      ...(typeof args.nombre_proyecto === "string" && args.nombre_proyecto.trim() !== ""
+        ? { nombreProyecto: args.nombre_proyecto.trim() }
+        : {}),
+    }, senal);
+  },
+  ajustar_pistas: async (args, _senal, local) => {
+    const lista = Array.isArray(args.pistas) ? (args.pistas as Record<string, unknown>[]) : [];
+    if (lista.length === 0) return { ok: false, texto: "You have not named any track." };
+    const pistas: AjustePista[] = lista.map((p) => {
+      const ajuste: AjustePista = { nombre: String(p.nombre ?? "").trim() };
+      if (typeof p.gainDb === "number") ajuste.gainDb = p.gainDb;
+      if (typeof p.pan === "number") ajuste.pan = p.pan;
+      if (typeof p.muted === "boolean") ajuste.muted = p.muted;
+      if (typeof p.solo === "boolean") ajuste.solo = p.solo;
+      return ajuste;
+    });
+    return local.ajustarPistas({ pistas });
+  },
+  exportar: async (args, senal, local) => {
+    return await local.exportar({ midi: args.midi === true, wav: args.wav === true }, senal);
+  },
+  escuchar_mezcla: async (args, senal, local) => {
+    return await local.escuchar(
+      {
+        pistas: Array.isArray(args.pistas) ? args.pistas.map(String) : undefined,
+        compasesPorTramo: Number(args.compases_por_tramo) > 0 ? Number(args.compases_por_tramo) : undefined,
+      },
+      senal,
+    );
+  },
+  versiones: async (args, senal, local) => {
+    return await local.versiones({
+      accion: String(args.accion ?? "listar"),
+      version: args.version === undefined ? undefined : String(args.version),
+      pistas: Array.isArray(args.pistas) ? args.pistas.map(String) : undefined,
+    }, senal);
+  },
+  leer_proyecto: async (args, _senal, local) => {
+    return local.leerProyecto(typeof args.clip === "string" && args.clip.trim() !== "" ? { clipId: args.clip.trim() } : {});
+  },
+  editar_proyecto: async (args, _senal, local) => {
+    const ops = Array.isArray(args.ops) ? (args.ops as unknown[]) : [];
+    if (ops.length === 0) return { ok: false, texto: "Missing `ops`: a list of operations (see the tool description)." };
+    return local.editarProyecto({ ops });
+  },
+  escribir_progresion: async (args, _senal, local) => {
+    if (sinPista(args)) return SIN_PISTA;
+    const lista = (valor: unknown): unknown[] | undefined => (Array.isArray(valor) ? valor : undefined);
+    const numero = (valor: unknown): number | undefined =>
+      typeof valor === "number" && Number.isFinite(valor) ? valor : undefined;
+    const acordes = lista(args.acordes)?.map(String);
+    const grados = lista(args.grados)?.map(Number);
+    const patron = PATRONES.find((p) => p === args.patron);
+    const peticion: PeticionProgresionPista = { pista: String(args.pista ?? "").trim() || "Acordes" };
+    if (acordes && acordes.length > 0) peticion.acordes = acordes;
+    if (grados && grados.length > 0) peticion.grados = grados;
+    if (patron) peticion.patron = patron;
+    const opcionales: [keyof PeticionProgresionPista, unknown][] = [
+      ["compasesPorAcorde", numero(args.compases_por_acorde)],
+      ["octava", numero(args.octava)],
+      ["paso", numero(args.paso)],
+      ["velocidad", numero(args.velocidad)],
+      ["repeticiones", numero(args.repeticiones)],
+      ["desdeCompas", numero(args.desde_compas)],
+    ];
+    for (const [clave, valor] of opcionales) if (valor !== undefined) (peticion as unknown as Record<string, unknown>)[clave] = valor;
+    Object.assign(peticion, escrituraDe(args));
+    return local.escribirProgresion(peticion);
+  },
+  escribir_notas: async (args, _senal, local) => {
+    if (sinPista(args)) return SIN_PISTA;
+    if (typeof args.notas !== "string" || args.notas.trim() === "") {
+      return { ok: false, texto: "Missing `notas`: the phrase in compact notation." };
+    }
+    return local.escribirNotas({
+      ...escrituraDe(args),
+      notas: args.notas,
+      ...(typeof args.velocidad === "number" ? { velocidad: args.velocidad } : {}),
+      ...(typeof args.repeticiones === "number" ? { repeticiones: args.repeticiones } : {}),
+    });
+  },
+  escribir_bateria: async (args, _senal, local) => {
+    const filas = (valor: unknown): Record<string, string> | undefined =>
+      typeof valor === "object" && valor !== null
+        ? Object.fromEntries(Object.entries(valor as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
+        : undefined;
+    if (sinPista(args)) return SIN_PISTA;
+    const patrones = filas(args.patrones);
+    if (!patrones || Object.keys(patrones).length === 0) {
+      return { ok: false, texto: "Missing `patrones`: piece → row of steps, e.g. {\"kick\":\"x...x...\"}." };
+    }
+    const final = filas(args.final);
+    return local.escribirBateria({
+      ...escrituraDe(args),
+      patrones,
+      ...(final ? { final } : {}),
+      ...(typeof args.compases === "number" ? { compases: args.compases } : {}),
+      ...(typeof args.pasos_por_compas === "number" ? { pasosPorCompas: args.pasos_por_compas } : {}),
+      ...(typeof args.swing === "number" ? { swing: args.swing } : {}),
+      humanizar: args.humanizar !== false,
+    });
+  },
+  listar_instrumentos: async (_args, senal, _local) => {
+    const datos = (await pedirJson("/api/gm", undefined, 30000, senal)) as {
+      ruta?: string | null;
+      instrumentos?: string;
+      biblioteca?: string;
+    };
+    const gm = datos.ruta
+      ? (datos.instrumentos ?? "(no list)")
+      : "There is no General MIDI SoundFont installed (workspace/catalogo/gm/): MIDI tracks sound with " +
+        "openDAW's synths.";
+    return { ok: true, texto: [gm, datos.biblioteca ?? ""].filter(Boolean).join("\n\n") };
+  },
+  buscar_web: async (args, senal, _local) => {
+    const consulta = String(args.consulta ?? "").trim();
+    if (consulta === "") return { ok: false, texto: "Missing the query." };
+    const maximo = Math.min(10, Math.max(1, Math.round(Number(args.resultados) || 5)));
+    const datos = (await pedirJson("/api/llm/api/web_search", { query: consulta, max_results: maximo }, 45000, senal)) as {
+      results?: { title?: string; url?: string; content?: string }[];
+    };
+    const resultados = datos.results ?? [];
+    if (resultados.length === 0) return { ok: true, texto: `No results for “${consulta}”.` };
+    return {
+      ok: true,
+      texto: resultados
+        .map((r, i) => `${i + 1}. ${r.title ?? "(no title)"}\n   ${r.url ?? ""}\n   ${(r.content ?? "").replace(/\s+/g, " ").slice(0, 500)}`)
+        .join("\n"),
+    };
+  },
+  leer_web: async (args, senal, _local) => {
+    const url = String(args.url ?? "").trim();
+    if (!/^https?:\/\//i.test(url)) return { ok: false, texto: "A full URL is needed (https://…)." };
+    const datos = (await pedirJson("/api/llm/api/web_fetch", { url }, 60000, senal)) as {
+      title?: string;
+      content?: string;
+    };
+    const contenido = (datos.content ?? "").trim();
+    if (contenido === "") return { ok: false, texto: `The page returned no text: ${url}` };
+    const desde = Math.max(0, Math.trunc(Number(args.desde) || 0));
+    const trozo = contenido.slice(desde, desde + 6000);
+    const resto = contenido.length - (desde + trozo.length);
+    return {
+      ok: true,
+      texto:
+        `${datos.title ?? url}\n\n${trozo}` +
+        (resto > 0 ? `\n[… continues: ${resto} more characters. leer_web(url, desde=${desde + trozo.length})]` : ""),
+    };
+  },
+  verificar_audio: async (args, senal, _local) => {
+    const tope = Number(args.timeout_segundos);
+    const datos = await pedirJson(
+      "/api/verificar",
+      { path: args.path },
+      Number.isFinite(tope) && tope > 0 ? tope * 1000 + 45000 : 225000,
+      senal,
+    );
+    return { ok: datos.ok === true, texto: String(datos.informe ?? "(no report)") };
+  },
+  ejecutar_python: async (args, senal, _local) => {
+    const segundos = Number(args.timeout_segundos) || 300;
+    // The GPU only if the model ASKS for it and the person ALLOWS it in the selector
+    // (checked with the other GPU tools before the switch). Before, it was enough for
+    // the selector to be on GPU: on Oct 27 a script that only looked for files
+    // switched on a paid A10.
+    const destino: Destino = args.destino === "lambda" ? "lambda" : "cpu";
+    // On Lambda the first start is ~3 minutes: the client limit covers it.
+    const margen = destino === "lambda" ? segundos * 1000 + 15 * 60 * 1000 : segundos * 1000 + 45000;
+    const datos = await pedirJson(
+      destino === "lambda" ? "/api/run/lambda" : "/api/run/python",
+      {
+        path: args.path,
+        argumentos: args.argumentos,
+        timeout_segundos: args.timeout_segundos,
+      },
+      margen,
+      senal,
+    );
+    const salida = String(datos.salida ?? "").trim();
+    const errores = String(datos.errores ?? "").trim();
+    const partes = [
+      `${destino === "lambda" ? "GPU" : "CPU"}: exit=${datos.codigo} en ${datos.ms} ms`,
+    ];
+    if (destino === "lambda") {
+      const info = (datos.lambda ?? {}) as { ip?: string; traidos?: string[]; nota?: string };
+      const traidos = Array.isArray(info.traidos) ? info.traidos : [];
+      partes.push(
+        `machine ${String(info.ip ?? "?")} (${String(info.nota ?? "")})` +
+          (traidos.length > 0 ? `; returned: ${traidos.join(", ")}` : ""),
+      );
+    }
+    const escritos = Array.isArray(datos.escritos) ? (datos.escritos as string[]) : [];
+    if (escritos.length > 0) {
+      partes.push(
+        `files written: ${escritos.slice(0, 12).join(", ")}` +
+          (escritos.length > 12 ? ` and ${escritos.length - 12} more` : ""),
+      );
+    }
+    if (salida !== "") partes.push(`output:\n${salida}`);
+    if (errores !== "") partes.push(`errors:\n${errores}`);
+    return { ok: datos.ok === true, texto: partes.join("\n") };
+  },
+};
+
 async function ejecutarCrudo(
   nombre: string,
   argumentosJson: string,
@@ -1157,568 +1740,9 @@ async function ejecutarCrudo(
   const local = registradas as AccionesEstudio;
 
   try {
-    switch (nombre) {
-      case "escribir_fichero": {
-        // A file of 9,700 tokens in one go (measured on Oct 25) makes the
-        // provider cut the next turn with finish_reason 'load'. The cap is
-        // mechanical on purpose: asking for it in the prompt did not work.
-        const contenido = contenidoDeFichero(args);
-        if (contenido === null) {
-          return { ok: false, texto: "Missing `contenido`: the text of the file (a string)." };
-        }
-        if (contenido.length > MAX_FICHERO) {
-          return {
-            ok: false,
-            texto:
-              `Too long: ${contenido.length} characters (the cap is ${MAX_FICHERO}). ` +
-              "Write the file in pieces: first the structure and the base functions, and " +
-              "then add the rest with editar_fichero (search/replace) or with a second " +
-              "escribir_fichero to another file if they are different things.",
-          };
-        }
-        // The engine smoke test can take 120 s on the server: the cancel must reach it.
-        const datos = await pedirJson("/api/fs/write", { path: args.path, contenido }, 45000, senal);
-        // `nota` says whether the engine passed the smoke test (or that in gpu/ only the
-        // syntax has been checked): it is the proof that the change is safe.
-        const nota = typeof datos.nota === "string" && datos.nota !== "" ? ` ${datos.nota}` : "";
-        return { ok: true, texto: `Wrote ${datos.path} (${datos.bytes} bytes).${nota}` };
-      }
-      case "leer_fichero": {
-        const desde = Math.max(0, Math.trunc(Number(args.desde) || 0));
-        const datos = await pedirJson("/api/fs/read", { path: args.path, desde }, 45000, senal);
-        const siguiente = typeof datos.siguiente === "number" ? datos.siguiente : null;
-        return {
-          ok: true,
-          texto:
-            String(datos.contenido ?? "") +
-            (siguiente !== null
-              ? `\n[… continues: ${Number(datos.total) - siguiente} more characters. leer_fichero(path, desde=${siguiente})]`
-              : ""),
-        };
-      }
-      case "listar_ficheros": {
-        const carpeta = typeof args.carpeta === "string" ? args.carpeta.trim() : "";
-        const consulta = carpeta === "" ? "/api/fs/list" : `/api/fs/list?carpeta=${encodeURIComponent(carpeta)}`;
-        const datos = await pedirJson(consulta, undefined, 30000, senal);
-        const ficheros = (datos.ficheros ?? []) as { path: string; bytes: number }[];
-        const donde = String(datos.carpeta ?? ".");
-        if (ficheros.length === 0) {
-          return { ok: true, texto: `There are no files in ${donde}/.` };
-        }
-        const total = ficheros.reduce((suma, f) => suma + f.bytes, 0);
-        const truncado = datos.truncado === true;
-        return {
-          ok: true,
-          texto:
-            `${ficheros.length}${truncado ? "+ (truncated)" : ""} file(s) in ${donde}/ ` +
-            `(${(total / 1024).toFixed(0)} KB):\n` +
-            ficheros.map((f) => `${f.path} (${f.bytes} B)`).join("\n") +
-            (truncado
-              ? "\n[The list is truncated: ask for a more specific folder (e.g. 'salida').]"
-              : ""),
-        };
-      }
-      case "editar_fichero": {
-        const datos = await pedirJson(
-          "/api/fs/edit",
-          { path: args.path, busca: args.busca, reemplaza: args.reemplaza, todas: args.todas },
-          45000,
-          senal,
-        );
-        return { ok: true, texto: `Edited ${datos.path ?? args.path}: ${datos.reemplazos} replacement(s).` };
-      }
-      case "crear_proyecto": {
-        const tonica = typeof args.tonica === "string" ? args.tonica.trim() : "";
-        const modo = typeof args.modo === "string" ? args.modo.trim() : "";
-        return local.crearProyecto({
-          nombre: String(args.nombre ?? "").trim(),
-          bpm: Number(args.bpm ?? 120) || 120,
-          compases: Number(args.compases ?? 8) || 8,
-          ...(tonica ? { tonica } : {}),
-          ...(modo ? { modo } : {}),
-        });
-      }
-      case "listar_voces": {
-        try {
-          const datos = (await pedirJson("/api/voces", undefined, 240000, senal)) as {
-            voces?: {
-              clave: string;
-              familia: string;
-              descripcion: string;
-              excluida?: string | null;
-              params: { clave: string; min?: number; max?: number; unidad?: string }[];
-            }[];
-          };
-          const lineas = (datos.voces ?? []).map((voz) => {
-            if (voz.excluida) return `- ${voz.clave}: NOT USABLE (${voz.excluida})`;
-            const params = voz.params
-              .map((p) =>
-                p.min === undefined ? p.clave : `${p.clave} ${p.min}..${p.max}${p.unidad ? " " + p.unidad : ""}`,
-              )
-              .join(", ");
-            return `- ${voz.clave} [${voz.familia}${(voz as { destino?: string }).destino === "gpu" ? ", GPU" : ""}] ${voz.descripcion} (${params})`;
-          });
-          return { ok: true, texto: `Engine voices (${lineas.length}):\n${lineas.join("\n")}` };
-        } catch (error) {
-          return {
-            ok: false,
-            texto: "I could not read the catalog: " + (error instanceof Error ? error.message : String(error)),
-          };
-        }
-      }
-      case "buscar_sonido": {
-        const consulta = String(args.consulta ?? "").trim();
-        if (consulta === "") return { ok: false, texto: "missing query" };
-        try {
-          // Measuring the 16 voices costs ~2 s: it is only requested if the query carries a
-          // character word (short, bright…), which is when it is needed.
-          const pideCaracter = /\b(corto|largo|seco|brillante|oscuro|grave|agudo|sucio|limpio|redondo|apagado|chillon|metalico|short|long|dry|bright|dark|low|deep|high|dirty|clean)\b/i.test(
-            consulta,
-          );
-          const datos = (await pedirJson(
-            pideCaracter ? "/api/voces?medir=1" : "/api/voces",
-            undefined,
-            240000,
-            senal,
-          )) as {
-            voces?: {
-              clave: string;
-              etiqueta: string;
-              familia: string;
-              descripcion: string;
-              destino?: string;
-              excluida?: string | null;
-              perfil?: Record<string, number>;
-            }[];
-          };
-          const catalogo: EntradaCatalogo[] = (datos.voces ?? [])
-            .filter((voz) => !voz.excluida)
-            .map((voz) => ({
-              clave: voz.clave,
-              etiqueta: voz.etiqueta,
-              familia: voz.familia,
-              descripcion: voz.descripcion,
-              destino: voz.destino === "gpu" ? "gpu" : "cpu",
-              perfil: voz.perfil,
-            }));
-          // The CC0 library (4,231 samples), searched on the server.
-          let biblioteca: string[] = [];
-          try {
-            const rc = await pedir("/api/catalogo/buscar", {
-              cuerpo: { consulta, limite: 6 },
-              limiteMs: 30000,
-              senal,
-            });
-            if (rc.ok) {
-              const dc = (await rc.json()) as {
-                resultados?: {
-                  archivo: string;
-                  instrumento: string;
-                  familia: string;
-                  strudel: string | null;
-                  perfil?: Record<string, number>;
-                }[];
-              };
-              biblioteca = (dc.resultados ?? []).map((r) => {
-                const p = r.perfil ?? {};
-                const medidas = [
-                  p.duracion_s !== undefined ? `${p.duracion_s} s` : "",
-                  p.centroide_hz !== undefined ? `${Math.round(p.centroide_hz)} Hz` : "",
-                ]
-                  .filter((x) => x !== "")
-                  .join(", ");
-                return (
-                  `- ${r.archivo} (${r.instrumento}, ${r.familia}) [${medidas}]` +
-                  (r.strudel ? ` · in Strudel: s("${r.strudel}")` : "")
-                );
-              });
-            }
-          } catch {
-            /* no library: continue with the engine voices */
-          }
-
-          const encontrados = buscarEnCatalogo(catalogo, consulta, {
-            ...(typeof args.familia === "string" ? { familia: args.familia } : {}),
-            limite: 6,
-          });
-          const etiquetas = etiquetasEnFrase(consulta).map((e) => e.id);
-          if (encontrados.length === 0) {
-            return {
-              ok: true,
-              texto:
-                `There is nothing like "${consulta}" in the catalog` +
-                (etiquetas.length > 0 ? ` (closest by tag: ${etiquetas.join(", ")})` : "") +
-                ". You can create it with crear_sonido if there is a suitable voice, or with crear_voz if not.",
-            };
-          }
-          const lineas = encontrados.map((r) => {
-            const p = r.entrada.perfil ?? {};
-            const medidas = [
-              p.duracion_s !== undefined ? `${p.duracion_s} s` : "",
-              p.centroide_hz !== undefined ? `${Math.round(p.centroide_hz)} Hz` : "",
-              p.crest_db !== undefined ? `crest ${p.crest_db} dB` : "",
-            ]
-              .filter((x) => x !== "")
-              .join(", ");
-            return `- ${r.entrada.clave} (${r.entrada.familia}, ${r.entrada.destino}): ${r.entrada.descripcion} [${medidas}] (${r.motivos.join("; ")})`;
-          });
-          const partes = [
-            `Candidates for "${consulta}":`,
-            lineas.join("\n"),
-            biblioteca.length > 0
-              ? `\nIn the CC0 library (${biblioteca.length}):\n${biblioteca.join("\n")}\nTo bring it in: usar_sample(archivo="...").`
-              : "",
-            "To synthesize a new one: crear_sonido with the voice you choose.",
-          ].filter((x) => x !== "");
-          return { ok: true, texto: partes.join("\n") };
-        } catch (error) {
-          return { ok: false, texto: "I could not search: " + (error instanceof Error ? error.message : String(error)) };
-        }
-      }
-      case "medir_referencia": {
-        const origen = String(args.origen ?? "").trim();
-        if (!origen) return { ok: false, texto: "Missing the reference link or path." };
-        const res = await pedir("/api/referencia/medir", {
-          cuerpo: { origen },
-          // Downloading from YouTube and analyzing 4 minutes: the server allows 900 s.
-          limiteMs: 900000,
-          senal,
-        });
-        const datos = (await res.json()) as Record<string, unknown> & { ok?: boolean; error?: string };
-        if (!datos.ok) return { ok: false, texto: `Could not measure: ${datos.error ?? res.status}` };
-        const linea =
-          `${datos.duracion_s} s · ${datos.tempo_bpm} BPM · ` +
-          (datos.tonalidad && (datos.tonalidad as { tonica?: string }).tonica
-            ? `${(datos.tonalidad as { tonica: string }).tonica} ${(datos.tonalidad as { modo: string }).modo}`
-            : "no clear key") +
-          ` · ${datos.compases} bars\n` +
-          `character: ${(datos.palabras as string[])?.join(", ") ?? ""}\n` +
-          `shape (energy per 4 bars): ${JSON.stringify(datos.forma)}`;
-        return { ok: true, texto: linea };
-      }
-      case "usar_instrumento":
-        return local.usarInstrumento({
-          sfz: String(args.sfz ?? "").trim(),
-          nombre: String(args.nombre ?? "").trim(),
-          ...(typeof args.pista === "string" && args.pista.trim() !== "" ? { pista: args.pista.trim() } : {}),
-        }, senal);
-      case "usar_sample":
-        return local.usarSample({
-          archivo: String(args.archivo ?? "").trim(),
-          ...(typeof args.nombre === "string" && args.nombre.trim() !== ""
-            ? { nombre: args.nombre.trim() }
-            : {}),
-          ...(Number(args.compases) > 0 ? { compases: Math.trunc(Number(args.compases)) } : {}),
-        }, senal);
-      case "generar_audio": {
-        const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
-        const txt = (v: unknown): string | undefined => (typeof v === "string" && v.trim() !== "" ? v.trim() : undefined);
-        const entero = (v: unknown): number | undefined => (num(v) === undefined ? undefined : Math.trunc(num(v) as number));
-        return local.generarAudio(
-          {
-            prompt: String(args.prompt ?? ""),
-            nombre: String(args.nombre ?? ""),
-            ...(txt(args.letra) ? { letra: txt(args.letra) } : {}),
-            ...(txt(args.idioma) ? { idioma: txt(args.idioma) } : {}),
-            ...(txt(args.tonalidad) ? { tonalidad: txt(args.tonalidad) } : {}),
-            ...(num(args.duracion) !== undefined ? { duracion: num(args.duracion) } : {}),
-            ...(entero(args.bpm) !== undefined ? { bpm: entero(args.bpm) } : {}),
-            ...(entero(args.variantes) !== undefined ? { variantes: entero(args.variantes) } : {}),
-            ...(entero(args.semilla) !== undefined ? { semilla: entero(args.semilla) } : {}),
-            ...(entero(args.inicio_compas) !== undefined ? { inicioCompas: entero(args.inicio_compas) } : {}),
-            ...((entero(args.compases) ?? 0) > 0 ? { compases: entero(args.compases) } : {}),
-          },
-          senal,
-        );
-      }
-      case "transcribir_audio":
-        return local.transcribirAudio(
-          {
-            archivo: String(args.archivo ?? "").trim(),
-            ...(typeof args.nombre === "string" && args.nombre.trim() !== "" ? { nombre: args.nombre.trim() } : {}),
-            ...(typeof args.importar === "boolean" ? { importar: args.importar } : {}),
-            ...(typeof args.inicio_compas === "number" ? { inicioCompas: Math.trunc(args.inicio_compas) } : {}),
-          },
-          senal,
-        );
-      case "proponer_midi":
-        return local.proponerMidi(
-          {
-            prompt: String(args.prompt ?? ""),
-            nombre: String(args.nombre ?? ""),
-            ...(typeof args.variantes === "number" && args.variantes >= 1 ? { variantes: Math.trunc(args.variantes) } : {}),
-          },
-          senal,
-        );
-      case "crear_sonido": {
-        const argsSonido =
-          typeof args.args === "object" && args.args !== null
-            ? (args.args as Record<string, number | boolean | number[]>)
-            : undefined;
-        return local.crearSonido({
-          nombre: String(args.nombre ?? "").trim(),
-          voz: String(args.voz ?? "").trim(),
-          ...(Array.isArray(args.palabras) ? { palabras: (args.palabras as unknown[]).map(String) } : {}),
-          ...(argsSonido ? { args: argsSonido } : {}),
-          gpuPermitida: destinoPreferido === "lambda",
-        }, senal);
-      }
-      case "crear_voz": {
-        const nombre = String(args.nombre ?? "").trim().toLowerCase();
-        const fuente = String(args.fuente ?? "");
-        if (nombre === "" || fuente.trim() === "") {
-          return { ok: false, texto: "missing name or source" };
-        }
-        try {
-          const destino = args.destino === "gpu" ? "gpu" : "cpu";
-          const res = await pedir("/api/voces/nueva", {
-            cuerpo: { nombre, fuente, destino },
-            // On GPU the gate renders on Lambda: 900 s limit there.
-            limiteMs: destino === "gpu" ? 960000 : 120000,
-            senal,
-          });
-          const datos = (await res.json()) as {
-            ok?: boolean;
-            motivos?: string[];
-            voz?: { clave?: string; familia?: string; params?: { clave: string }[] };
-            perfil?: Record<string, number>;
-            total?: number;
-            traza?: string | null;
-          };
-          if (!res.ok || !datos.ok) {
-            const perfil =
-              datos.perfil && Object.keys(datos.perfil).length > 0
-                ? ` Measurements: ${Object.entries(datos.perfil)
-                    .map(([k, v]) => `${k}=${v}`)
-                    .join(" ")}`
-                : "";
-            return {
-              ok: false,
-              texto: `The gate rejects it: ${(datos.motivos ?? [`HTTP ${res.status}`]).join("; ")}.${perfil}`,
-            };
-          }
-          return {
-            ok: true,
-            texto:
-              `Voice "${datos.voz?.clave ?? nombre}" added to the ${destino.toUpperCase()} engine (family ${datos.voz?.familia ?? "?"}, ` +
-              `parameters: ${(datos.voz?.params ?? []).map((p) => p.clave).join(", ")}). Catalog: ${datos.total ?? "?"} voices. ` +
-              `It can now be used with crear_sonido.`,
-          };
-        } catch (error) {
-          return { ok: false, texto: "I could not call the gate: " + (error instanceof Error ? error.message : String(error)) };
-        }
-      }
-      case "igualar_clips":
-        return local.igualarClips({
-          ...(Number(args.compases) > 0 ? { compases: Math.trunc(Number(args.compases)) } : {}),
-          ...(Array.isArray(args.pistas) ? { pistas: (args.pistas as unknown[]).map(String) } : {}),
-        });
-      case "anadir_pistas":
-        return local.anadirPistas({
-          midis: Array.isArray(args.midis) ? (args.midis as unknown[]).map(String) : [],
-          wavs: Array.isArray(args.wavs) ? (args.wavs as unknown[]).map(String) : [],
-          inicioCompas: Number(args.inicio_compas ?? 0) || 0,
-          ...(Number(args.compases) > 0 ? { compases: Math.trunc(Number(args.compases)) } : {}),
-          ...(typeof args.nombre_proyecto === "string" && args.nombre_proyecto.trim() !== ""
-            ? { nombreProyecto: args.nombre_proyecto.trim() }
-            : {}),
-        }, senal);
-      case "ajustar_pistas": {
-        const lista = Array.isArray(args.pistas) ? (args.pistas as Record<string, unknown>[]) : [];
-        if (lista.length === 0) return { ok: false, texto: "You have not named any track." };
-        const pistas: AjustePista[] = lista.map((p) => {
-          const ajuste: AjustePista = { nombre: String(p.nombre ?? "").trim() };
-          if (typeof p.gainDb === "number") ajuste.gainDb = p.gainDb;
-          if (typeof p.pan === "number") ajuste.pan = p.pan;
-          if (typeof p.muted === "boolean") ajuste.muted = p.muted;
-          if (typeof p.solo === "boolean") ajuste.solo = p.solo;
-          return ajuste;
-        });
-        return local.ajustarPistas({ pistas });
-      }
-      case "exportar":
-        return await local.exportar({ midi: args.midi === true, wav: args.wav === true }, senal);
-      case "escuchar_mezcla":
-        return await local.escuchar(
-          {
-            pistas: Array.isArray(args.pistas) ? args.pistas.map(String) : undefined,
-            compasesPorTramo: Number(args.compases_por_tramo) > 0 ? Number(args.compases_por_tramo) : undefined,
-          },
-          senal,
-        );
-      case "versiones":
-        return await local.versiones({
-          accion: String(args.accion ?? "listar"),
-          version: args.version === undefined ? undefined : String(args.version),
-          pistas: Array.isArray(args.pistas) ? args.pistas.map(String) : undefined,
-        }, senal);
-      case "leer_proyecto":
-        return local.leerProyecto(typeof args.clip === "string" && args.clip.trim() !== "" ? { clipId: args.clip.trim() } : {});
-      case "editar_proyecto": {
-        const ops = Array.isArray(args.ops) ? (args.ops as unknown[]) : [];
-        if (ops.length === 0) return { ok: false, texto: "Missing `ops`: a list of operations (see the tool description)." };
-        return local.editarProyecto({ ops });
-      }
-      case "escribir_progresion": {
-        if (sinPista(args)) return SIN_PISTA;
-        const lista = (valor: unknown): unknown[] | undefined => (Array.isArray(valor) ? valor : undefined);
-        const numero = (valor: unknown): number | undefined =>
-          typeof valor === "number" && Number.isFinite(valor) ? valor : undefined;
-        const acordes = lista(args.acordes)?.map(String);
-        const grados = lista(args.grados)?.map(Number);
-        const patron = PATRONES.find((p) => p === args.patron);
-        const peticion: PeticionProgresionPista = { pista: String(args.pista ?? "").trim() || "Acordes" };
-        if (acordes && acordes.length > 0) peticion.acordes = acordes;
-        if (grados && grados.length > 0) peticion.grados = grados;
-        if (patron) peticion.patron = patron;
-        const opcionales: [keyof PeticionProgresionPista, unknown][] = [
-          ["compasesPorAcorde", numero(args.compases_por_acorde)],
-          ["octava", numero(args.octava)],
-          ["paso", numero(args.paso)],
-          ["velocidad", numero(args.velocidad)],
-          ["repeticiones", numero(args.repeticiones)],
-          ["desdeCompas", numero(args.desde_compas)],
-        ];
-        for (const [clave, valor] of opcionales) if (valor !== undefined) (peticion as unknown as Record<string, unknown>)[clave] = valor;
-        Object.assign(peticion, escrituraDe(args));
-        return local.escribirProgresion(peticion);
-      }
-      case "escribir_notas": {
-        if (sinPista(args)) return SIN_PISTA;
-        if (typeof args.notas !== "string" || args.notas.trim() === "") {
-          return { ok: false, texto: "Missing `notas`: the phrase in compact notation." };
-        }
-        return local.escribirNotas({
-          ...escrituraDe(args),
-          notas: args.notas,
-          ...(typeof args.velocidad === "number" ? { velocidad: args.velocidad } : {}),
-          ...(typeof args.repeticiones === "number" ? { repeticiones: args.repeticiones } : {}),
-        });
-      }
-      case "escribir_bateria": {
-        const filas = (valor: unknown): Record<string, string> | undefined =>
-          typeof valor === "object" && valor !== null
-            ? Object.fromEntries(Object.entries(valor as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
-            : undefined;
-        if (sinPista(args)) return SIN_PISTA;
-        const patrones = filas(args.patrones);
-        if (!patrones || Object.keys(patrones).length === 0) {
-          return { ok: false, texto: "Missing `patrones`: piece → row of steps, e.g. {\"kick\":\"x...x...\"}." };
-        }
-        const final = filas(args.final);
-        return local.escribirBateria({
-          ...escrituraDe(args),
-          patrones,
-          ...(final ? { final } : {}),
-          ...(typeof args.compases === "number" ? { compases: args.compases } : {}),
-          ...(typeof args.pasos_por_compas === "number" ? { pasosPorCompas: args.pasos_por_compas } : {}),
-          ...(typeof args.swing === "number" ? { swing: args.swing } : {}),
-          humanizar: args.humanizar !== false,
-        });
-      }
-      case "listar_instrumentos": {
-        const datos = (await pedirJson("/api/gm", undefined, 30000, senal)) as {
-          ruta?: string | null;
-          instrumentos?: string;
-          biblioteca?: string;
-        };
-        const gm = datos.ruta
-          ? (datos.instrumentos ?? "(no list)")
-          : "There is no General MIDI SoundFont installed (workspace/catalogo/gm/): MIDI tracks sound with " +
-            "openDAW's synths.";
-        return { ok: true, texto: [gm, datos.biblioteca ?? ""].filter(Boolean).join("\n\n") };
-      }
-      case "buscar_web": {
-        const consulta = String(args.consulta ?? "").trim();
-        if (consulta === "") return { ok: false, texto: "Missing the query." };
-        const maximo = Math.min(10, Math.max(1, Math.round(Number(args.resultados) || 5)));
-        const datos = (await pedirJson("/api/llm/api/web_search", { query: consulta, max_results: maximo }, 45000, senal)) as {
-          results?: { title?: string; url?: string; content?: string }[];
-        };
-        const resultados = datos.results ?? [];
-        if (resultados.length === 0) return { ok: true, texto: `No results for “${consulta}”.` };
-        return {
-          ok: true,
-          texto: resultados
-            .map((r, i) => `${i + 1}. ${r.title ?? "(no title)"}\n   ${r.url ?? ""}\n   ${(r.content ?? "").replace(/\s+/g, " ").slice(0, 500)}`)
-            .join("\n"),
-        };
-      }
-      case "leer_web": {
-        const url = String(args.url ?? "").trim();
-        if (!/^https?:\/\//i.test(url)) return { ok: false, texto: "A full URL is needed (https://…)." };
-        const datos = (await pedirJson("/api/llm/api/web_fetch", { url }, 60000, senal)) as {
-          title?: string;
-          content?: string;
-        };
-        const contenido = (datos.content ?? "").trim();
-        if (contenido === "") return { ok: false, texto: `The page returned no text: ${url}` };
-        const desde = Math.max(0, Math.trunc(Number(args.desde) || 0));
-        const trozo = contenido.slice(desde, desde + 6000);
-        const resto = contenido.length - (desde + trozo.length);
-        return {
-          ok: true,
-          texto:
-            `${datos.title ?? url}\n\n${trozo}` +
-            (resto > 0 ? `\n[… continues: ${resto} more characters. leer_web(url, desde=${desde + trozo.length})]` : ""),
-        };
-      }
-      case "verificar_audio": {
-        const tope = Number(args.timeout_segundos);
-        const datos = await pedirJson(
-          "/api/verificar",
-          { path: args.path },
-          Number.isFinite(tope) && tope > 0 ? tope * 1000 + 45000 : 225000,
-          senal,
-        );
-        return { ok: datos.ok === true, texto: String(datos.informe ?? "(no report)") };
-      }
-      case "ejecutar_python": {
-        const segundos = Number(args.timeout_segundos) || 300;
-        // The GPU only if the model ASKS for it and the person ALLOWS it in the selector
-        // (checked with the other GPU tools before the switch). Before, it was enough for
-        // the selector to be on GPU: on Oct 27 a script that only looked for files
-        // switched on a paid A10.
-        const destino: Destino = args.destino === "lambda" ? "lambda" : "cpu";
-        // On Lambda the first start is ~3 minutes: the client limit covers it.
-        const margen = destino === "lambda" ? segundos * 1000 + 15 * 60 * 1000 : segundos * 1000 + 45000;
-        const datos = await pedirJson(
-          destino === "lambda" ? "/api/run/lambda" : "/api/run/python",
-          {
-            path: args.path,
-            argumentos: args.argumentos,
-            timeout_segundos: args.timeout_segundos,
-          },
-          margen,
-          senal,
-        );
-        const salida = String(datos.salida ?? "").trim();
-        const errores = String(datos.errores ?? "").trim();
-        const partes = [
-          `${destino === "lambda" ? "GPU" : "CPU"}: exit=${datos.codigo} en ${datos.ms} ms`,
-        ];
-        if (destino === "lambda") {
-          const info = (datos.lambda ?? {}) as { ip?: string; traidos?: string[]; nota?: string };
-          const traidos = Array.isArray(info.traidos) ? info.traidos : [];
-          partes.push(
-            `machine ${String(info.ip ?? "?")} (${String(info.nota ?? "")})` +
-              (traidos.length > 0 ? `; returned: ${traidos.join(", ")}` : ""),
-          );
-        }
-        const escritos = Array.isArray(datos.escritos) ? (datos.escritos as string[]) : [];
-        if (escritos.length > 0) {
-          partes.push(
-            `files written: ${escritos.slice(0, 12).join(", ")}` +
-              (escritos.length > 12 ? ` and ${escritos.length - 12} more` : ""),
-          );
-        }
-        if (salida !== "") partes.push(`output:\n${salida}`);
-        if (errores !== "") partes.push(`errors:\n${errores}`);
-        return { ok: datos.ok === true, texto: partes.join("\n") };
-      }
-      default:
-        return { ok: false, texto: `Unknown tool: ${nombre}` };
-    }
+    const manejador = Object.hasOwn(MANEJADORES, nombre) ? MANEJADORES[nombre] : undefined;
+    if (!manejador) return { ok: false, texto: `Unknown tool: ${nombre}` };
+    return await manejador(args, senal, local);
   } catch (error) {
     const abortado = error instanceof Error && error.name === "AbortError";
     // Cancel and a timeout both arrive as AbortError; only the turn's signal tells them
