@@ -663,8 +663,9 @@ export const HERRAMIENTAS: ToolSpec[] = [
           carpeta: {
             type: "string",
             description:
-              "Optional. By default, the project folder. Others: 'codigo', 'gpu', " +
-              "'herramientas', 'plantillas', '_salidas' or '' (the workspace root).",
+              "Optional. By default, the project folder. A subfolder of the project by its name " +
+              "('generado', 'salida', 'transcripciones'); shared folders: 'codigo', 'gpu', " +
+              "'herramientas', 'plantillas', '_salidas'; or '' (the workspace root).",
           },
         },
       },

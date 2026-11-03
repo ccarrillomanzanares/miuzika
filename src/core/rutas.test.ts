@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { CARPETAS_COMPARTIDAS, esRutaCompartida, rutaEnWorkspace } from "./rutas.ts";
+import { CARPETAS_COMPARTIDAS, carpetaParaListar, esRutaCompartida, rutaEnWorkspace } from "./rutas.ts";
 
 /**
  * The shared folder list is used by the server (to resolve paths) and the browser
@@ -26,4 +26,15 @@ test("a folder that only starts the same does not sneak through", () => {
   assert.equal(esRutaCompartida("codigofuente/x.py"), false);
   assert.equal(esRutaCompartida("proyectos2/x"), false);
   assert.equal(rutaEnWorkspace("codigofuente/x.py", "tema"), "proyectos/tema/codigofuente/x.py");
+});
+
+test("listar_ficheros resolves its folder like reading and writing do", () => {
+  // 3-Nov, "cain-uriel": carpeta="generado" was looked up at the workspace root.
+  assert.equal(carpetaParaListar("generado", "cain-uriel"), "proyectos/cain-uriel/generado");
+  assert.equal(carpetaParaListar("/salida/", "cain-uriel"), "proyectos/cain-uriel/salida");
+  assert.equal(carpetaParaListar(null, "cain-uriel"), "proyectos/cain-uriel");
+  assert.equal(carpetaParaListar("", "cain-uriel"), "");
+  assert.equal(carpetaParaListar(".", "cain-uriel"), "");
+  assert.equal(carpetaParaListar("codigo", "cain-uriel"), "codigo");
+  assert.equal(carpetaParaListar("proyectos/hard", "cain-uriel"), "proyectos/hard");
 });

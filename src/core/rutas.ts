@@ -46,3 +46,18 @@ export function esRutaCompartida(ruta: string): boolean {
 export function rutaEnWorkspace(ruta: string, slugProyecto: string): string {
   return esRutaCompartida(ruta) ? ruta : `proyectos/${slugProyecto}/${ruta}`;
 }
+
+/**
+ * The folder `listar_ficheros` lists, with the same rule as reading and writing: no folder =
+ * the project; "" = the workspace root; a shared folder as-is; anything else inside the project.
+ *
+ * Why: until 3-Nov `carpeta` was always taken from workspace/, so on "cain-uriel"
+ * `listar_ficheros(carpeta="generado")` answered "There are no files in generado/" with the
+ * take sitting in proyectos/cain-uriel/generado/, while leer_fichero("generado/...") found it.
+ */
+export function carpetaParaListar(pedida: string | null, slugProyecto: string): string {
+  if (pedida === null) return `proyectos/${slugProyecto}`;
+  const limpia = pedida.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  if (limpia === "" || limpia === ".") return "";
+  return rutaEnWorkspace(limpia, slugProyecto);
+}

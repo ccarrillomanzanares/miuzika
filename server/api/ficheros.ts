@@ -8,6 +8,7 @@ import { rutaJson } from "../ruta.ts";
 import { CARPETA_VERSIONES, versionesSobrantes } from "../../src/core/versiones.ts";
 import { escribirComprobando } from "../escritura-verificada.ts";
 import { soloLecturaParaElAgente } from "../solo-lectura.ts";
+import { carpetaParaListar } from "../../src/core/rutas.ts";
 
 /** Modules that a project script cannot shadow: the standard-library ones
  * actually used, numpy/scipy and the engine's own. */
@@ -186,14 +187,10 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
     responderJson(res, 200, { ok: true, id: idDeBuild(), arrancado: arranqueServidor });
   });
 
-  server.middlewares.use("/api/fs/list", rutaJson({ metodo: "GET" }, async ({ req, res }) => {
-    // Without `carpeta`: the active project (what the agent needs to see).
-    // With `carpeta=codigo` or `carpeta=` another zone of the space is requested.
-    const url = new URL(req.url ?? "/", "http://localhost");
-    const pedida = url.searchParams.get("carpeta");
-    const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
-    const carpeta =
-      pedida !== null ? pedida.replace(/^\/+|\/+$/g, "") : `proyectos/${slug}`;
+  server.middlewares.use("/api/fs/list", rutaJson({ metodo: "GET" }, async ({ req, res, url }) => {
+    // Without `carpeta`: the active project (what the agent needs to see). `carpeta=codigo`
+    // (shared) or `carpeta=` (root) reach other zones; any other name is inside the project.
+    const carpeta = carpetaParaListar(url.searchParams.get("carpeta"), slugProyecto(req.headers["x-miuzika-proyecto"]));
     const ficheros = listarTrabajo(carpeta);
     responderJson(res, 200, {
       ok: true,
