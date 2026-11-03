@@ -65,3 +65,32 @@ test("the report explains that (muted) rows are measured alone with mute off", (
   assert.match(texto, /Rows marked \(muted\) are rendered ALONE with mute off/);
   assert.match(texto, /No problems/);
 });
+
+test("a silent MIX over a track that sounds alone is a problem, not 'No problems'", () => {
+  // 3-Nov, "cain-uriel": MIX SILENT in every span, the audio track at -24..-21 alone.
+  const mudo = { rmsDb: -Infinity, picoDb: -Infinity };
+  const texto = informeEscucha({
+    compasesPorTramo: 8,
+    mezcla: [mudo, mudo],
+    pistas: [{ nombre: "aces-1", muted: false, notas: [1, 1], niveles: [{ rmsDb: -24, picoDb: -8 }, { rmsDb: -21, picoDb: -6 }] }],
+  });
+  assert.match(texto, /The MIX is silent in EVERY span while "aces-1" sounds alone/);
+  assert.doesNotMatch(texto, /No problems/);
+});
+
+test("a silent MIX span names its bars, and a muted track sounding alone does not count", () => {
+  const mudo = { rmsDb: -Infinity, picoDb: -Infinity };
+  const suena = { rmsDb: -20, picoDb: -6 };
+  const parcial = informeEscucha({
+    compasesPorTramo: 4,
+    mezcla: [suena, mudo],
+    pistas: [{ nombre: "Bajo", muted: false, notas: [1, 1], niveles: [suena, suena] }],
+  });
+  assert.match(parcial, /The MIX is silent in bars 5-8 while "Bajo" sounds alone/);
+  const muteada = informeEscucha({
+    compasesPorTramo: 4,
+    mezcla: [mudo],
+    pistas: [{ nombre: "Toma 2", muted: true, notas: [1], niveles: [suena] }],
+  });
+  assert.doesNotMatch(muteada, /The MIX is silent/);
+});

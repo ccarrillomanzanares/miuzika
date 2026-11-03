@@ -143,6 +143,24 @@ export function informeEscucha(datos: {
       problemas.push(`"${pista.nombre}" has notes and does not play in bars ${mudos.join(", ")}.`);
     }
   }
+  // The MIX row too. Seen 3-Nov on "cain-uriel": MIX SILENT in all ten spans while its only
+  // track sounded alone at -24..-21 dBFS (compressor + eq on an audio track), and the report
+  // said "No problems", so the agent guessed the cause. A silent MIX where an unmuted track
+  // sounds alone means the signal is lost after the track: its devices, a bus or the master.
+  const mixMudo = datos.mezcla.flatMap((n, i) => {
+    if (n.picoDb >= UMBRAL_SILENCIO_DB) return [];
+    const suenan = datos.pistas.filter((p) => !p.muted && (p.niveles[i]?.picoDb ?? -Infinity) >= UMBRAL_SILENCIO_DB);
+    return suenan.length > 0 ? [{ tramo: rotulos[i]!, suenan: suenan.map((p) => p.nombre) }] : [];
+  });
+  if (mixMudo.length > 0) {
+    const unicas = [...new Set(mixMudo.flatMap((m) => m.suenan))];
+    const nombres = unicas.map((n) => `"${n}"`).join(", ");
+    const donde = mixMudo.length === tramos ? "in EVERY span" : `in bars ${mixMudo.map((m) => m.tramo).join(", ")}`;
+    problemas.push(
+      `The MIX is silent ${donde} while ${nombres} ${unicas.length === 1 ? "sounds" : "sound"} alone: ` +
+        `the signal is lost after the track (its devices, a bus or the master), not in the instrument.`,
+    );
+  }
   const picoMezcla = Math.max(...datos.mezcla.map((n) => n.picoDb));
   if (picoMezcla > 0) problemas.push(`The mix goes above 0 dBFS (peak ${picoMezcla.toFixed(1)} dB): it clips. Lower the master or the loudest tracks.`);
   for (const archivo of datos.sinCargar ?? []) problemas.push(`Could not load ${archivo}: that track does not have its instrument in the render.`);
