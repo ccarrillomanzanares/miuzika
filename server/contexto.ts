@@ -8,7 +8,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { relative, resolve, sep } from "node:path";
 import { CARPETAS_OCULTAS, rutaEnWorkspace } from "../src/core/rutas.ts";
@@ -17,6 +17,7 @@ import { configDesdeEnv } from "./lambda.ts";
 import { crearAlmacenPrecios } from "./precios.ts";
 import { costeDe } from "../src/core/precios.ts";
 import { explicarFalloMudo } from "./fallo-proceso.ts";
+import type { Comprobacion } from "./escritura-verificada.ts";
 
 export function crearContexto(env: Record<string, string>) {
   // Lambda is OFF unless MIUZIKA_LAMBDA=on: Carlos asked on 31-Oct to stop using the
@@ -409,22 +410,21 @@ export function crearContexto(env: Record<string, string>) {
   /** Is it the GPU engine? That one cannot be validated here: there is no torch on the laptop. */
   const esDeGpu = (ruta: string): boolean => ruta.replace(/\\/g, "/").startsWith("gpu/");
 
-  /** After touching the engine: smoke test and, if it fails, revert. */
-  const smokeOTeReverto = async (
-    destino: string,
-    previo: string | null,
-  ): Promise<{ ok: boolean; detalle: string }> => {
+  /** The engine still imports and renders (rollback is done by escribirComprobando). */
+  const smokeDelMotor = async (): Promise<Comprobacion> => {
     const smoke = await correr("herramientas/smoke.py", [], 120);
     if (smoke.codigo === 0) return { ok: true, detalle: smoke.salida.trim() };
-    if (previo !== null) {
-      writeFileSync(destino, previo, "utf8");
-    } else if (existsSync(destino)) {
-      unlinkSync(destino);
-    }
-    return {
-      ok: false,
-      detalle: (smoke.errores || smoke.salida).slice(-1500),
-    };
+    return { ok: false, detalle: (smoke.errores || smoke.salida).slice(-1500) };
+  };
+
+  /** A gpu/ file at least parses: the laptop has no torch, so nothing more can run here. */
+  const parseaPython = async (destino: string): Promise<Comprobacion> => {
+    const r = await correr(
+      "-c",
+      [`import ast,sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())`, destino],
+      60,
+    );
+    return r.codigo === 0 ? { ok: true, detalle: "" } : { ok: false, detalle: (r.errores || r.salida).slice(-1200) };
   };
 
   return {
@@ -458,7 +458,8 @@ export function crearContexto(env: Record<string, string>) {
     MOTOR,
     esDeCodigo,
     esDeGpu,
-    smokeOTeReverto,
+    smokeDelMotor,
+    parseaPython,
   };
 }
 

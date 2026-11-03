@@ -5,6 +5,7 @@ import { basename, dirname, resolve } from "node:path";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 import { CARPETA_VERSIONES, versionesSobrantes } from "../../src/core/versiones.ts";
+import { escribirComprobando } from "../escritura-verificada.ts";
 
 /** Modules that a project script cannot shadow: the standard-library ones
  * actually used, numpy/scipy and the engine's own. */
@@ -22,7 +23,7 @@ const MODULOS_PROTEGIDOS = new Set(
 );
 
 export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
-  const { anotar, registrarTurno, ficheroHerramientas, carpetaTrabajo, responderJson, leerCuerpo, idDeBuild, arranqueServidor, slugProyecto, resolverEnTrabajo, MAX_LISTADO, listarTrabajo, correr, MOTOR, esDeCodigo, esDeGpu, smokeOTeReverto } = ctx;
+  const { anotar, registrarTurno, ficheroHerramientas, carpetaTrabajo, responderJson, leerCuerpo, idDeBuild, arranqueServidor, slugProyecto, resolverEnTrabajo, MAX_LISTADO, listarTrabajo, correr, MOTOR, esDeCodigo, esDeGpu, smokeDelMotor, parseaPython } = ctx;
 
   server.middlewares.use("/api/agent-log", (req, res) => {
     if (req.method !== "POST") {
@@ -103,55 +104,37 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
           return;
         }
 
-        // (3) write; if it is the engine, smoke test with rollback
+        // (3) write; the engine (smoke test) and gpu/ (it must parse) roll back on failure
         const esMotor = MOTOR.has(nombre) && esDeCodigo(datos.path);
-        const previo = esMotor && !nuevo ? readFileSync(destino, "utf8") : null;
-        mkdirSync(dirname(destino), { recursive: true });
-        writeFileSync(destino, datos.contenido, "utf8");
-        // Version snapshots (one per agent turn): the last ones are kept.
-        if (basename(dirname(destino)) === CARPETA_VERSIONES && nombre.endsWith(".json")) {
-          for (const viejo of versionesSobrantes(readdirSync(dirname(destino)))) {
-            try {
-              unlinkSync(resolve(dirname(destino), viejo));
-            } catch {
-              /* another write deleted it first */
-            }
-          }
-        }
-
         let nota = "";
-        if (esDeGpu(datos.path)) {
+        if (esMotor || esDeGpu(datos.path)) {
           // In gpu/ there is no possible smoke test: the laptop has no torch. The
           // minimum is that the file parses; real validation is done on the
           // instance with destino="lambda".
-          const comprobacion = await correr(
-            "-c",
-            [
-              `import ast,sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())`,
-              destino,
-            ],
-            60,
-          );
-          if (comprobacion.codigo !== 0) {
-            writeFileSync(destino, previo ?? "", "utf8");
-            if (previo === null && existsSync(destino)) unlinkSync(destino);
+          const r = await escribirComprobando(destino, datos.contenido, esMotor ? smokeDelMotor : () => parseaPython(destino));
+          if (!r.ok) {
+            if (esMotor) anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "smoke" }));
             responderJson(res, 400, {
-              error: `The GPU file does not parse; it has not been written.\n${(comprobacion.errores || comprobacion.salida).slice(-1200)}`,
+              error: esMotor
+                ? `The engine does not pass the smoke test; changes reverted.\n${r.detalle}`
+                : `The GPU file does not parse; it has not been written.\n${r.detalle}`,
             });
             return;
           }
-          nota = "gpu: syntax ok (validate by running with destino=lambda)";
-        }
-        if (esMotor) {
-          const smoke = await smokeOTeReverto(destino, previo);
-          if (!smoke.ok) {
-            anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "smoke" }));
-            responderJson(res, 400, {
-              error: `The engine does not pass the smoke test; changes reverted.\n${smoke.detalle}`,
-            });
-            return;
+          nota = esMotor ? `smoke: ${r.detalle}` : "gpu: syntax ok (validate by running with destino=lambda)";
+        } else {
+          mkdirSync(dirname(destino), { recursive: true });
+          writeFileSync(destino, datos.contenido, "utf8");
+          // Version snapshots (one per agent turn): the last ones are kept.
+          if (basename(dirname(destino)) === CARPETA_VERSIONES && nombre.endsWith(".json")) {
+            for (const viejo of versionesSobrantes(readdirSync(dirname(destino)))) {
+              try {
+                unlinkSync(resolve(dirname(destino), viejo));
+              } catch {
+                /* another write deleted it first */
+              }
+            }
           }
-          nota = `smoke: ${smoke.detalle}`;
         }
         if (esDeCodigo(datos.path)) {
           await correr("herramientas/manifiesto.py", [], 60);
@@ -295,15 +278,19 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
         const todas = d.todas !== false;
         const despues = todas ? trozos.join(d.reemplaza) : antes.replace(d.busca, d.reemplaza);
         const esMotor = MOTOR.has(basename(destino)) && esDeCodigo(d.path);
-        writeFileSync(destino, despues, "utf8");
-        if (esMotor) {
-          const smoke = await smokeOTeReverto(destino, antes);
-          if (!smoke.ok) {
+        if (esMotor || esDeGpu(d.path)) {
+          // Same rule as /api/fs/write: until 3-Nov an edit in gpu/ was not even parsed.
+          const r = await escribirComprobando(destino, despues, esMotor ? smokeDelMotor : () => parseaPython(destino));
+          if (!r.ok) {
             responderJson(res, 400, {
-              error: `The engine does not pass the smoke test; change reverted.\n${smoke.detalle}`,
+              error: esMotor
+                ? `The engine does not pass the smoke test; change reverted.\n${r.detalle}`
+                : `The GPU file would not parse; change reverted.\n${r.detalle}`,
             });
             return;
           }
+        } else {
+          writeFileSync(destino, despues, "utf8");
         }
         if (esDeCodigo(d.path)) await correr("herramientas/manifiesto.py", [], 60);
         anotar(
