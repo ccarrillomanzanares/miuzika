@@ -43,7 +43,7 @@ import {
 import { listarProyectos } from "../proyecto-disco.ts";
 import { interpretarProyectoEnDisco } from "../proyecto-archivo.ts";
 import { CARPETA_VERSIONES, describirVersion, restaurarVersion } from "../../../src/core/versiones.ts";
-import { cabeceraDeProyecto, cabecerasProyecto } from "./tools.ts";
+import { cabeceraDeProyecto, cabecerasProyecto, GPU_NO_PERMITIDA } from "./tools.ts";
 import type {
   AccionesEstudio,
   AjustePista,
@@ -497,6 +497,9 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     const voz = vozPorClave(catalogo, receta.voz);
     const destino: "cpu" | "gpu" = (voz as { destino?: string } | undefined)?.destino === "gpu" ? "gpu" : "cpu";
     receta = { ...receta, destino };
+    if (destino === "gpu" && peticion.gpuPermitida === false) {
+      return { ok: false, texto: GPU_NO_PERMITIDA };
+    }
     if (destino === "gpu") {
       avisos.push("This voice renders on the GPU: it uses Lambda ($1.29/h while off, ~3 min to start).");
     }

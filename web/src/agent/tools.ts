@@ -51,6 +51,32 @@ export function setDestino(destino: Destino): void {
 }
 
 /**
+ * Does this call reach a paid Lambda GPU? Every such tool asks the chat selector first.
+ * Until 3-Nov only ejecutar_python did: generar_audio, proponer_midi and crear_voz
+ * destino=gpu went to Lambda guarded only by the server's MIUZIKA_LAMBDA flag (review
+ * 3-Nov, bug 4). crear_sonido is decided in its action: only the catalog knows whether
+ * the voice renders on the GPU.
+ */
+export function llamadaUsaGpu(nombre: string, args: Record<string, unknown>): boolean {
+  switch (nombre) {
+    case "ejecutar_python":
+      return args.destino === "lambda";
+    case "crear_voz":
+      return args.destino === "gpu";
+    case "generar_audio":
+    case "proponer_midi":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** The same answer for every tool the selector stops. */
+export const GPU_NO_PERMITIDA =
+  "The GPU is not allowed: the chat selector is on CPU. This runs on a paid Lambda GPU (it costs money per " +
+  "hour). Ask the person to switch the selector to GPU if it is really needed; do not retry until they do.";
+
+/**
  * Header with a project's folder. It goes ENCODED: an HTTP header only accepts Latin-1
  * and `fetch` throws with a folder like "夜の歌". The server decodes it in
  * `slugProyecto` (server/contexto.ts).
@@ -191,6 +217,8 @@ export interface PeticionSonido {
   palabras?: string[];
   /** Concrete values of the voice's parameters (optional). */
   args?: Record<string, number | boolean | number[]>;
+  /** The chat selector allows the GPU; a GPU voice is refused without it (3-Nov, bug 4). */
+  gpuPermitida?: boolean;
 }
 
 /** Generate audio with a music model on the GPU and place it as a clip. */
@@ -1119,6 +1147,10 @@ async function ejecutarCrudo(
     };
   }
 
+  if (llamadaUsaGpu(nombre, args) && destinoPreferido !== "lambda") {
+    return { ok: false, texto: nombre === "ejecutar_python" ? `${GPU_NO_PERMITIDA} Or run it with destino='cpu'.` : GPU_NO_PERMITIDA };
+  }
+
   // The ones that change or read the project run in the tab (see registrarAcciones).
   const registradas = acciones();
   if (!registradas && HERRAMIENTAS_DEL_PROYECTO.has(nombre)) return { ok: false, texto: SIN_REGISTRO };
@@ -1430,6 +1462,7 @@ async function ejecutarCrudo(
           voz: String(args.voz ?? "").trim(),
           ...(Array.isArray(args.palabras) ? { palabras: (args.palabras as unknown[]).map(String) } : {}),
           ...(argsSonido ? { args: argsSonido } : {}),
+          gpuPermitida: destinoPreferido === "lambda",
         });
       }
       case "crear_voz": {
@@ -1644,17 +1677,10 @@ async function ejecutarCrudo(
       }
       case "ejecutar_python": {
         const segundos = Number(args.timeout_segundos) || 300;
-        // The GPU only if the model ASKS for it and the person ALLOWS it in the selector.
-        // Before, it was enough for the selector to be on GPU: on Oct 27 a script that only
-        // looked for files switched on a paid A10.
-        if (args.destino === "lambda" && destinoPreferido !== "lambda") {
-          return {
-            ok: false,
-            texto:
-              "The GPU is not allowed: the chat selector is on CPU. Run on CPU, or ask the " +
-              "person to enable it if it is really needed (it costs money per hour).",
-          };
-        }
+        // The GPU only if the model ASKS for it and the person ALLOWS it in the selector
+        // (checked with the other GPU tools before the switch). Before, it was enough for
+        // the selector to be on GPU: on Oct 27 a script that only looked for files
+        // switched on a paid A10.
         const destino: Destino = args.destino === "lambda" ? "lambda" : "cpu";
         // On Lambda the first start is ~3 minutes: the client limit covers it.
         const margen = destino === "lambda" ? segundos * 1000 + 15 * 60 * 1000 : segundos * 1000 + 45000;

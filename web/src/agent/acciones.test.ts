@@ -71,3 +71,23 @@ test("a stem that does not fit the budget still streams", async () => {
   const { texto } = await importar(1200, "salida/stem_largo.wav", 60);
   assert.match(texto, /streaming audio/);
 });
+
+test("crear_sonido refuses a GPU voice when the selector does not allow the GPU (3-Nov bug 4)", async () => {
+  const original = globalThis.fetch;
+  const rutas: string[] = [];
+  globalThis.fetch = (async (url: string | URL) => {
+    rutas.push(String(url));
+    const voz = { clave: "zumbido_gpu", etiqueta: "Zumbido", familia: "fx", descripcion: "", params: [], destino: "gpu" };
+    return new Response(JSON.stringify(String(url) === "/api/voces" ? { voces: [voz] } : { ok: true }));
+  }) as typeof fetch;
+  let proyecto: Project = createProject({ name: "Stahl", bpm: 125, lengthBars: 8 });
+  try {
+    const acciones = crearAcciones({ proyecto: () => proyecto, fijar: (p) => (proyecto = p), enVivo: (p) => (proyecto = p), avisar: () => {} });
+    const r = await acciones.crearSonido({ nombre: "zumbido", voz: "zumbido_gpu", gpuPermitida: false });
+    assert.equal(r.ok, false);
+    assert.match(r.texto, /The GPU is not allowed/);
+    assert.deepEqual(rutas, ["/api/voces"], "nothing was written or run");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
