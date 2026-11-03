@@ -14,7 +14,14 @@ import { carpetaDeProyecto } from "../../src/core/project.ts";
 import { midiDeProyecto } from "../../src/core/midi-export.ts";
 import { informeEscucha, nivelesPorTramo, notasPorTramo, type PistaEscuchada } from "../../src/core/escucha.ts";
 import { assetsPorStreaming, audioAssets, hidratarAssets } from "./audio-store.ts";
-import { subirAudio } from "./proyecto-disco.ts";
+import { convertirMp3, subirAudio } from "./proyecto-disco.ts";
+
+/** What `exportar` writes. `mp3` renders the WAV too: the MP3 is encoded from it. */
+export interface Formatos {
+  midi: boolean;
+  wav: boolean;
+  mp3?: boolean;
+}
 import { audioBufferToWav } from "./wav.ts";
 
 type SoundfontCargado = { uuid: Uint8Array; name: string; bytes: ArrayBuffer };
@@ -30,14 +37,14 @@ export interface DependenciasRender {
 }
 
 export function crearRenderEscucha(d: DependenciasRender): {
-  exportar(formatos: { midi: boolean; wav: boolean }, senal?: AbortSignal): Promise<{ ok: boolean; texto: string }>;
+  exportar(formatos: Formatos, senal?: AbortSignal): Promise<{ ok: boolean; texto: string }>;
   escuchar(opciones: { pistas?: string[]; compasesPorTramo?: number }, senal?: AbortSignal): Promise<{ ok: boolean; texto: string }>;
 } {
   /**
    * Brief export: the project to MIDI and/or the mix to WAV, in
    * `proyectos/<carpeta>/salida/`. The WAV is rendered by the same engine as Play.
    */
-  async function exportarProyecto(formatos: { midi: boolean; wav: boolean }, senal?: AbortSignal): Promise<{ ok: boolean; texto: string }> {
+  async function exportarProyecto(formatos: Formatos, senal?: AbortSignal): Promise<{ ok: boolean; texto: string }> {
     const view = d.proyecto();
     if (!view) return { ok: false, texto: "There is no open project." };
     const slug = carpetaDeProyecto(view);
@@ -57,7 +64,7 @@ export function crearRenderEscucha(d: DependenciasRender): {
         const pistas = view.tracks.filter((t) => t.kind === "midi").length;
         hechos.push(`MIDI: proyectos/${slug}/${path} (${pistas} track(s), ${view.bpm} BPM).`);
       }
-      if (formatos.wav) {
+      if (formatos.wav || formatos.mp3) {
         if (senal?.aborted) return cancelado();
         const render = await prepararRender(view, slug);
         if (senal?.aborted) return cancelado();
@@ -77,12 +84,23 @@ export function crearRenderEscucha(d: DependenciasRender): {
         const picoDb = pico > 0 ? 20 * Math.log10(pico) : -Infinity;
         hechos.push(
           `WAV: proyectos/${slug}/${path} (${Math.floor(segundos / 60)}:${String(Math.round(segundos % 60)).padStart(2, "0")}, ` +
-            `peak ${picoDb.toFixed(1)} dBFS${pico > 1 ? " — CLIPPING: lower the master" : ""}).`,
+            `peak ${picoDb.toFixed(1)} dBFS${pico > 1 ? " — CLIPPING: lower the master" : ""})` +
+            (formatos.wav ? "." : ", kept as the MP3's source."),
         );
+        if (formatos.mp3) {
+          if (senal?.aborted) return cancelado();
+          const r = await convertirMp3(path, slug, view.name, senal);
+          const mb = (r.bytes / (1024 * 1024)).toFixed(1);
+          const picoMp3 = r.mp3.picoDb === null ? "?" : r.mp3.picoDb.toFixed(1);
+          hechos.push(
+            `MP3: ${r.ruta} (${r.kbps} kbps, ${mb} MB, peak ${picoMp3} dBFS, title "${view.name}")` +
+              (r.problemas.length > 0 ? ` — CHECK: ${r.problemas.join(" ")}` : "."),
+          );
+        }
       }
-      const fuera = formatos.wav ? assetsPorStreaming(view) : [];
+      const fuera = formatos.wav || formatos.mp3 ? assetsPorStreaming(view) : [];
       if (fuera.length > 0) {
-        hechos.push(`Not in the WAV (long, played by streaming, outside openDAW): ${fuera.join(", ")}.`);
+        hechos.push(`Not in the WAV/MP3 (long, played by streaming, outside openDAW): ${fuera.join(", ")}.`);
       }
       return { ok: true, texto: hechos.join("\n") || "No format was requested." };
     } catch (error) {

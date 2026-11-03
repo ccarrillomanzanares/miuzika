@@ -68,7 +68,7 @@ export interface Estudio {
   avisar(texto: string): void;
   /** Exports the project to MIDI and/or the mix to WAV in salida/. */
   /** `senal` is the turn's Cancel: the tab checks it between renders (a render in flight finishes). */
-  exportar?(formatos: { midi: boolean; wav: boolean }, senal?: AbortSignal): Promise<ResultadoAccion>;
+  exportar?(formatos: { midi: boolean; wav: boolean; mp3?: boolean }, senal?: AbortSignal): Promise<ResultadoAccion>;
   /** Renders with openDAW and measures the level per bar range of the mix and of each track alone. */
   escuchar?(opciones: { pistas?: string[]; compasesPorTramo?: number }, senal?: AbortSignal): Promise<ResultadoAccion>;
 }
@@ -1284,9 +1284,9 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     }
   }
 
-  async function exportar(peticion: { midi: boolean; wav: boolean }, senal?: AbortSignal): Promise<ResultadoAccion> {
+  async function exportar(peticion: { midi: boolean; wav: boolean; mp3?: boolean }, senal?: AbortSignal): Promise<ResultadoAccion> {
     if (!e.exportar) return { ok: false, texto: "This tab does not know how to export." };
-    if (!peticion.midi && !peticion.wav) return { ok: false, texto: "Ask for midi, wav or both." };
+    if (!peticion.midi && !peticion.wav && !peticion.mp3) return { ok: false, texto: "Ask for midi, wav, mp3 or several." };
     return e.exportar(peticion, senal);
   }
 

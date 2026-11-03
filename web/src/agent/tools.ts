@@ -287,7 +287,7 @@ export interface PeticionNotas extends PeticionEscritura {
 export interface PeticionBateriaPista extends PeticionBateria, PeticionEscritura {}
 
 export interface AccionesEstudio {
-  exportar(peticion: { midi: boolean; wav: boolean }, senal?: AbortSignal): Promise<ResultadoAccion>;
+  exportar(peticion: { midi: boolean; wav: boolean; mp3?: boolean }, senal?: AbortSignal): Promise<ResultadoAccion>;
   escuchar(peticion: { pistas?: string[]; compasesPorTramo?: number }, senal?: AbortSignal): Promise<ResultadoAccion>;
   versiones(peticion: { accion: string; version?: string; pistas?: string[] }, senal?: AbortSignal): Promise<ResultadoAccion>;
   leerProyecto(peticion: { clipId?: string }): ResultadoAccion;
@@ -394,14 +394,16 @@ export const HERRAMIENTAS: ToolSpec[] = [
       description:
         "Exports the project to salida/: midi=true writes a .mid with one track per MIDI track " +
         "(tempo, time signature, GM programs, drums on channel 10); wav=true renders the mix with the " +
-        "same engine as Play (instruments, effects, volumes) to a .wav. Use it only if the " +
-        "brief asks for MIDI or WAV; if not, the result is the project itself. Do not write scripts " +
+        "same engine as Play (instruments, effects, volumes) to a .wav; mp3=true also encodes that " +
+        "mix to a 320 kbps .mp3 titled with the project name and measures it against the WAV. Use it " +
+        "only if the brief asks for MIDI, WAV or MP3; if not, the result is the project itself. Do not write scripts " +
         "to export.",
       parameters: {
         type: "object",
         properties: {
           midi: { type: "boolean" },
           wav: { type: "boolean" },
+          mp3: { type: "boolean" },
         },
       },
     },
@@ -1531,7 +1533,7 @@ export const MANEJADORES: Record<string, Manejador> = {
     return local.ajustarPistas({ pistas });
   },
   exportar: async (args, senal, local) => {
-    return await local.exportar({ midi: args.midi === true, wav: args.wav === true }, senal);
+    return await local.exportar({ midi: args.midi === true, wav: args.wav === true, mp3: args.mp3 === true }, senal);
   },
   escuchar_mezcla: async (args, senal, local) => {
     return await local.escuchar(

@@ -95,3 +95,8 @@ test("without a language, the brief comes out in English", () => {
     "A new song, in a new project called “Rebeldía”.",
   );
 });
+
+test("MP3 joins the delivery list", () => {
+  const texto = textoDeEncargo({ ...ENCARGO_VACIO, entregaWav: true, entregaMp3: true }, "en");
+  assert.match(texto, /Delivery: when it's finished, export it as WAV and MP3\./);
+});

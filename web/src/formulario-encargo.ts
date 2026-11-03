@@ -223,7 +223,8 @@ export class FormularioEncargo {
           tx("Entrega", "Delivery"),
           `<span class="nota">${tx("en el proyecto, y además:", "in the project, and also:")}</span>
            <label class="opcion"><input type="checkbox" name="e-midi"> MIDI</label>
-           <label class="opcion"><input type="checkbox" name="e-wav"> WAV</label>`,
+           <label class="opcion"><input type="checkbox" name="e-wav"> WAV</label>
+           <label class="opcion"><input type="checkbox" name="e-mp3"> MP3</label>`,
         )}
 
         <div class="dialogo-acciones">
@@ -360,6 +361,7 @@ export class FormularioEncargo {
         mas: valor("mas"),
         entregaMidi: valor("e-midi") !== "",
         entregaWav: valor("e-wav") !== "",
+        entregaMp3: valor("e-mp3") !== "",
       };
       this.deps.escribir(textoDeEncargo(encargo, idioma(), project?.name ?? ""));
       this.dialogo.close();

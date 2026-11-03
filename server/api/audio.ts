@@ -2,10 +2,11 @@
 
 import { correrProceso } from "../proceso.ts";
 import { existsSync, mkdirSync, readdirSync, renameSync, statSync, writeFileSync, createReadStream } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, relative, resolve, sep } from "node:path";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 import { rutaJson } from "../ruta.ts";
+import { KBPS_MP3, argumentosMedir, argumentosMp3, leerMedida, problemasMp3 } from "../mp3.ts";
 
 /**
  * basic-pitch arguments. `--midi-tempo` is the project's tempo: basic-pitch keeps note
@@ -73,6 +74,53 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
       }
     });
   });
+
+  // WAV → MP3 (320 kbps CBR, project title as ID3), measured back against the WAV.
+  // Mounted before /api/audio, which matches by prefix. The MP3 goes next to its WAV. See server/mp3.ts for the decision and the tolerances.
+  server.middlewares.use(
+    "/api/audio/mp3",
+    rutaJson<{ archivo?: string; titulo?: string }>({ metodo: "POST" }, async ({ req, res, datos: d }) => {
+      const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
+      const origen = d.archivo ? resolverEnTrabajo(d.archivo, slug) : null;
+      if (!origen || !/\.wav$/i.test(origen)) {
+        responderJson(res, 400, { ok: false, error: "'archivo' must be a .wav inside workspace/" });
+        return;
+      }
+      if (!existsSync(origen)) {
+        responderJson(res, 404, { ok: false, error: `${d.archivo} does not exist` });
+        return;
+      }
+      const destino = origen.replace(/\.wav$/i, ".mp3");
+      const control = new AbortController();
+      res.on("close", () => control.abort());
+      const ffmpeg = (args: string[], segundos: number) =>
+        correrProceso("ffmpeg", args, { segundos, nombre: "ffmpeg", cwd: carpetaTrabajo, windowsHide: true, senal: control.signal });
+      const t0 = Date.now();
+      const antes = await ffmpeg(argumentosMedir(origen), 300);
+      if (antes.errorArranque) {
+        responderJson(res, 501, { ok: false, error: `ffmpeg is not on the server's PATH (${antes.errorArranque}).` });
+        return;
+      }
+      const conv = await ffmpeg(argumentosMp3(origen, destino, { titulo: d.titulo }), 600);
+      if (conv.cancelado) return;
+      if (conv.codigo !== 0 || !existsSync(destino)) {
+        responderJson(res, 500, { ok: false, error: `ffmpeg could not convert it: ${conv.errores.slice(-600)}` });
+        return;
+      }
+      const despues = await ffmpeg(argumentosMedir(destino), 300);
+      if (despues.cancelado) return;
+      const wav = leerMedida(antes.errores);
+      const mp3 = leerMedida(despues.errores);
+      const problemas = problemasMp3(wav, mp3);
+      const rel = relative(carpetaTrabajo, destino).split(sep).join("/");
+      const bytes = statSync(destino).size;
+      anotar(
+        ficheroHerramientas,
+        JSON.stringify({ t: new Date().toISOString(), tool: "mp3", archivo: d.archivo, ruta: rel, bytes, wav, mp3, problemas, ms: Date.now() - t0 }),
+      );
+      responderJson(res, 200, { ok: problemas.length === 0, ruta: rel, bytes, kbps: KBPS_MP3, wav, mp3, problemas });
+    }),
+  );
 
   // Serves a WAV from workspace/ with Range support: the client can request
   // chunks and decode them one by one (streaming) instead of the whole file.

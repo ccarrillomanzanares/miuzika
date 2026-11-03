@@ -67,3 +67,36 @@ export async function subirAudio(
   });
   return { path: String(datos.path ?? ""), bytes: Number(datos.bytes ?? 0) };
 }
+
+export interface ResultadoMp3 {
+  /** false when the MP3 was written but its measurement disagrees with the WAV. */
+  ok: boolean;
+  ruta: string;
+  bytes: number;
+  kbps: number;
+  mp3: { segundos: number | null; picoDb: number | null };
+  problemas: string[];
+}
+
+/**
+ * A WAV of the project to MP3 next to it (server/mp3.ts: 320 kbps CBR, `titulo` as ID3,
+ * measured back against the WAV). `rutaWav` as the project sees it ("salida/x.wav").
+ */
+export async function convertirMp3(rutaWav: string, slug: string, titulo: string, senal?: AbortSignal): Promise<ResultadoMp3> {
+  const datos = await pedirJson("/api/audio/mp3", {
+    method: "POST",
+    // Encoded like cabeceraDeProyecto (tools.ts): a header only carries Latin-1.
+    headers: { "Content-Type": "application/json", "x-miuzika-proyecto": encodeURIComponent(slug) },
+    body: JSON.stringify({ archivo: rutaWav, titulo }),
+    signal: senal,
+  });
+  const mp3 = (datos.mp3 ?? {}) as { segundos?: number | null; picoDb?: number | null };
+  return {
+    ok: datos.ok === true,
+    ruta: String(datos.ruta ?? ""),
+    bytes: Number(datos.bytes ?? 0),
+    kbps: Number(datos.kbps ?? 0),
+    mp3: { segundos: mp3.segundos ?? null, picoDb: mp3.picoDb ?? null },
+    problemas: Array.isArray(datos.problemas) ? datos.problemas.map(String) : [],
+  };
+}
