@@ -18,6 +18,7 @@
 import { correrProceso } from "./proceso.ts";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import { dentroDe } from "./dentro.ts";
 
 export interface ConfigLambda {
   apiKey: string;
@@ -385,7 +386,7 @@ export function planDeEntradas(
   const plan: { local: string; remoto: string }[] = [];
   for (const entrada of entradas) {
     const local = resolve(entrada);
-    if (!local.startsWith(raiz + sep)) return { error: `${entrada} is not inside the project folder` };
+    if (!dentroDe(raiz, local)) return { error: `${entrada} is not inside the project folder` };
     const remoto = relative(raiz, local).split(sep).join("/");
     if (!plan.some((p) => p.remoto === remoto)) plan.push({ local, remoto });
   }
@@ -488,9 +489,10 @@ async function traerNuevos(
   // One scp per group of files with the same destination directory.
   const porDestino = new Map<string, string[]>();
   for (const rel of relativos) {
-    const destinoLocal = resolve(join(carpetaTrabajo, "proyectos", slug, rel));
-    const dentro = destinoLocal.startsWith(resolve(carpetaTrabajo));
-    if (!dentro) continue;
+    // Inside THIS project, not just workspace/: the names come from the instance.
+    const carpetaDelProyecto = resolve(carpetaTrabajo, "proyectos", slug);
+    const destinoLocal = resolve(join(carpetaDelProyecto, rel));
+    if (!dentroDe(carpetaDelProyecto, destinoLocal)) continue;
     mkdirSync(dirname(destinoLocal), { recursive: true });
     const clave = dirname(destinoLocal);
     const listaDestino = porDestino.get(clave) ?? [];

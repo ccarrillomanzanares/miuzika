@@ -20,6 +20,7 @@ import { leerCuerpoCrudo, LIMITE_CUERPO, registroApi, responderJson, rutaJson, t
 import type { Comprobacion } from "./escritura-verificada.ts";
 import { CAJA, entornoDeCaja, escribiblesDelServidor } from "./api/python.ts";
 import { MOTOR } from "./solo-lectura.ts";
+import { dentroDe } from "./dentro.ts";
 
 export function crearContexto(env: Record<string, string>) {
   // Lambda is OFF unless MIUZIKA_LAMBDA=on: Carlos asked on 31-Oct to stop using the
@@ -229,7 +230,7 @@ export function crearContexto(env: Record<string, string>) {
     if (relativo.includes("\\") || relativo.includes("..")) return null;
     // The rule for what is shared lives in src/core/rutas.ts (the browser uses it too).
     const destino = resolve(carpetaTrabajo, rutaEnWorkspace(relativo.replace(/^\/+/, ""), slug));
-    const dentro = destino === carpetaTrabajo || destino.startsWith(carpetaTrabajo + sep);
+    const dentro = dentroDe(carpetaTrabajo, destino, { incluirRaiz: true });
     return dentro ? destino : null;
   };
 
@@ -297,7 +298,7 @@ export function crearContexto(env: Record<string, string>) {
     if (!existsSync(carpetaTrabajo)) return [];
     const relativa = carpeta.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
     const inicio = relativa === "" ? carpetaTrabajo : resolve(carpetaTrabajo, relativa);
-    const dentro = inicio === carpetaTrabajo || inicio.startsWith(carpetaTrabajo + sep);
+    const dentro = dentroDe(carpetaTrabajo, inicio, { incluirRaiz: true });
     if (!dentro || !existsSync(inicio)) return [];
     const salida: { path: string; bytes: number }[] = [];
     const recorrer = (dir: string): void => {

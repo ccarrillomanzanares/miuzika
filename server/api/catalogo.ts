@@ -1,7 +1,7 @@
 /** The CC0 library (VCSL): search, listen, import samples and SFZ → SF2 instruments. */
 
 import { createReadStream, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { basename, resolve, sep } from "node:path";
+import { basename, resolve } from "node:path";
 import { buscarEnCatalogo } from "../../src/core/buscar.ts";
 import type { EntradaCatalogo } from "../../src/core/buscar.ts";
 import { presetsDeSf2, textoDePresets } from "../gm.ts";
@@ -10,6 +10,7 @@ import type { InstrumentoBiblioteca } from "../../src/core/biblioteca.ts";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 import { rutaJson } from "../ruta.ts";
+import { dentroDe } from "../dentro.ts";
 
 export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
   const { anotar, ficheroHerramientas, carpetaTrabajo, responderJson, slugProyecto, resolverEnTrabajo, correr } = ctx;
@@ -162,7 +163,7 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
     const rel = url.searchParams.get("path") ?? "";
     const raiz = resolve(carpetaTrabajo, "catalogo");
     const destino = resolve(carpetaTrabajo, rel);
-    if (rel === "" || !destino.startsWith(raiz + sep) || !existsSync(destino)) {
+    if (rel === "" || !dentroDe(raiz, destino) || !existsSync(destino)) {
       responderJson(res, 404, { error: "does not exist" });
       return;
     }
@@ -222,7 +223,7 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
       resolve(carpetaTrabajo, "catalogo", archivo),
       ...(raiz !== "" ? [resolve(carpetaTrabajo, "catalogo", raiz, archivo)] : []),
     ];
-    const origen = candidatos.find((c) => c.startsWith(completo + sep) && existsSync(c));
+    const origen = candidatos.find((c) => dentroDe(completo, c) && existsSync(c));
     if (!origen) {
       responderJson(res, 404, { ok: false, error: `${archivo} does not exist` });
       return;
