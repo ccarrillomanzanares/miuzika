@@ -250,6 +250,32 @@ None of this has been heard in previous sessions:
     Parked: `generar_audio` default of 2 takes;
     Lambda persistent filesystem so cold starts do not reinstall the weights.
 
+18. **"Los ochenta en las calles" and "cain-uriel", 3-Nov night** (Carlos in the browser, DeepSeek
+    v4.1 flash, ACE-Step on Lambda). Read from `tmp/api.log` (first night with it), `herramientas.log`
+    and the trajectory `cain-uriel/trayectorias/2026-11-03_23-08-00_...json`:
+    - Worked: a trajectory file per turn (check 11), `generar_audio` takes entering as audio, the
+      server changes of the day (no 5xx in api.log). **"⏻ Off" works**: clicked 22:19, Lambda
+      confirmed after 87 s (`lambda_apagar apagada: true`); the header said "apagada" at once.
+    - Timings: cold boot 264 s; warm `run/lambda` 119 s for 2 takes of 103 s (model load 31 s,
+      generation 35 s, VRAM 16.0 GB). The turn: 28 calls, 5 min, 0.022 $.
+    - **Bug, report**: `escuchar_mezcla` said "No problems" with the MIX row SILENT in every span
+      while the only track sounded at -24..-21 dBFS alone. `informeEscucha` (`src/core/escucha.ts`)
+      checks each track row, never the MIX row. Fix: a problem when a MIX span is silent and an
+      unmuted track sounds in it.
+    - **Bug, render, not understood yet**: that silent MIX came right after `add_device` compressor
+      + eq on the audio track `cain-uriel-aces-1` (master -5 dB); the track alone, with the same
+      devices, did sound. Removing both devices brought the MIX back. The agent concluded "devices
+      mute an audio track in openDAW" and left the song without them. Needs a repro: audio track +
+      compressor + eq, full render vs solo render.
+    - **Bug, paths**: `listar_ficheros(carpeta="generado")` answered "There are no files in
+      generado/" with `proyectos/cain-uriel/generado/cain-uriel-aces-1.wav` there: `carpeta` is
+      taken from workspace/, not from the project. Goes with step 4's path resolver.
+    - Friction: `set_song` with `key: "E"` rejected twice ("expected object") before the agent
+      gave up on it; accept a tonic string or put an example in the error.
+    - Agent: ACE-Step only when the request names it. In the cut turn it composed note by note;
+      in the next it wrote 4 bars of MIDI drums first, then switched to `generar_audio` and
+      deleted them. Master set to -1, -2, 0, -2 dB across 7 listens. Prompt item 15.5 (consent).
+
 ## 3. Pending work
 
 **3-Nov: architecture review before reordering.** `docs/REVISION-2026-11-03.md` is the
@@ -298,7 +324,7 @@ Carlos, 3-Nov: "la exportación wav funcionó ayer" (the 2-Nov fix of check 16 w
 **Lambda, 3-Nov night:** `/api/gpu/estado` says our instance is off (`fase: apagada`); the
 other one listed (`295bdec6…`, "terminating") has been stuck like that for about a year, a
 provider-side fault; Carlos, 3-Nov: it is not billing. Ignore it. `3d46b7f046ca` is no longer
-billing. The "⏻ Off" button is still unclicked.
+billing. The "⏻ Off" button was first used later that night and works (check 18).
 
 **3-Nov night, step 4 started**: `server/proceso.ts` `correrProceso` (time limit, cancel by
 signal, tree kill, `explicarFalloMudo`) replaces the four spawn wrappers (`contexto.correr`,
