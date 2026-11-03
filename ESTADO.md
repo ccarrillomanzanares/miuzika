@@ -252,6 +252,16 @@ None of this has been heard in previous sessions:
 
 ## 3. Pending work
 
+**3-Nov: architecture review before reordering.** `docs/REVISION-2026-11-03.md` is the
+inventory of the whole tree (four clean-context reviewers, key claims re-verified by hand):
+measured shape, 12 bugs that fell out of it (a bad `gpu/*.py` edit deletes the file; the Python
+box has a side door; a cancelled turn keeps Lambda billing), the duplication map, the 31 tools
+grouped, the capability state table (HEARD / MEASURED / BUILT / PARKED / PLANNED), the proposed
+spines and the execution order. **Start there**: section 10 gives the order (bugs 1-5 first, one
+commit each with a test); section 9 lists the decisions only Carlos can take. Baseline 3-Nov:
+`tsc` 0 errors, 245 unit tests green.
+
+
 1. Draw buses and sends in the interface (mixer).
 2. Seen on 28-Oct with the agent. Fixed on 1-Nov (not yet exercised in a browser):
    - `escribir_notas`/`escribir_bateria`/`escribir_progresion` without `pista` now fail
