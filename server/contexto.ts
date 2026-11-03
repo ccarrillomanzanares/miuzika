@@ -48,10 +48,19 @@ export function crearContexto(env: Record<string, string>) {
     compactarTurno,
     registrarTurno,
     precios,
-  } = crearRegistros(resolve(process.cwd(), "tmp"));
+  } = crearRegistros(resolve(process.cwd(), "tmp"), {
+    // From the .env record first: Vite's loadEnv does not fill process.env, so until 3-Nov
+    // MIUZIKA_LOG_COMPLETO=1 in .env did nothing (review bug 8). The shell still works.
+    logCompleto: (env.MIUZIKA_LOG_COMPLETO || process.env.MIUZIKA_LOG_COMPLETO) === "1",
+  });
   /** Everything the agent writes or runs lives here, and cannot leave it. */
   const carpetaTrabajo = resolve(process.cwd(), "workspace");
   const interprete = env.MIUZIKA_PYTHON || "python";
+  /** basic-pitch's CLI (its own venv, see /api/transcribir). Same .env rule as above. */
+  const basicPitch =
+    env.MIUZIKA_BASIC_PITCH ||
+    process.env.MIUZIKA_BASIC_PITCH ||
+    resolve(process.cwd(), ".miuzika", "bp", process.platform === "win32" ? "Scripts/basic-pitch.exe" : "bin/basic-pitch");
 
   /** One line per API request (route, status, ms): `registroApi` in ruta.ts. Not the two
    *  routes the tab polls (/api/build every 20 s and the GPU counter). */
@@ -245,6 +254,7 @@ export function crearContexto(env: Record<string, string>) {
     ficheroHerramientas,
     carpetaTrabajo,
     interprete,
+    basicPitch,
     responderJson,
     rutaJson,
     ficheroApi,

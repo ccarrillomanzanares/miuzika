@@ -22,7 +22,7 @@ export function argumentosBasicPitch(carpeta: string, origen: string, bpm: unkno
 }
 
 export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
-  const { anotar, ficheroHerramientas, responderJson, leerCuerpoBinario, slugProyecto, carpetaProyecto, resolverEnTrabajo, correr, carpetaTrabajo } = ctx;
+  const { anotar, ficheroHerramientas, basicPitch, responderJson, leerCuerpoBinario, slugProyecto, carpetaProyecto, resolverEnTrabajo, correr, carpetaTrabajo } = ctx;
 
   // WAV from the browser to disk: what the user imports with "Audio" is
   // copied to proyectos/<slug>/entrada/ so the master file can reference it
@@ -269,9 +269,7 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
   // 8 s per 2.5-minute stem; on miuzika's own "Stahl" stems (MIDI ground truth) F1 at
   // 50 ms: bass 0.85, guitar riff 0.89 (48 octave errors), synth 0.66. Good for "take the
   // melody from my stem", not a score. Only the user's own or CC audio (LEGAL.md §4).
-  const basicPitch =
-    process.env.MIUZIKA_BASIC_PITCH ||
-    resolve(process.cwd(), ".miuzika", "bp", process.platform === "win32" ? "Scripts/basic-pitch.exe" : "bin/basic-pitch");
+  // Its path comes from the context (MIUZIKA_BASIC_PITCH in .env, or the default venv).
   server.middlewares.use("/api/transcribir", rutaJson<{ archivo?: string; nombre?: string; bpm?: number }>({ metodo: "POST" }, async ({ req, res, datos: d }) => {
         const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
     const origen = d.archivo ? resolverEnTrabajo(d.archivo, slug) : null;

@@ -9,7 +9,7 @@ import { resolve } from "node:path";
 import { crearAlmacenPrecios } from "./precios.ts";
 import { costeDe } from "../src/core/precios.ts";
 
-export function crearRegistros(carpetaTmp: string) {
+export function crearRegistros(carpetaTmp: string, opciones: { logCompleto?: boolean } = {}) {
   const ficheroHerramientas = resolve(carpetaTmp, "herramientas.log");
   const ficheroApi = resolve(carpetaTmp, "api.log");
   const ficheroLog = resolve(carpetaTmp, "llm.log");
@@ -39,7 +39,7 @@ export function crearRegistros(carpetaTmp: string) {
    * separately, the request and the response. With the flag, the whole thing (for debugging).
    */
   const compactarTurno = (linea: string): string => {
-    if (process.env.MIUZIKA_LOG_COMPLETO === "1") return linea;
+    if (opciones.logCompleto === true) return linea;
     try {
       const datos = JSON.parse(linea) as Record<string, unknown>;
       const mensajes = Array.isArray(datos.mensajes)
