@@ -38,7 +38,7 @@ const VARIABLES_DE_SISTEMA = [
 
 export function entornoDeCaja(
   base: NodeJS.ProcessEnv,
-  rutas: { motor: string; proyecto: string; repo: string; workspace: string },
+  rutas: { motor: string; proyecto: string | string[]; repo: string; workspace: string; procesos?: boolean },
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const clave of Object.keys(base)) {
@@ -52,10 +52,31 @@ export function entornoDeCaja(
     // `delimiter` (";" on Windows, ":" elsewhere), not `sep`: with a previous
     // PYTHONPATH, joining it with "\\" or "/" left a single broken path.
     PYTHONPATH: [rutas.motor, base.PYTHONPATH].filter(Boolean).join(delimiter),
-    MIUZIKA_ESCRIBIR: rutas.proyecto,
+    // The first folder holds the script's temp (see caja.py).
+    MIUZIKA_ESCRIBIR: (Array.isArray(rutas.proyecto) ? rutas.proyecto : [rutas.proyecto]).join(delimiter),
     MIUZIKA_REPO: rutas.repo,
     MIUZIKA_WORKSPACE: rutas.workspace,
+    ...(rutas.procesos ? { MIUZIKA_PROCESOS: "1" } : {}),
   };
+}
+
+/**
+ * Where the server's own scripts may write when they run in the box: projects, the
+ * shared temp, downloaded references and the engine manifest. Not codigo/, gpu/ or
+ * herramientas/: engine code the agent edited must not be able to rewrite the scripts
+ * that run with more permissions (sfz_a_proyecto, analizar_referencia, the pad).
+ * Measured 3-Nov by reading every script the server runs (smoke, manifiesto, picos,
+ * midi_lector, verificar_audio, voces, gate_voz, importar_sample, sfz_a_proyecto,
+ * analizar_referencia): none writes anywhere else.
+ */
+export function escribiblesDelServidor(carpetaTrabajo: string): string[] {
+  return [
+    resolve(carpetaTrabajo, "tmp"),
+    resolve(carpetaTrabajo, "proyectos"),
+    resolve(carpetaTrabajo, "_referencias"),
+    resolve(carpetaTrabajo, "MANIFEST.json"),
+    resolve(carpetaTrabajo, "MANIFEST.md"),
+  ];
 }
 
 export function rutasPython(server: ViteDevServer, ctx: Contexto): void {

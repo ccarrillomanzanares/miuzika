@@ -8,11 +8,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { CAJA, entornoDeCaja } from "../api/python.ts";
+import { CAJA, entornoDeCaja, escribiblesDelServidor } from "../api/python.ts";
 
 const interprete = process.env.MIUZIKA_PYTHON || "python";
 const MOTOR = resolve(process.cwd(), "workspace", "codigo");
@@ -53,7 +53,11 @@ test("a normal script writes in its project and uses the engine (numpy)", () => 
   assert.equal(r.codigo, 0, r.errores);
   assert.match(r.salida, /ok None/, "the server variables do not reach the script");
   assert.ok(existsSync(join(proyecto, "salida", "tono.wav")));
-  assert.ok(!existsSync(join(proyecto, ".tmp-caja")), "the script temp is deleted when it finishes");
+  assert.deepEqual(
+    readdirSync(proyecto).filter((n) => n.startsWith(".tmp-caja")),
+    [],
+    "the script temp is deleted when it finishes",
+  );
 });
 
 test("does not write to or delete anything outside the project", () => {
@@ -85,6 +89,57 @@ test("does not launch processes or open the network", () => {
   const sistema = correr("import os\nos.system('echo hola')");
   assert.notEqual(sistema.codigo, 0);
   const red = correr("import socket\nsocket.create_connection(('example.com', 80), timeout=2)");
+  assert.notEqual(red.codigo, 0);
+  assert.match(red.errores, /do not open network connections/);
+});
+
+/** A server script (smoke, voces, sfz_a_proyecto...) as `correr` launches it since 3-Nov. */
+function correrComoServidor(codigo: string, procesos = false) {
+  const { repo } = montar();
+  const workspace = join(repo, "workspace");
+  mkdirSync(join(workspace, "herramientas"), { recursive: true });
+  const script = join(workspace, "herramientas", "script.py");
+  writeFileSync(script, codigo);
+  const r = spawnSync(interprete, ["-u", CAJA, script], {
+    cwd: workspace,
+    env: entornoDeCaja(process.env, { motor: MOTOR, proyecto: escribiblesDelServidor(workspace), repo, workspace, procesos }),
+    encoding: "utf8",
+    timeout: 60_000,
+  });
+  return { workspace, codigo: r.status, salida: r.stdout, errores: r.stderr };
+}
+
+test("server scripts write the manifest and projects, never the scripts the server runs (3-Nov bug 2)", () => {
+  const ok = correrComoServidor(
+    [
+      "import os",
+      "open('MANIFEST.md', 'w').write('x')",
+      "os.makedirs('proyectos/p', exist_ok=True)",
+      "open('proyectos/p/a.txt', 'w').write('x')",
+    ].join("\n"),
+  );
+  assert.equal(ok.codigo, 0, ok.errores);
+  assert.ok(existsSync(join(ok.workspace, "MANIFEST.md")));
+  for (const blanco of ["herramientas/smoke.py", "codigo/sfz2sf2.py", "gpu/generar_audio.py"]) {
+    const r = correrComoServidor(
+      ["import os", `os.makedirs(os.path.dirname('${blanco}'), exist_ok=True)`, `open('${blanco}', 'w').write('x')`].join("\n"),
+    );
+    assert.notEqual(r.codigo, 0, blanco);
+    assert.match(r.errores, /outside the project folder/, blanco);
+  }
+});
+
+test("only the server's process permission lets a script launch programs, and never opens the network", () => {
+  const sin = correrComoServidor("import subprocess, sys\nsubprocess.run([sys.executable, '-c', 'print(1)'])");
+  assert.notEqual(sin.codigo, 0);
+  assert.match(sin.errores, /do not launch other programs/);
+  const con = correrComoServidor(
+    "import subprocess, sys\nprint(subprocess.run([sys.executable, '-c', 'print(41+1)'], capture_output=True, text=True).stdout)",
+    true,
+  );
+  assert.equal(con.codigo, 0, con.errores);
+  assert.match(con.salida, /42/);
+  const red = correrComoServidor("import socket\nsocket.create_connection(('example.com', 80), timeout=2)", true);
   assert.notEqual(red.codigo, 0);
   assert.match(red.errores, /do not open network connections/);
 });

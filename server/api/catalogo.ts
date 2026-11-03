@@ -68,6 +68,7 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
           "codigo/sfz_a_proyecto.py",
           [sfz, carpeta, nombre],
           600,
+          { procesos: true }, // it launches sfz2sf2.py
         );
         if (r.codigo !== 0) {
           responderJson(res, 400, { error: (r.errores || r.salida).slice(-800) });

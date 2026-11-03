@@ -162,7 +162,7 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
           responderJson(res, 400, { error: "missing the origin (link or path)" });
           return;
         }
-        const r = await correr("codigo/analizar_referencia.py", [origen], 900);
+        const r = await correr("codigo/analizar_referencia.py", [origen], 900, { procesos: true }); // yt_dlp and ffmpeg
         if (r.codigo !== 0) {
           const crudo = (r.errores || r.salida).slice(-800);
           // What is missing on the machine, phrased so the agent can ask the person for it.

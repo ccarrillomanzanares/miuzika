@@ -18,6 +18,8 @@ import { crearAlmacenPrecios } from "./precios.ts";
 import { costeDe } from "../src/core/precios.ts";
 import { explicarFalloMudo } from "./fallo-proceso.ts";
 import type { Comprobacion } from "./escritura-verificada.ts";
+import { CAJA, entornoDeCaja, escribiblesDelServidor } from "./api/python.ts";
+import { MOTOR } from "./solo-lectura.ts";
 
 export function crearContexto(env: Record<string, string>) {
   // Lambda is OFF unless MIUZIKA_LAMBDA=on: Carlos asked on 31-Oct to stop using the
@@ -354,17 +356,36 @@ export function crearContexto(env: Record<string, string>) {
       .map((f) => f.path.slice(`proyectos/${slug}/`.length));
   };
 
-  /** Launches a script from workspace/ and returns output, errors and exit code. */
+  /**
+   * Launches a script from workspace/ and returns output, errors and exit code.
+   * Inside the box (caja.py) since 3-Nov: these scripts import engine code the agent can
+   * edit (smoke, voces, gate_voz with the agent's candidate voice), and they ran with the
+   * whole server environment, network and processes (review 3-Nov, bug 2). `procesos`
+   * is only for the two scripts that call ffmpeg, yt_dlp or sfz2sf2. "-c" (the gpu/
+   * parse check) only parses text, so it runs outside the box with the minimal env.
+   */
   const correr = (
     scriptRel: string,
     argumentos: string[] = [],
     segundos = 90,
+    opciones: { procesos?: boolean } = {},
   ): Promise<{ codigo: number | null; salida: string; errores: string }> =>
     new Promise((resolvePromise) => {
-      const hijo = spawn(interprete, ["-u", scriptRel, ...argumentos], {
-        cwd: carpetaTrabajo,
-        env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUNBUFFERED: "1" },
-      });
+      const enCaja = scriptRel !== "-c";
+      const hijo = spawn(
+        interprete,
+        enCaja ? ["-u", CAJA, resolve(carpetaTrabajo, scriptRel), ...argumentos] : ["-u", scriptRel, ...argumentos],
+        {
+          cwd: carpetaTrabajo,
+          env: entornoDeCaja(process.env, {
+            motor: resolve(carpetaTrabajo, "codigo"),
+            proyecto: escribiblesDelServidor(carpetaTrabajo),
+            repo: process.cwd(),
+            workspace: carpetaTrabajo,
+            procesos: opciones.procesos === true,
+          }),
+        },
+      );
       let salida = "";
       let errores = "";
       let listo = false;
@@ -397,9 +418,6 @@ export function crearContexto(env: Record<string, string>) {
         terminar(null);
       });
     });
-
-  /** Files that make up the engine: rewriting them requires passing the smoke test. */
-  const MOTOR = new Set(["dsp.py", "instruments.py", "render.py", "midi.py"]);
 
   /** Is it engine code? Both count: the numpy one in codigo/ and the GPU one in gpu/. */
   const esDeCodigo = (ruta: string): boolean => {

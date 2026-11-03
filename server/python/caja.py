@@ -7,6 +7,13 @@ Variables set by the server:
     MIUZIKA_ESCRIBIR   folders where writing is allowed (os.pathsep between them)
     MIUZIKA_REPO       repository root
     MIUZIKA_WORKSPACE  workspace/ (the only part of the repository that can be read)
+    MIUZIKA_PROCESOS   "1" lets the script launch programs. Only the server sets it, and only
+                       for its own scripts that call ffmpeg, yt_dlp or sfz2sf2 (3-Nov); the
+                       agent cannot edit those files.
+
+Since 3-Nov the server's own scripts (smoke, manifest, peaks, voices...) also run here:
+they import engine code the agent can edit, and before that they ran with the whole
+server environment, network and processes (review 3-Nov, bug 2).
 
 Why (STATUS Oct 28, pending item 5): the agent's Python ran with Carlos's permissions
 and the server's whole environment. A wrong script could delete things
@@ -44,9 +51,12 @@ def _dentro(ruta, raiz):
 
 
 ESCRIBIBLES = [_norm(p) for p in os.environ.get("MIUZIKA_ESCRIBIR", "").split(os.pathsep) if p]
-# The script's temp lives inside the project (and is deleted when it finishes): opening the whole
-# system temp allowed writing to anything hanging from it.
-TEMPORAL = os.path.join(ESCRIBIBLES[0] if ESCRIBIBLES else os.getcwd(), ".tmp-caja")
+# The script's temp lives inside the first writable folder (and is deleted when it finishes):
+# opening the whole system temp allowed writing to anything hanging from it. One per run:
+# server scripts share workspace/tmp, and a shared folder would be deleted under a
+# script still running.
+BASE_TEMPORAL = ESCRIBIBLES[0] if ESCRIBIBLES else os.getcwd()
+PROCESOS_PERMITIDOS = os.environ.get("MIUZIKA_PROCESOS") == "1"
 REPO = _norm(os.environ.get("MIUZIKA_REPO") or os.getcwd())
 WORKSPACE = _norm(os.environ.get("MIUZIKA_WORKSPACE") or os.path.join(REPO, "workspace"))
 
@@ -127,7 +137,7 @@ def _vigilante(evento, args):
     elif evento in ("os.rename", "os.link", "os.symlink", "shutil.copyfile", "shutil.move"):
         _comprobar_escritura(args[0], "move")
         _comprobar_escritura(args[1], "move to")
-    elif evento.startswith(_PROCESOS):
+    elif evento.startswith(_PROCESOS) and not PROCESOS_PERMITIDOS:
         _prohibir("agent scripts do not launch other programs")
     elif evento in ("socket.connect", "socket.bind", "socket.getaddrinfo"):
         _prohibir("agent scripts do not open network connections (for the web use buscar_web and leer_web)")
@@ -141,7 +151,8 @@ def main():
         raise SystemExit("usage: caja.py <script.py> [arguments...]")
     script = os.path.abspath(sys.argv[1])
     sys.dont_write_bytecode = True  # engine .pyc files would end up outside the project
-    os.makedirs(TEMPORAL, exist_ok=True)
+    os.makedirs(BASE_TEMPORAL, exist_ok=True)
+    TEMPORAL = tempfile.mkdtemp(prefix=".tmp-caja-", dir=BASE_TEMPORAL)
     for variable in ("TMP", "TEMP", "TMPDIR"):
         os.environ[variable] = TEMPORAL
     tempfile.tempdir = TEMPORAL

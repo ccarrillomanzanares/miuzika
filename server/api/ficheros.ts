@@ -6,6 +6,7 @@ import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 import { CARPETA_VERSIONES, versionesSobrantes } from "../../src/core/versiones.ts";
 import { escribirComprobando } from "../escritura-verificada.ts";
+import { soloLecturaParaElAgente } from "../solo-lectura.ts";
 
 /** Modules that a project script cannot shadow: the standard-library ones
  * actually used, numpy/scipy and the engine's own. */
@@ -55,6 +56,15 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
         const destino = resolverEnTrabajo(datos.path, slugProyecto(req.headers["x-miuzika-proyecto"]));
         if (!destino) {
           responderJson(res, 403, { error: "path outside workspace/" });
+          return;
+        }
+        if (soloLecturaParaElAgente(destino, carpetaTrabajo)) {
+          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "server script" }));
+          responderJson(res, 403, {
+            error:
+              "herramientas/ and the codigo/ files other than dsp, instruments, render and midi are run by the " +
+              "server and cannot be changed from the chat. Write your script in the project folder.",
+          });
           return;
         }
         if (datos.contenido.trim().length === 0) {
@@ -263,6 +273,15 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
         }
         if (!existsSync(destino)) {
           responderJson(res, 404, { error: "does not exist" });
+          return;
+        }
+        if (soloLecturaParaElAgente(destino, carpetaTrabajo)) {
+          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "editar_fichero", path: d.path, rechazado: "server script" }));
+          responderJson(res, 403, {
+            error:
+              "herramientas/ and the codigo/ files other than dsp, instruments, render and midi are run by the " +
+              "server and cannot be changed from the chat. Write your script in the project folder.",
+          });
           return;
         }
         const antes = readFileSync(destino, "utf8");
