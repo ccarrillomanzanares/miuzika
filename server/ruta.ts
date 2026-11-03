@@ -78,7 +78,8 @@ export function rutaJson<T = Record<string, unknown>>(
       try {
         await manejador({ req, res, datos, url, responder });
       } catch (error) {
-        responder(500, { error: mensajeDe(error) });
+        // ok:false too: some callers read `datos.ok` (transcribir, catalogo/importar).
+        responder(500, { ok: false, error: mensajeDe(error) });
       }
     };
     if (op.metodo === "GET") {

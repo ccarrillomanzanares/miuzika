@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFile
 import { basename, dirname, resolve } from "node:path";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
+import { rutaJson } from "../ruta.ts";
 import { CARPETA_VERSIONES, versionesSobrantes } from "../../src/core/versiones.ts";
 import { escribirComprobando } from "../escritura-verificada.ts";
 import { soloLecturaParaElAgente } from "../solo-lectura.ts";
@@ -41,169 +42,143 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
     });
   });
 
-  server.middlewares.use("/api/fs/write", (req, res) => {
-    if (req.method !== "POST") {
-      responderJson(res, 405, { error: "use POST" });
+  server.middlewares.use("/api/fs/write", rutaJson<{ path?: string; contenido?: string }>({ metodo: "POST" }, async ({ req, res, datos }) => {
+    if (!datos.path || typeof datos.contenido !== "string") {
+      responderJson(res, 400, { error: "missing 'path' or 'contenido'" });
       return;
     }
-    leerCuerpo(req, res, async (cuerpo) => {
-      try {
-        const datos = JSON.parse(cuerpo) as { path?: string; contenido?: string };
-        if (!datos.path || typeof datos.contenido !== "string") {
-          responderJson(res, 400, { error: "missing 'path' or 'contenido'" });
-          return;
-        }
-        const destino = resolverEnTrabajo(datos.path, slugProyecto(req.headers["x-miuzika-proyecto"]));
-        if (!destino) {
-          responderJson(res, 403, { error: "path outside workspace/" });
-          return;
-        }
-        if (soloLecturaParaElAgente(destino, carpetaTrabajo)) {
-          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "server script" }));
-          responderJson(res, 403, {
-            error:
-              "herramientas/ and the codigo/ files other than dsp, instruments, render and midi are run by the " +
-              "server and cannot be changed from the chat. Write your script in the project folder.",
-          });
-          return;
-        }
-        if (datos.contenido.trim().length === 0) {
-          responderJson(res, 400, {
-            error:
-              "empty content: write the whole script in a single call (do not leave it for later).",
-          });
-          return;
-        }
-        const nombre = basename(destino);
-        const nuevo = !existsSync(destino);
-
-        // (1) forbidden to patch someone else's code with replacement scripts
-        if (/^(patch|parche)/i.test(nombre) && nombre.endsWith(".py")) {
-          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "patch script" }));
-          responderJson(res, 409, {
-            error:
-              "Patch scripts are not allowed (patch*/parche*). Use editar_fichero(path, busca, reemplaza): exact, atomic and verified replacement.",
-          });
-          return;
-        }
-
-        // (1c) a script named like a module shadows that module for everything that
-        // runs in its folder (Python puts the script's folder first in
-        // sys.path). Measured on Oct 28: a diagnostic inspect.py broke numpy.
-        if (nuevo && nombre.endsWith(".py") && !esDeCodigo(datos.path) && MODULOS_PROTEGIDOS.has(nombre.slice(0, -3).toLowerCase())) {
-          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "module name" }));
-          responderJson(res, 409, {
-            error:
-              `"${nombre}" is named like a Python or engine module and would shadow it (numpy, the engine and your ` +
-              `scripts would stop importing it). Give it another name: e.g. "my_${nombre}".`,
-          });
-          return;
-        }
-
-        // (1b) the engines do not grow with loose scripts: a NEW file in codigo/ or gpu/
-        // is rejected. Previously the agent left its tests there (buscar_sfz.py, info_saxo*.py…)
-        // and they started to look like library code. Editing what already exists still goes through smoke.
-        if (nuevo && esDeCodigo(datos.path)) {
-          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "new file in the engine" }));
-          responderJson(res, 409, {
-            error:
-              "codigo/ and gpu/ are the shared engines: files are not added from the chat. Write the " +
-              "script in the project folder (e.g. 'scripts/my_script.py'); from there it can import the " +
-              "engine just the same. For a new timbre use crear_voz.",
-          });
-          return;
-        }
-
-        // (3) write; the engine (smoke test) and gpu/ (it must parse) roll back on failure
-        const esMotor = MOTOR.has(nombre) && esDeCodigo(datos.path);
-        let nota = "";
-        if (esMotor || esDeGpu(datos.path)) {
-          // In gpu/ there is no possible smoke test: the laptop has no torch. The
-          // minimum is that the file parses; real validation is done on the
-          // instance with destino="lambda".
-          const r = await escribirComprobando(destino, datos.contenido, esMotor ? smokeDelMotor : () => parseaPython(destino));
-          if (!r.ok) {
-            if (esMotor) anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "smoke" }));
-            responderJson(res, 400, {
-              error: esMotor
-                ? `The engine does not pass the smoke test; changes reverted.\n${r.detalle}`
-                : `The GPU file does not parse; it has not been written.\n${r.detalle}`,
-            });
-            return;
-          }
-          nota = esMotor ? `smoke: ${r.detalle}` : "gpu: syntax ok (validate by running with destino=lambda)";
-        } else {
-          mkdirSync(dirname(destino), { recursive: true });
-          writeFileSync(destino, datos.contenido, "utf8");
-          // Version snapshots (one per agent turn): the last ones are kept.
-          if (basename(dirname(destino)) === CARPETA_VERSIONES && nombre.endsWith(".json")) {
-            for (const viejo of versionesSobrantes(readdirSync(dirname(destino)))) {
-              try {
-                unlinkSync(resolve(dirname(destino), viejo));
-              } catch {
-                /* another write deleted it first */
-              }
-            }
-          }
-        }
-        if (esDeCodigo(datos.path)) {
-          await correr("herramientas/manifiesto.py", [], 60);
-        }
-
-        const bytes = Buffer.byteLength(datos.contenido, "utf8");
-        anotar(
-          ficheroHerramientas,
-          JSON.stringify({
-            t: new Date().toISOString(),
-            tool: "escribir_fichero",
-            path: datos.path,
-            bytes,
-          }),
-        );
-        responderJson(res, 200, { ok: true, path: datos.path, bytes, nota });
-      } catch (error) {
-        responderJson(res, 500, {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    });
-  });
-
-  server.middlewares.use("/api/fs/read", (req, res) => {
-    if (req.method !== "POST") {
-      responderJson(res, 405, { error: "use POST" });
+    const destino = resolverEnTrabajo(datos.path, slugProyecto(req.headers["x-miuzika-proyecto"]));
+    if (!destino) {
+      responderJson(res, 403, { error: "path outside workspace/" });
       return;
     }
-    leerCuerpo(req, res, (cuerpo) => {
-      try {
-        const datos = JSON.parse(cuerpo) as { path?: string; desde?: number };
-        const destino = datos.path ? resolverEnTrabajo(datos.path, slugProyecto(req.headers["x-miuzika-proyecto"])) : null;
-        if (!destino) {
-          responderJson(res, 403, { error: "path outside workspace/" });
-          return;
-        }
-        if (!existsSync(destino)) {
-          responderJson(res, 404, { error: "does not exist" });
-          return;
-        }
-        responderJson(res, 200, {
-          ok: true,
-          path: datos.path,
-          // By pages: the agent asks for `desde` to keep reading. Before, it was cut at
-          // 20,000 characters and the long output was saved to another file, which on
-          // re-reading was cut and saved again: the agent read in circles.
-          // Without `desde` (the app reading agente.json, for example) the whole thing is returned.
-          ...(datos.desde === undefined
-            ? { contenido: readFileSync(destino, "utf8") }
-            : pagina(readFileSync(destino, "utf8"), Number(datos.desde) || 0)),
+    if (soloLecturaParaElAgente(destino, carpetaTrabajo)) {
+      anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "server script" }));
+      responderJson(res, 403, {
+        error:
+          "herramientas/ and the codigo/ files other than dsp, instruments, render and midi are run by the " +
+          "server and cannot be changed from the chat. Write your script in the project folder.",
+      });
+      return;
+    }
+    if (datos.contenido.trim().length === 0) {
+      responderJson(res, 400, {
+        error:
+          "empty content: write the whole script in a single call (do not leave it for later).",
+      });
+      return;
+    }
+    const nombre = basename(destino);
+    const nuevo = !existsSync(destino);
+
+    // (1) forbidden to patch someone else's code with replacement scripts
+    if (/^(patch|parche)/i.test(nombre) && nombre.endsWith(".py")) {
+      anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "patch script" }));
+      responderJson(res, 409, {
+        error:
+          "Patch scripts are not allowed (patch*/parche*). Use editar_fichero(path, busca, reemplaza): exact, atomic and verified replacement.",
+      });
+      return;
+    }
+
+    // (1c) a script named like a module shadows that module for everything that
+    // runs in its folder (Python puts the script's folder first in
+    // sys.path). Measured on Oct 28: a diagnostic inspect.py broke numpy.
+    if (nuevo && nombre.endsWith(".py") && !esDeCodigo(datos.path) && MODULOS_PROTEGIDOS.has(nombre.slice(0, -3).toLowerCase())) {
+      anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "module name" }));
+      responderJson(res, 409, {
+        error:
+          `"${nombre}" is named like a Python or engine module and would shadow it (numpy, the engine and your ` +
+          `scripts would stop importing it). Give it another name: e.g. "my_${nombre}".`,
+      });
+      return;
+    }
+
+    // (1b) the engines do not grow with loose scripts: a NEW file in codigo/ or gpu/
+    // is rejected. Previously the agent left its tests there (buscar_sfz.py, info_saxo*.py…)
+    // and they started to look like library code. Editing what already exists still goes through smoke.
+    if (nuevo && esDeCodigo(datos.path)) {
+      anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "new file in the engine" }));
+      responderJson(res, 409, {
+        error:
+          "codigo/ and gpu/ are the shared engines: files are not added from the chat. Write the " +
+          "script in the project folder (e.g. 'scripts/my_script.py'); from there it can import the " +
+          "engine just the same. For a new timbre use crear_voz.",
+      });
+      return;
+    }
+
+    // (3) write; the engine (smoke test) and gpu/ (it must parse) roll back on failure
+    const esMotor = MOTOR.has(nombre) && esDeCodigo(datos.path);
+    let nota = "";
+    if (esMotor || esDeGpu(datos.path)) {
+      // In gpu/ there is no possible smoke test: the laptop has no torch. The
+      // minimum is that the file parses; real validation is done on the
+      // instance with destino="lambda".
+      const r = await escribirComprobando(destino, datos.contenido, esMotor ? smokeDelMotor : () => parseaPython(destino));
+      if (!r.ok) {
+        if (esMotor) anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "escribir_fichero", path: datos.path, rechazado: "smoke" }));
+        responderJson(res, 400, {
+          error: esMotor
+            ? `The engine does not pass the smoke test; changes reverted.\n${r.detalle}`
+            : `The GPU file does not parse; it has not been written.\n${r.detalle}`,
         });
-      } catch (error) {
-        responderJson(res, 500, {
-          error: error instanceof Error ? error.message : String(error),
-        });
+        return;
       }
+      nota = esMotor ? `smoke: ${r.detalle}` : "gpu: syntax ok (validate by running with destino=lambda)";
+    } else {
+      mkdirSync(dirname(destino), { recursive: true });
+      writeFileSync(destino, datos.contenido, "utf8");
+      // Version snapshots (one per agent turn): the last ones are kept.
+      if (basename(dirname(destino)) === CARPETA_VERSIONES && nombre.endsWith(".json")) {
+        for (const viejo of versionesSobrantes(readdirSync(dirname(destino)))) {
+          try {
+            unlinkSync(resolve(dirname(destino), viejo));
+          } catch {
+            /* another write deleted it first */
+          }
+        }
+      }
+    }
+    if (esDeCodigo(datos.path)) {
+      await correr("herramientas/manifiesto.py", [], 60);
+    }
+
+    const bytes = Buffer.byteLength(datos.contenido, "utf8");
+    anotar(
+      ficheroHerramientas,
+      JSON.stringify({
+        t: new Date().toISOString(),
+        tool: "escribir_fichero",
+        path: datos.path,
+        bytes,
+      }),
+    );
+    responderJson(res, 200, { ok: true, path: datos.path, bytes, nota });
+  }));
+
+  server.middlewares.use("/api/fs/read", rutaJson<{ path?: string; desde?: number }>({ metodo: "POST" }, async ({ req, res, datos }) => {
+    const destino = datos.path ? resolverEnTrabajo(datos.path, slugProyecto(req.headers["x-miuzika-proyecto"])) : null;
+    if (!destino) {
+      responderJson(res, 403, { error: "path outside workspace/" });
+      return;
+    }
+    if (!existsSync(destino)) {
+      responderJson(res, 404, { error: "does not exist" });
+      return;
+    }
+    responderJson(res, 200, {
+      ok: true,
+      path: datos.path,
+      // By pages: the agent asks for `desde` to keep reading. Before, it was cut at
+      // 20,000 characters and the long output was saved to another file, which on
+      // re-reading was cut and saved again: the agent read in circles.
+      // Without `desde` (the app reading agente.json, for example) the whole thing is returned.
+      ...(datos.desde === undefined
+        ? { contenido: readFileSync(destino, "utf8") }
+        : pagina(readFileSync(destino, "utf8"), Number(datos.desde) || 0)),
     });
-  });
+  }));
 
   // Identifier of the served code: the tab compares it every 20 s and
   // warns if it is running an old bundle (HMR disconnected).
@@ -211,11 +186,7 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
     responderJson(res, 200, { ok: true, id: idDeBuild(), arrancado: arranqueServidor });
   });
 
-  server.middlewares.use("/api/fs/list", (req, res) => {
-    if (req.method !== "GET") {
-      responderJson(res, 405, { error: "use GET" });
-      return;
-    }
+  server.middlewares.use("/api/fs/list", rutaJson({ metodo: "GET" }, async ({ req, res }) => {
     // Without `carpeta`: the active project (what the agent needs to see).
     // With `carpeta=codigo` or `carpeta=` another zone of the space is requested.
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -232,101 +203,81 @@ export function rutasFicheros(server: ViteDevServer, ctx: Contexto): void {
       // Without this warning, a truncated listing reads as "it is not here".
       truncado: ficheros.length >= MAX_LISTADO,
     });
-  });
+  }));
 
   // The engine manifest, regenerated when requested (injected into the prompt).
-  server.middlewares.use("/api/manifiesto", async (req, res) => {
-    if (req.method !== "GET") {
-      responderJson(res, 405, { error: "use GET" });
-      return;
-    }
+  server.middlewares.use("/api/manifiesto", rutaJson({ metodo: "GET" }, async ({ res }) => {
     await correr("herramientas/manifiesto.py", [], 60);
     const rutaMd = resolve(carpetaTrabajo, "MANIFEST.md");
     const texto = existsSync(rutaMd)
       ? readFileSync(rutaMd, "utf8")
       : "(no manifest: run herramientas/manifiesto.py)";
     responderJson(res, 200, { ok: true, manifiesto: texto, bytes: texto.length });
-  });
+  }));
 
   // editar_fichero: exact replacement, with a smoke test if it touches the engine.
-  server.middlewares.use("/api/fs/edit", (req, res) => {
-    if (req.method !== "POST") {
-      responderJson(res, 405, { error: "use POST" });
+  server.middlewares.use("/api/fs/edit", rutaJson<{ path?: string; busca?: string; reemplaza?: string; todas?: boolean }>({ metodo: "POST" }, async ({ req, res, datos: d }) => {
+    if (!d.path || typeof d.busca !== "string" || typeof d.reemplaza !== "string") {
+      responderJson(res, 400, { error: "missing 'path', 'busca' or 'reemplaza'" });
       return;
     }
-    leerCuerpo(req, res, async (cuerpo) => {
-      try {
-        const d = JSON.parse(cuerpo) as {
-          path?: string;
-          busca?: string;
-          reemplaza?: string;
-          todas?: boolean;
-        };
-        if (!d.path || typeof d.busca !== "string" || typeof d.reemplaza !== "string") {
-          responderJson(res, 400, { error: "missing 'path', 'busca' or 'reemplaza'" });
-          return;
-        }
-        const destino = resolverEnTrabajo(d.path, slugProyecto(req.headers["x-miuzika-proyecto"]));
-        if (!destino) {
-          responderJson(res, 403, { error: "path outside workspace/" });
-          return;
-        }
-        if (!existsSync(destino)) {
-          responderJson(res, 404, { error: "does not exist" });
-          return;
-        }
-        if (soloLecturaParaElAgente(destino, carpetaTrabajo)) {
-          anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "editar_fichero", path: d.path, rechazado: "server script" }));
-          responderJson(res, 403, {
-            error:
-              "herramientas/ and the codigo/ files other than dsp, instruments, render and midi are run by the " +
-              "server and cannot be changed from the chat. Write your script in the project folder.",
-          });
-          return;
-        }
-        const antes = readFileSync(destino, "utf8");
-        const trozos = antes.split(d.busca);
-        const total = trozos.length - 1;
-        if (total === 0) {
-          responderJson(res, 409, {
-            error:
-              "that text does not appear in the file: copy the EXACT fragment (with its indentation) or use leer_fichero.",
-          });
-          return;
-        }
-        const todas = d.todas !== false;
-        const despues = todas ? trozos.join(d.reemplaza) : antes.replace(d.busca, d.reemplaza);
-        const esMotor = MOTOR.has(basename(destino)) && esDeCodigo(d.path);
-        if (esMotor || esDeGpu(d.path)) {
-          // Same rule as /api/fs/write: until 3-Nov an edit in gpu/ was not even parsed.
-          const r = await escribirComprobando(destino, despues, esMotor ? smokeDelMotor : () => parseaPython(destino));
-          if (!r.ok) {
-            responderJson(res, 400, {
-              error: esMotor
-                ? `The engine does not pass the smoke test; change reverted.\n${r.detalle}`
-                : `The GPU file would not parse; change reverted.\n${r.detalle}`,
-            });
-            return;
-          }
-        } else {
-          writeFileSync(destino, despues, "utf8");
-        }
-        if (esDeCodigo(d.path)) await correr("herramientas/manifiesto.py", [], 60);
-        anotar(
-          ficheroHerramientas,
-          JSON.stringify({
-            t: new Date().toISOString(),
-            tool: "editar_fichero",
-            path: d.path,
-            reemplazos: todas ? total : 1,
-          }),
-        );
-        responderJson(res, 200, { ok: true, path: d.path, reemplazos: todas ? total : 1, bytes: Buffer.byteLength(despues, "utf8") });
-      } catch (error) {
-        responderJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
+    const destino = resolverEnTrabajo(d.path, slugProyecto(req.headers["x-miuzika-proyecto"]));
+    if (!destino) {
+      responderJson(res, 403, { error: "path outside workspace/" });
+      return;
+    }
+    if (!existsSync(destino)) {
+      responderJson(res, 404, { error: "does not exist" });
+      return;
+    }
+    if (soloLecturaParaElAgente(destino, carpetaTrabajo)) {
+      anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "editar_fichero", path: d.path, rechazado: "server script" }));
+      responderJson(res, 403, {
+        error:
+          "herramientas/ and the codigo/ files other than dsp, instruments, render and midi are run by the " +
+          "server and cannot be changed from the chat. Write your script in the project folder.",
+      });
+      return;
+    }
+    const antes = readFileSync(destino, "utf8");
+    const trozos = antes.split(d.busca);
+    const total = trozos.length - 1;
+    if (total === 0) {
+      responderJson(res, 409, {
+        error:
+          "that text does not appear in the file: copy the EXACT fragment (with its indentation) or use leer_fichero.",
+      });
+      return;
+    }
+    const todas = d.todas !== false;
+    const despues = todas ? trozos.join(d.reemplaza) : antes.replace(d.busca, d.reemplaza);
+    const esMotor = MOTOR.has(basename(destino)) && esDeCodigo(d.path);
+    if (esMotor || esDeGpu(d.path)) {
+      // Same rule as /api/fs/write: until 3-Nov an edit in gpu/ was not even parsed.
+      const r = await escribirComprobando(destino, despues, esMotor ? smokeDelMotor : () => parseaPython(destino));
+      if (!r.ok) {
+        responderJson(res, 400, {
+          error: esMotor
+            ? `The engine does not pass the smoke test; change reverted.\n${r.detalle}`
+            : `The GPU file would not parse; change reverted.\n${r.detalle}`,
+        });
+        return;
       }
-    });
-  });
+    } else {
+      writeFileSync(destino, despues, "utf8");
+    }
+    if (esDeCodigo(d.path)) await correr("herramientas/manifiesto.py", [], 60);
+    anotar(
+      ficheroHerramientas,
+      JSON.stringify({
+        t: new Date().toISOString(),
+        tool: "editar_fichero",
+        path: d.path,
+        reemplazos: todas ? total : 1,
+      }),
+    );
+    responderJson(res, 200, { ok: true, path: d.path, reemplazos: todas ? total : 1, bytes: Buffer.byteLength(despues, "utf8") });
+  }));
 }
 
 /** One page of a long text: content, where it continues and how long it is. */

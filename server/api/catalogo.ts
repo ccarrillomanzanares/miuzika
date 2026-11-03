@@ -9,9 +9,10 @@ import { instrumentosDeSfz, resolverInstrumento, textoDeBiblioteca } from "../..
 import type { InstrumentoBiblioteca } from "../../src/core/biblioteca.ts";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
+import { rutaJson } from "../ruta.ts";
 
 export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
-  const { anotar, ficheroHerramientas, carpetaTrabajo, responderJson, leerCuerpo, slugProyecto, resolverEnTrabajo, correr } = ctx;
+  const { anotar, ficheroHerramientas, carpetaTrabajo, responderJson, slugProyecto, resolverEnTrabajo, correr } = ctx;
 
   // A library instrument, converted to .sf2 inside the project.
   // It is the way to play 46 regions instead of stretching a sample (which sounds
@@ -37,49 +38,38 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
     return bibliotecaSfz;
   };
 
-  server.middlewares.use("/api/instrumentos/crear", (req, res) => {
-    if (req.method !== "POST") {
-      responderJson(res, 405, { error: "use POST" });
+  server.middlewares.use("/api/instrumentos/crear", rutaJson<{ sfz?: string; nombre?: string }>({ metodo: "POST" }, async ({ req, res, datos }) => {
+        const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
+    let sfzRel = String(datos.sfz ?? "").trim();
+    let sfz = sfzRel ? resolverEnTrabajo(sfzRel, slug) : null;
+    if (!sfz || !existsSync(sfz)) {
+      // Also by name, as shown in listar_instrumentos: "Grand Piano, Steinway B".
+      const { instrumento, error } = resolverInstrumento(sfzRel, biblioteca());
+      if (!instrumento) {
+        responderJson(res, 404, { error: error ?? `SFZ does not exist: ${sfzRel}` });
+        return;
+      }
+      sfzRel = instrumento.ruta;
+      sfz = resolverEnTrabajo(sfzRel, slug);
+      if (!sfz || !existsSync(sfz)) {
+        responderJson(res, 404, { error: `SFZ does not exist: ${sfzRel}` });
+        return;
+      }
+    }
+    const carpeta = resolve(carpetaTrabajo, "proyectos", slug);
+    const nombre = String(datos.nombre || basename(sfz, ".sfz"));
+    const r = await correr(
+      "codigo/sfz_a_proyecto.py",
+      [sfz, carpeta, nombre],
+      600,
+      { procesos: true }, // it launches sfz2sf2.py
+    );
+    if (r.codigo !== 0) {
+      responderJson(res, 400, { error: (r.errores || r.salida).slice(-800) });
       return;
     }
-    leerCuerpo(req, res, async (cuerpo) => {
-      try {
-        const datos = JSON.parse(cuerpo) as { sfz?: string; nombre?: string };
-        const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
-        let sfzRel = String(datos.sfz ?? "").trim();
-        let sfz = sfzRel ? resolverEnTrabajo(sfzRel, slug) : null;
-        if (!sfz || !existsSync(sfz)) {
-          // Also by name, as shown in listar_instrumentos: "Grand Piano, Steinway B".
-          const { instrumento, error } = resolverInstrumento(sfzRel, biblioteca());
-          if (!instrumento) {
-            responderJson(res, 404, { error: error ?? `SFZ does not exist: ${sfzRel}` });
-            return;
-          }
-          sfzRel = instrumento.ruta;
-          sfz = resolverEnTrabajo(sfzRel, slug);
-          if (!sfz || !existsSync(sfz)) {
-            responderJson(res, 404, { error: `SFZ does not exist: ${sfzRel}` });
-            return;
-          }
-        }
-        const carpeta = resolve(carpetaTrabajo, "proyectos", slug);
-        const nombre = String(datos.nombre || basename(sfz, ".sfz"));
-        const r = await correr(
-          "codigo/sfz_a_proyecto.py",
-          [sfz, carpeta, nombre],
-          600,
-          { procesos: true }, // it launches sfz2sf2.py
-        );
-        if (r.codigo !== 0) {
-          responderJson(res, 400, { error: (r.errores || r.salida).slice(-800) });
-          return;
-        }
-        responderJson(res, 200, { ...JSON.parse(r.salida), sfz: sfzRel });
-      } catch (error) {
-        responderJson(res, 500, { error: String(error) });
-      }
-    });
-  });
+    responderJson(res, 200, { ...JSON.parse(r.salida), sfz: sfzRel });
+  }));
 
   // ---------------------------------------------------------- Sample catalog
   // Index of the CC0 library (codigo/catalogo.py). It is searched on the server
@@ -188,94 +178,72 @@ export function rutasCatalogo(server: ViteDevServer, ctx: Contexto): void {
     flujo.pipe(res);
   });
 
-  server.middlewares.use("/api/catalogo/buscar", (req, res) => {
-    if (req.method !== "POST") {
-      responderJson(res, 405, { error: "use POST" });
-      return;
-    }
-    leerCuerpo(req, res, (cuerpo) => {
-      try {
-        const datos = JSON.parse(cuerpo) as { consulta?: string; limite?: number; familia?: string };
-        const { entradas, total, raiz } = leerCatalogo();
-        const encontrados = buscarEnCatalogo(entradas, String(datos.consulta ?? ""), {
-          limite: Math.min(Math.max(Number(datos.limite ?? 8), 1), 50),
-          ...(datos.familia ? { familia: datos.familia } : {}),
-        });
-        responderJson(res, 200, {
-          ok: true,
-          total,
-          resultados: encontrados.map((r) => ({
-            archivo: r.entrada.ruta,
-            // For the <audio> element: path relative to workspace/.
-            rutaAudio: `catalogo/${raiz}/${String(r.entrada.ruta ?? "")}`,
-            instrumento: r.entrada.etiqueta,
-            familia: r.entrada.familia,
-            perfil: r.entrada.perfil,
-            strudel: (r.entrada as { strudel?: string | null }).strudel ?? null,
-            puntuacion: r.puntuacion,
-            motivos: r.motivos,
-          })),
-        });
-      } catch (error) {
-        responderJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
-      }
+  server.middlewares.use("/api/catalogo/buscar", rutaJson<{ consulta?: string; limite?: number; familia?: string }>({ metodo: "POST" }, async ({ res, datos }) => {
+    const { entradas, total, raiz } = leerCatalogo();
+    const encontrados = buscarEnCatalogo(entradas, String(datos.consulta ?? ""), {
+      limite: Math.min(Math.max(Number(datos.limite ?? 8), 1), 50),
+      ...(datos.familia ? { familia: datos.familia } : {}),
     });
-  });
+    responderJson(res, 200, {
+      ok: true,
+      total,
+      resultados: encontrados.map((r) => ({
+        archivo: r.entrada.ruta,
+        // For the <audio> element: path relative to workspace/.
+        rutaAudio: `catalogo/${raiz}/${String(r.entrada.ruta ?? "")}`,
+        instrumento: r.entrada.etiqueta,
+        familia: r.entrada.familia,
+        perfil: r.entrada.perfil,
+        strudel: (r.entrada as { strudel?: string | null }).strudel ?? null,
+        puntuacion: r.puntuacion,
+        motivos: r.motivos,
+      })),
+    });
+  }));
 
   // A sample from the catalog enters the project converted and normalized.
-  server.middlewares.use("/api/catalogo/importar", (req, res) => {
-    if (req.method !== "POST") {
-      responderJson(res, 405, { error: "use POST" });
+  server.middlewares.use("/api/catalogo/importar", rutaJson<{ archivo?: string; nombre?: string }>({ metodo: "POST" }, async ({ req, res, datos }) => {
+        const archivo = String(datos.archivo ?? "");
+    const nombre = String(datos.nombre ?? "").replace(/[^a-z0-9_-]+/gi, "-").toLowerCase();
+    if (archivo === "" || nombre === "") {
+      responderJson(res, 400, { ok: false, error: "missing 'archivo' or 'nombre'" });
       return;
     }
-    leerCuerpo(req, res, async (cuerpo) => {
-      try {
-        const datos = JSON.parse(cuerpo) as { archivo?: string; nombre?: string };
-        const archivo = String(datos.archivo ?? "");
-        const nombre = String(datos.nombre ?? "").replace(/[^a-z0-9_-]+/gi, "-").toLowerCase();
-        if (archivo === "" || nombre === "") {
-          responderJson(res, 400, { ok: false, error: "missing 'archivo' or 'nombre'" });
-          return;
-        }
-        const completo = resolve(carpetaTrabajo, "catalogo");
-        // The index stores the path relative to the library root
-        // ("Idiophones/…"), so it is tried with and without that root.
-        const indice = resolve(carpetaTrabajo, "catalogo", "catalogo-vcsl.json");
-        let raiz = "";
-        if (existsSync(indice)) {
-          const cabecera = JSON.parse(readFileSync(indice, "utf8")) as { raiz?: string };
-          raiz = String(cabecera.raiz ?? "");
-        }
-        const candidatos = [
-          resolve(carpetaTrabajo, "catalogo", archivo),
-          ...(raiz !== "" ? [resolve(carpetaTrabajo, "catalogo", raiz, archivo)] : []),
-        ];
-        const origen = candidatos.find((c) => c.startsWith(completo + sep) && existsSync(c));
-        if (!origen) {
-          responderJson(res, 404, { ok: false, error: `${archivo} does not exist` });
-          return;
-        }
-        const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
-        const r = await correr(
-          "codigo/importar_sample.py",
-          [origen, slug, nombre],
-          300,
-        );
-        const salida = (r.salida ?? "").trim().split("\n").filter((l) => l.startsWith("{")).pop();
-        if (!salida) {
-          responderJson(res, 500, { ok: false, error: (r.errores || r.salida).slice(-800) });
-          return;
-        }
-        anotar(
-          ficheroHerramientas,
-          JSON.stringify({ t: new Date().toISOString(), tool: "catalogo_importar", archivo, nombre }),
-        );
-        responderJson(res, 200, JSON.parse(salida));
-      } catch (error) {
-        responderJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
-      }
-    });
-  });
+    const completo = resolve(carpetaTrabajo, "catalogo");
+    // The index stores the path relative to the library root
+    // ("Idiophones/…"), so it is tried with and without that root.
+    const indice = resolve(carpetaTrabajo, "catalogo", "catalogo-vcsl.json");
+    let raiz = "";
+    if (existsSync(indice)) {
+      const cabecera = JSON.parse(readFileSync(indice, "utf8")) as { raiz?: string };
+      raiz = String(cabecera.raiz ?? "");
+    }
+    const candidatos = [
+      resolve(carpetaTrabajo, "catalogo", archivo),
+      ...(raiz !== "" ? [resolve(carpetaTrabajo, "catalogo", raiz, archivo)] : []),
+    ];
+    const origen = candidatos.find((c) => c.startsWith(completo + sep) && existsSync(c));
+    if (!origen) {
+      responderJson(res, 404, { ok: false, error: `${archivo} does not exist` });
+      return;
+    }
+    const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
+    const r = await correr(
+      "codigo/importar_sample.py",
+      [origen, slug, nombre],
+      300,
+    );
+    const salida = (r.salida ?? "").trim().split("\n").filter((l) => l.startsWith("{")).pop();
+    if (!salida) {
+      responderJson(res, 500, { ok: false, error: (r.errores || r.salida).slice(-800) });
+      return;
+    }
+    anotar(
+      ficheroHerramientas,
+      JSON.stringify({ t: new Date().toISOString(), tool: "catalogo_importar", archivo, nombre }),
+    );
+    responderJson(res, 200, JSON.parse(salida));
+  }));
 
   let presetsGm: { clave: string; texto: string } | null = null;
 

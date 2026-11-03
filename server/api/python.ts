@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { delimiter, resolve } from "node:path";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
+import { rutaJson } from "../ruta.ts";
 
 /** The launcher that watches the agent's scripts (see its header). Outside workspace/: the agent cannot edit it. */
 export const CAJA = resolve(process.cwd(), "server", "python", "caja.py");
@@ -80,23 +81,11 @@ export function escribiblesDelServidor(carpetaTrabajo: string): string[] {
 }
 
 export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
-  const { anotar, ficheroHerramientas, carpetaTrabajo, interprete, responderJson, leerCuerpo, slugProyecto, carpetaProyecto, resolverEnTrabajo, escritosDesde } = ctx;
+  const { anotar, ficheroHerramientas, carpetaTrabajo, interprete, responderJson, slugProyecto, carpetaProyecto, resolverEnTrabajo, escritosDesde } = ctx;
 
-  server.middlewares.use("/api/run/python", (req, res) => {
-    if (req.method !== "POST") {
-      responderJson(res, 405, { error: "use POST" });
-      return;
-    }
-    leerCuerpo(req, res, async (cuerpo) => {
-      let datos: { path?: string; argumentos?: string[]; timeout_segundos?: number };
-      try {
-        datos = JSON.parse(cuerpo) as typeof datos;
-      } catch (error) {
-        responderJson(res, 400, {
-          error: `invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
-        });
-        return;
-      }
+  server.middlewares.use(
+    "/api/run/python",
+    rutaJson<{ path?: string; argumentos?: string[]; timeout_segundos?: number }>({ metodo: "POST" }, async ({ req, res, datos }) => {
       if (!datos.path) {
         responderJson(res, 400, { error: "missing 'path'" });
         return;
@@ -174,6 +163,6 @@ export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
         errores: r.errores.slice(-8000),
         escritos: escritosDesde(slug, t0),
       });
-    });
-  });
+    }),
+  );
 }

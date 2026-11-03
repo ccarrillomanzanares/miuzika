@@ -305,7 +305,15 @@ signal, tree kill, `explicarFalloMudo`) replaces the four spawn wrappers (`conte
 `/api/run/python`, basic-pitch, lambda ssh/scp; the pad keeps its own long-lived process).
 Run against a test server on :5199: `ejecutar_python` ok / cut at 2 s / cancelled (no python
 left), `/api/manifiesto`, `/api/picos`, `/api/verificar`, and `ssh -V` via `/api/gpu/estado`.
-Left in step 4: route wrapper with logging, path resolver, `contexto.ts` slimmed.
+Then, same night: `registroApi` logs every /api request to `tmp/api.log` (not `/api/build` and
+`/api/gpu/estado`, which the tab polls); `rutaJson` (`server/ruta.ts`) took over 16 JSON routes
+(fs/*, manifiesto, run/python, picos, midi, verificar, transcribir, referencia/medir,
+instrumentos/crear, catalogo/buscar, catalogo/importar, trayectorias, proveedores/probar).
+Behaviour: bad JSON is 400 everywhere (some were 500); picos/midi/probar now refuse the wrong
+method; the 413 text names the route's limit. Left on purpose: the GPU routes and voces/nueva
+(Lambda chain, not testable without a paid start), streaming/binary/raw-text routes and the
+proxies. Each migrated route was hit on a :5199 server, Cancel logs "closed".
+Left in step 4: path resolver, `contexto.ts` slimmed.
 
 
 1. Draw buses and sends in the interface (mixer).

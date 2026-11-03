@@ -21,6 +21,7 @@ import { dirname, resolve } from "node:path";
 import { Readable } from "node:stream";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
+import { rutaJson } from "../ruta.ts";
 import {
   CONFIG_VACIA,
   PROVEEDORES,
@@ -120,44 +121,43 @@ export function rutasProveedores(server: ViteDevServer, ctx: Contexto, env: Reco
       .catch((error: unknown) => responderJson(res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) }));
   });
 
-  server.middlewares.use("/api/proveedores/probar", (req, res) => {
-    leerCuerpo(req, res, async (cuerpo) => {
-      try {
-        const { id, modelo } = JSON.parse(cuerpo) as { id?: string; modelo?: string };
-        const p = proveedorPorId(String(id));
-        if (!p) throw new Error("unknown provider");
-        const ajustes = leerConfig().proveedores[p.id];
-        const base = baseDe(p, ajustes);
-        const clave = claveDe(p, ajustes, env);
-        if (p.necesitaClave && !clave) throw new Error("missing the key");
-        const t0 = Date.now();
-        const r = await fetch(`${base}/chat/completions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...cabeceras(clave) },
-          body: JSON.stringify(
-            adaptarCuerpo(p, {
-              model: modelo || ajustes?.modelo || p.modeloPorDefecto,
-              messages: [{ role: "user", content: "Answer only: ok" }],
-              max_tokens: 16,
-              stream: false,
-            }),
-          ),
-          signal: AbortSignal.timeout(60_000),
-        });
-        const texto = await r.text();
-        if (!r.ok) throw new Error(`HTTP ${r.status}: ${texto.slice(0, 300)}`);
-        const datos = JSON.parse(texto) as { choices?: { message?: { content?: string } }[]; model?: string };
-        responderJson(res, 200, {
-          ok: true,
-          ms: Date.now() - t0,
-          modelo: datos.model,
-          respuesta: String(datos.choices?.[0]?.message?.content ?? "").slice(0, 80),
-        });
-      } catch (error) {
-        responderJson(res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) });
-      }
-    });
-  });
+  // Errors answer 200 with ok:false on purpose: the Models panel shows the text.
+  // rutaJson adds the POST guard it lacked (review 3-Nov, bug 9).
+  server.middlewares.use("/api/proveedores/probar", rutaJson<{ id?: string; modelo?: string }>({ metodo: "POST" }, async ({ res, datos: { id, modelo } }) => {
+    try {
+      const p = proveedorPorId(String(id));
+      if (!p) throw new Error("unknown provider");
+      const ajustes = leerConfig().proveedores[p.id];
+      const base = baseDe(p, ajustes);
+      const clave = claveDe(p, ajustes, env);
+      if (p.necesitaClave && !clave) throw new Error("missing the key");
+      const t0 = Date.now();
+      const r = await fetch(`${base}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...cabeceras(clave) },
+        body: JSON.stringify(
+          adaptarCuerpo(p, {
+            model: modelo || ajustes?.modelo || p.modeloPorDefecto,
+            messages: [{ role: "user", content: "Answer only: ok" }],
+            max_tokens: 16,
+            stream: false,
+          }),
+        ),
+        signal: AbortSignal.timeout(60_000),
+      });
+      const texto = await r.text();
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${texto.slice(0, 300)}`);
+      const datos = JSON.parse(texto) as { choices?: { message?: { content?: string } }[]; model?: string };
+      responderJson(res, 200, {
+        ok: true,
+        ms: Date.now() - t0,
+        modelo: datos.model,
+        respuesta: String(datos.choices?.[0]?.message?.content ?? "").slice(0, 80),
+      });
+    } catch (error) {
+      responderJson(res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  }));
 
   server.middlewares.use("/api/proveedores", (req, res, next) => {
     // Mounted after /modelos and /probar: only the root reaches here.

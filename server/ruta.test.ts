@@ -43,7 +43,7 @@ test("wrong method is 405, bad JSON is 400, an exception is 500 with its message
     assert.match(((await mal.json()) as { error: string }).error, /^invalid JSON/);
     const e = await fetch(`${base}/api/x`, { method: "POST", body: "{}" });
     assert.equal(e.status, 500);
-    assert.deepEqual(await e.json(), { error: "broke" });
+    assert.deepEqual(await e.json(), { ok: false, error: "broke" });
   });
 });
 

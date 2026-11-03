@@ -50,4 +50,5 @@ python workspace/herramientas/smoke.py   # Python engine (workspace/codigo)
 - `workspace/` — what the agent reads and writes: `codigo/` (numpy engine),
   `catalogo/` (VCSL, GM; outside git), `herramientas/` (smoke, manifest, touchpad),
   `proyectos/<folder>/` (outside git).
-- Logs: `tmp/llm.log` (every model call) and `tmp/herramientas.log`.
+- Logs: `tmp/llm.log` (every model call), `tmp/herramientas.log` and `tmp/api.log` (one line
+  per /api request: route, status, ms; "closed" = the client left first).
