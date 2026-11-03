@@ -254,6 +254,17 @@ export async function encender(
   throw new Error("the instance did not reach 'active' within 9 minutes");
 }
 
+/**
+ * Instances the app's off button may shut down: only the ones named like ours
+ * (LAMBDA_NOMBRE) that are on or starting. The account is shared with other projects
+ * (the SSH key is "aios-agent-rag"), and /api/gpu/estado lists every live instance in
+ * it: the button must never terminate someone else's machine (3-Nov).
+ */
+export function apagablesDe(lista: Instancia[], nombre: string): Instancia[] {
+  const vivos = new Set(["active", "booting", "loading", "unhealthy"]);
+  return lista.filter((i) => i.nombre === nombre && vivos.has(i.status));
+}
+
 /** Shuts down (terminates) the instance and confirms it disappears from the account. */
 export async function apagar(
   cfg: ConfigLambda,

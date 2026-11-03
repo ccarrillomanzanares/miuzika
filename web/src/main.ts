@@ -91,7 +91,10 @@ const songInfo = $("song-info");
 
 const chat = initChat();
 /** GPU spending counter (generic: fed by /api/gpu/estado). */
-const costeGpu = initCosteGpu(document.getElementById("gpu-coste"));
+const costeGpu = initCosteGpu(
+  document.getElementById("gpu-coste"),
+  document.getElementById("gpu-apagar") as HTMLButtonElement | null,
+);
 const costeLlm = initCosteLlm(document.getElementById("llm-coste"));
 
 const timeline = new TimelineView(canvas, wrap, heads);
@@ -276,9 +279,8 @@ async function responderAlUsuario(texto: string): Promise<void> {
     if (cancelador?.signal.aborted) {
       chat.update(
         burbuja,
-        // No GPU off control exists in the app yet (review 3-Nov, bug 3 and decision 7).
         "Turn cancelled by you. Whatever was already written to disk stays. The GPU run was stopped, but a " +
-          "Lambda instance that was started stays on and keeps billing until it is shut down from the Lambda console.",
+          "Lambda instance that was started stays on and keeps billing: shut it down with ⏻ Off next to the GPU counter.",
       );
       setStatus("✓ turn cancelled");
       void costeGpu.refrescar();

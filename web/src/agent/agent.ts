@@ -99,10 +99,10 @@ export async function ejecutarAgente(
   /** Closing answer when the user cancels. */
   const cancelado = (): ResultadoAgente => ({
     texto:
-      // The app has no GPU off control yet (review 3-Nov, bug 3 and decision 7): the text
-      // used to send people to a header toggle that never existed.
+      // Until 3-Nov this text sent people to a header toggle that did not exist; the
+      // ⏻ Off button next to the GPU counter was added then (review 3-Nov, decision 7).
       "Turn cancelled. Whatever was already written to disk stays. The GPU run was stopped, but a Lambda " +
-      "instance that was started stays on and keeps billing until it is shut down from the Lambda console.",
+      "instance that was started stays on and keeps billing: shut it down with ⏻ Off next to the GPU counter.",
     pasos,
     llamadas,
     ms: Date.now() - t0,

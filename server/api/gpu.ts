@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { relative, sep } from "node:path";
-import { apagar as apagarLambda, Cancelado, ejecutarEnLambda, encender as encenderLambda, estado as estadoLambda } from "../lambda.ts";
+import { apagablesDe, apagar as apagarLambda, Cancelado, ejecutarEnLambda, encender as encenderLambda, estado as estadoLambda, instancias as instanciasLambda } from "../lambda.ts";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 
@@ -93,40 +93,46 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       responderJson(res, 400, { error: `missing ${faltanLambda.join(", ")} in .env` });
       return;
     }
-    leerCuerpo(req, res, (cuerpo) => {
-      let id = maquinaLambda?.id ?? "";
+    // Called by the off button next to the GPU counter (added 3-Nov: the cancel texts
+    // promised a control that did not exist, review 3-Nov bug 3 and decision 7).
+    // Without an id it shuts down every instance of ours that is on or starting; with
+    // one, only if it is ours. It answers when Lambda confirms (up to ~200 s).
+    leerCuerpo(req, res, async (cuerpo) => {
+      const cfg = cfgLambda;
+      if (cfg === null) return;
+      let pedido = "";
       try {
         const datos = JSON.parse(cuerpo === "" ? "{}" : cuerpo) as { id?: string };
-        if (typeof datos.id === "string" && datos.id !== "") id = datos.id;
+        if (typeof datos.id === "string") pedido = datos.id;
       } catch {
-        /* no body: the session's instance is shut down */
+        /* no body: all of ours */
       }
-      if (id === "") {
-        responderJson(res, 400, {
-          error: "I do not know which instance to shut down: this session has not started any",
-        });
-        return;
-      }
-      apagarLambda(cfgLambda, id)
-        .then((r) => {
-          maquinaLambda = null;
+      try {
+        const nuestras = apagablesDe(await instanciasLambda(cfg), cfg.nombre);
+        const objetivo = pedido === "" ? nuestras : nuestras.filter((i) => i.id === pedido);
+        if (objetivo.length === 0) {
+          responderJson(res, pedido === "" ? 409 : 403, {
+            error:
+              pedido === ""
+                ? `there is no instance named ${cfg.nombre} on or starting`
+                : `${pedido} is not an instance of this app (${cfg.nombre}) that is on or starting`,
+          });
+          return;
+        }
+        const hechas = await Promise.all(
+          objetivo.map(async (i) => ({ id: i.id, ...(await apagarLambda(cfg, i.id)) })),
+        );
+        if (hechas.some((h) => h.id === maquinaLambda?.id)) maquinaLambda = null;
+        for (const h of hechas) {
           anotar(
             ficheroHerramientas,
-            JSON.stringify({
-              t: new Date().toISOString(),
-              tool: "lambda_apagar",
-              id,
-              apagada: r.apagada,
-              segundos: r.segundos,
-            }),
+            JSON.stringify({ t: new Date().toISOString(), tool: "lambda_apagar", id: h.id, apagada: h.apagada, segundos: h.segundos }),
           );
-          responderJson(res, 200, { ok: r.apagada, id, segundos: r.segundos });
-        })
-        .catch((error) =>
-          responderJson(res, 502, {
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        );
+        }
+        responderJson(res, 200, { ok: hechas.every((h) => h.apagada), apagadas: hechas });
+      } catch (error) {
+        responderJson(res, 502, { error: error instanceof Error ? error.message : String(error) });
+      }
     });
   });
 

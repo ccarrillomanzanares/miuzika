@@ -668,6 +668,19 @@ button.active {
 .chat-head .coste.desconocido {
   opacity: 0.7;
 }
+/* GPU off button: only shown while one of our instances is on or starting. */
+.chat-head .gpu-apagar {
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  border-color: #4a3f22;
+  color: #e5c07b;
+  white-space: nowrap;
+}
+.chat-head .gpu-apagar:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
 
 /* Execution target: the laptop CPU or a GPU on Lambda Cloud. */
 .chat-head .destino select {

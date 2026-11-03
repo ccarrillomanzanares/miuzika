@@ -12,7 +12,8 @@
  *     reloads and is not lost when the machine is shut down)
  */
 
-import { detalleCoste, normalizarEstadoGpu, textoCoste, type EstadoGpu } from "./gpu-texto.ts";
+import { detalleCoste, hayGpuQueApagar, normalizarEstadoGpu, textoCoste, type EstadoGpu } from "./gpu-texto.ts";
+import { t } from "./i18n.ts";
 
 // v3: v2 stored a total using the rate from .env (which might not be the real one).
 const CLAVE_SESION = "miuzika.gpu.sesion.v3";
@@ -25,8 +26,10 @@ export interface CosteGpu {
   estado(): EstadoGpu | null;
 }
 
-export function initCosteGpu(elemento: HTMLElement | null): CosteGpu {
+export function initCosteGpu(elemento: HTMLElement | null, boton: HTMLButtonElement | null = null): CosteGpu {
   if (!elemento) return { refrescar: async () => {}, estado: () => null };
+  /** True while /api/gpu/apagar is in flight (Lambda takes up to ~200 s to confirm). */
+  let apagando = false;
 
   let estado: EstadoGpu | null = null;
   let instanciaActual = "";
@@ -48,7 +51,15 @@ export function initCosteGpu(elemento: HTMLElement | null): CosteGpu {
     }
   };
 
+  const pintarBoton = (): void => {
+    if (!boton) return;
+    boton.hidden = !apagando && !hayGpuQueApagar(estado);
+    boton.disabled = apagando;
+    boton.textContent = apagando ? t("gpu.apagar.enCurso", "shutting down…") : t("gpu.apagar", "⏻ Off");
+  };
+
   const pintar = (): void => {
+    pintarBoton();
     if (!estado || !estado.configurado) {
       elemento.hidden = true;
       return;
@@ -88,6 +99,33 @@ export function initCosteGpu(elemento: HTMLElement | null): CosteGpu {
       if (estado === null) elemento.hidden = true;
     }
   };
+
+  // The off control the cancel texts promised (review 3-Nov, bug 3 and decision 7).
+  boton?.addEventListener("click", () => {
+    if (apagando) return;
+    const seguro = window.confirm(
+      t(
+        "gpu.apagar.confirmar",
+        "Shut down the GPU? It stops billing. Starting it again takes 3 to 7 minutes, and a GPU tool running now will fail.",
+      ),
+    );
+    if (!seguro) return;
+    apagando = true;
+    pintarBoton();
+    const fallo = t("gpu.apagar.fallo", "The GPU could not be shut down");
+    void fetch("/api/gpu/apagar", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+      .then(async (res) => {
+        const datos = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+        if (!res.ok || datos.ok !== true) window.alert(`${fallo}: ${datos.error ?? `HTTP ${res.status}`}`);
+      })
+      .catch((error: unknown) => {
+        window.alert(`${fallo}: ${error instanceof Error ? error.message : String(error)}`);
+      })
+      .finally(() => {
+        apagando = false;
+        void refrescar();
+      });
+  });
 
   void refrescar();
   window.setInterval(() => void refrescar(), CADA_POLVO_MS);

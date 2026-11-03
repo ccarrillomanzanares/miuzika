@@ -34,7 +34,20 @@ export interface EstadoGpu {
   moneda: string;
   gastado: number;
   proveedor?: string;
+  /** LAMBDA_NOMBRE: the only instances the off button may shut down. */
+  nombre?: string;
   instancias?: InstanciaGpu[];
+}
+
+/**
+ * Is there one of OUR instances on or starting? That is when the off button shows.
+ * The account is shared with other projects: an instance with another name never
+ * counts (the server refuses it too, `apagablesDe` in server/lambda.ts).
+ */
+export function hayGpuQueApagar(estado: EstadoGpu | null): boolean {
+  if (!estado?.configurado || !estado.nombre) return false;
+  const vivos = new Set(["active", "booting", "loading", "unhealthy"]);
+  return (estado.instancias ?? []).some((i) => i.nombre === estado.nombre && vivos.has(i.status));
 }
 
 const simbolo = (moneda: string): string => (moneda === "USD" ? "$" : moneda === "EUR" ? "€" : `${moneda} `);
@@ -152,6 +165,7 @@ export function normalizarEstadoGpu(crudo: unknown): EstadoGpu {
     moneda: typeof datos.moneda === "string" ? datos.moneda : "USD",
     gastado: Number.isFinite(Number(datos.gastado)) ? Number(datos.gastado) : 0,
     proveedor: typeof datos.proveedor === "string" ? datos.proveedor : undefined,
+    nombre: typeof datos.nombre === "string" ? datos.nombre : undefined,
     instancias,
   };
 }

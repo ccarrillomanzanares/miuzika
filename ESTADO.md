@@ -266,8 +266,11 @@ openDAW contract OK, smoke OK). Step 2 of section 10 (one WAV intake) is next.
 - `2d4f787` a gpu/ write or edit that does not parse keeps the old file (`escribirComprobando`).
 - `ea6df8f` the server's own Python scripts run in `caja.py` too; the agent can no longer write
   `herramientas/` or the non-engine `codigo/` files. All ten server scripts were run boxed by hand.
-- `a2ee158` Cancel stops a Lambda run (boot wait, sync, ssh). A started instance stays on: the
-  cancel text now says to shut it down from the Lambda console (decision 7 is still open).
+- `a2ee158` Cancel stops a Lambda run (boot wait, sync, ssh). A started instance stays on.
+- Decision 7, taken 3-Nov ("añade el botón"): a "⏻ Off" button next to the GPU counter, shown
+  only while an instance named LAMBDA_NOMBRE is on or starting; it asks for confirmation and
+  shuts down only our instances (the Lambda account is shared; the server refuses others).
+  Not clicked yet: needs a running instance.
 - `672f405` **behaviour change**: `generar_audio`, `proponer_midi`, `crear_voz` on GPU and
   `crear_sonido` with a GPU voice now need the chat selector on GPU, like `ejecutar_python`.
 - `9ea410a` Cancel reaches the file tools and five actions, and is reported as a cancel.

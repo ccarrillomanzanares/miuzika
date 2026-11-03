@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   detalleCoste,
   dinero,
+  hayGpuQueApagar,
   minutosYsegundos,
   normalizarEstadoGpu,
   sinSenales,
@@ -153,4 +154,16 @@ test("without signals it only warns after the threshold seconds", () => {
   assert.equal(sinSenales(AHORA - 30_000, AHORA), 0);
   assert.equal(sinSenales(AHORA - 90_000, AHORA), 0);
   assert.equal(sinSenales(AHORA - 132_000, AHORA), 132);
+});
+
+test("the off button shows only for our own instance on or starting", () => {
+  const estado = (instancias: { id: string; status: string; nombre: string }[]) =>
+    normalizarEstadoGpu({ configurado: true, nombre: "miuzika-gpu", precio_hora: 0.75, instancias });
+  assert.equal(hayGpuQueApagar(estado([{ id: "a", status: "active", nombre: "miuzika-gpu" }])), true);
+  assert.equal(hayGpuQueApagar(estado([{ id: "a", status: "booting", nombre: "miuzika-gpu" }])), true);
+  assert.equal(hayGpuQueApagar(estado([{ id: "a", status: "terminating", nombre: "miuzika-gpu" }])), false);
+  // Another project on the same Lambda account: never offered.
+  assert.equal(hayGpuQueApagar(estado([{ id: "d", status: "active", nombre: "aios-agent-rag" }])), false);
+  assert.equal(hayGpuQueApagar(estado([])), false);
+  assert.equal(hayGpuQueApagar(null), false);
 });

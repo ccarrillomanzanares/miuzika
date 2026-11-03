@@ -84,6 +84,12 @@ const ES: Diccionario = {
   "gpu.sinFacturar": "aún sin facturar",
   "gpu.apagandose": "apagándose…",
   "gpu.apagada": "GPU apagada",
+  "gpu.apagar": "⏻ Apagar",
+  "gpu.apagar.title": "Apagar la GPU de Lambda de esta app (factura por horas mientras está encendida)",
+  "gpu.apagar.enCurso": "apagando…",
+  "gpu.apagar.confirmar":
+    "¿Apagar la GPU? Deja de facturar. Volver a encenderla tarda de 3 a 7 minutos, y una herramienta de GPU que esté en marcha fallará.",
+  "gpu.apagar.fallo": "No se pudo apagar la GPU",
   "gpu.proveedor": "Proveedor",
   "gpu.tarifa": "tarifa",
   "gpu.hora": "hora",

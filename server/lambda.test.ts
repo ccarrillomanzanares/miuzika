@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { Cancelado, encender, ejecutarEnLambda, type ConfigLambda } from "./lambda.ts";
+import { apagablesDe, Cancelado, encender, ejecutarEnLambda, type ConfigLambda, type Instancia } from "./lambda.ts";
 
 const cfg: ConfigLambda = {
   apiKey: "falsa",
@@ -77,4 +77,17 @@ test("a cancel while the instance list loads stops before the launch call that s
     globalThis.fetch = original;
     api.restaurar();
   }
+});
+
+test("the off button only targets our own instances that are on or starting", () => {
+  const i = (id: string, nombre: string, status: string): Instancia => ({
+    id, nombre, status, ip: null, tipo: "gpu_1x_a10", desde: null, cambio: null, precioHora: 0.75, horas: 0, gastado: 0,
+  });
+  const lista = [
+    i("a", "miuzika-gpu", "active"),
+    i("b", "miuzika-gpu", "booting"),
+    i("c", "miuzika-gpu", "terminating"),
+    i("d", "aios-agent-rag", "active"), // another project on the same account
+  ];
+  assert.deepEqual(apagablesDe(lista, "miuzika-gpu").map((x) => x.id), ["a", "b"]);
 });
