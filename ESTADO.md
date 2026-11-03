@@ -262,7 +262,8 @@ commit each with a test); section 9 lists the decisions only Carlos can take. Ba
 `tsc` 0 errors, 245 unit tests green.
 
 **3-Nov, bugs 1-5 of the review fixed** (one commit each, with tests; 262 unit tests green,
-openDAW contract OK, smoke OK). Step 2 of section 10 (one WAV intake) is next.
+openDAW contract OK, smoke OK). Step 2 of section 10 (one WAV intake) was done the same day;
+step 3 (tool table with zod) is next.
 - `2d4f787` a gpu/ write or edit that does not parse keeps the old file (`escribirComprobando`).
 - `ea6df8f` the server's own Python scripts run in `caja.py` too; the agent can no longer write
   `herramientas/` or the non-engine `codigo/` files. All ten server scripts were run boxed by hand.
@@ -274,7 +275,11 @@ openDAW contract OK, smoke OK). Step 2 of section 10 (one WAV intake) is next.
 - `672f405` **behaviour change**: `generar_audio`, `proponer_midi`, `crear_voz` on GPU and
   `crear_sonido` with a GPU voice now need the chat selector on GPU, like `ejecutar_python`.
 - `9ea410a` Cancel reaches the file tools and five actions, and is reported as a cancel.
-Not run in a browser (the dev server was off): a GPU tool with the selector on CPU answers
+- One WAV intake (`cargarWavDeDisco`, `opsDeAudio`): behaviour change, the agent re-importing
+  a decoded WAV with the same name now replaces that track's clips (before, only streamed
+  ones did; decoded ones made a duplicate track).
+- `/api/run/lambda` takes `entradas`: input files uploaded whatever their folder or size.
+Not run in a browser (the dev server was off): importing WAVs with the Audio button and with anadir_pistas, and opening a project with audio; a GPU tool with the selector on CPU answers
 "The GPU is not allowed"; Cancel during `generar_audio` logs `cancelado: true` in
 `tmp/herramientas.log` and the instance stops at the step it was in; `usar_instrumento`,
 `usar_sample` and `medir_referencia` still work (they now run boxed).

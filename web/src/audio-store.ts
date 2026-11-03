@@ -12,7 +12,8 @@
  * the waveform computed on the server, and do not enter the mixer.
  */
 
-import type { Project } from "../../src/core/types.ts";
+import type { Project, Track } from "../../src/core/types.ts";
+import type { Op } from "../../src/core/ops.ts";
 import { idsDeAssets } from "../../src/core/project.ts";
 import { rutaEnWorkspace } from "../../src/core/rutas.ts";
 import { slugDe } from "../../src/core/nombres.ts";
@@ -147,49 +148,96 @@ export async function decodeAudioBlob(blob: Blob): Promise<AudioBuffer> {
   return decodeContext.decodeAudioData(await blob.arrayBuffer());
 }
 
-/** Fetches a WAV from the server and decodes it (only short ones: openDAW needs them in memory). */
-async function decodificarDeDisco(datos: {
+/**
+ * THE way a WAV on disk becomes an asset in memory: duration and peaks from the server,
+ * decoded when it fits the memory budget (reservarDecodificado), streamed otherwise.
+ * Used by the Audio button, by every agent tool that brings material in (anadir_pistas,
+ * usar_sample, generar_audio, transcribir_audio) and by project load.
+ *
+ * Until 3-Nov that flow existed three times (main.importarAudio, acciones.importarPistas,
+ * hidratarAssets) and the copies drifted: on 2-Nov the agent's copy had its own `>= 30 s`
+ * rule and a 30.000 s generar_audio take streamed, silent for escuchar_mezcla and the
+ * export (review 3-Nov, step 2).
+ */
+export async function cargarWavDeDisco(datos: {
   id: string;
   name: string;
-  /** Path relative to the project folder. */
+  /** Path relative to the project folder ("entrada/kick.wav"). */
   ruta: string;
-  /** Path used to request it from the server (with the project folder in front). */
-  completa: string;
+  slug: string;
   bpm: number;
+  /** The project's figure, when it already has one (project load). */
   durationBeats?: number;
-  peaks?: Float32Array;
+  /** The bytes, when the caller already has them (Audio button): no second download. */
+  fichero?: Blob;
+  senal?: AbortSignal;
 }): Promise<LoadedAsset> {
-  const res = await fetch(`/api/audio?path=${encodeURIComponent(datos.completa)}`);
-  if (!res.ok) throw new Error(`could not read ${datos.ruta}`);
-  const buffer = await decodeAudioBlob(await res.blob());
-  const asset: LoadedAsset = {
-    id: datos.id,
-    name: datos.name,
-    buffer,
-    durationBeats: datos.durationBeats ?? (buffer.duration * datos.bpm) / 60,
-    peaks: datos.peaks ?? computePeaks(buffer, 1024),
-    src: datos.ruta,
-    streaming: false,
-  };
-  audioAssets.set(asset.id, asset);
-  return asset;
+  const completa = rutaEnProyecto(datos.ruta, datos.slug);
+  const { picos, duracionSeg } = await metadatosWav(completa);
+  const durationBeats =
+    datos.durationBeats !== undefined && datos.durationBeats > 0
+      ? datos.durationBeats
+      : Math.max(0.25, (duracionSeg * datos.bpm) / 60);
+  const peaks = Float32Array.from(picos);
+  const soltar = reservarDecodificado(duracionSeg);
+  if (!soltar) {
+    registrarAssetStreaming({ id: datos.id, name: datos.name, durationBeats, src: datos.ruta, peaks });
+    return audioAssets.get(datos.id)!;
+  }
+  try {
+    let blob = datos.fichero;
+    if (!blob) {
+      const res = await fetch(`/api/audio?path=${encodeURIComponent(completa)}`, { signal: datos.senal });
+      if (!res.ok) throw new Error(`could not read ${datos.ruta} (HTTP ${res.status})`);
+      blob = await res.blob();
+    }
+    const buffer = await decodeAudioBlob(blob);
+    const asset: LoadedAsset = {
+      id: datos.id,
+      name: datos.name,
+      buffer,
+      durationBeats,
+      peaks: peaks.length > 0 ? peaks : computePeaks(buffer, 1024),
+      src: datos.ruta,
+      streaming: false,
+    };
+    audioAssets.set(asset.id, asset);
+    return asset;
+  } finally {
+    soltar();
+  }
 }
 
-/** Decodes a local file already uploaded to disk and leaves it ready for openDAW. */
-export async function loadAudioFile(file: File, bpm: number, src: string): Promise<LoadedAsset> {
-  const buffer = await decodeAudioBlob(file);
-  const name = file.name.replace(/\.[^.]+$/, "");
-  const asset: LoadedAsset = {
-    id: idDeAsset(name),
-    name,
-    buffer,
-    durationBeats: (buffer.duration * bpm) / 60,
-    peaks: computePeaks(buffer, 1024),
-    src,
-    streaming: false,
+/**
+ * Ops that put a loaded WAV on the timeline: register the asset and add one clip.
+ * With `reemplazar` (the agent's imports) a track with the same name gets its clips
+ * replaced, so re-importing a badly trimmed batch does not leave two identical tracks;
+ * until 3-Nov only the streaming copy did that and a decoded take was duplicated.
+ */
+export function opsDeAudio(
+  project: Project,
+  datos: { assetId: string; nombre: string; durationBeats: number; ruta: string; startBar: number; lengthBeats: number; reemplazar: boolean },
+): Op[] {
+  const existente: Track | undefined = datos.reemplazar
+    ? project.tracks.find((t) => t.kind === "audio" && t.name === datos.nombre)
+    : undefined;
+  const clip = {
+    op: "add_audio_clip" as const,
+    assetId: datos.assetId,
+    startBar: datos.startBar,
+    lengthBeats: datos.lengthBeats,
+    gainDb: 0,
+    name: datos.nombre,
   };
-  audioAssets.set(asset.id, asset);
-  return asset;
+  return [
+    { op: "register_audio_asset", assetId: datos.assetId, name: datos.nombre, durationBeats: datos.durationBeats, ruta: datos.ruta },
+    ...(existente
+      ? [
+          ...existente.clips.map((c) => ({ op: "remove_clip" as const, trackId: existente.id, clipId: c.id })),
+          { ...clip, trackId: existente.id },
+        ]
+      : [{ ...clip, track: { name: datos.nombre } }]),
+  ];
 }
 
 export { idsDeAssets };
@@ -220,35 +268,15 @@ export async function hidratarAssets(
       faltan.push(meta?.name ?? id);
       return;
     }
-    const completa = rutaEnProyecto(meta.ruta, slugProyecto);
     try {
-      const { picos, duracionSeg } = await metadatosWav(completa);
-      const durationBeats =
-        meta.durationBeats > 0 ? meta.durationBeats : (duracionSeg * project.bpm) / 60;
-      const soltar = reservarDecodificado(duracionSeg);
-      if (!soltar) {
-        registrarAssetStreaming({
-          id,
-          name: meta.name,
-          durationBeats,
-          src: meta.ruta,
-          peaks: Float32Array.from(picos),
-        });
-      } else {
-        try {
-          await decodificarDeDisco({
-            id,
-            name: meta.name,
-            ruta: meta.ruta,
-            completa,
-            bpm: project.bpm,
-            durationBeats,
-            peaks: Float32Array.from(picos),
-          });
-        } finally {
-          soltar();
-        }
-      }
+      await cargarWavDeDisco({
+        id,
+        name: meta.name,
+        ruta: meta.ruta,
+        slug: slugProyecto,
+        bpm: project.bpm,
+        durationBeats: meta.durationBeats,
+      });
       cargados++;
     } catch {
       faltan.push(meta.name);

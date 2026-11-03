@@ -33,13 +33,7 @@ import { notasDeBateria } from "../../../src/core/bateria.ts";
 import { nombreDeNota, resumenParaAgente } from "../../../src/core/resumen.ts";
 import { normalizarTexto, slugDe } from "../../../src/core/nombres.ts";
 import { MODE_NAMES, intervalosDe, pitchClass } from "../../../src/core/theory.ts";
-import {
-  reservarDecodificado,
-  loadAudioFile,
-  metadatosWav,
-  registrarAssetStreaming,
-  rutaEnProyecto,
-} from "../audio-store.ts";
+import { cargarWavDeDisco, idDeAsset, opsDeAudio } from "../audio-store.ts";
 import { listarProyectos } from "../proyecto-disco.ts";
 import { interpretarProyectoEnDisco } from "../proyecto-archivo.ts";
 import { CARPETA_VERSIONES, describirVersion, restaurarVersion } from "../../../src/core/versiones.ts";
@@ -116,7 +110,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
   /**
    * Creates real tracks in the project from files in workspace/: the .mid as MIDI tracks
    * with their notes and the .wav as audio tracks. It reuses the same path as the "Audio"
-   * importer (loadAudioFile -> persistAudioAsset -> ops).
+   * importer (cargarWavDeDisco -> opsDeAudio, in audio-store.ts).
    */
   async function importarPistas(
     peticion: PeticionPistas,
@@ -294,121 +288,42 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
         const recortado = prefijo && sinExt.startsWith(prefijo) ? sinExt.slice(prefijo.length) : sinExt;
         const nombre = (recortado || sinExt || "Audio").slice(0, 60);
 
-        // Same rule as the Audio button and project load (reservarDecodificado):
-        // decoded when ≤ 30 s or when it fits the memory budget; only the rest streams.
-        // Measured on 2-Nov: this used to have its own `>= 30 s` check, so a 30.000 s
-        // generar_audio take streamed and was SILENT for escuchar_mezcla and the export.
-        const meta = await metadatosWav(rutaEnProyecto(ruta, carpetaDeProyecto(project)));
-        const soltar = reservarDecodificado(meta.duracionSeg);
-        if (!soltar) {
-          const durationBeats = (meta.duracionSeg * current.bpm) / 60;
-          const assetId = `aud_st_${Date.now().toString(36)}_${contador++}`;
-          registrarAssetStreaming({
-            id: assetId,
-            name: nombre,
-            durationBeats,
-            src: ruta,
-            peaks: Float32Array.from(meta.picos),
-          });
-          const existente = current.tracks.find((t) => t.kind === "audio" && t.name === nombre);
-          current = applyOps(current, [
-            { op: "register_audio_asset", assetId, name: nombre, durationBeats, ruta },
-            ...(existente
-              ? [
-                  // Reimporting REPLACES that track's clips: that way a badly trimmed
-                  // batch is fixed without ending up with two identical tracks.
-                  ...existente.clips.map((clip) => ({
-                    op: "remove_clip" as const,
-                    trackId: existente.id,
-                    clipId: clip.id,
-                  })),
-                  {
-                    op: "add_audio_clip" as const,
-                    assetId,
-                    startBar: inicio,
-                    lengthBeats:
-                      compasesToma > 0
-                        ? compasesToma * beatsPerBar(current)
-                        : compasesDeAudio(durationBeats, beatsPerBar(current)),
-                    gainDb: 0,
-                    name: nombre,
-                    trackId: existente.id,
-                  },
-                ]
-              : [
-                  {
-                    op: "add_audio_clip" as const,
-                    assetId,
-                    startBar: inicio,
-                    lengthBeats:
-                      compasesToma > 0
-                        ? compasesToma * beatsPerBar(current)
-                        : compasesDeAudio(durationBeats, beatsPerBar(current)),
-                    gainDb: 0,
-                    name: nombre,
-                    track: { name: nombre },
-                  },
-                ]),
-          ]).project;
-          if (compasesToma > 0 && compasesToma * beatsPerBar(current) > durationBeats + 1e-6) {
-            avisos.push(
-              `${nombre}: you asked for ${compasesToma} bars but the WAV lasts ${durationBeats.toFixed(1)} beats ` +
-                `(${(durationBeats / beatsPerBar(current)).toFixed(2)} bars). The clip stays at what there is.`,
-            );
-          }
-          largoAudio = Math.max(
-            largoAudio,
-            compasesToma > 0 ? compasesToma * beatsPerBar(current) : compasesDeAudio(durationBeats, beatsPerBar(current)),
-          );
-          hechas.push(
-            `${nombre} (streaming audio, ${durationBeats.toFixed(1)} beats, not decoded)`,
-          );
-          continue;
-        }
-
-        let asset: Awaited<ReturnType<typeof loadAudioFile>>;
-        try {
-          const res = await fetch(`/api/audio?path=${encodeURIComponent(rutaEnProyecto(ruta, carpetaDeProyecto(project)))}`, { signal: senal });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const blob = await res.blob();
-          const file = new File([blob], fichero, { type: "audio/wav" });
-          // The asset points to its path on disk: the project is portable with no more.
-          asset = await loadAudioFile(file, current.bpm, ruta);
-        } finally {
-          soltar();
-        }
-        current = applyOps(current, [
-          {
-            op: "register_audio_asset",
+        // The one WAV intake (audio-store.ts): decoded when it fits the memory budget,
+        // streamed otherwise; a same-named track gets its clips replaced.
+        const asset = await cargarWavDeDisco({
+          id: idDeAsset(nombre),
+          name: nombre,
+          ruta,
+          slug: carpetaDeProyecto(project),
+          bpm: current.bpm,
+          senal,
+        });
+        const largo =
+          compasesToma > 0 ? compasesToma * beatsPerBar(current) : compasesDeAudio(asset.durationBeats, beatsPerBar(current));
+        current = applyOps(
+          current,
+          opsDeAudio(current, {
             assetId: asset.id,
-            name: asset.name,
+            nombre,
             durationBeats: asset.durationBeats,
             ruta,
-          },
-          {
-            op: "add_audio_clip",
-            assetId: asset.id,
             startBar: inicio,
-            lengthBeats:
-              compasesToma > 0
-                ? compasesToma * beatsPerBar(current)
-                : compasesDeAudio(asset.durationBeats, beatsPerBar(current)),
-            gainDb: 0,
-            name: nombre,
-            track: { name: nombre },
-          },
-        ]).project;
+            lengthBeats: largo,
+            reemplazar: true,
+          }),
+        ).project;
         if (compasesToma > 0 && compasesToma * beatsPerBar(current) > asset.durationBeats + 1e-6) {
           avisos.push(
-            `${nombre}: you asked for ${compasesToma} bars but the WAV lasts ${asset.durationBeats.toFixed(1)} beats. ` +
-              "The clip stays at what there is.",
+            `${nombre}: you asked for ${compasesToma} bars but the WAV lasts ${asset.durationBeats.toFixed(1)} beats ` +
+              `(${(asset.durationBeats / beatsPerBar(current)).toFixed(2)} bars). The clip stays at what there is.`,
           );
         }
-        largoAudio = Math.max(
-          largoAudio,
-          compasesToma > 0 ? compasesToma * beatsPerBar(current) : compasesDeAudio(asset.durationBeats, beatsPerBar(current)),
+        largoAudio = Math.max(largoAudio, largo);
+        hechas.push(
+          asset.streaming
+            ? `${nombre} (streaming audio, ${asset.durationBeats.toFixed(1)} beats, not decoded)`
+            : `${nombre} (audio, ${asset.durationBeats.toFixed(1)} beats)`,
         );
-        hechas.push(`${nombre} (audio, ${asset.durationBeats.toFixed(1)} beats)`);
       } catch (error) {
         fallos.push(`${ruta}: ${error instanceof Error ? error.message : String(error)}`);
       }

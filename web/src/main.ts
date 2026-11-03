@@ -9,15 +9,13 @@ import { applyOps } from "../../src/core/ops.ts";
 import type { Op } from "../../src/core/ops.ts";
 import {
   assetsPorStreaming,
-  reservarDecodificado,
   audioAssets,
+  cargarWavDeDisco,
   computePeaks,
   hidratarAssets,
   idDeAsset,
   liberarAssetsNoUsados,
-  loadAudioFile,
-  metadatosWav,
-  registrarAssetStreaming,
+  opsDeAudio,
   rutaEnProyecto,
 } from "./audio-store.ts";
 import { StemPlayer } from "./stem-player.ts";
@@ -1532,50 +1530,23 @@ async function importarAudio(files: File[], destino: "anadir" | "nuevo" = "anadi
         continue;
       }
 
-      // 2) duration and waveform are measured by the server (the WAV is already in place).
-      const meta = await metadatosWav(rutaEnProyecto(ruta, slug));
-      const segundos = meta.duracionSeg;
-      let assetId: string;
-      let nombre = file.name.replace(/\.[^.]+$/, "").slice(0, 60) || "Audio";
-      let durationBeats = Math.max(0.25, (segundos * current.bpm) / 60);
-
-      const soltar = reservarDecodificado(segundos);
-      if (!soltar) {
-        // Long and with no memory for it: it is not decoded (so 6-minute stems fit).
-        assetId = idDeAsset(nombre);
-        registrarAssetStreaming({
-          id: assetId,
-          name: nombre,
-          durationBeats,
-          src: ruta,
-          peaks: Float32Array.from(meta.picos),
-        });
-      } else {
-        // It fits: decoded so openDAW can play it.
-        const asset = await loadAudioFile(file, current.bpm, ruta).finally(soltar);
-        assetId = asset.id;
-        nombre = asset.name;
-        durationBeats = asset.durationBeats;
-      }
-
-      current = applyOps(current, [
-        {
-          op: "register_audio_asset",
-          assetId,
-          name: nombre,
-          durationBeats,
+      // 2) the one WAV intake (audio-store.ts): duration and waveform from the server,
+      // decoded if it fits the memory budget, streamed otherwise (6-minute stems fit).
+      // The bytes are already here, so a decoded file is not downloaded again.
+      const nombre = file.name.replace(/\.[^.]+$/, "").slice(0, 60) || "Audio";
+      const asset = await cargarWavDeDisco({ id: idDeAsset(nombre), name: nombre, ruta, slug, bpm: current.bpm, fichero: file });
+      current = applyOps(
+        current,
+        opsDeAudio(current, {
+          assetId: asset.id,
+          nombre,
+          durationBeats: asset.durationBeats,
           ruta,
-        },
-        {
-          op: "add_audio_clip",
-          assetId,
           startBar: bar,
-          lengthBeats: compasesDeAudio(durationBeats, beatsPerBar(current)),
-          gainDb: 0,
-          name: nombre,
-          track: { name: nombre },
-        },
-      ]).project;
+          lengthBeats: compasesDeAudio(asset.durationBeats, beatsPerBar(current)),
+          reemplazar: false,
+        }),
+      ).project;
       metidos++;
     }
 

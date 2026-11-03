@@ -127,3 +127,19 @@ test("Cancel cuts usar_sample while the server converts, instead of waiting up t
     globalThis.fetch = original;
   }
 });
+
+test("re-importing a decoded take replaces its clips instead of duplicating the track (3-Nov step 2)", async () => {
+  // Before 3-Nov only the streaming copy replaced; a 30 s take imported twice gave two tracks.
+  const restaurar = servidorFalso(30);
+  let proyecto: Project = createProject({ name: "Stahl", bpm: 125, lengthBars: 8 });
+  try {
+    const acciones = crearAcciones({ proyecto: () => proyecto, fijar: (p) => (proyecto = p), enVivo: (p) => (proyecto = p), avisar: () => {} });
+    await acciones.anadirPistas({ midis: [], wavs: ["generado/toma.wav"], inicioCompas: 0 });
+    await acciones.anadirPistas({ midis: [], wavs: ["generado/toma.wav"], inicioCompas: 0 });
+    const tomas = proyecto.tracks.filter((t) => t.name === "toma");
+    assert.equal(tomas.length, 1);
+    assert.equal(tomas[0]!.clips.length, 1);
+  } finally {
+    restaurar();
+  }
+});
