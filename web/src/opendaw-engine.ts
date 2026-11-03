@@ -7,6 +7,7 @@ import type { Project as MiuzikaProject } from "../../src/core/types.ts";
 import type { OpenDawAudioAsset, OpenDawDrumSample } from "../../src/host/opendaw/adapter.ts";
 import { projectToOpenDaw } from "../../src/host/opendaw/adapter.ts";
 import { repartirZonasGlobales } from "./soundfont-zonas.ts";
+import { KIT_POR_DEFECTO } from "../../src/core/bateria.ts";
 import workletsUrl from "@opendaw/studio-core/processors.js?url";
 import workersUrl from "@opendaw/studio-core/workers-main.js?worker&url";
 import wasmProcessorUrl from "@opendaw/studio-core-wasm/wasm-processor.js?url";
@@ -99,21 +100,8 @@ async function bootEngine(): Promise<EngineBoot> {
   }
 }
 
-const DRUM_FILES: ReadonlyArray<{ note: number; file: string; name: string }> = [
-  { note: 36, file: "kick-hard.wav", name: "Kick" },
-  { note: 38, file: "snare-hard.wav", name: "Snare" },
-  { note: 39, file: "clap-hard.wav", name: "Clap" },
-  { note: 42, file: "hat-hard.wav", name: "Hat" },
-  { note: 44, file: "hat-hard.wav", name: "Hat pedal" },
-  { note: 46, file: "hat-open.wav", name: "Open hat" },
-  { note: 45, file: "tom-low.wav", name: "Tom low" },
-  { note: 47, file: "tom-mid.wav", name: "Tom mid" },
-  { note: 48, file: "tom-high.wav", name: "Tom high" },
-  { note: 49, file: "crash.wav", name: "Crash" },
-  { note: 51, file: "ride.wav", name: "Ride" },
-  { note: 37, file: "rim.wav", name: "Rim" },
-  { note: 56, file: "cowbell.wav", name: "Cowbell" },
-];
+/** The default kit: one table with the escribir_bateria warning (src/core/bateria.ts). */
+const DRUM_FILES = KIT_POR_DEFECTO;
 
 interface OpenDawAudioInput {
   name: string;
