@@ -27,7 +27,8 @@ export interface OpenDawPlaybackHandle {
    * Live note on a track's instrument (the touchpad): `velocidad` 1..127 starts it,
    * 0 releases it. It sounds with the transport stopped or running.
    */
-  nota: (nombrePista: string, pitch: number, velocidad: number) => void;
+  /** `pista`: the track id (its name still works, for older callers). */
+  nota: (pista: string, pitch: number, velocidad: number) => void;
 }
 
 export interface OpcionesOpenDaw {
@@ -330,7 +331,7 @@ async function montarProyecto(
       },
     );
   }
-  return { project, context, core, Option };
+  return { project, context, core, Option, UUID, unidades: exported.unidades };
 }
 
 export async function playWithOpenDaw(
@@ -341,14 +342,20 @@ export async function playWithOpenDaw(
   gm: { uuid: Uint8Array; name: string; bytes: ArrayBuffer } | null = null,
   opciones: OpcionesOpenDaw = {},
 ): Promise<OpenDawPlaybackHandle> {
-  const { project, context } = await montarProyecto(source, audioAssets, soundfonts, gm);
-  const units = new Map(
-    project.rootBoxAdapter.audioUnits.adapters().map((unit) => [unit.label, unit] as const),
-  );
+  const { project, context, UUID, unidades } = await montarProyecto(source, audioAssets, soundfonts, gm);
+  // By the UUID the adapter recorded per track id (review 3-Nov bug 10); by label only
+  // for a track the adapter did not map.
+  const todas = project.rootBoxAdapter.audioUnits.adapters();
+  const porUuid = new Map<string, (typeof todas)[number]>(todas.map((unit) => [UUID.toString(unit.uuid), unit]));
+  const porNombre = new Map(todas.map((unit) => [unit.label, unit] as const));
+  const unidadDe = (track: { id: string; name: string }) => {
+    const uuid = unidades[track.id];
+    return (uuid !== undefined ? porUuid.get(uuid) : undefined) ?? porNombre.get(track.name);
+  };
   const syncMix = (source: MiuzikaProject): void => {
     project.editing.modify(() => {
       for (const track of source.tracks) {
-        const unit = units.get(track.name);
+        const unit = unidadDe(track);
         if (!unit) continue;
         unit.namedParameter.mute.setValue(track.muted);
         unit.namedParameter.solo.setValue(track.solo);
@@ -395,8 +402,8 @@ export async function playWithOpenDaw(
     play: () => {
       void arrancar();
     },
-    nota: (nombrePista, pitch, velocidad) => {
-      const unit = units.get(nombrePista);
+    nota: (pista, pitch, velocidad) => {
+      const unit = (unidades[pista] !== undefined ? porUuid.get(unidades[pista]!) : undefined) ?? porNombre.get(pista);
       if (!unit) return;
       const nota = Math.min(127, Math.max(0, Math.round(pitch)));
       project.engine.noteSignal(

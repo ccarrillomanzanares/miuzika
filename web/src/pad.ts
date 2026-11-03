@@ -295,7 +295,7 @@ export class PanelPad {
     else this.sonando.delete(nota.nota);
     const motor = this.deps.motorActual();
     try {
-      if (motor) motor.nota(track.name, nota.nota, nota.accion === "on" ? nota.velocidad : 0);
+      if (motor) motor.nota(track.id, nota.nota, nota.accion === "on" ? nota.velocidad : 0);
       else if (nota.accion === "on") void this.asegurarMotor();
     } catch {
       /* the engine was unloading: the next note requests it again */

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 
 import { applyOps } from "../../core/ops.ts";
 import { createProject } from "../../core/project.ts";
-import { projectToOpenDaw, openDawToProject } from "./adapter.ts";
+import { projectToOpenDaw, openDawToProject, uuidsDeUnidades } from "./adapter.ts";
 
 function countNotes(project: ReturnType<typeof createProject>): number {
   return project.tracks.reduce(
@@ -118,5 +118,20 @@ assert.equal(exportadoBus.stats.sends, 2);
 assert.equal(exportadoBus.stats.devices, 1, "the bus reverb");
 const reimportadoBus = await openDawToProject(exportadoBus.bytes);
 assert.equal(reimportadoBus.project.tracks.length, 2, "the bus does not sneak in as a track when reimporting");
+
+// --- Units by track id (review 3-Nov bug 10): two tracks with the same name must map to
+// two different units, and those UUIDs must exist after Project.load (the engine's view).
+const gemelas = applyOps(createProject({ name: "openDAW twins", lengthBars: 1 }), [
+  { op: "add_track", id: "trk_x", name: "Lead", instrument: { type: "lead" } },
+  { op: "add_track", id: "trk_y", name: "Lead", instrument: { type: "pad" } },
+  { op: "add_track", id: "trk_z", name: "Toma", kind: "audio" },
+]).project;
+const exportadoGemelas = await projectToOpenDaw(gemelas);
+const { trk_x, trk_y, trk_z } = exportadoGemelas.unidades;
+assert.ok(trk_x && trk_y && trk_z, "every track, audio included, has its unit");
+assert.notEqual(trk_x, trk_y, "same name, different units");
+const cargadas = new Set(await uuidsDeUnidades(exportadoGemelas.bytes));
+for (const uuid of [trk_x, trk_y, trk_z]) assert.ok(cargadas.has(uuid!), `unit ${uuid} survives Project.load`);
+console.log(`units: ${Object.keys(exportadoGemelas.unidades).length} tracks mapped by uuid, ${cargadas.size} units after load`);
 
 console.log("OPENDAW OK");

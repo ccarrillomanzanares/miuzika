@@ -30,6 +30,13 @@ import { Option, UUID } from "@opendaw/lib-std";
 interface OpenDawExport {
   bytes: ArrayBuffer;
   warnings: string[];
+  /**
+   * miuzika track id → UUID (string) of its openDAW audio unit. The UUIDs survive the
+   * serialization, so the engine finds each track's unit after Project.load without
+   * going by name (review 3-Nov bug 10: two tracks with the same name, or a rename after
+   * Play, sent mute/solo/volume and the pad's notes to the wrong unit).
+   */
+  unidades: Record<string, string>;
   stats: {
     tracks: number;
     regions: number;
@@ -199,6 +206,10 @@ export async function projectToOpenDaw(
   const warnings: string[] = [];
   const stats = { tracks: 0, regions: 0, notes: 0, devices: 0, skippedDevices: 0, buses: 0, sends: 0 };
   const audioFileByAsset = new Map<string, unknown>();
+  const unidades: Record<string, string> = {};
+  const anotarUnidad = (trackId: string, audioUnitBox: unknown): void => {
+    unidades[trackId] = UUID.toString((audioUnitBox as { address: { uuid: UUID.Bytes } }).address.uuid);
+  };
 
   try {
     project.editing.modify(() => {
@@ -309,6 +320,7 @@ export async function projectToOpenDaw(
             adapters.InstrumentFactories.Tape as never,
             { name: track.name } as never,
           );
+          anotarUnidad(track.id, product.audioUnitBox);
           const unit = project.boxAdapters.adapterFor(
             product.audioUnitBox,
             adapters.AudioUnitBoxAdapter,
@@ -418,6 +430,7 @@ export async function projectToOpenDaw(
         }
 
         aplicarMezcla(product.audioUnitBox, track);
+        anotarUnidad(track.id, product.audioUnitBox);
         aplicarEfectos(product.audioUnitBox, track);
         aplicarEnvios(product.audioUnitBox, track);
 
@@ -446,13 +459,24 @@ export async function projectToOpenDaw(
     });
 
     const bytes = new Uint8Array(project.toArrayBuffer()).buffer as ArrayBuffer;
-    return { bytes, warnings, stats };
+    return { bytes, warnings, stats, unidades };
   } finally {
     project.terminate();
   }
 }
 
 /** Reads an openDAW project and converts it to our IR. */
+/** UUIDs of the audio units in a serialized project, as the engine sees them after load (for check.ts). */
+export async function uuidsDeUnidades(bytes: ArrayBuffer): Promise<string[]> {
+  const { core } = await loadSdk();
+  const project = core.Project.load(createHeadlessEnv() as never, bytes);
+  try {
+    return project.rootBoxAdapter.audioUnits.adapters().map((unit: { uuid: UUID.Bytes }) => UUID.toString(unit.uuid));
+  } finally {
+    project.terminate();
+  }
+}
+
 export async function openDawToProject(bytes: ArrayBuffer): Promise<OpenDawImport> {
   const { core, adapters, boxes } = await loadSdk();
   const env = createHeadlessEnv();
