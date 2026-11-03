@@ -7,10 +7,10 @@
  * The routes (`server/api/*.ts`) receive this object and share nothing else.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { relative, resolve, sep } from "node:path";
-import { CARPETAS_OCULTAS, rutaEnWorkspace } from "../src/core/rutas.ts";
+import { resolve } from "node:path";
+import { rutaEnWorkspace } from "../src/core/rutas.ts";
 import { slugDe } from "../src/core/nombres.ts";
 import { configDesdeEnv } from "./lambda.ts";
 import { crearRegistros } from "./registro.ts";
@@ -20,6 +20,7 @@ import type { Comprobacion } from "./escritura-verificada.ts";
 import { CAJA, entornoDeCaja, escribiblesDelServidor } from "./api/python.ts";
 import { MOTOR } from "./solo-lectura.ts";
 import { dentroDe } from "./dentro.ts";
+import { MAX_LISTADO, cambiadosDesde, ficherosDeTrabajo, proyectosEnDisco } from "./trabajo.ts";
 
 export function crearContexto(env: Record<string, string>) {
   // Lambda is OFF unless MIUZIKA_LAMBDA=on: Carlos asked on 31-Oct to stop using the
@@ -166,107 +167,10 @@ export function crearContexto(env: Record<string, string>) {
     return dentro ? destino : null;
   };
 
-  /** Inventory of the projects on disk: those that have proyecto.json. */
-  const listarProyectosDisco = (): Record<string, unknown>[] => {
-    const carpeta = resolve(carpetaTrabajo, "proyectos");
-    if (!existsSync(carpeta)) return [];
-    const salida: Record<string, unknown>[] = [];
-    for (const entrada of readdirSync(carpeta, { withFileTypes: true })) {
-      if (!entrada.isDirectory()) continue;
-      const maestro = resolve(carpeta, entrada.name, "proyecto.json");
-      if (!existsSync(maestro)) continue;
-      const ruta = `proyectos/${entrada.name}/proyecto.json`;
-      const bytes = statSync(maestro).size;
-      const actualizado = statSync(maestro).mtime.toISOString();
-      try {
-        // Only the header is read: the file with all the notes can be large.
-        const datos = JSON.parse(readFileSync(maestro, "utf8")) as {
-          guardadoEn?: string;
-          proyecto?: { name?: string; bpm?: number; lengthBars?: number; tracks?: unknown[] };
-        };
-        const proyecto = datos.proyecto ?? {};
-        salida.push({
-          slug: entrada.name,
-          ruta,
-          nombre: String(proyecto.name ?? entrada.name),
-          bpm: Number(proyecto.bpm ?? 0),
-          compases: Number(proyecto.lengthBars ?? 0),
-          pistas: Array.isArray(proyecto.tracks) ? proyecto.tracks.length : 0,
-          guardadoEn: String(datos.guardadoEn ?? ""),
-          actualizado,
-          bytes,
-        });
-      } catch (error) {
-        salida.push({
-          slug: entrada.name,
-          ruta,
-          nombre: entrada.name,
-          bpm: 0,
-          compases: 0,
-          pistas: 0,
-          guardadoEn: "",
-          actualizado,
-          bytes,
-          error: error instanceof Error ? error.message : "unreadable proyecto.json",
-        });
-      }
-    }
-    return salida.sort((a, b) => String(b.actualizado).localeCompare(String(a.actualizado)));
-  };
-
-  /**
-   * Inventory of files in the workspace.
-   *
-   * Optional `carpeta`: "" = the root (without hidden folders), "proyectos/<slug>",
-   * "codigo"… CARPETAS_OCULTAS folders are never traversed: `catalogo/`
-   * is 4,231 files and put 573 KB into the model context, which arrives
-   * trimmed to head and tail (that is: the agent did not see the middle, which is where
-   * its files were). It is queried with `buscar_sonido`, not by listing.
-   */
-  const MAX_LISTADO = 2000;
-  const listarTrabajo = (
-    carpeta = "",
-  ): { path: string; bytes: number }[] => {
-    if (!existsSync(carpetaTrabajo)) return [];
-    const relativa = carpeta.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-    const inicio = relativa === "" ? carpetaTrabajo : resolve(carpetaTrabajo, relativa);
-    const dentro = dentroDe(carpetaTrabajo, inicio, { incluirRaiz: true });
-    if (!dentro || !existsSync(inicio)) return [];
-    const salida: { path: string; bytes: number }[] = [];
-    const recorrer = (dir: string): void => {
-      if (salida.length >= MAX_LISTADO) return;
-      for (const entrada of readdirSync(dir, { withFileTypes: true })) {
-        if (salida.length >= MAX_LISTADO) return;
-        const completo = resolve(dir, entrada.name);
-        if (entrada.isDirectory()) {
-          if ((CARPETAS_OCULTAS as readonly string[]).includes(entrada.name)) continue;
-          recorrer(completo);
-        } else {
-          salida.push({
-            path: relative(carpetaTrabajo, completo).split(sep).join("/"),
-            bytes: statSync(completo).size,
-          });
-        }
-      }
-    };
-    recorrer(inicio);
-    return salida;
-  };
-
-  /** Files in the project folder that changed since `desde` (ms). */
-  const escritosDesde = (slug: string, desde: number): string[] => {
-    const carpeta = resolve(carpetaTrabajo, "proyectos", slug);
-    if (!existsSync(carpeta)) return [];
-    return listarTrabajo(`proyectos/${slug}`)
-      .filter((f) => {
-        try {
-          return statSync(resolve(carpetaTrabajo, f.path)).mtimeMs >= desde;
-        } catch {
-          return false;
-        }
-      })
-      .map((f) => f.path.slice(`proyectos/${slug}/`.length));
-  };
+  // Disk inventory (server/trabajo.ts), bound to this workspace.
+  const listarProyectosDisco = (): Record<string, unknown>[] => proyectosEnDisco(carpetaTrabajo);
+  const listarTrabajo = (carpeta = ""): { path: string; bytes: number }[] => ficherosDeTrabajo(carpetaTrabajo, carpeta);
+  const escritosDesde = (slug: string, desde: number): string[] => cambiadosDesde(carpetaTrabajo, slug, desde);
 
   /**
    * Launches a script from workspace/ and returns output, errors and exit code.
