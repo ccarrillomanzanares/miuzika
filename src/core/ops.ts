@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import type { Bus, Clip, Device, DeviceType, Note, Project, Track } from "./types.ts";
+import type { Bus, Clip, Device, DeviceType, Mode, Note, Project, Track } from "./types.ts";
 import {
   DEVICE_DEFAULTS,
   DEVICE_PARAMS,
@@ -60,11 +60,18 @@ const KeySchema = z.object({
   mode: z.enum(MODE_NAMES),
 });
 
+/**
+ * The key as text too ("E", "E minor", "F#m", "Bb dorian"). Measured on 3-Nov in
+ * "cain-uriel": DeepSeek sent `key: "E"` twice, both whole batches were rejected
+ * ("expected object") and the agent gave up setting the length in the same op.
+ */
+const KeyInput = z.union([KeySchema, z.string().min(1).max(24)]);
+
 const SetSongOp = z.object({
   op: z.literal("set_song"),
   name: z.string().min(1).max(80).optional(),
   bpm: z.number().min(20).max(300).optional(),
-  key: KeySchema.optional(),
+  key: KeyInput.optional(),
   lengthBars: BarsSchema.optional(),
   seed: z.number().int().optional(),
 });
@@ -507,6 +514,21 @@ function defaultDeviceId(track: { devices: Device[] }, type: DeviceType): string
 // Application
 // ---------------------------------------------------------------------------
 
+/** "E" (keeps `modoActual`), "E minor", "Em", "F#m", "Bb major", "D dorian". */
+export function keyFromText(texto: string, modoActual: Mode): { tonic: string; mode: Mode } {
+  const m = /^\s*([A-Ga-g](?:#|b)?)\s*(.*?)\s*$/.exec(texto);
+  const resto = (m?.[2] ?? "").toLowerCase().replace(/[\s_-]+/g, "");
+  const alias: Record<string, Mode> = { "": modoActual, m: "minor", min: "minor", maj: "major" };
+  const porNombre = MODE_NAMES.find((n) => n.toLowerCase() === resto);
+  const mode = m?.[2] === "M" ? "major" : (alias[resto] ?? porNombre);
+  if (!m || !mode) {
+    throw new OpError(
+      `Invalid key "${texto}": use {"tonic":"E","mode":"minor"} or text like "E minor" / "F#m" (modes: ${MODE_NAMES.join(", ")}).`,
+    );
+  }
+  return { tonic: m[1]!.charAt(0).toUpperCase() + m[1]!.slice(1), mode };
+}
+
 function applyOne(project: Project, op: ParsedOp): string {
   switch (op.op) {
     case "set_song": {
@@ -515,12 +537,13 @@ function applyOne(project: Project, op: ParsedOp): string {
       if (op.lengthBars !== undefined) project.lengthBars = op.lengthBars;
       if (op.seed !== undefined) project.seed = op.seed;
       if (op.key) {
+        const key = typeof op.key === "string" ? keyFromText(op.key, project.key.mode) : op.key;
         try {
-          pitchClass(op.key.tonic);
+          pitchClass(key.tonic);
         } catch {
-          throw new OpError(`Invalid tonic: "${op.key.tonic}"`);
+          throw new OpError(`Invalid tonic: "${key.tonic}"`);
         }
-        project.key = { tonic: canonicalPitchClass(op.key.tonic), mode: op.key.mode };
+        project.key = { tonic: canonicalPitchClass(key.tonic), mode: key.mode };
       }
       return `Song: ${project.name} · ${project.bpm} BPM · ${project.key.tonic} ${project.key.mode} · ${project.lengthBars} bars`;
     }

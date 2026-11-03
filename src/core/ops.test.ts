@@ -308,3 +308,22 @@ test("a device's loose parameters are applied, not lost (what happened in \"Hard
     /It is now called "thresholdDb"/,
   );
 });
+
+test("set_song takes the key as text, keeping the mode when only the tonic is given", () => {
+  // 3-Nov, "cain-uriel": key "E" was rejected twice with "expected object".
+  const solo = applyOps(baseProject(), [{ op: "set_song", key: "E", lengthBars: 80 } as unknown as Op]).project;
+  assert.deepEqual(solo.key, { tonic: "E", mode: "minor" });
+  assert.equal(solo.lengthBars, 80);
+  const casos: [string, string, string][] = [
+    ["E minor", "E", "minor"],
+    ["F#m", "F#", "minor"],
+    ["bb major", "A#", "major"], // canonicalPitchClass spells flats as sharps, as for the object form
+    ["D dorian", "D", "dorian"],
+    ["A harmonicMinor", "A", "harmonicMinor"],
+  ];
+  for (const [texto, tonic, mode] of casos) {
+    const p = applyOps(baseProject(), [{ op: "set_song", key: texto } as unknown as Op]).project;
+    assert.deepEqual(p.key, { tonic, mode }, texto);
+  }
+  assert.throws(() => applyOps(baseProject(), [{ op: "set_song", key: "H blues" } as unknown as Op]), /Invalid key "H blues"/);
+});
