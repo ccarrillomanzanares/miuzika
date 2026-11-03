@@ -240,7 +240,7 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
   }));
 
   // verificar_audio: objective metrics of a WAV (do not rewrite analyzers).
-  server.middlewares.use("/api/verificar", rutaJson<{ path?: string }>({ metodo: "POST" }, async ({ req, res, datos: d }) => {
+  server.middlewares.use("/api/verificar", rutaJson<{ path?: string; timeout_segundos?: number }>({ metodo: "POST" }, async ({ req, res, datos: d }) => {
         const destino = d.path ? resolverEnTrabajo(d.path, slugProyecto(req.headers["x-miuzika-proyecto"])) : null;
     if (!destino) {
       responderJson(res, 403, { error: "path outside workspace/" });
@@ -250,7 +250,10 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
       responderJson(res, 404, { error: "does not exist" });
       return;
     }
-    const r = await correr("herramientas/verificar_audio.py", [destino], 180);
+    // The tool's limit (180 by default, 1800 at most, as its description says).
+    const pedido = Number(d.timeout_segundos);
+    const segundos = Number.isFinite(pedido) && pedido > 0 ? Math.min(Math.max(pedido, 10), 1800) : 180;
+    const r = await correr("herramientas/verificar_audio.py", [destino], segundos);
     anotar(
       ficheroHerramientas,
       JSON.stringify({ t: new Date().toISOString(), tool: "verificar_audio", path: d.path, codigo: r.codigo }),

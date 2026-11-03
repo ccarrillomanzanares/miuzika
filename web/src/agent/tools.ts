@@ -1667,7 +1667,9 @@ export const MANEJADORES: Record<string, Manejador> = {
     const tope = Number(args.timeout_segundos);
     const datos = await pedirJson(
       "/api/verificar",
-      { path: args.path },
+      // timeout_segundos reaches the server since 3-Nov (review bug 9): before, the browser
+      // waited longer but the server still cut the measurement at 180 s.
+      { path: args.path, ...(Number.isFinite(tope) && tope > 0 ? { timeout_segundos: tope } : {}) },
       Number.isFinite(tope) && tope > 0 ? tope * 1000 + 45000 : 225000,
       senal,
     );
