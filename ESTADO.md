@@ -296,7 +296,8 @@ nothing built: `docs/PLAN-MODELOS-MUSICA.md`, last section. Mastering is a separ
 Carlos, 3-Nov: "la exportación wav funcionó ayer" (the 2-Nov fix of check 16 works in the app).
 
 **Lambda, 3-Nov night:** `/api/gpu/estado` says our instance is off (`fase: apagada`); the
-only instance on the shared account is someone else's, terminating. `3d46b7f046ca` is no longer
+other one listed (`295bdec6…`, "terminating") has been stuck like that for about a year, a
+provider-side fault; Carlos, 3-Nov: it is not billing. Ignore it. `3d46b7f046ca` is no longer
 billing. The "⏻ Off" button is still unclicked.
 
 **3-Nov night, step 4 started**: `server/proceso.ts` `correrProceso` (time limit, cancel by
