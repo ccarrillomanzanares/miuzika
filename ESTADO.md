@@ -295,6 +295,11 @@ nothing built: `docs/PLAN-MODELOS-MUSICA.md`, last section. Mastering is a separ
 
 Carlos, 3-Nov: "la exportación wav funcionó ayer" (the 2-Nov fix of check 16 works in the app).
 
+**Possibly still billing (3-Nov):** Lambda instance `3d46b7f046ca` (129.158.202.216), started
+2-Nov 21:31 UTC for the two "Vacío" `generar_audio` takes; no shutdown was ever logged in
+`tmp/herramientas.log`. Carlos to turn it off (Lambda console, or "⏻ Off" as its first real
+test). Next session: browser checks above, then review section 10 step 4 (it restarts the server).
+
 
 1. Draw buses and sends in the interface (mixer).
 2. Seen on 28-Oct with the agent. Fixed on 1-Nov (not yet exercised in a browser):
