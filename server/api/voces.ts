@@ -43,6 +43,12 @@ export function rutasVoces(server: ViteDevServer, ctx: Contexto): void {
       responderJson(res, 405, { error: "use POST" });
       return;
     }
+    // Cancel in the app closes this request; the loopback call to /api/run/lambda is
+    // cut with it, and that route then stops the Lambda run (review 3-Nov, bug 3).
+    const corte = new AbortController();
+    res.on("close", () => {
+      if (!res.writableEnded) corte.abort();
+    });
     leerCuerpo(req, res, async (cuerpo) => {
       const rutaInstruments = resolve(carpetaTrabajo, "codigo", "instruments.py");
       try {
@@ -84,6 +90,7 @@ export function rutasVoces(server: ViteDevServer, ctx: Contexto): void {
           const host = req.headers.host ?? "localhost:5173";
           const respuesta = await fetch(`http://${host}/api/run/lambda`, {
             method: "POST",
+            signal: corte.signal,
             headers: { "Content-Type": "application/json", "x-miuzika-proyecto": encodeURIComponent(slugProyecto(req.headers["x-miuzika-proyecto"])) },
             body: JSON.stringify({
               path: "gpu/gate_voz_gpu.py",

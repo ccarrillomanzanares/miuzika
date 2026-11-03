@@ -276,8 +276,9 @@ async function responderAlUsuario(texto: string): Promise<void> {
     if (cancelador?.signal.aborted) {
       chat.update(
         burbuja,
-        "Turn cancelled by you. Whatever was already written to disk stays; if a GPU is running, " +
-          "stop it from the counter in the header (it keeps billing until it stops).",
+        // No GPU off control exists in the app yet (review 3-Nov, bug 3 and decision 7).
+        "Turn cancelled by you. Whatever was already written to disk stays. The GPU run was stopped, but a " +
+          "Lambda instance that was started stays on and keeps billing until it is shut down from the Lambda console.",
       );
       setStatus("✓ turn cancelled");
       void costeGpu.refrescar();

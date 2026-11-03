@@ -169,14 +169,44 @@ export async function instancias(cfg: ConfigLambda): Promise<Instancia[]> {
   });
 }
 
-const esperar = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+/** The client went away (Cancel in the app). Thrown so no further step starts. */
+export class Cancelado extends Error {
+  constructor() {
+    super("cancelled by the user");
+    this.name = "Cancelado";
+  }
+}
+
+function comprobarCancelado(senal?: AbortSignal): void {
+  if (senal?.aborted) throw new Cancelado();
+}
+
+/** A pause that ends early, with Cancelado, when the turn is cancelled. */
+const esperar = (ms: number, senal?: AbortSignal): Promise<void> =>
+  new Promise((listo, fallo) => {
+    if (senal?.aborted) {
+      fallo(new Cancelado());
+      return;
+    }
+    const alAbortar = (): void => {
+      clearTimeout(t);
+      fallo(new Cancelado());
+    };
+    const t = setTimeout(() => {
+      senal?.removeEventListener("abort", alAbortar);
+      listo();
+    }, ms);
+    senal?.addEventListener("abort", alAbortar, { once: true });
+  });
 
 /** Powers on the instance or reuses the one already alive with that name. */
 export async function encender(
   cfg: ConfigLambda,
   aviso: (texto: string) => void,
+  senal?: AbortSignal,
 ): Promise<{ id: string; ip: string; reutilizada: boolean; minutos: number }> {
   const t0 = Date.now();
+  comprobarCancelado(senal);
   const vivas = (await instancias(cfg)).filter(
     (i) => i.nombre === cfg.nombre && i.status !== "terminated",
   );
@@ -187,6 +217,9 @@ export async function encender(
   }
 
   let id = vivas[0]?.id ?? "";
+  // Last check before the call that starts billing: a turn cancelled while the
+  // instance list was loading must not launch a machine.
+  comprobarCancelado(senal);
   if (id === "") {
     aviso(`launching ${cfg.tipo} in ${cfg.region}`);
     const resp = (await api(cfg, "instance-operations/launch", {
@@ -202,7 +235,9 @@ export async function encender(
   }
 
   for (let intento = 0; intento < 90; intento++) {
-    await esperar(6000);
+    // Cancel stops the 9-minute wait here (3-Nov review, bug 3). An instance already
+    // launched keeps booting and billing: shutting it down is the person's call.
+    await esperar(6000, senal);
     const mia = (await instancias(cfg)).find((i) => i.id === id);
     if (mia?.status === "active" && mia.ip) {
       aviso(`active in ${Math.round((Date.now() - t0) / 1000)} s: ${mia.ip}`);
@@ -240,9 +275,21 @@ function correrComando(
   comando: string,
   args: string[],
   segundos: number,
+  senal?: AbortSignal,
 ): Promise<{ codigo: number | null; salida: string; errores: string }> {
   return new Promise((listo) => {
     const hijo = spawn(comando, args, { windowsHide: true });
+    const matar = (): void => {
+      if (!hijo.pid) return;
+      if (process.platform === "win32") spawn("taskkill", ["/PID", String(hijo.pid), "/T", "/F"]);
+      else hijo.kill("SIGKILL");
+    };
+    const alAbortar = (): void => {
+      errores += `\n[miuzika] ${comando} cancelled\n`;
+      matar();
+    };
+    if (senal?.aborted) alAbortar();
+    else senal?.addEventListener("abort", alAbortar, { once: true });
     let salida = "";
     let errores = "";
     let cerrado = false;
@@ -250,13 +297,11 @@ function correrComando(
       if (cerrado) return;
       cerrado = true;
       if (temporizador) clearTimeout(temporizador);
+      senal?.removeEventListener("abort", alAbortar);
       listo({ codigo, salida, errores });
     };
     const temporizador = setTimeout(() => {
-      if (hijo.pid) {
-        if (process.platform === "win32") spawn("taskkill", ["/PID", String(hijo.pid), "/T", "/F"]);
-        else hijo.kill("SIGKILL");
-      }
+      matar();
       errores += `\n[miuzika] ${comando} cut off after ${segundos} s\n`;
       setTimeout(() => terminar(null), 2000);
     }, segundos * 1000);
@@ -293,8 +338,9 @@ export function ssh(
   ip: string,
   comando: string,
   segundos = 300,
+  senal?: AbortSignal,
 ): Promise<{ codigo: number | null; salida: string; errores: string }> {
-  return correrComando("ssh", [...opcionesSsh(cfg), `${cfg.usuario}@${ip}`, comando], segundos);
+  return correrComando("ssh", [...opcionesSsh(cfg), `${cfg.usuario}@${ip}`, comando], segundos, senal);
 }
 
 function scp(
@@ -303,12 +349,14 @@ function scp(
   locales: string[],
   destinoRemoto: string,
   segundos = 900,
+  senal?: AbortSignal,
 ): Promise<{ codigo: number | null; salida: string; errores: string }> {
   return correrComando(
     "scp",
     ["-q", "-r", "-i", cfg.sshKey, "-o", "StrictHostKeyChecking=accept-new", "-o", "LogLevel=ERROR",
       ...locales, `${cfg.usuario}@${ip}:${destinoRemoto}`],
     segundos,
+    senal,
   );
 }
 
@@ -355,6 +403,7 @@ export async function sincronizar(
   ip: string,
   carpetaTrabajo: string,
   slug: string,
+  senal?: AbortSignal,
 ): Promise<{ codigo: number | null; errores: string; ficheros: number }> {
   const dirs = [
     `${REMOTO}/codigo`,
@@ -363,31 +412,31 @@ export async function sincronizar(
     `${REMOTO}/plantillas`,
     `${REMOTO}/proyectos/${slug}/salida`,
   ];
-  const mk = await ssh(cfg, ip, `mkdir -p ${dirs.map((d) => `~/${d}`).join(" ")}`, 60);
+  const mk = await ssh(cfg, ip, `mkdir -p ${dirs.map((d) => `~/${d}`).join(" ")}`, 60, senal);
   if (mk.codigo !== 0) return { codigo: mk.codigo, errores: mk.errores, ficheros: 0 };
 
   let total = 0;
   const motor = pyDe(join(carpetaTrabajo, "codigo"));
   if (motor.length > 0) {
-    const r = await scp(cfg, ip, motor, `${REMOTO}/codigo/`);
+    const r = await scp(cfg, ip, motor, `${REMOTO}/codigo/`, 900, senal);
     if (r.codigo !== 0) return { codigo: r.codigo, errores: `motor: ${r.errores}`, ficheros: 0 };
     total += motor.length;
   }
   const gpu = pyDe(join(carpetaTrabajo, "gpu"));
   if (gpu.length > 0) {
-    const r = await scp(cfg, ip, gpu, `${REMOTO}/gpu/`);
+    const r = await scp(cfg, ip, gpu, `${REMOTO}/gpu/`, 900, senal);
     if (r.codigo !== 0) return { codigo: r.codigo, errores: `gpu: ${r.errores}`, ficheros: 0 };
     total += gpu.length;
   }
   const herramientas = pyDe(join(carpetaTrabajo, "herramientas"));
   if (herramientas.length > 0) {
-    const r = await scp(cfg, ip, herramientas, `${REMOTO}/herramientas/`);
+    const r = await scp(cfg, ip, herramientas, `${REMOTO}/herramientas/`, 900, senal);
     if (r.codigo !== 0) return { codigo: r.codigo, errores: `herramientas: ${r.errores}`, ficheros: 0 };
     total += herramientas.length;
   }
   const proyecto = ficherosDelProyecto(join(carpetaTrabajo, "proyectos", slug));
   if (proyecto.length > 0) {
-    const r = await scp(cfg, ip, proyecto, `${REMOTO}/proyectos/${slug}/`);
+    const r = await scp(cfg, ip, proyecto, `${REMOTO}/proyectos/${slug}/`, 900, senal);
     if (r.codigo !== 0) return { codigo: r.codigo, errores: `proyecto: ${r.errores}`, ficheros: 0 };
     total += proyecto.length;
   }
@@ -450,6 +499,8 @@ export interface PeticionLambda {
   carpetaTrabajo: string;
   slug: string;
   aviso: (texto: string) => void;
+  /** Aborted when the HTTP client goes away: no later step starts (3-Nov review, bug 3). */
+  senal?: AbortSignal;
 }
 
 export async function ejecutarEnLambda(
@@ -467,8 +518,9 @@ export async function ejecutarEnLambda(
   nota: string;
 }> {
   const t0 = Date.now();
-  const arranque = await encender(cfg, p.aviso);
-  const sinc = await sincronizar(cfg, arranque.ip, p.carpetaTrabajo, p.slug);
+  const arranque = await encender(cfg, p.aviso, p.senal);
+  const sinc = await sincronizar(cfg, arranque.ip, p.carpetaTrabajo, p.slug, p.senal);
+  comprobarCancelado(p.senal);
   if (sinc.codigo !== 0) {
     return {
       ok: false, id: arranque.id, ip: arranque.ip, codigo: sinc.codigo, salida: "",
@@ -496,7 +548,14 @@ export async function ejecutarEnLambda(
     `PYTHONPATH=~/${REMOTO}/codigo PYTHONUNBUFFERED=1 PYTHONIOENCODING=utf-8 ` +
     `timeout -k 5 ${p.segundos} python3 -u ${comillas(script)} ${args}`;
 
-  const r = await ssh(cfg, arranque.ip, comando, p.segundos + 60);
+  comprobarCancelado(p.senal);
+  const r = await ssh(cfg, arranque.ip, comando, p.segundos + 60, p.senal);
+  if (p.senal?.aborted) {
+    // Killing the local ssh does not stop the remote python: it would keep the GPU
+    // memory (ACE-Step takes 16 of the A10's 24 GB) and the next run would not fit.
+    await ssh(cfg, arranque.ip, `pkill -f -- ${comillas(script)}`, 20);
+    throw new Cancelado();
+  }
   const traida = await traerNuevos(cfg, arranque.ip, p.carpetaTrabajo, p.slug);
   p.aviso(`done; ${traida.traidos.length} file(s) brought back`);
 

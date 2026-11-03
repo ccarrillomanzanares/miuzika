@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { relative, sep } from "node:path";
-import { apagar as apagarLambda, ejecutarEnLambda, encender as encenderLambda, estado as estadoLambda } from "../lambda.ts";
+import { apagar as apagarLambda, Cancelado, ejecutarEnLambda, encender as encenderLambda, estado as estadoLambda } from "../lambda.ts";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 
@@ -200,7 +200,15 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
 
       const avisos: string[] = [];
       const t0Lambda = Date.now();
+      // Cancel in the app closes this request: from then on no step starts (no boot
+      // wait, no sync, the ssh is cut). Before 3-Nov a cancelled turn kept polling
+      // the boot for up to 9 minutes and then ran the script (review 3-Nov, bug 3).
+      const corte = new AbortController();
+      res.on("close", () => {
+        if (!res.writableEnded) corte.abort();
+      });
       ejecutarEnLambda(cfgLambda, {
+        senal: corte.signal,
         scriptRel: relativo,
         argumentos,
         segundos,
@@ -247,6 +255,13 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
           });
         })
         .catch((error) => {
+          if (error instanceof Cancelado) {
+            anotar(
+              ficheroHerramientas,
+              JSON.stringify({ t: new Date().toISOString(), tool: "ejecutar_python_lambda", path: datos.path, cancelado: true, ms: Date.now() - t0Lambda, avisos }),
+            );
+            return; // nobody is listening any more
+          }
           responderJson(res, 502, {
             error: error instanceof Error ? error.message : String(error),
             avisos,
