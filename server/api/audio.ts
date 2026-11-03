@@ -1,6 +1,6 @@
 /** Project audio: upload, serve with Range, waveform peaks, MIDI to notes, measurements of a WAV and of a reference. */
 
-import { spawn } from "node:child_process";
+import { correrProceso } from "../proceso.ts";
 import { existsSync, mkdirSync, readdirSync, renameSync, statSync, writeFileSync, createReadStream } from "node:fs";
 import { basename, resolve } from "node:path";
 import type { ViteDevServer } from "vite";
@@ -281,34 +281,13 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
         const carpeta = resolve(carpetaProyecto(slug), "transcripciones");
         mkdirSync(carpeta, { recursive: true });
         const t0 = Date.now();
-        const r = await new Promise<{ codigo: number | null; salida: string; errores: string }>((listo) => {
-          // PYTHONUTF8: the CLI prints a unicode banner and dies on the Windows code page without it.
-          const hijo = spawn(basicPitch, argumentosBasicPitch(carpeta, origen, d.bpm), {
-            cwd: carpetaTrabajo,
-            env: { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" },
-            windowsHide: true,
-          });
-          let salida = "";
-          let errores = "";
-          let cerrado = false;
-          const terminar = (codigo: number | null): void => {
-            if (cerrado) return;
-            cerrado = true;
-            clearTimeout(temporizador);
-            listo({ codigo, salida, errores });
-          };
-          const temporizador = setTimeout(() => {
-            if (hijo.pid) {
-              if (process.platform === "win32") spawn("taskkill", ["/PID", String(hijo.pid), "/T", "/F"]);
-              else hijo.kill("SIGKILL");
-            }
-            errores += "\n[miuzika] basic-pitch cut off after 300 s\n";
-            setTimeout(() => terminar(null), 2000);
-          }, 300_000);
-          hijo.stdout.on("data", (t: Buffer) => { salida += t.toString("utf8"); });
-          hijo.stderr.on("data", (t: Buffer) => { errores += t.toString("utf8"); });
-          hijo.on("close", (codigo) => terminar(codigo));
-          hijo.on("error", (error) => { errores += error.message; terminar(null); });
+        // PYTHONUTF8: the CLI prints a unicode banner and dies on the Windows code page without it.
+        const r = await correrProceso(basicPitch, argumentosBasicPitch(carpeta, origen, d.bpm), {
+          segundos: 300,
+          nombre: "basic-pitch",
+          cwd: carpetaTrabajo,
+          env: { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" },
+          windowsHide: true,
         });
         // basic-pitch names the file <stem>_basic_pitch.mid; the project wants <nombre>.mid.
         const base = basename(origen).replace(/\.[^.]+$/, "");

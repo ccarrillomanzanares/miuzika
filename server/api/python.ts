@@ -1,6 +1,6 @@
 /** Run a Python script on this machine, with a time limit and cancellation, inside the sandbox. */
 
-import { spawn } from "node:child_process";
+import { correrProceso } from "../proceso.ts";
 import { existsSync } from "node:fs";
 import { delimiter, resolve } from "node:path";
 import type { ViteDevServer } from "vite";
@@ -87,7 +87,7 @@ export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
       responderJson(res, 405, { error: "use POST" });
       return;
     }
-    leerCuerpo(req, res, (cuerpo) => {
+    leerCuerpo(req, res, async (cuerpo) => {
       let datos: { path?: string; argumentos?: string[]; timeout_segundos?: number };
       try {
         datos = JSON.parse(cuerpo) as typeof datos;
@@ -121,7 +121,14 @@ export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
       const motor = resolve(carpetaTrabajo, "codigo");
 
       const t0 = Date.now();
-      const hijo = spawn(interprete, ["-u", CAJA, script, ...argumentos], {
+      // "Cancel" in the app aborts the fetch: the connection closes and the process has to
+      // die with it. Before, it kept rendering until its own limit. 'close' also fires after
+      // a normal answer; by then the run is over and aborting does nothing.
+      const control = new AbortController();
+      res.on("close", () => control.abort());
+      const r = await correrProceso(interprete, ["-u", CAJA, script, ...argumentos], {
+        segundos,
+        nombre: datos.path,
         cwd: cwdProyecto,
         env: entornoDeCaja(process.env, {
           motor,
@@ -129,104 +136,43 @@ export function rutasPython(server: ViteDevServer, ctx: Contexto): void {
           repo: process.cwd(),
           workspace: carpetaTrabajo,
         }),
-        // Own group outside Windows: this way `kill(-pid)` also kills the grandchildren.
-        detached: process.platform !== "win32",
+        senal: control.signal,
       });
-      let salida = "";
-      let errores = "";
-      hijo.stdout.on("data", (trozo: Buffer) => {
-        salida += trozo.toString("utf8");
-      });
-      hijo.stderr.on("data", (trozo: Buffer) => {
-        errores += trozo.toString("utf8");
-      });
-
-      let avisado = false;
-      let porTiempo = false;
-      let temporizador: NodeJS.Timeout | null = null;
-
-      /** Answers ONCE only (exit and close may both arrive). */
-      const terminar = (codigo: number | null, senal: string | null): void => {
-        if (avisado) return;
-        avisado = true;
-        if (temporizador) clearTimeout(temporizador);
-        const ms = Date.now() - t0;
+      if (r.cancelado) {
         anotar(
           ficheroHerramientas,
-          JSON.stringify({
-            t: new Date().toISOString(),
-            tool: "ejecutar_python",
-            path: datos.path,
-            argumentos,
-            codigo,
-            senal,
-            ms,
-            por_timeout: porTiempo,
-            salida: salida.slice(-600),
-            errores: errores.slice(-600),
-          }),
+          JSON.stringify({ t: new Date().toISOString(), tool: "ejecutar_python", path: datos.path, cancelado: true }),
         );
-        responderJson(res, 200, {
-          ok: codigo === 0,
-          codigo,
-          senal,
-          ms,
-          por_timeout: porTiempo,
-          salida: salida.slice(-8000),
-          errores: errores.slice(-8000),
-          escritos: escritosDesde(slug, t0),
-        });
-      };
-
-      /** Kills the process AND its descendants: on Windows 'python' is a launcher
-       *  that leaves a grandchild with the pipes open (otherwise they are orphaned). */
-      const matarArbol = (): void => {
-        const pid = hijo.pid;
-        if (!pid) return;
-        if (process.platform === "win32") {
-          spawn("taskkill", ["/PID", String(pid), "/T", "/F"]);
-        } else {
-          try {
-            process.kill(-pid, "SIGKILL");
-          } catch {
-            hijo.kill("SIGKILL");
-          }
-        }
-      };
-
-      // "Cancel" in the app aborts the fetch: the connection closes and the process
-      // has to die with it. Before, it kept rendering until its own limit.
-      res.on("close", () => {
-        if (!avisado) {
-          avisado = true;
-          if (temporizador) clearTimeout(temporizador);
-          anotar(
-            ficheroHerramientas,
-            JSON.stringify({ t: new Date().toISOString(), tool: "ejecutar_python", path: datos.path, cancelado: true }),
-          );
-          matarArbol();
-        }
-      });
-
-      temporizador = setTimeout(() => {
-        porTiempo = true;
-        matarArbol();
-        // Safety net: if the tree does not die, the request does not hang.
-        setTimeout(() => terminar(null, "timeout"), 5000);
-      }, segundos * 1000);
-
-      // 'exit' arrives even if a grandchild keeps the pipes; 'close' only if they close.
-      hijo.on("exit", (codigo, senal) => {
-        setTimeout(() => terminar(codigo, senal), 150);
-      });
-      hijo.on("close", (codigo, senal) => terminar(codigo, senal));
-      hijo.on("error", (error) => {
-        if (avisado) return;
-        avisado = true;
-        if (temporizador) clearTimeout(temporizador);
-        responderJson(res, 500, {
-          error: `could not launch '${interprete}': ${error.message}`,
-        });
+        return;
+      }
+      if (r.errorArranque) {
+        responderJson(res, 500, { error: `could not launch '${interprete}': ${r.errorArranque}` });
+        return;
+      }
+      anotar(
+        ficheroHerramientas,
+        JSON.stringify({
+          t: new Date().toISOString(),
+          tool: "ejecutar_python",
+          path: datos.path,
+          argumentos,
+          codigo: r.codigo,
+          senal: r.senal,
+          ms: r.ms,
+          por_timeout: r.porTiempo,
+          salida: r.salida.slice(-600),
+          errores: r.errores.slice(-600),
+        }),
+      );
+      responderJson(res, 200, {
+        ok: r.codigo === 0,
+        codigo: r.codigo,
+        senal: r.senal,
+        ms: r.ms,
+        por_timeout: r.porTiempo,
+        salida: r.salida.slice(-8000),
+        errores: r.errores.slice(-8000),
+        escritos: escritosDesde(slug, t0),
       });
     });
   });

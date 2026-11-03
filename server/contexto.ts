@@ -7,7 +7,6 @@
  * The routes (`server/api/*.ts`) receive this object and share nothing else.
  */
 
-import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { relative, resolve, sep } from "node:path";
@@ -16,7 +15,7 @@ import { slugDe } from "../src/core/nombres.ts";
 import { configDesdeEnv } from "./lambda.ts";
 import { crearAlmacenPrecios } from "./precios.ts";
 import { costeDe } from "../src/core/precios.ts";
-import { explicarFalloMudo } from "./fallo-proceso.ts";
+import { correrProceso } from "./proceso.ts";
 import type { Comprobacion } from "./escritura-verificada.ts";
 import { CAJA, entornoDeCaja, escribiblesDelServidor } from "./api/python.ts";
 import { MOTOR } from "./solo-lectura.ts";
@@ -369,55 +368,25 @@ export function crearContexto(env: Record<string, string>) {
     argumentos: string[] = [],
     segundos = 90,
     opciones: { procesos?: boolean } = {},
-  ): Promise<{ codigo: number | null; salida: string; errores: string }> =>
-    new Promise((resolvePromise) => {
-      const enCaja = scriptRel !== "-c";
-      const hijo = spawn(
-        interprete,
-        enCaja ? ["-u", CAJA, resolve(carpetaTrabajo, scriptRel), ...argumentos] : ["-u", scriptRel, ...argumentos],
-        {
-          cwd: carpetaTrabajo,
-          env: entornoDeCaja(process.env, {
-            motor: resolve(carpetaTrabajo, "codigo"),
-            proyecto: escribiblesDelServidor(carpetaTrabajo),
-            repo: process.cwd(),
-            workspace: carpetaTrabajo,
-            procesos: opciones.procesos === true,
-          }),
-        },
-      );
-      let salida = "";
-      let errores = "";
-      let listo = false;
-      const terminar = (codigo: number | null): void => {
-        if (listo) return;
-        listo = true;
-        if (temporizador) clearTimeout(temporizador);
-        resolvePromise({ codigo, salida, errores: explicarFalloMudo(codigo, salida, errores) });
-      };
-      const temporizador = setTimeout(() => {
-        if (hijo.pid) {
-          if (process.platform === "win32") {
-            spawn("taskkill", ["/PID", String(hijo.pid), "/T", "/F"]);
-          } else {
-            hijo.kill("SIGKILL");
-          }
-        }
-        setTimeout(() => terminar(null), 3000);
-      }, segundos * 1000);
-      hijo.stdout.on("data", (trozo: Buffer) => {
-        salida += trozo.toString("utf8");
-      });
-      hijo.stderr.on("data", (trozo: Buffer) => {
-        errores += trozo.toString("utf8");
-      });
-      hijo.on("exit", (codigo) => setTimeout(() => terminar(codigo), 120));
-      hijo.on("close", (codigo) => terminar(codigo));
-      hijo.on("error", (error) => {
-        errores += error.message;
-        terminar(null);
-      });
-    });
+  ): Promise<{ codigo: number | null; salida: string; errores: string }> => {
+    const enCaja = scriptRel !== "-c";
+    return correrProceso(
+      interprete,
+      enCaja ? ["-u", CAJA, resolve(carpetaTrabajo, scriptRel), ...argumentos] : ["-u", scriptRel, ...argumentos],
+      {
+        segundos,
+        nombre: scriptRel,
+        cwd: carpetaTrabajo,
+        env: entornoDeCaja(process.env, {
+          motor: resolve(carpetaTrabajo, "codigo"),
+          proyecto: escribiblesDelServidor(carpetaTrabajo),
+          repo: process.cwd(),
+          workspace: carpetaTrabajo,
+          procesos: opciones.procesos === true,
+        }),
+      },
+    );
+  };
 
   /** Is it engine code? Both count: the numpy one in codigo/ and the GPU one in gpu/. */
   const esDeCodigo = (ruta: string): boolean => {

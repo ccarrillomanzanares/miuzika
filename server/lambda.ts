@@ -15,7 +15,7 @@
  * costs three minutes, so the person decides, not the process.
  */
 
-import { spawn } from "node:child_process";
+import { correrProceso } from "./proceso.ts";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
@@ -282,53 +282,14 @@ export async function apagar(
 
 // ------------------------------------------------------------------ ssh / scp
 
-function correrComando(
+async function correrComando(
   comando: string,
   args: string[],
   segundos: number,
   senal?: AbortSignal,
 ): Promise<{ codigo: number | null; salida: string; errores: string }> {
-  return new Promise((listo) => {
-    const hijo = spawn(comando, args, { windowsHide: true });
-    const matar = (): void => {
-      if (!hijo.pid) return;
-      if (process.platform === "win32") spawn("taskkill", ["/PID", String(hijo.pid), "/T", "/F"]);
-      else hijo.kill("SIGKILL");
-    };
-    const alAbortar = (): void => {
-      errores += `\n[miuzika] ${comando} cancelled\n`;
-      matar();
-    };
-    if (senal?.aborted) alAbortar();
-    else senal?.addEventListener("abort", alAbortar, { once: true });
-    let salida = "";
-    let errores = "";
-    let cerrado = false;
-    const terminar = (codigo: number | null): void => {
-      if (cerrado) return;
-      cerrado = true;
-      if (temporizador) clearTimeout(temporizador);
-      senal?.removeEventListener("abort", alAbortar);
-      listo({ codigo, salida, errores });
-    };
-    const temporizador = setTimeout(() => {
-      matar();
-      errores += `\n[miuzika] ${comando} cut off after ${segundos} s\n`;
-      setTimeout(() => terminar(null), 2000);
-    }, segundos * 1000);
-    hijo.stdout.on("data", (t: Buffer) => {
-      salida += t.toString("utf8");
-    });
-    hijo.stderr.on("data", (t: Buffer) => {
-      errores += t.toString("utf8");
-    });
-    hijo.on("exit", (codigo) => setTimeout(() => terminar(codigo), 120));
-    hijo.on("close", (codigo) => terminar(codigo));
-    hijo.on("error", (error) => {
-      errores += `${error.message}\n`;
-      terminar(null);
-    });
-  });
+  const r = await correrProceso(comando, args, { segundos, senal, windowsHide: true });
+  return { codigo: r.codigo, salida: r.salida, errores: r.errores };
 }
 
 const opcionesSsh = (cfg: ConfigLambda): string[] => [

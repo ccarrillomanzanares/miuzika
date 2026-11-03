@@ -295,10 +295,16 @@ nothing built: `docs/PLAN-MODELOS-MUSICA.md`, last section. Mastering is a separ
 
 Carlos, 3-Nov: "la exportación wav funcionó ayer" (the 2-Nov fix of check 16 works in the app).
 
-**Possibly still billing (3-Nov):** Lambda instance `3d46b7f046ca` (129.158.202.216), started
-2-Nov 21:31 UTC for the two "Vacío" `generar_audio` takes; no shutdown was ever logged in
-`tmp/herramientas.log`. Carlos to turn it off (Lambda console, or "⏻ Off" as its first real
-test). Next session: browser checks above, then review section 10 step 4 (it restarts the server).
+**Lambda, 3-Nov night:** `/api/gpu/estado` says our instance is off (`fase: apagada`); the
+only instance on the shared account is someone else's, terminating. `3d46b7f046ca` is no longer
+billing. The "⏻ Off" button is still unclicked.
+
+**3-Nov night, step 4 started**: `server/proceso.ts` `correrProceso` (time limit, cancel by
+signal, tree kill, `explicarFalloMudo`) replaces the four spawn wrappers (`contexto.correr`,
+`/api/run/python`, basic-pitch, lambda ssh/scp; the pad keeps its own long-lived process).
+Run against a test server on :5199: `ejecutar_python` ok / cut at 2 s / cancelled (no python
+left), `/api/manifiesto`, `/api/picos`, `/api/verificar`, and `ssh -V` via `/api/gpu/estado`.
+Left in step 4: route wrapper with logging, path resolver, `contexto.ts` slimmed.
 
 
 1. Draw buses and sends in the interface (mixer).
