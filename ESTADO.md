@@ -261,6 +261,23 @@ spines and the execution order. **Start there**: section 10 gives the order (bug
 commit each with a test); section 9 lists the decisions only Carlos can take. Baseline 3-Nov:
 `tsc` 0 errors, 245 unit tests green.
 
+**3-Nov, bugs 1-5 of the review fixed** (one commit each, with tests; 262 unit tests green,
+openDAW contract OK, smoke OK). Step 2 of section 10 (one WAV intake) is next.
+- `2d4f787` a gpu/ write or edit that does not parse keeps the old file (`escribirComprobando`).
+- `ea6df8f` the server's own Python scripts run in `caja.py` too; the agent can no longer write
+  `herramientas/` or the non-engine `codigo/` files. All ten server scripts were run boxed by hand.
+- `a2ee158` Cancel stops a Lambda run (boot wait, sync, ssh). A started instance stays on: the
+  cancel text now says to shut it down from the Lambda console (decision 7 is still open).
+- `672f405` **behaviour change**: `generar_audio`, `proponer_midi`, `crear_voz` on GPU and
+  `crear_sonido` with a GPU voice now need the chat selector on GPU, like `ejecutar_python`.
+- `9ea410a` Cancel reaches the file tools and five actions, and is reported as a cancel.
+Not run in a browser (the dev server was off): a GPU tool with the selector on CPU answers
+"The GPU is not allowed"; Cancel during `generar_audio` logs `cancelado: true` in
+`tmp/herramientas.log` and the instance stops at the step it was in; `usar_instrumento`,
+`usar_sample` and `medir_referencia` still work (they now run boxed).
+
+Carlos, 3-Nov: "la exportación wav funcionó ayer" (the 2-Nov fix of check 16 works in the app).
+
 
 1. Draw buses and sends in the interface (mixer).
 2. Seen on 28-Oct with the agent. Fixed on 1-Nov (not yet exercised in a browser):
