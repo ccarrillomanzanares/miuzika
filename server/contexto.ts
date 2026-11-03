@@ -16,6 +16,7 @@ import { configDesdeEnv } from "./lambda.ts";
 import { crearAlmacenPrecios } from "./precios.ts";
 import { costeDe } from "../src/core/precios.ts";
 import { correrProceso } from "./proceso.ts";
+import { leerCuerpoCrudo, LIMITE_CUERPO, registroApi, responderJson, rutaJson, textoTamano } from "./ruta.ts";
 import type { Comprobacion } from "./escritura-verificada.ts";
 import { CAJA, entornoDeCaja, escribiblesDelServidor } from "./api/python.ts";
 import { MOTOR } from "./solo-lectura.ts";
@@ -117,34 +118,13 @@ export function crearContexto(env: Record<string, string>) {
   const carpetaTrabajo = resolve(process.cwd(), "workspace");
   const interprete = env.MIUZIKA_PYTHON || "python";
 
-  const responderJson = (res: ServerResponse, codigo: number, cuerpo: unknown): void => {
-    if (res.headersSent) return;
-    res.statusCode = codigo;
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.end(JSON.stringify(cuerpo));
-  };
-
-  /** Raw text body; returns null if it exceeds the limit. */
-  const leerCuerpoCrudo = (
-    req: IncomingMessage,
-    alTerminar: (cuerpo: string | null) => void,
-    limite = 8 * 1024 * 1024,
-  ): void => {
-    let cuerpo = "";
-    let total = 0;
-    let pasado = false;
-    req.on("data", (trozo: Buffer) => {
-      total += trozo.length;
-      if (total > limite) {
-        pasado = true;
-        cuerpo = "";
-        return;
-      }
-      cuerpo += trozo.toString("utf8");
-    });
-    req.on("end", () => alTerminar(pasado ? null : cuerpo));
-    req.on("error", () => alTerminar(null));
-  };
+  /** One line per API request (route, status, ms): `registroApi` in ruta.ts. Not the two
+   *  routes the tab polls (/api/build every 20 s and the GPU counter). */
+  const ficheroApi = resolve(carpetaTmp, "api.log");
+  const registro = registroApi(
+    (linea) => anotar(ficheroApi, linea, TOPE_LOG_HERRAMIENTAS),
+    new Set(["/api/build", "/api/gpu/estado"]),
+  );
 
   /** Text body of an API request: answering 413 is better than running out of memory. */
   const leerCuerpo = (
@@ -157,7 +137,7 @@ export function crearContexto(env: Record<string, string>) {
       req,
       (cuerpo) => {
         if (cuerpo === null) {
-          responderJson(res, 413, { error: "body too large (max. 8 MB)" });
+          responderJson(res, 413, { error: `body too large (max. ${textoTamano(limite ?? LIMITE_CUERPO)})` });
           return;
         }
         alTerminar(cuerpo);
@@ -429,6 +409,9 @@ export function crearContexto(env: Record<string, string>) {
     carpetaTrabajo,
     interprete,
     responderJson,
+    rutaJson,
+    ficheroApi,
+    registro,
     leerCuerpoCrudo,
     leerCuerpo,
     leerCuerpoBinario,

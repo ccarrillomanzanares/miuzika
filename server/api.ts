@@ -28,6 +28,8 @@ export function miuzikaApi(env: Record<string, string>): Plugin {
   return {
     name: "miuzika-api",
     configureServer(server) {
+      // First: it logs every /api request, whatever route answers it.
+      server.middlewares.use(ctx.registro);
       rutasFicheros(server, ctx);
       rutasProyectos(server, ctx);
       rutasAudio(server, ctx);
