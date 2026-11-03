@@ -47,6 +47,10 @@ export function crearRenderEscucha(d: DependenciasRender): {
   async function exportarProyecto(formatos: Formatos, senal?: AbortSignal): Promise<{ ok: boolean; texto: string }> {
     const view = d.proyecto();
     if (!view) return { ok: false, texto: "There is no open project." };
+    // Seen 2-Nov on "vidrio-4": an empty project exported 10 s of silence (the render's tail)
+    // and reported "peak -Infinity dBFS" as if it were a song.
+    const sonido = view.tracks.some((t) => t.clips.some((c) => c.audio !== undefined || c.notes.length > 0));
+    if (!sonido) return { ok: false, texto: "The project has no notes and no audio clips: there is nothing to export yet." };
     const slug = carpetaDeProyecto(view);
     const hechos: string[] = [];
     // Cancel used to be ignored here: the turn waited for the whole render (28-Oct). The
