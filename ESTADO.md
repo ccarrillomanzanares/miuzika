@@ -280,6 +280,11 @@ Step 4 (server plumbing: spawn helper, route wrapper, path resolver) is next.
   a decoded WAV with the same name now replaces that track's clips (before, only streamed
   ones did; decoded ones made a duplicate track).
 - `/api/run/lambda` takes `entradas`: input files uploaded whatever their folder or size.
+Run against a real dev server on 3-Nov (started from the Claude Code shell; Python spawned
+fine this time): /api/picos, /api/manifiesto and /api/verificar work with the scripts boxed;
+the agent file routes refuse herramientas/ and codigo/voces.py (logged "server script"), refuse
+a "../" escape, and a broken write or edit of gpu/proponer_midi.py leaves its md5 unchanged.
+NOT run: anything that calls the Lambda API (status, the off button, a GPU run, inputs upload).
 Not run in a browser (the dev server was off): importing WAVs with the Audio button and with anadir_pistas, and opening a project with audio; a GPU tool with the selector on CPU answers
 "The GPU is not allowed"; Cancel during `generar_audio` logs `cancelado: true` in
 `tmp/herramientas.log` and the instance stops at the step it was in; `usar_instrumento`,
