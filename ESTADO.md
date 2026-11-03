@@ -339,7 +339,38 @@ Behaviour: bad JSON is 400 everywhere (some were 500); picos/midi/probar now ref
 method; the 413 text names the route's limit. Left on purpose: the GPU routes and voces/nueva
 (Lambda chain, not testable without a paid start), streaming/binary/raw-text routes and the
 proxies. Each migrated route was hit on a :5199 server, Cancel logs "closed".
-Left in step 4: path resolver, `contexto.ts` slimmed.
+Step 4 finished the night of 3-Nov (Carlos asleep, app closed): `dentroDe` (one containment check;
+the Lambda copy compared without the separator and against workspace/), logs to `server/registro.ts`,
+disk inventory to `server/trabajo.ts` (tested), `contexto.ts` 484 -> ~280 lines. Next: step 5.
+
+**Night of 3-Nov, also done** (one commit each, 304 unit tests green, openDAW contract OK):
+- Check 18's bugs: a silent MIX row is a problem in `escuchar_mezcla`, and a silent MIX is rendered
+  a second time with a note saying which happened; `listar_ficheros(carpeta)` looks inside the
+  project; `set_song` takes the key as text ("E", "F#m").
+- The silent MIX with compressor + eq on an audio track did NOT reproduce in headless Chrome
+  (Python Playwright + the installed Chrome, temp profile, :5199): 8 variants and 5 fresh pages,
+  13 renders, always sound (-21.7 dBFS with the full takes). Cause unknown; the re-render will
+  leave the evidence next time.
+- **MP3 export** (Carlos's call: 320 kbps CBR, title as ID3): `/api/audio/mp3` + `exportar(mp3)`
+  + the Brief's MP3 box. Run end to end in headless Chrome through the real `exportar`: WAV
+  rendered, uploaded, MP3 8.25 s = WAV, 320 kbps, title tag. **Not heard.**
+- Review bugs: 6 (escribir_bateria names the pieces the default kit cannot play, e.g. hightom=50),
+  8 (MIUZIKA_LOG_COMPLETO / MIUZIKA_BASIC_PITCH from .env), 9 (verificar_audio timeout reaches the
+  server), 10 (openDAW units found by track id, contract-checked; live mute/solo and the pad
+  **not exercised with sound**).
+- From check 16: exportar refuses an empty project; escuchar_mezcla explains that a bus has no
+  row; the MIDI+WAV "same song" warning only pairs matching names.
+- Headless smoke of the app on :5199: it loads, the Brief shows MIDI/WAV/MP3; the only console
+  errors are two 404s at start (a missing agente.json, plus one more resource), as before.
+
+**For Carlos to decide or check** (not done on purpose):
+- Hear an MP3 export, and try mute/solo and the pad on two tracks with the same name.
+- Review bug 7: `MANIFEST.json` "regla" promises a 409 on redefined symbols that the server does
+  not implement. The text is injected into the agent's context: changing it is close to the
+  prompt (house rule 1), so it waits for a yes.
+- Prompt item 15.5 (ACE-Step when a song is asked; hear proposals through anadir_pistas).
+- The default drum kit: switch drumkit tracks without programa to the GM kit (every piece sounds)
+  changes how existing songs sound; only with listening.
 
 
 1. Draw buses and sends in the interface (mixer).
