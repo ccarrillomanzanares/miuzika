@@ -12,7 +12,7 @@ import type { Project } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
 import { carpetaDeProyecto } from "../../src/core/project.ts";
 import { midiDeProyecto } from "../../src/core/midi-export.ts";
-import { informeEscucha, nivelesPorTramo, notasPorTramo, type PistaEscuchada } from "../../src/core/escucha.ts";
+import { informeEscucha, nivelesPorTramo, notasPorTramo, tramosMixMudo, type PistaEscuchada } from "../../src/core/escucha.ts";
 import { assetsPorStreaming, audioAssets, hidratarAssets } from "./audio-store.ts";
 import { convertirMp3, subirAudio } from "./proyecto-disco.ts";
 
@@ -167,7 +167,7 @@ export function crearRenderEscucha(d: DependenciasRender): {
         nivelesPorTramo(r.canales.slice(0, 2), r.sampleRate, view.bpm, tiemposTramo, tramos);
       if (senal?.aborted) return cancelado(0, elegidas.length);
       d.estado("Listening: rendering the mix…");
-      const mezcla = medir(await render.renderizar(view));
+      let mezcla = medir(await render.renderizar(view));
       const pistas: PistaEscuchada[] = [];
       for (const [i, pista] of elegidas.entries()) {
         if (senal?.aborted) return cancelado(i, elegidas.length);
@@ -183,8 +183,28 @@ export function crearRenderEscucha(d: DependenciasRender): {
           niveles: medir(await render.renderizar(sola)),
         });
       }
+      // A silent MIX over tracks that sound alone: render the mix once more. Seen 3-Nov on
+      // "cain-uriel" (compressor + eq on an audio track, another one muted) and NOT reproduced
+      // the same night in headless Chrome: that project shape rendered fine 6 times (13 renders in all), also as
+      // the first render of a fresh page. If the second render sounds it was a race in the
+      // tab, and the report says so instead of sending the agent after the devices.
+      let segundaVez = "";
+      if (tramosMixMudo(mezcla, pistas).length > 0 && !senal?.aborted) {
+        d.estado("Listening: the mix came out silent, rendering it again…");
+        const otra = medir(await render.renderizar(view));
+        if (tramosMixMudo(otra, pistas).length === 0) {
+          mezcla = otra;
+          segundaVez =
+            "\nNote: the first render of the MIX came out silent and a second one did not; the MIX row is the second. " +
+            "Intermittent engine issue, not your devices: say so to the person.";
+        } else {
+          segundaVez = "\nNote: the MIX was rendered twice and came out silent both times.";
+        }
+      }
       const fuera = assetsPorStreaming(view);
-      const nota = fuera.length > 0 ? `\nNOT measured (long WAVs through streaming, outside openDAW; they sound in Play): ${fuera.join(", ")}.` : "";
+      const nota =
+        segundaVez +
+        (fuera.length > 0 ? `\nNOT measured (long WAVs through streaming, outside openDAW; they sound in Play): ${fuera.join(", ")}.` : "");
       return { ok: true, texto: informeEscucha({ compasesPorTramo, mezcla, pistas, sinCargar: render.sinCargar }) + nota };
     } catch (error) {
       return { ok: false, texto: `Could not listen to the mix: ${error instanceof Error ? error.message : String(error)}` };

@@ -101,6 +101,18 @@ function celda(nivel: NivelTramo, notas: number): string {
 }
 
 /**
+ * Spans where the MIX is silent while an unmuted track sounds alone. Used by the report and
+ * by `escuchar_mezcla`, which renders the mix a second time when this is not empty.
+ */
+export function tramosMixMudo(mezcla: readonly NivelTramo[], pistas: readonly PistaEscuchada[]): { indice: number; suenan: string[] }[] {
+  return mezcla.flatMap((n, i) => {
+    if (n.picoDb >= UMBRAL_SILENCIO_DB) return [];
+    const suenan = pistas.filter((p) => !p.muted && (p.niveles[i]?.picoDb ?? -Infinity) >= UMBRAL_SILENCIO_DB);
+    return suenan.length > 0 ? [{ indice: i, suenan: suenan.map((p) => p.nombre) }] : [];
+  });
+}
+
+/**
  * The report for the agent: a table (rows = mix and tracks, columns = spans) with
  * the RMS in dBFS, and the problems in words below. "SILENT" = there are notes and
  * nothing comes out; "·" = neither notes nor sound.
@@ -147,11 +159,7 @@ export function informeEscucha(datos: {
   // track sounded alone at -24..-21 dBFS (compressor + eq on an audio track), and the report
   // said "No problems", so the agent guessed the cause. A silent MIX where an unmuted track
   // sounds alone means the signal is lost after the track: its devices, a bus or the master.
-  const mixMudo = datos.mezcla.flatMap((n, i) => {
-    if (n.picoDb >= UMBRAL_SILENCIO_DB) return [];
-    const suenan = datos.pistas.filter((p) => !p.muted && (p.niveles[i]?.picoDb ?? -Infinity) >= UMBRAL_SILENCIO_DB);
-    return suenan.length > 0 ? [{ tramo: rotulos[i]!, suenan: suenan.map((p) => p.nombre) }] : [];
-  });
+  const mixMudo = tramosMixMudo(datos.mezcla, datos.pistas).map((m) => ({ tramo: rotulos[m.indice]!, suenan: m.suenan }));
   if (mixMudo.length > 0) {
     const unicas = [...new Set(mixMudo.flatMap((m) => m.suenan))];
     const nombres = unicas.map((n) => `"${n}"`).join(", ");
