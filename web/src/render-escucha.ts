@@ -163,7 +163,15 @@ export function crearRenderEscucha(d: DependenciasRender): {
         (t) => pedidas.length === 0 || pedidas.includes(t.id.toLowerCase()) || pedidas.includes(t.name.toLowerCase()),
       );
       if (pedidas.length > 0 && elegidas.length === 0) {
-        return { ok: false, texto: `No tracks named ${pedidas.join(", ")}. Tracks: ${view.tracks.map((t) => t.name).join(", ")}.` };
+        // 2-Nov "vidrio": the agent asked for its reverb bus by name and read "No tracks named
+        // sala" as a broken bus. A bus has no row of its own; its return is inside the MIX.
+        const buses = (view.buses ?? []).filter((b) => pedidas.includes(b.id.toLowerCase()) || pedidas.includes(b.name.toLowerCase()));
+        const deBus =
+          buses.length > 0
+            ? ` ${buses.map((b) => `"${b.name}"`).join(", ")} is a bus: buses are not rendered alone, their return is in the MIX row. ` +
+              `To hear what it adds, listen without pistas and compare the MIX before and after set_send.`
+            : "";
+        return { ok: false, texto: `No tracks named ${pedidas.join(", ")}. Tracks: ${view.tracks.map((t) => t.name).join(", ")}.${deBus}` };
       }
       if (senal?.aborted) return cancelado(0, elegidas.length);
       const render = await prepararRender(view, carpetaDeProyecto(view));
