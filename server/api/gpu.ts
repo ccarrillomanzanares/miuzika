@@ -1,8 +1,8 @@
 /** GPU on Lambda Cloud: status and spend, power on, power off and run a script. */
 
 import { existsSync, readFileSync } from "node:fs";
-import { relative, sep } from "node:path";
-import { apagablesDe, apagar as apagarLambda, Cancelado, ejecutarEnLambda, encender as encenderLambda, estado as estadoLambda, instancias as instanciasLambda } from "../lambda.ts";
+import { relative, resolve, sep } from "node:path";
+import { apagablesDe, apagar as apagarLambda, Cancelado, ejecutarEnLambda, planDeEntradas, encender as encenderLambda, estado as estadoLambda, instancias as instanciasLambda } from "../lambda.ts";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 
@@ -147,7 +147,7 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       return;
     }
     leerCuerpo(req, res, (cuerpo) => {
-      let datos: { path?: string; argumentos?: string[]; timeout_segundos?: number };
+      let datos: { path?: string; argumentos?: string[]; timeout_segundos?: number; entradas?: unknown };
       try {
         datos = JSON.parse(cuerpo) as typeof datos;
       } catch (error) {
@@ -197,6 +197,23 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
         });
         return;
       }
+      // Input files (relative to the project, like every path the agent gives): uploaded
+      // whatever their folder or size, see planDeEntradas in server/lambda.ts.
+      const entradas: string[] = [];
+      for (const ruta of Array.isArray(datos.entradas) ? datos.entradas : []) {
+        const local = typeof ruta === "string" ? resolverEnTrabajo(ruta, slug) : null;
+        if (!local || !existsSync(local)) {
+          responderJson(res, 400, { error: `input ${String(ruta)} does not exist in the project` });
+          return;
+        }
+        entradas.push(local);
+      }
+      // Checked before the machine boots, not after: only files inside this project.
+      const plan = planDeEntradas(resolve(carpetaTrabajo, "proyectos", slug), entradas);
+      if ("error" in plan) {
+        responderJson(res, 400, { error: plan.error });
+        return;
+      }
       const segundos = Math.min(Math.max(datos.timeout_segundos ?? 900, 1), 1800);
       const argumentos = Array.isArray(datos.argumentos)
         ? datos.argumentos.map((a) => String(a))
@@ -220,6 +237,7 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
         segundos,
         carpetaTrabajo,
         slug,
+        entradas,
         aviso: (t) => {
           avisos.push(t);
           anotar(

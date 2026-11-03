@@ -17,7 +17,7 @@
 
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 
 export interface ConfigLambda {
   apiKey: string;
@@ -408,6 +408,56 @@ const pyDe = (carpeta: string): string[] => {
     .map((n) => join(carpeta, n));
 };
 
+/**
+ * Files a GPU run reads as input (the mix for an ACE-Step cover, a stem for lego...),
+ * uploaded whatever their folder and size. `sincronizar` skips salida/, where exportar
+ * writes the mix, and any file over MAX_SUBIDA: a 16-bit stereo 48 kHz WAV is 192 KB/s,
+ * so the mix of a song over ~4:20 never reached the instance (found 3-Nov while planning
+ * the ACE-Step tasks). Returns where each file goes, relative to the project folder on
+ * the instance, or the reason it is refused (only files inside the project).
+ */
+export function planDeEntradas(
+  carpetaProyecto: string,
+  entradas: string[],
+): { local: string; remoto: string }[] | { error: string } {
+  const raiz = resolve(carpetaProyecto);
+  const plan: { local: string; remoto: string }[] = [];
+  for (const entrada of entradas) {
+    const local = resolve(entrada);
+    if (!local.startsWith(raiz + sep)) return { error: `${entrada} is not inside the project folder` };
+    const remoto = relative(raiz, local).split(sep).join("/");
+    if (!plan.some((p) => p.remoto === remoto)) plan.push({ local, remoto });
+  }
+  return plan;
+}
+
+async function subirEntradas(
+  cfg: ConfigLambda,
+  ip: string,
+  carpetaProyecto: string,
+  slug: string,
+  entradas: string[],
+  senal?: AbortSignal,
+): Promise<{ codigo: number | null; errores: string }> {
+  const plan = planDeEntradas(carpetaProyecto, entradas);
+  if ("error" in plan) return { codigo: 1, errores: plan.error };
+  const base = `${REMOTO}/proyectos/${slug}`;
+  const porCarpeta = new Map<string, string[]>();
+  for (const { local, remoto } of plan) {
+    const carpeta = remoto.includes("/") ? remoto.slice(0, remoto.lastIndexOf("/")) : "";
+    porCarpeta.set(carpeta, [...(porCarpeta.get(carpeta) ?? []), local]);
+  }
+  const dirs = [...porCarpeta.keys()].map((c) => comillas(`${base}/${c}`.replace(/\/$/, "")));
+  const mk = await ssh(cfg, ip, `cd ~ && mkdir -p ${dirs.join(" ")}`, 60, senal);
+  if (mk.codigo !== 0) return { codigo: mk.codigo, errores: mk.errores };
+  for (const [carpeta, locales] of porCarpeta) {
+    // A mix can be hundreds of MB: the limit is generous, Cancel still cuts it.
+    const r = await scp(cfg, ip, locales, `${base}/${carpeta}`.replace(/\/$/, "") + "/", 1800, senal);
+    if (r.codigo !== 0) return { codigo: r.codigo, errores: r.errores };
+  }
+  return { codigo: 0, errores: "" };
+}
+
 /** Replicates engine + project on the instance. */
 export async function sincronizar(
   cfg: ConfigLambda,
@@ -510,6 +560,8 @@ export interface PeticionLambda {
   carpetaTrabajo: string;
   slug: string;
   aviso: (texto: string) => void;
+  /** Absolute paths of project files the script reads, uploaded explicitly (see planDeEntradas). */
+  entradas?: string[];
   /** Aborted when the HTTP client goes away: no later step starts (3-Nov review, bug 3). */
   senal?: AbortSignal;
 }
@@ -539,7 +591,18 @@ export async function ejecutarEnLambda(
       nota: "sync",
     };
   }
-  p.aviso(`${sinc.ficheros} file(s) uploaded; running ${p.scriptRel}`);
+  if (p.entradas && p.entradas.length > 0) {
+    const subida = await subirEntradas(cfg, arranque.ip, join(p.carpetaTrabajo, "proyectos", p.slug), p.slug, p.entradas, p.senal);
+    comprobarCancelado(p.senal);
+    if (subida.codigo !== 0) {
+      return {
+        ok: false, id: arranque.id, ip: arranque.ip, codigo: subida.codigo, salida: "",
+        errores: `could not upload the inputs: ${subida.errores}`, ms: Date.now() - t0, traidos: [],
+        nota: "inputs",
+      };
+    }
+  }
+  p.aviso(`${sinc.ficheros + (p.entradas?.length ?? 0)} file(s) uploaded; running ${p.scriptRel}`);
 
   await ssh(cfg, arranque.ip, `touch ~/${REMOTO}/.marca`, 30);
   // The remote cwd is the project folder: what lives inside it is passed relative

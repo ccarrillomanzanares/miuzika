@@ -212,7 +212,9 @@ How the tasks fit the five axes of `docs/REVISION-2026-11-03.md` §8, without a 
    `salida/` (where `exportar` writes) and any file over 50 MB, and uploads every other
    project file on every run. A 16-bit stereo 48 kHz WAV is 192 KB/s, so a 4:20 song
    already passes 50 MB. The run request gets `entradas: string[]`: those files are uploaded,
-   whatever their size, and nothing else of the project is needed by the GPU scripts.
+   whatever their size. Built 3-Nov (`planDeEntradas` in `server/lambda.ts`, `entradas` in
+   `/api/run/lambda`, checked before the machine boots); the rest of the sync is unchanged,
+   because GPU sound scripts live in the project folder. Not run on a real instance yet.
 4. **One GPU script.** `gpu/generar_audio.py` gets `--tarea`, `--audio`, `--fuerza`,
    `--desde/--hasta` and `--pista`, plus `--modelo acestep-v15-xl-base`. Its bootstrap,
    re-exec, lineage and `RESULT` line are the skeleton the review wants shared with

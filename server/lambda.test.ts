@@ -6,7 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { apagablesDe, Cancelado, encender, ejecutarEnLambda, type ConfigLambda, type Instancia } from "./lambda.ts";
+import { apagablesDe, Cancelado, encender, ejecutarEnLambda, planDeEntradas, type ConfigLambda, type Instancia } from "./lambda.ts";
+import { join } from "node:path";
 
 const cfg: ConfigLambda = {
   apiKey: "falsa",
@@ -90,4 +91,25 @@ test("the off button only targets our own instances that are on or starting", ()
     i("d", "aios-agent-rag", "active"), // another project on the same account
   ];
   assert.deepEqual(apagablesDe(lista, "miuzika-gpu").map((x) => x.id), ["a", "b"]);
+});
+
+test("inputs are uploaded by path inside the project, salida/ and big files included", () => {
+  const proyecto = join("/w", "proyectos", "vidrio");
+  const plan = planDeEntradas(proyecto, [
+    join(proyecto, "salida", "vidrio.wav"), // skipped by sincronizar: exportar writes here
+    join(proyecto, "stems", "bateria.wav"),
+    join(proyecto, "salida", "vidrio.wav"), // repeated: uploaded once
+  ]);
+  assert.deepEqual(
+    "error" in plan ? plan : plan.map((p) => p.remoto),
+    ["salida/vidrio.wav", "stems/bateria.wav"],
+  );
+});
+
+test("an input outside the project is refused before anything boots", () => {
+  const proyecto = join("/w", "proyectos", "vidrio");
+  for (const fuera of [join("/w", "codigo", "dsp.py"), join("/w", "proyectos", "otro", "x.wav"), join("/w", "proyectos", "vidrio-2", "x.wav")]) {
+    const plan = planDeEntradas(proyecto, [fuera]);
+    assert.ok("error" in plan, fuera);
+  }
 });
