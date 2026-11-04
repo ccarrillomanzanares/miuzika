@@ -393,9 +393,12 @@ crashes the dev server when a streaming answer is cut. All run headless; not wit
   Steinway -3.0) while openDAW ignores initialAttenuation. First fix (loudest sample to -1 dBFS),
   measured by the agent in "prueba-nivel" (RMS, gain 0): organ -15, GM piano -16, harp -25; one
   loud harp sample capped the gain. Now the median peak goes to -6 dBFS and only samples above
-  -1 dBFS are turned down: harp +17.1 dB, organ +23.3, Steinway +3.6. Expected harp ~-19, not yet
-  measured in a project nor heard. Only new conversions: the .sf2 already in projects keep
-  the old level.
+  -1 dBFS are turned down: harp +17.1 dB, organ +23.3, Steinway +3.6. Measured in "prueba-nivel"
+  with the real engine, sends off: harp -18.0 LUFS, organ -10.8, GM piano -13.4. Carlos hears
+  the piano above both (the organ has no attack and sits back despite more energy). Decided to
+  leave the converter here: VCSL now within ~5 dB of GM (it was 14); per-instrument balance is
+  the mix's job. A harp chord alone peaks at +0.7 dBFS. Only new conversions: the .sf2 already
+  in projects keep the old level.
 - Fixed: when `ops` arrives as JSON text that does not parse (prueba-nivel: missing final `]`),
   editar_proyecto says so and shows how it ends, instead of "Missing `ops`".
 - Fixed: `add_bus` accepts `{device:{type,...}}` and `{device:"reverb", params}` inside devices,
