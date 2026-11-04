@@ -1,7 +1,7 @@
 {
- "generado": "2026-11-02T19:46:48",
+ "generado": "2026-11-04T07:54:20",
  "raiz": "workspace/",
- "regla": "These symbols ALREADY exist. Reuse them with 'from <module> import <symbol>'. Writing a new file that redefines them will be rejected (409).",
+ "regla": "These symbols ALREADY exist. Reuse them with 'from <module> import <symbol>'. The server rejects (409) new files in codigo/ or gpu/, patch*/parche* scripts and scripts named like a Python or engine module.",
  "modulos": {
   "dsp": {
    "archivo": "codigo/dsp.py",

@@ -61,8 +61,12 @@ def main() -> None:
         "generado": datetime.datetime.now().isoformat(timespec="seconds"),
         "raiz": "workspace/",
         "regla": (
+            # Until 3-Nov this promised a 409 for any file redefining a symbol; the server never
+            # compared symbols (review 3-Nov bug 7). These are the 409s it really gives
+            # (server/api/ficheros.ts). Only this JSON says it; the agent reads MANIFEST.md.
             "These symbols ALREADY exist. Reuse them with 'from <module> import <symbol>'. "
-            "Writing a new file that redefines them will be rejected (409)."
+            "The server rejects (409) new files in codigo/ or gpu/, patch*/parche* scripts and "
+            "scripts named like a Python or engine module."
         ),
         "modulos": {},
     }
