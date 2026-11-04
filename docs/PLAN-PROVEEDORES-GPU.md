@@ -51,8 +51,8 @@ docs.runpod.io/runpodctl/reference/runpodctl-pod.
 
 So `ProveedorGpu` needs: a way to pick the machine (fixed type for Lambda, offer search for Vast),
 SSH host **and port**, an explicit **stop vs destroy** with what each still bills, and an optional
-image/template so cold starts do not reinstall (on Lambda this is ruled out: Carlos has no credits
-for storage, 4-Nov).
+image/template so cold starts do not reinstall (Lambda persistent filesystem: later, as an option for
+users who pay for storage; Carlos accepts the reinstall, 4-Nov).
 
 ## Order
 

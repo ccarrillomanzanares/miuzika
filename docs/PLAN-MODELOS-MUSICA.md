@@ -98,8 +98,8 @@ a **Latin American Spanish accent**. `vocal_language="es"` has no regional contr
 next: ask for the accent in the caption ("Castilian Spanish accent, Spain") and compare. Cost of the whole
 afternoon (6 runs, ~1 h of A10): about 1.3 $.
 
-rebuild on the next cold start). A Lambda persistent filesystem is ruled out (4-Nov, Carlos: no
-credits for storage); cold starts reinstall.
+rebuild on the next cold start). A Lambda persistent filesystem: Carlos accepts the reinstall (no
+storage credits, 4-Nov); later, an option for users who want to pay for storage.
 The server's `/api/run/lambda` only powers the GPU on for scripts that import torch, which
 is why both scripts import it at the top.
 
