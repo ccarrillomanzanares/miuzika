@@ -247,8 +247,8 @@ None of this has been heard in previous sessions:
     Carlos: the accent is still Latin American even with "Castilian Spanish accent" in the
     caption, so the caption does not steer it. Transcribing a full mix was dropped: basic-pitch
     puts voice, guitars and drums in one track. Stem separation comes first.
-    Parked: `generar_audio` default of 2 takes;
-    Lambda persistent filesystem so cold starts do not reinstall the weights.
+    Parked: `generar_audio` default of 2 takes. Ruled out (4-Nov, no credits for storage):
+    a Lambda persistent filesystem; cold starts reinstall the weights (~2.5 min).
 
 18. **"Los ochenta en las calles" and "cain-uriel", 3-Nov night** (Carlos in the browser, DeepSeek
     v4.1 flash, ACE-Step on Lambda). Read from `tmp/api.log` (first night with it), `herramientas.log`
