@@ -413,6 +413,24 @@ export function herramientasDelTurno(destino: Destino): ToolSpec[] {
   });
 }
 
+/**
+ * `ops` as a list, or as that list written as JSON text. Measured on 4-Nov in "herminia":
+ * DeepSeek v4.1 flash sent `"ops": "[{...}]"` once and the whole batch was refused with
+ * "Missing `ops`", so the step was wasted. Anything else stays empty (and is refused).
+ */
+export function opsDeArgumento(valor: unknown): unknown[] {
+  if (Array.isArray(valor)) return valor;
+  if (typeof valor === "string" && valor.trim().startsWith("[")) {
+    try {
+      const leido = JSON.parse(valor) as unknown;
+      return Array.isArray(leido) ? leido : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 export const HERRAMIENTAS: ToolSpec[] = [
   {
     type: "function",
@@ -1598,7 +1616,7 @@ export const MANEJADORES: Record<string, Manejador> = {
     return local.leerProyecto(typeof args.clip === "string" && args.clip.trim() !== "" ? { clipId: args.clip.trim() } : {});
   },
   editar_proyecto: async (args, _senal, local) => {
-    const ops = Array.isArray(args.ops) ? (args.ops as unknown[]) : [];
+    const ops = opsDeArgumento(args.ops);
     if (ops.length === 0) return { ok: false, texto: "Missing `ops`: a list of operations (see the tool description)." };
     return local.editarProyecto({ ops });
   },

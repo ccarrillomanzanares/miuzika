@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { HERRAMIENTAS, MANEJADORES, ejecutarHerramienta, herramientasDelTurno, resumenLlamada, setDestino } from "./tools.ts";
+import { HERRAMIENTAS, MANEJADORES, ejecutarHerramienta, herramientasDelTurno, opsDeArgumento, resumenLlamada, setDestino } from "./tools.ts";
 
 /** Runs escribir_fichero against a fake /api/fs/write and returns what the server got. */
 async function escribir(args: Record<string, unknown>): Promise<{ ok: boolean; texto: string; cuerpo: unknown }> {
@@ -129,4 +129,13 @@ test("with the selector on CPU the GPU tools are not offered at all", () => {
   assert.deepEqual(enumDe("lambda", "ejecutar_python"), ["cpu", "lambda"]);
   // The shared list itself is not mutated by the CPU view.
   assert.deepEqual(enumDe("lambda", "crear_voz"), ["cpu", "gpu"]);
+});
+
+test("editar_proyecto takes ops as a list or as that list in JSON text", () => {
+  // 4-Nov "herminia": "ops": "[{...}]" was refused as missing.
+  assert.deepEqual(opsDeArgumento([{ op: "set_master", gainDb: -3 }]), [{ op: "set_master", gainDb: -3 }]);
+  assert.deepEqual(opsDeArgumento('[{"op":"set_master","gainDb":-3}]'), [{ op: "set_master", gainDb: -3 }]);
+  assert.deepEqual(opsDeArgumento("[{no json"), []);
+  assert.deepEqual(opsDeArgumento('{"op":"set_master"}'), []);
+  assert.deepEqual(opsDeArgumento(undefined), []);
 });
