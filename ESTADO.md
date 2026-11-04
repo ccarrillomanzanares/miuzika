@@ -363,11 +363,13 @@ disk inventory to `server/trabajo.ts` (tested), `contexto.ts` 484 -> ~280 lines.
 - Headless smoke of the app on :5199: it loads, the Brief shows MIDI/WAV/MP3; the only console
   errors are two 404s at start (a missing agente.json, plus one more resource), as before.
 
+**4-Nov: GPU providers and song generation** — plan in `docs/PLAN-PROVEEDORES-GPU.md` (Carlos's
+decisions: GPU providers as their own list in Models, Lambda first; selector on GPU + "hazme una
+canción" = ACE-Step; on CPU the GPU tools are not offered; ACE-Step is one sound model of several
+to come). Review bug 7 done (`9c028ea`). Nothing of the plan built yet.
+
 **For Carlos to decide or check** (not done on purpose):
 - Hear an MP3 export, and try mute/solo and the pad on two tracks with the same name.
-- Review bug 7: `MANIFEST.json` "regla" promises a 409 on redefined symbols that the server does
-  not implement. The text is injected into the agent's context: changing it is close to the
-  prompt (house rule 1), so it waits for a yes.
 - Prompt item 15.5 (ACE-Step when a song is asked; hear proposals through anadir_pistas).
 - The default drum kit: switch drumkit tracks without programa to the GM kit (every piece sounds)
   changes how existing songs sound; only with listening.
