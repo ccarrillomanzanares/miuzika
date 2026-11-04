@@ -1733,6 +1733,9 @@ $<HTMLButtonElement>("exportar-mp3").addEventListener("click", async () => {
     const r = await renderEscucha.exportar({ midi: false, wav: false, mp3: true });
     setStatus(r.texto.split("\n").pop() ?? r.texto);
     if (!r.ok) window.alert(r.texto);
+    // Say where it went, in the chat: a status-bar line alone was not enough (4-Nov, Carlos
+    // pressed it twice and did not find the file it had written next to the WAV and MIDI).
+    if (r.ok) chat.add("meta", `♪ ${r.texto.split("\n").filter((l) => l.startsWith("MP3:")).join(" ") || r.texto}`);
   } finally {
     boton.disabled = false;
   }

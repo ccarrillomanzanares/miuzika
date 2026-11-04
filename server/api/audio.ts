@@ -138,7 +138,8 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
     const rango = String(req.headers.range ?? "");
     const coincidencia = /^bytes=(\d*)-(\d*)$/.exec(rango.trim());
     res.setHeader("Accept-Ranges", "bytes");
-    res.setHeader("Content-Type", "audio/wav");
+    res.setHeader("Content-Type", /\.mp3$/i.test(destino) ? "audio/mpeg" : "audio/wav");
+
 
     if (coincidencia && (coincidencia[1] !== "" || coincidencia[2] !== "")) {
       let desde = coincidencia[1] === "" ? totalBytes - Number(coincidencia[2]) : Number(coincidencia[1]);
