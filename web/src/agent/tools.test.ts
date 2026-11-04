@@ -158,3 +158,26 @@ test("when ops gives nothing, the refusal says why (4-Nov, prueba-nivel: JSON te
   assert.match(motivoSinOps([]), /empty list/);
   assert.match(motivoSinOps(undefined), /Missing `ops`/);
 });
+
+test("inicio_compas counts from 1 in the three tools that place material, like desde_compas", async () => {
+  // 4-Nov: it was 0-based while the prompt says material goes "desde el compás 1", so a
+  // model that followed the prompt landed one bar late.
+  const vistos: Record<string, unknown> = {};
+  const guardar = (nombre: string) => async (p: { inicioCompas?: number }) => {
+    vistos[nombre] = p.inicioCompas;
+    return { ok: true, texto: "" };
+  };
+  const local = {
+    anadirPistas: guardar("anadir"),
+    generarAudio: guardar("generar"),
+    transcribirAudio: guardar("transcribir"),
+  } as unknown as Parameters<(typeof MANEJADORES)["anadir_pistas"]>[2];
+  await MANEJADORES.anadir_pistas!({ wavs: ["a.wav"], inicio_compas: 1 }, undefined, local);
+  await MANEJADORES.generar_audio!({ prompt: "x", nombre: "t", inicio_compas: 9 }, undefined, local);
+  await MANEJADORES.transcribir_audio!({ archivo: "a.wav", inicio_compas: "5" }, undefined, local);
+  assert.deepEqual(vistos, { anadir: 0, generar: 8, transcribir: 4 });
+  await MANEJADORES.anadir_pistas!({ wavs: ["a.wav"] }, undefined, local);
+  await MANEJADORES.generar_audio!({ prompt: "x", nombre: "t" }, undefined, local);
+  await MANEJADORES.transcribir_audio!({ archivo: "a.wav", inicio_compas: 0 }, undefined, local);
+  assert.deepEqual(vistos, { anadir: 0, generar: undefined, transcribir: 0 });
+});

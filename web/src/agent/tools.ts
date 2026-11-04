@@ -1001,7 +1001,7 @@ export const HERRAMIENTAS: ToolSpec[] = [
           tonalidad: { type: "string", description: "Only to override the project's key, e.g. 'A minor'" },
           variantes: { type: "integer", description: "Takes of the same prompt, 1-8 (default 1); each one is a track" },
           semilla: { type: "integer", description: "Fixed seed to repeat a take; omit for a new one" },
-          inicio_compas: { type: "integer", description: "Bar where the clip starts (default 0)" },
+          inicio_compas: { type: "integer", description: "Bar where the clip starts, from 1 (1 by default)" },
           compases: { type: "integer", description: "Clip length in bars (default: what the audio lasts)" },
         },
         required: ["prompt", "nombre"],
@@ -1025,7 +1025,7 @@ export const HERRAMIENTAS: ToolSpec[] = [
           archivo: { type: "string", description: "Audio path inside the project (salida/x.wav, entrada/x.wav) or workspace" },
           nombre: { type: "string", description: "Name of the .mid and of the track (default: the audio's)" },
           importar: { type: "boolean", description: "false = only write the .mid, do not add a track (default true)" },
-          inicio_compas: { type: "integer", description: "Bar where the clip starts (default 0)" },
+          inicio_compas: { type: "integer", description: "Bar where the clip starts, from 1 (1 by default)" },
         },
         required: ["archivo"],
       },
@@ -1165,7 +1165,7 @@ export const HERRAMIENTAS: ToolSpec[] = [
           },
           inicio_compas: {
             type: "integer",
-            description: "Bar where the tracks start (0 = beginning)",
+            description: "Bar where the tracks start, from 1 (1 = beginning, the default)",
           },
           compases: {
             type: "integer",
@@ -1249,6 +1249,19 @@ type Manejador = (
  * ejecutarCrudo (review 3-Nov, step 3); the bodies moved here unchanged. A test checks
  * that every tool declared in HERRAMIENTAS has a handler and the other way round.
  */
+/**
+ * `inicio_compas` counts from 1, like `desde_compas` and like the prompt ("desde el compás 1")
+ * and the bar numbers on screen; inside, bars count from 0. Until 4-Nov it was 0-based in
+ * generar_audio, transcribir_audio and anadir_pistas while the prompt said bar 1 is the
+ * start, so a model that followed the prompt put the take one bar late. Numbers as text
+ * ("5") are accepted because models send them; anything below 1 is the beginning.
+ */
+export function compasDesdeUno(valor: unknown): number | undefined {
+  const n = typeof valor === "number" ? valor : typeof valor === "string" && valor.trim() !== "" ? Number(valor) : NaN;
+  if (!Number.isFinite(n)) return undefined;
+  return Math.max(0, Math.trunc(n) - 1);
+}
+
 export const MANEJADORES: Record<string, Manejador> = {
   escribir_fichero: async (args, senal, _local) => {
     // A file of 9,700 tokens in one go (measured on Oct 25) makes the
@@ -1519,7 +1532,7 @@ export const MANEJADORES: Record<string, Manejador> = {
         ...(entero(args.bpm) !== undefined ? { bpm: entero(args.bpm) } : {}),
         ...(entero(args.variantes) !== undefined ? { variantes: entero(args.variantes) } : {}),
         ...(entero(args.semilla) !== undefined ? { semilla: entero(args.semilla) } : {}),
-        ...(entero(args.inicio_compas) !== undefined ? { inicioCompas: entero(args.inicio_compas) } : {}),
+        ...(compasDesdeUno(args.inicio_compas) !== undefined ? { inicioCompas: compasDesdeUno(args.inicio_compas) } : {}),
         ...((entero(args.compases) ?? 0) > 0 ? { compases: entero(args.compases) } : {}),
       },
       senal,
@@ -1531,7 +1544,7 @@ export const MANEJADORES: Record<string, Manejador> = {
         archivo: String(args.archivo ?? "").trim(),
         ...(typeof args.nombre === "string" && args.nombre.trim() !== "" ? { nombre: args.nombre.trim() } : {}),
         ...(typeof args.importar === "boolean" ? { importar: args.importar } : {}),
-        ...(typeof args.inicio_compas === "number" ? { inicioCompas: Math.trunc(args.inicio_compas) } : {}),
+        ...(compasDesdeUno(args.inicio_compas) !== undefined ? { inicioCompas: compasDesdeUno(args.inicio_compas) } : {}),
       },
       senal,
     );
@@ -1614,7 +1627,7 @@ export const MANEJADORES: Record<string, Manejador> = {
     return local.anadirPistas({
       midis: Array.isArray(args.midis) ? (args.midis as unknown[]).map(String) : [],
       wavs: Array.isArray(args.wavs) ? (args.wavs as unknown[]).map(String) : [],
-      inicioCompas: Number(args.inicio_compas ?? 0) || 0,
+      inicioCompas: compasDesdeUno(args.inicio_compas) ?? 0,
       ...(Number(args.compases) > 0 ? { compases: Math.trunc(Number(args.compases)) } : {}),
       ...(typeof args.nombre_proyecto === "string" && args.nombre_proyecto.trim() !== ""
         ? { nombreProyecto: args.nombre_proyecto.trim() }
