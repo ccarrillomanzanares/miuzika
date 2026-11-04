@@ -7,7 +7,7 @@ stubs because code comments still cite them. Decisions are logged in `docs/DECIS
 what is done and heard is in `ESTADO.md`. Architecture and live debt: `docs/ARCHITECTURE.md`.
 
 Labels: "Phase N" no longer exists as a bare name. The 27-Oct plan uses **Stage 0-5**, the
-authorship handoff's two phases are **Authorship phase A / B** (`fable.md`), the own-model
+authorship handoff's two phases are **Authorship phase A / B** (`autoria/HANDOFF-2026-11-02.md`), the own-model
 note uses **P1-P8**, and the music-models list keeps its numbered approvals (**M1-M6**).
 
 ## Now / next (4-Nov-2026)
@@ -32,7 +32,7 @@ note uses **P1-P8**, and the music-models list keeps its numbered approvals (**M
 6. **Parked** (do not start without Carlos): ACE-Step on the Contabo VPS, LoRA on own
    stems, Magenta RealTime 2, Stable Audio 3, a Lambda persistent filesystem, the 2-take
    default of `generar_audio`.
-7. Authorship layer (`autoria/`, `fable.md` §6 steps): Spike B done 2-Nov; integration
+7. Authorship layer (`autoria/`, `autoria/HANDOFF-2026-11-02.md` §6 steps): Spike B done 2-Nov; integration
    into the export path and the watermark baseline are open; its folder and name are
    Carlos's call.
 
@@ -112,7 +112,7 @@ in his browser.
 ## 2-Nov-2026 — Music models (updated 3-Nov and 4-Nov)
 
 
-Follows `fable.md` (brainstorm handoff, 2-Nov) §3.1 and §4.5, and `autoria/CONCEPT.md`
+Follows `autoria/HANDOFF-2026-11-02.md` (brainstorm handoff, 2-Nov) §3.1 and §4.5, and `autoria/CONCEPT.md`
 (authorship layer, Spike B done). This note records what Carlos approved on 2-Nov, in
 which order, and what was parked, so later sessions do not re-argue it.
 
@@ -170,7 +170,7 @@ which order, and what was parked, so later sessions do not re-argue it.
 
 4. **LoRA on Carlos's own stems** on Lambda, with ACE-Step and Stable Audio 3 (both ship
    training code). Measure VRAM, time, cost; the lineage record must name the LoRA.
-5. **Real-time phase (`fable.md` "Phase 2"), Magenta RealTime 2 Small** only after measuring whether 230M runs in real
+5. **Real-time phase (`autoria/HANDOFF-2026-11-02.md` "Phase 2"), Magenta RealTime 2 Small** only after measuring whether 230M runs in real
    time on this CPU. WebGPU on Intel UHD is not a plan; without hardware it waits.
 6. **Housekeeping**: add to `docs/LEGAL.md` §6 Magenta RT2 (CC-BY-4.0), MIDI-LLM (Llama
    3.2 Community), MuScriptor (NC, rejected), basic-pitch; read the Stability AI Community

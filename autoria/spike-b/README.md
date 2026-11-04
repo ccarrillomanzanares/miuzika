@@ -1,6 +1,6 @@
 # Spike B — sign, stamp and verify a miuzika export (measured 2-Nov-2026)
 
-Goal from the handoff (`fable.md` §6.3): take a WAV exported by miuzika, embed a signed
+Goal from the handoff (`autoria/HANDOFF-2026-11-02.md` §6.3): take a WAV exported by miuzika, embed a signed
 C2PA manifest with a consent assertion and a lineage record, timestamp its hash with
 OpenTimestamps, verify both, and record what survives re-encoding. Done on the laptop,
 no GPU, with the `stahl` project's `salida/stahl_sint.wav` (2:20, 24-bit 44.1 kHz stereo,

@@ -2,7 +2,7 @@
 
 One place for decisions. Format: date · decision · why · source. Created 4-Nov-2026 (review
 step 6, `docs/REVISION-2026-11-03.md` §9.5) by collecting what was scattered in
-`docs/LEGAL.md` §7, `fable.md` §4, the old `PLAN-MODELOS-MUSICA.md` (now a section of
+`docs/LEGAL.md` §7, `autoria/HANDOFF-2026-11-02.md` §4, the old `PLAN-MODELOS-MUSICA.md` (now a section of
 `PLAN.md`) and inline decisions in `ESTADO.md`. Nothing was reinterpreted: where two sources
 disagree, both are listed and the disagreement is under "Conflicts". Add new decisions here,
 with their source; not in LEGAL §7 or ESTADO.
@@ -21,7 +21,7 @@ with their source; not in LEGAL §7 or ESTADO.
 | 2026-11-01 | Capture full trajectories (messages, tool calls, results, verdict) in `proyectos/<slug>/trayectorias/` | dataset for a model of our own and audit trail for a paid tier; `llm.log` keeps 200 characters only | PLAN.md "1-Nov", step 2 |
 | 2026-11-01 | Two tiers: a local model (free, lower quality) and an advanced paid tier that resells provider capacity; shared groundwork first (cost, trajectories, evaluator) | per-turn input is over 1 M tokens, so reselling needs a per-turn cap and per-user metering | PLAN.md "1-Nov" |
 | 2026-11-01 | The paid tier goes through OpenRouter with one key of ours; read each provider's terms before choosing (they allow a product on top, not reselling raw API access) | price, real cost and invoice come from one place | PLAN.md "1-Nov", steps 7-8 |
-| 2026-11-02 | Code and docs in English, names in English | house convention | `fable.md` §4.7 |
+| 2026-11-02 | Code and docs in English, names in English | house convention | `autoria/HANDOFF-2026-11-02.md` §4.7 |
 | 2026-11-02 | Generation runs on Lambda first; the laptop is the client | measured: i5-1035G1, no CUDA, 7.7 GB RAM (about 2 GB free) | PLAN.md "2-Nov"; LEGAL §7 |
 | 2026-11-02 | `MIUZIKA_LAMBDA=on` in `.env` | needed for `generar_audio` | ESTADO (2-Nov) |
 | 2026-11-02 | Approved in order: (1) `generar_audio` (ACE-Step 1.5) on Lambda, (2) basic-pitch transcription, local, only on own or CC audio, (3) MIDI-LLM `proponer_midi` as a material generator | miuzika composes in notes; transcription closes the `medir_referencia` gap | PLAN.md "2-Nov" |
@@ -46,16 +46,16 @@ with their source; not in LEGAL §7 or ESTADO.
 | 2026-11-04 | Kept on the list, not now: Steinway with 3 velocity layers (40 MB cap), first hit louder in live Play | Carlos | ESTADO (4-Nov) |
 | 2026-11-04 | Docs consolidation: one `PLAN.md` with dated sections, one `docs/DECISIONES.md` (this file); the three secondary plans became stubs | REVISION §7 and §9.5, approved by Carlos | this change |
 
-## Authorship layer (`fable.md` §4, "do not reopen")
+## Authorship layer (`autoria/HANDOFF-2026-11-02.md` §4, "do not reopen")
 
 | Date | Decision | Why | Source |
 |---|---|---|---|
-| 2026-11-02 | It is a project of its own, closely coupled to miuzika, not only a feature | separate concerns and licence | `fable.md` §4.1 |
-| 2026-11-02 | No NFT, no blockchain beyond the OpenTimestamps anchor | NFTs do not prove authorship, consent or lineage; musicians reject them | `fable.md` §4.2; LEGAL §7; CONCEPT |
-| 2026-11-02 | Local-first: generation, signing and marking run on the user's machine or the user's own Lambda; no cloud service of ours in the loop | privacy and cost | `fable.md` §4.3 |
-| 2026-11-02 | Four pieces: signature + public timestamp, C2PA credentials, machine-readable training consent (`cawg.training-mining`, TDMRep, optionally Spawning), lineage manifest of generated output. No statistical attribution ("3 % of this came from you") | unsolved research; the docs say so | `fable.md` §4.4 |
-| 2026-11-02 | Authorship phase A = local generation + LoRA on the user's own stems; phase B = real-time instruments/agents in the browser (RAVE / Magenta RT class, WebGPU + AudioWorklet) | consent is trivial on own stems | `fable.md` §4.5 |
-| 2026-11-02 | An open music watermark is the designated research track (uses the Lambda credits) | likely the most original contribution | `fable.md` §4.6 |
+| 2026-11-02 | It is a project of its own, closely coupled to miuzika, not only a feature | separate concerns and licence | `autoria/HANDOFF-2026-11-02.md` §4.1 |
+| 2026-11-02 | No NFT, no blockchain beyond the OpenTimestamps anchor | NFTs do not prove authorship, consent or lineage; musicians reject them | `autoria/HANDOFF-2026-11-02.md` §4.2; LEGAL §7; CONCEPT |
+| 2026-11-02 | Local-first: generation, signing and marking run on the user's machine or the user's own Lambda; no cloud service of ours in the loop | privacy and cost | `autoria/HANDOFF-2026-11-02.md` §4.3 |
+| 2026-11-02 | Four pieces: signature + public timestamp, C2PA credentials, machine-readable training consent (`cawg.training-mining`, TDMRep, optionally Spawning), lineage manifest of generated output. No statistical attribution ("3 % of this came from you") | unsolved research; the docs say so | `autoria/HANDOFF-2026-11-02.md` §4.4 |
+| 2026-11-02 | Authorship phase A = local generation + LoRA on the user's own stems; phase B = real-time instruments/agents in the browser (RAVE / Magenta RT class, WebGPU + AudioWorklet) | consent is trivial on own stems | `autoria/HANDOFF-2026-11-02.md` §4.5 |
+| 2026-11-02 | An open music watermark is the designated research track (uses the Lambda credits) | likely the most original contribution | `autoria/HANDOFF-2026-11-02.md` §4.6 |
 | 2026-11-02 | Exports carry a C2PA manifest, a `cawg.training-mining` assertion (generative training and data mining notAllowed by default, inference allowed) and an OpenTimestamps proof | Spike B showed the WAV stays bit-identical | LEGAL §7, §9; CONCEPT |
 
 ## Legal (from `docs/LEGAL.md` §7; the reasoning stays in LEGAL §1-§6 and §9)
@@ -80,12 +80,12 @@ Each can be reopened; the older text stays where it was, superseded by this sect
 | # | Conflict | Decision | Why |
 |---|---|---|---|
 | 1 | Consent default: LEGAL §7 and CONCEPT body "decided", CONCEPT question 4 and LEGAL §8 "open" | **Training and mining `notAllowed` by default**, per export, the artist can change it. CONCEPT question 4 and the LEGAL §8 item are closed | already decided 2-Nov and implemented in Spike B; the open entries were leftovers |
-| 2 | `fable.md` §4.3 "no cloud service of ours" vs the 1-Nov paid tier | **Local-first is the product.** The paid tier (1-Nov, steps 6-7) is optional and later; everything works with the user's own keys, own Lambda or local models. §4.3 applies to the authorship layer: signing, marking and consent never go through a service of ours | both stand once scoped: §4.3 is about authorship and privacy, the tier about who pays for the LLM |
-| 3 | Default generation model open (CONCEPT 6, `fable.md` §6.4) vs ACE-Step built | **ACE-Step 1.5 (MIT)** is the default. Stable Audio 3 stays parked until its licence text and model card are read (LEGAL §8) | it is built, run and heard ("very industrial, very good", 2-Nov); MIT has no revenue cap |
+| 2 | `autoria/HANDOFF-2026-11-02.md` §4.3 "no cloud service of ours" vs the 1-Nov paid tier | **Local-first is the product.** The paid tier (1-Nov, steps 6-7) is optional and later; everything works with the user's own keys, own Lambda or local models. §4.3 applies to the authorship layer: signing, marking and consent never go through a service of ours | both stand once scoped: §4.3 is about authorship and privacy, the tier about who pays for the LLM |
+| 3 | Default generation model open (CONCEPT 6, `autoria/HANDOFF-2026-11-02.md` §6.4) vs ACE-Step built | **ACE-Step 1.5 (MIT)** is the default. Stable Audio 3 stays parked until its licence text and model card are read (LEGAL §8) | it is built, run and heard ("very industrial, very good", 2-Nov); MIT has no revenue cap |
 | 4 | LEGAL 23-Oct bans "Stable Audio" vs 2-Nov candidate Stable Audio 3 | The 23-Oct ban is **Stable Audio Open (CC-BY-NC) and MusicGen (CC-BY-NC weights)**. Stable Audio 3 is a different product under the Community Licence: candidate, not cleared | the ban was about the NC licence, not the brand |
-| 5 | Authorship phase A = local generation + LoRA (`fable.md` §4.5) vs 2-Nov "Lambda, LoRA parked" | **Existing models on Lambda first**; local generation and the own-stems LoRA come after, still phase A | Carlos, 2-Nov: "try existing models first"; the laptop has 7.7 GB RAM |
-| 6 | Lambda credits: watermark (`fable.md` §5) vs Qwen LoRA (CONCEPT 8, PLAN 1-Nov) | **No pre-split.** Each run is approved by Carlos when it is proposed, with its estimated cost. A Qwen3 8B LoRA is out (does not run on 7.7 GB); the own-model LoRA starts from a ~1B model that speaks MIDI | spending is already per run (GPU counter, Off button); the 8B option was ruled out by measurement |
-| 7 | Where the authorship project lives (`fable.md` §4.1, CONCEPT 1, REVISION §9.4) | **`autoria/` in this repo until it has code that runs on its own**, then its own repo. `fable.md` moves to `autoria/HANDOFF-2026-11-02.md`, unescaped | one repo is cheaper while it is a spike; the handoff belongs with what it describes |
+| 5 | Authorship phase A = local generation + LoRA (`autoria/HANDOFF-2026-11-02.md` §4.5) vs 2-Nov "Lambda, LoRA parked" | **Existing models on Lambda first**; local generation and the own-stems LoRA come after, still phase A | Carlos, 2-Nov: "try existing models first"; the laptop has 7.7 GB RAM |
+| 6 | Lambda credits: watermark (`autoria/HANDOFF-2026-11-02.md` §5) vs Qwen LoRA (CONCEPT 8, PLAN 1-Nov) | **No pre-split.** Each run is approved by Carlos when it is proposed, with its estimated cost. A Qwen3 8B LoRA is out (does not run on 7.7 GB); the own-model LoRA starts from a ~1B model that speaks MIDI | spending is already per run (GPU counter, Off button); the 8B option was ruled out by measurement |
+| 7 | Where the authorship project lives (`autoria/HANDOFF-2026-11-02.md` §4.1, CONCEPT 1, REVISION §9.4) | **`autoria/` in this repo until it has code that runs on its own**, then its own repo. `fable.md` moved to `autoria/HANDOFF-2026-11-02.md`, unescaped (done 4-Nov) | one repo is cheaper while it is a spike; the handoff belongs with what it describes |
 | 8 | When ACE-Step is used: 3-Nov "only when named" vs 4-Nov "forced by the header box" | **The 4-Nov rule**: the "ACE-Step" box in the chat header decides, and a new-song Brief on GPU ticks it | the model ignored the prompt rule; the code rule is newer and enforceable |
 | 9 | Article 50 date "2-Dec-2026, not re-verified" | **Verified 4-Nov** (web search): Article 50 applies from 2-Aug-2026; the Digital Omnibus (Reg. (EU) 2026/1744, in force 27-Jul-2026) gives until **2-Dec-2026** for the machine-readable marking of 50(2) only to generative systems placed on the market before 2-Aug-2026. miuzika is not on the market (local dev server), so the date only matters if it ships | sources: usercentrics.com, technology.org (13-Oct-2026), joneswalker.com; check the Official Journal text before shipping |
 

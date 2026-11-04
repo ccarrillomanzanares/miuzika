@@ -1,7 +1,7 @@
 # Authorship layer for miuzika — concept (draft, 2026-11-02)
 
 Provisional home: `autoria/` inside the miuzika repo. The brainstorm handoff
-(`fable.md`, 2-Nov-2026) decided this is a project of its own, closely coupled to
+(`autoria/HANDOFF-2026-11-02.md`, 2-Nov-2026) decided this is a project of its own, closely coupled to
 miuzika. Name and folder are Carlos's call (open question 1); until then it lives here so
 the spike can be run against real miuzika exports. Everything in English, per house rule.
 
