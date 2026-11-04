@@ -56,7 +56,13 @@ is the same idea).
 
 ## Order
 
-1. `ProveedorGpu` interface with Lambda behind it, no behaviour change (tests from `lambda.test.ts`).
-2. Config in `.miuzika/proveedores.json` with `.env` fallback; the Models "GPU" section.
-3. Tools per turn from the selector (behaviour change: GPU tools vanish on CPU).
-4. The prompt section, after Carlos says yes to the exact text.
+1. Done 4-Nov (`e1a6869`): `ProveedorGpu` interface with Lambda behind it, no behaviour change.
+2. Done 4-Nov (`dc57e63`, `6f42e6b`): settings in `.miuzika/proveedores.json` under `gpu`, read on
+   every request, `.env` as the fallback field by field; the Models "GPU" section (headless run).
+3. Done 4-Nov: tools per call from the selector; on CPU the GPU tools are not offered.
+4. The prompt section, after Carlos says yes to the exact text (proposed 4-Nov, see ESTADO).
+
+Still to do: rename `/api/run/lambda` to `/api/run/gpu` (keeping the alias); the log tool names
+(`lambda_encender`, `ejecutar_python_lambda`…) say Lambda and stay until a second provider exists.
+Not checked yet with Carlos: a GPU turn with a model after these changes, the Models GPU section
+in his browser.
