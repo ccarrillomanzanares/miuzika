@@ -366,11 +366,12 @@ disk inventory to `server/trabajo.ts` (tested), `contexto.ts` 484 -> ~280 lines.
 **4-Nov: GPU providers and song generation** — plan in `docs/PLAN-PROVEEDORES-GPU.md` (Carlos's
 decisions: GPU providers as their own list in Models, Lambda first; selector on GPU + "hazme una
 canción" = ACE-Step; on CPU the GPU tools are not offered; ACE-Step is one sound model of several
-to come). Review bug 7 done (`9c028ea`). Nothing of the plan built yet.
+to come). Review bug 7 done (`9c028ea`). Steps 1-3 built the same day (provider interface, settings in
+.miuzika/proveedores.json + Models GPU section, GPU tools only offered on GPU); **prompt v5**
+(`622c6698`, item 15.5, approved by Carlos with the exact text). Carlos to try it in the browser.
 
 **For Carlos to decide or check** (not done on purpose):
 - Hear an MP3 export, and try mute/solo and the pad on two tracks with the same name.
-- Prompt item 15.5 (ACE-Step when a song is asked; hear proposals through anadir_pistas).
 - The default drum kit: switch drumkit tracks without programa to the GM kit (every piece sounds)
   changes how existing songs sound; only with listening.
 
