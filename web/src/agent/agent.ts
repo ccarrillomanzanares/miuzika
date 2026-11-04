@@ -108,6 +108,9 @@ export async function ejecutarAgente(
   const forzar = opciones.forzar;
   let forzadaHecha = forzar === undefined;
   let recordatorios = 0;
+  /** Calls to the forced tool that failed, and the last error: a failing tool is not "not called". */
+  let intentosFallidos = 0;
+  let ultimoErrorForzada = "";
   const herramientasAhora = (): ReturnType<typeof herramientasDelTurno> => {
     const todas = herramientasDelTurno(destinoActual());
     return forzar && !forzadaHecha ? herramientasForzadas(todas, forzar.herramienta, forzar.previas) : todas;
@@ -249,6 +252,16 @@ export async function ejecutarAgente(
         };
       }
       // A forced turn does not end before the tool has run: remind it, then give up saying so.
+      // If it was called and failed, reminding is pointless: stop with the real error.
+      // (4-Nov test: with the GPU unreachable it was called 5 times, then reminded twice, and
+      // the stop said "answered without calling it", which was false.)
+      if (forzar && !forzadaHecha && intentosFallidos > 0) {
+        const aviso =
+          `I stopped: ${forzar.herramienta} was called ${intentosFallidos} time(s) and failed, so the song was not ` +
+          `generated (nothing was composed instead). Last error: ${ultimoErrorForzada.split("\n")[0].slice(0, 240)}`;
+        alEvento?.({ tipo: "aviso", texto: aviso.split(".")[0] });
+        return { texto: `${texto}\n\n${aviso}`.trim(), pasos, llamadas, ms: Date.now() - t0, herramientas };
+      }
       if (forzar && !forzadaHecha) {
         if (recordatorios < RECORDATORIOS_FORZAR) {
           recordatorios += 1;
@@ -281,7 +294,13 @@ export async function ejecutarAgente(
       const tHerramienta = Date.now();
       const resultado = await ejecutarHerramienta(nombre, argumentos, senal);
       const msHerramienta = Date.now() - tHerramienta;
-      if (forzar && nombre === forzar.herramienta && resultado.ok) forzadaHecha = true;
+      if (forzar && nombre === forzar.herramienta) {
+        if (resultado.ok) forzadaHecha = true;
+        else {
+          intentosFallidos += 1;
+          ultimoErrorForzada = resultado.texto;
+        }
+      }
       // `argumentos` is the string the model wrote: below, long ones are replaced in the
       // history with a summary, and the trajectory file needs the real thing.
       herramientas.push({
