@@ -300,7 +300,16 @@ export function rutasProveedores(server: ViteDevServer, ctx: Contexto, env: Reco
         res.end();
         return;
       }
-      Readable.fromWeb(r.body as never).pipe(res);
+      // The stream must have an error listener: when the browser closes the connection
+      // mid-answer (Cancel, reload, a closed tab) the abort above makes it emit AbortError, and
+      // an unhandled stream error kills the whole dev server. Seen 4-Nov: a test tab closed
+      // during a DeepSeek answer took down Vite ("Unhandled 'error' event ... AbortError").
+      const flujo = Readable.fromWeb(r.body as never);
+      flujo.on("error", (error) => {
+        if (!control.signal.aborted) console.error(`[llm] ${etiqueta} stream error: ${error instanceof Error ? error.message : String(error)}`);
+        res.destroy();
+      });
+      flujo.pipe(res);
     } catch (error) {
       if (control.signal.aborted) return;
       console.error(`[llm] ${etiqueta} ${url} -> ERROR ${error instanceof Error ? error.message : String(error)}`);
