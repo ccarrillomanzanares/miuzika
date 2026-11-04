@@ -83,12 +83,16 @@ MAX_SEGUNDOS = 6.0
 MIN_SEGUNDOS = 2.5
 FUNDIDO_S = 0.25
 
-# One gain per instrument so its loudest sample peaks here. Measured on 4-Nov: GeneralUser GS
-# samples are normalized (median peak -0.1 dBFS) while VCSL keeps the recording level (concert
-# harp loudest -11.8, pipe organ -22.7, Steinway -3.0 dBFS), and openDAW ignores
-# initialAttenuation, so in Carlos's test the harp needed +8 dB and the organ +12 to sit with
-# GM. A single gain keeps the soft/loud layer difference; -1 dBFS leaves room for no clipping.
-PICO_OBJETIVO_DBFS = -1.0
+# One gain per instrument, from its TYPICAL sample (median peak), not its loudest. Measured on
+# 4-Nov: GeneralUser GS samples are normalized (median peak -0.1 dBFS) while VCSL keeps the
+# recording level, and openDAW ignores initialAttenuation, so in Carlos's test the harp needed
+# +8 dB and the organ +12 to sit with GM. Normalizing the loudest sample to -1 dBFS was tried
+# first: the organ then sat with GM (-15 vs -16 dBFS RMS) but the harp stayed 9 dB below,
+# because 43 of its 45 samples peak at ~-23 dBFS and a single loud-layer one at -11.8 capped
+# the gain. Now the median peak goes to MEDIANA_OBJETIVO_DBFS and only the samples that would
+# pass TECHO_DBFS are turned down to it (they lose some of their extra loudness, no clipping).
+MEDIANA_OBJETIVO_DBFS = -6.0
+TECHO_DBFS = -1.0
 
 
 def suenan_por_defecto(regiones):
@@ -250,10 +254,12 @@ def construir(regiones, carpeta_sfz, nombre_preset, max_segundos=None):
             n = int(FUNDIDO_S * SR)
             datos[-n:] *= np.linspace(1.0, 0.0, n)
         leidas.append((region, datos))
-    pico = max((float(np.abs(d).max()) for _, d in leidas), default=0.0)
-    ganancia = 10 ** (PICO_OBJETIVO_DBFS / 20) / pico if pico > 0 else 1.0
-    for region, datos in leidas:
-        datos = datos * ganancia
+    picos = [float(np.abs(d).max()) for _, d in leidas]
+    mediana = float(np.median(picos)) if picos else 0.0
+    ganancia = 10 ** (MEDIANA_OBJETIVO_DBFS / 20) / mediana if mediana > 0 else 1.0
+    techo = 10 ** (TECHO_DBFS / 20)
+    for (region, datos), pico in zip(leidas, picos):
+        datos = datos * min(ganancia, techo / pico if pico > 0 else ganancia)
         # SF2 requires 46 samples of silence at the end of each sample.
         datos = np.concatenate([datos, np.zeros(46)])
         entero = np.clip(datos * 32767.0, -32768, 32767).astype("<i2")
