@@ -124,3 +124,26 @@ came from the prompt itself: "ONE section per turn" and "BEFORE DELIVERING, ASK"
   If a stem ends up 12 dB below the median, say so." The format is chosen in the
   brief's form (MIDI, WAV or both) and the new `exportar` tool does it
   without scripts.
+
+## v5 (4-Nov): generated audio, and hearing proposals through the project
+
+Fingerprint `0eaa1767` → `622c6698` (5,010 → 5,480 characters). Carlos approved the exact text
+on 4-Nov ("ok", "adelante") after reading it twice. One new section after ENTREGA DE AUDIO:
+
+> AUDIO GENERADO: si tienes generar_audio (el selector está en GPU), una canción se hace con él:
+> ACE-Step la crea entera y producida, con voz si hay letra; después puedes mezclarla, completarla
+> en el DAW y exportarla. Lo que salga de proponer_midi y transcribir_audio se oye con
+> anadir_pistas, nunca con renderizadores propios: su resumen ya es fiable. Lo que traigas para
+> comparar (tomas, propuestas) va desde el compás 1 en mute o solo, nunca detrás del último compás.
+
+Why, measured:
+- 3-Nov night, "cain-uriel": "hazme una canción dark psicobilly surf…" was composed note by note;
+  ACE-Step was only used when the request named it. The prompt never mentioned generar_audio.
+- 2-Nov, "Stahl": the agent re-read proponer_midi's files with its own scripts, called the channel-10
+  drum track "a piano on channel 16" and rendered it as piano.
+- 2-Nov, "Stahl": material to compare was stacked after the last bar (bars 81, 90, 112, 121) and
+  the song grew from 80 to 136 bars.
+
+"si tienes generar_audio" works because of the same day's code change (docs/PLAN-PROVEEDORES-GPU.md,
+step 3): with the chat selector on CPU the GPU tools are not offered at all, so the rule only
+applies when the person chose GPU.

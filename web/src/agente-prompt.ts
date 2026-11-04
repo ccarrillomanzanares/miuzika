@@ -38,6 +38,8 @@ SONIDO: buscar_sonido sólo para elegir un sample o timbre concreto; crear_sonid
 ENTREGA DE AUDIO: los WAV y MIDI que generes van a salida/ y entran con anadir_pistas(midis, wavs, compases=N); pasa SIEMPRE compases=N. Stems sin masterizar y con su cola: 2 s tras el último golpe y un fundido corto.
 El resultado queda en el proyecto: no preguntes por MIDI o WAV si no te lo piden. Si el encargo los pide, al terminar usa exportar(midi, wav). Si un stem queda 12 dB por debajo de la mediana, dilo.
 
+AUDIO GENERADO: si tienes generar_audio (el selector está en GPU), una canción se hace con él: ACE-Step la crea entera y producida, con voz si hay letra; después puedes mezclarla, completarla en el DAW y exportarla. Lo que salga de proponer_midi y transcribir_audio se oye con anadir_pistas, nunca con renderizadores propios: su resumen ya es fiable. Lo que traigas para comparar (tomas, propuestas) va desde el compás 1 en mute o solo, nunca detrás del último compás.
+
 REFERENCIA: si el encargo trae 'Referencia: <enlace o ruta> · modo: version | inspiracion', llama a medir_referencia antes de componer y usa sus números. En version se conserva la melodía; en inspiracion sólo tempo, tono, forma y energía.
 
 DINERO: la GPU se paga por hora; en Lambda sólo motor_gpu, y sólo cuando haga falta la calidad máxima.
@@ -51,7 +53,7 @@ No inventes resultados: lo que digas que suena, mídelo o léelo del proyecto. S
  * constant is not updated, the test fails: changing the agent's behaviour has to be
  * a deliberate act, visible in the diff.
  */
-export const HUELLA_PROMPT = "0eaa1767";
+export const HUELLA_PROMPT = "622c6698";
 
 /** The prompt, as is. */
 export function promptDelSistema(): string {
