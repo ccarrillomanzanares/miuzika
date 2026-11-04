@@ -15,6 +15,8 @@ import { slugDe } from "../src/core/nombres.ts";
 import { configDesdeEnv } from "./lambda.ts";
 import { proveedorLambda } from "./gpu/lambda.ts";
 import type { ProveedorGpu } from "./gpu/proveedor.ts";
+import { leerConfigGpu } from "./config-proveedores.ts";
+import { ajustesEfectivos, gpuActiva } from "../src/core/proveedores-gpu.ts";
 import { crearRegistros } from "./registro.ts";
 import { correrProceso } from "./proceso.ts";
 import { leerCuerpoCrudo, LIMITE_CUERPO, registroApi, responderJson, rutaJson, textoTamano } from "./ruta.ts";
@@ -25,21 +27,23 @@ import { dentroDe } from "./dentro.ts";
 import { MAX_LISTADO, cambiadosDesde, ficherosDeTrabajo, proyectosEnDisco } from "./trabajo.ts";
 
 export function crearContexto(env: Record<string, string>) {
-  // Lambda is OFF unless MIUZIKA_LAMBDA=on: Carlos asked on 31-Oct to stop using the
-  // paid GPU for now without deleting the code or the LAMBDA_* keys in .env. With the
-  // switch off every route behaves as "not configured" (no instance can be started).
-  const lambdaActivo = (env.MIUZIKA_LAMBDA ?? "").trim().toLowerCase() === "on";
-  const leido = lambdaActivo
-    ? configDesdeEnv(env as Record<string, string>)
-    : { cfg: null, faltan: ["MIUZIKA_LAMBDA=on (Lambda is disabled for now)"] };
-  const { cfg: cfgLambda, faltan: faltanLambda } = leido;
-  /** The GPU provider the routes use (docs/PLAN-PROVEEDORES-GPU.md); only Lambda for now. */
-  const gpu: ProveedorGpu | null = cfgLambda ? proveedorLambda(cfgLambda) : null;
-  const faltanGpu = faltanLambda;
-  if (!lambdaActivo) {
-    console.warn("[miuzika] Lambda disabled (set MIUZIKA_LAMBDA=on in .env to enable it). The CPU will be used.");
-  } else if (cfgLambda === null) {
-    console.warn(`[miuzika] Lambda not configured: missing ${faltanLambda.join(", ")}. The CPU will be used.`);
+  /**
+   * The GPU provider in force, read on every call so a change in Models → GPU applies without
+   * restarting (docs/PLAN-PROVEEDORES-GPU.md, step 2). Off unless the settings turn it on, or,
+   * with no GPU settings at all, MIUZIKA_LAMBDA=on in .env: Carlos asked on 31-Oct to stop the
+   * paid GPU by default without deleting its keys. Off or incomplete = every route answers
+   * "not configured" and no instance can be started.
+   */
+  const gpuActual = (): { gpu: ProveedorGpu | null; faltan: string[] } => {
+    const config = leerConfigGpu();
+    const id = gpuActiva(config, env);
+    if (id === "") return { gpu: null, faltan: ["the GPU is off (Models → GPU, or MIUZIKA_LAMBDA=on in .env)"] };
+    const { cfg, faltan } = configDesdeEnv(ajustesEfectivos(id, config, env).variables);
+    return cfg ? { gpu: proveedorLambda(cfg), faltan: [] } : { gpu: null, faltan };
+  };
+  {
+    const { gpu, faltan } = gpuActual();
+    if (!gpu) console.warn(`[miuzika] GPU not in use: ${faltan.join(", ")}. The CPU will be used.`);
   }
 
   const {
@@ -246,8 +250,7 @@ export function crearContexto(env: Record<string, string>) {
   };
 
   return {
-    gpu,
-    faltanGpu,
+    gpuActual,
     carpetaTmp,
     ficheroLog,
     TOPE_LOG,

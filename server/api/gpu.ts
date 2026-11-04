@@ -8,13 +8,14 @@ import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 
 export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
-  const { gpu, faltanGpu, anotar, ficheroHerramientas, carpetaTrabajo, responderJson, leerCuerpo, slugProyecto, resolverEnTrabajo, escritosDesde } = ctx;
+  const { gpuActual, anotar, ficheroHerramientas, carpetaTrabajo, responderJson, leerCuerpo, slugProyecto, resolverEnTrabajo, escritosDesde } = ctx;
 
   /** Instance used by this session (so it can be shut down without asking for the id). */
   let maquinaLambda: { id: string; ip: string } | null = null;
 
   // ---------------------------------------------------------- Lambda (GPU)
   server.middlewares.use("/api/gpu/estado", async (_req, res) => {
+    const { gpu, faltan: faltanGpu } = gpuActual();
     if (gpu === null) {
       responderJson(res, 200, {
         configurado: false,
@@ -56,8 +57,9 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       responderJson(res, 405, { error: "use POST" });
       return;
     }
+    const { gpu, faltan: faltanGpu } = gpuActual();
     if (gpu === null) {
-      responderJson(res, 400, { error: `missing ${faltanGpu.join(", ")} in .env` });
+      responderJson(res, 400, { error: `GPU not available: ${faltanGpu.join(", ")}` });
       return;
     }
     const avisos: string[] = [];
@@ -90,8 +92,9 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       responderJson(res, 405, { error: "use POST" });
       return;
     }
+    const { gpu, faltan: faltanGpu } = gpuActual();
     if (gpu === null) {
-      responderJson(res, 400, { error: `missing ${faltanGpu.join(", ")} in .env` });
+      responderJson(res, 400, { error: `GPU not available: ${faltanGpu.join(", ")}` });
       return;
     }
     // Called by the off button next to the GPU counter (added 3-Nov: the cancel texts
@@ -143,8 +146,9 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       responderJson(res, 405, { error: "use POST" });
       return;
     }
+    const { gpu, faltan: faltanGpu } = gpuActual();
     if (gpu === null) {
-      responderJson(res, 400, { error: `missing ${faltanGpu.join(", ")} in .env` });
+      responderJson(res, 400, { error: `GPU not available: ${faltanGpu.join(", ")}` });
       return;
     }
     leerCuerpo(req, res, (cuerpo) => {

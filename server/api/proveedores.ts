@@ -15,15 +15,14 @@
  * This used to be a fixed Vite proxy to Ollama Cloud (vite.config.ts).
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { dirname, resolve } from "node:path";
 import { Readable } from "node:stream";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 import { rutaJson } from "../ruta.ts";
+import { guardarFicheroProveedores, leerConfigGpu, leerFicheroProveedores } from "../config-proveedores.ts";
+import { PROVEEDORES_GPU, ajustesEfectivos, gpuActiva, limpiarAjustesGpu, proveedorGpuPorId } from "../../src/core/proveedores-gpu.ts";
 import {
-  CONFIG_VACIA,
   PROVEEDORES,
   PROVEEDOR_POR_DEFECTO,
   adaptarCuerpo,
@@ -36,24 +35,18 @@ import {
   type Proveedor,
 } from "../../src/core/proveedores.ts";
 
-const FICHERO = resolve(process.cwd(), ".miuzika", "proveedores.json");
-
 function leerConfig(): ConfigProveedores {
-  try {
-    if (!existsSync(FICHERO)) return structuredClone(CONFIG_VACIA);
-    const datos = JSON.parse(readFileSync(FICHERO, "utf8")) as Partial<ConfigProveedores>;
-    return {
-      activo: proveedorPorId(String(datos.activo ?? "")) ? String(datos.activo) : PROVEEDOR_POR_DEFECTO,
-      proveedores: typeof datos.proveedores === "object" && datos.proveedores ? datos.proveedores : {},
-    };
-  } catch {
-    return structuredClone(CONFIG_VACIA);
-  }
+  const datos = leerFicheroProveedores();
+  return {
+    activo: proveedorPorId(String(datos.activo ?? "")) ? String(datos.activo) : PROVEEDOR_POR_DEFECTO,
+    proveedores:
+      typeof datos.proveedores === "object" && datos.proveedores ? (datos.proveedores as ConfigProveedores["proveedores"]) : {},
+  };
 }
 
+/** Only the LLM part: the GPU part of the same file is kept (server/config-proveedores.ts). */
 function guardarConfig(config: ConfigProveedores): void {
-  mkdirSync(dirname(FICHERO), { recursive: true });
-  writeFileSync(FICHERO, JSON.stringify(config, null, 2), { encoding: "utf8", mode: 0o600 });
+  guardarFicheroProveedores({ activo: config.activo, proveedores: config.proveedores });
 }
 
 /** Authentication headers for a provider (Anthropic also accepts Bearer in its compatible API). */
@@ -62,7 +55,7 @@ function cabeceras(clave: string): Record<string, string> {
 }
 
 export function rutasProveedores(server: ViteDevServer, ctx: Contexto, env: Record<string, string>): void {
-  const { responderJson, leerCuerpo, leerCuerpoCrudo } = ctx;
+  const { responderJson, leerCuerpo, leerCuerpoCrudo, anotar, ficheroHerramientas } = ctx;
 
   const activo = (): { p: Proveedor; base: string; clave: string; modelo: string } => {
     const config = leerConfig();
@@ -158,6 +151,73 @@ export function rutasProveedores(server: ViteDevServer, ctx: Contexto, env: Reco
       responderJson(res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) });
     }
   }));
+
+  // ---------------------------------------------------------------- GPU (4-Nov)
+  // GET: the GPU providers, which one is on and each field's value and origin (settings,
+  // .env, default), WITHOUT secrets: a secret only says it exists and its last digits.
+  // POST {accion: guardar | activar | desactivar | borrarClave, id, campos}.
+  // Mounted before the root route below, which only answers "/".
+  const describirGpu = () => {
+    const config = leerConfigGpu();
+    const { gpu, faltan } = ctx.gpuActual();
+    return {
+      ok: true,
+      activo: gpuActiva(config, env),
+      // Where the on/off comes from: the settings, or .env's MIUZIKA_LAMBDA when there are none.
+      activoDesde: config?.activo !== undefined ? "ajustes" : "env",
+      disponible: gpu !== null,
+      faltan,
+      proveedores: PROVEEDORES_GPU.map((p) => {
+        const { variables, origen } = ajustesEfectivos(p.id, config, env);
+        return {
+          id: p.id,
+          nombre: p.nombre,
+          ayuda: { es: p.ayudaEs, en: p.ayudaEn },
+          campos: p.campos.map((c) => {
+            const valor = variables[c.variableEnv] ?? "";
+            return {
+              clave: c.clave,
+              es: c.es,
+              en: c.en,
+              variableEnv: c.variableEnv,
+              secreto: c.secreto === true,
+              origen: origen[c.clave],
+              porDefecto: c.porDefecto ?? "",
+              ...(c.secreto ? { tiene: valor !== "", oculta: claveOculta(valor) } : { valor }),
+            };
+          }),
+        };
+      }),
+    };
+  };
+
+  server.middlewares.use("/api/proveedores/gpu", (req, res) => {
+    if (req.method === "GET") {
+      responderJson(res, 200, describirGpu());
+      return;
+    }
+    rutaJson<{ accion?: string; id?: string; campos?: Record<string, unknown> }>({ metodo: "POST" }, async ({ res: r, datos }) => {
+      const p = proveedorGpuPorId(String(datos.id ?? ""));
+      if (!p) {
+        responderJson(r, 400, { error: `unknown GPU provider: ${String(datos.id)}` });
+        return;
+      }
+      const config = leerConfigGpu() ?? { proveedores: {} };
+      const previos = config.proveedores[p.id] ?? {};
+      let propios = limpiarAjustesGpu(p.id, datos.campos ?? {}, previos);
+      if (datos.accion === "borrarClave") {
+        propios = { ...previos };
+        for (const c of p.campos) if (c.secreto) delete propios[c.clave];
+      }
+      const activo = datos.accion === "activar" ? p.id : datos.accion === "desactivar" ? "" : config.activo;
+      guardarFicheroProveedores({
+        gpu: { ...(activo !== undefined ? { activo } : {}), proveedores: { ...config.proveedores, [p.id]: propios } },
+      });
+      // Never the values: which fields changed, for the log.
+      anotar(ficheroHerramientas, JSON.stringify({ t: new Date().toISOString(), tool: "ajustes_gpu", id: p.id, accion: datos.accion ?? "guardar", campos: Object.keys(datos.campos ?? {}) }));
+      responderJson(r, 200, describirGpu());
+    })(req, res);
+  });
 
   server.middlewares.use("/api/proveedores", (req, res, next) => {
     // Mounted after /modelos and /probar: only the root reaches here.
