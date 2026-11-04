@@ -73,8 +73,6 @@ export interface Encargo {
   /** Besides leaving it in the project, exporting it (both can be requested). */
   entregaMidi: boolean;
   entregaWav: boolean;
-  /** Added 3-Nov (Carlos: "deberíamos hacer un conversor a mp3 también"). Optional: older saved briefs lack it. */
-  entregaMp3?: boolean;
 }
 
 export const ENCARGO_VACIO: Encargo = {
@@ -103,7 +101,6 @@ export const ENCARGO_VACIO: Encargo = {
   mas: "",
   entregaMidi: false,
   entregaWav: false,
-  entregaMp3: false,
 };
 
 /** Tonics offered by the form, with their name in each language. */
@@ -335,7 +332,7 @@ export function textoDeEncargo(e: Encargo, idioma: Idioma = "en", proyectoAbiert
   const mas = e.mas.trim();
   if (mas) lineas.push(mas);
 
-  const formatos = [e.entregaMidi ? "MIDI" : "", e.entregaWav ? "WAV" : "", e.entregaMp3 ? "MP3" : ""].filter(Boolean);
+  const formatos = [e.entregaMidi ? "MIDI" : "", e.entregaWav ? "WAV" : ""].filter(Boolean);
   if (formatos.length > 0) {
     lineas.push(
       tx(

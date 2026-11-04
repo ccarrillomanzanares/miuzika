@@ -67,7 +67,7 @@ import { ejecutarHerramienta } from "./agent/tools.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
 import { PanelPad } from "./pad.ts";
 import { crearRenderEscucha } from "./render-escucha.ts";
-import { locale, traducirPagina } from "./i18n.ts";
+import { locale, t, traducirPagina } from "./i18n.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -1712,6 +1712,22 @@ $("guardar").addEventListener("click", () => {
     guardadoTimer = null;
   }
   void guardarEnDisco(false);
+});
+
+// MP3 is the person's call, not the agent's (Carlos, 4-Nov): a button that renders the mix and
+// encodes it (server/mp3.ts), with no tool and no brief line behind it.
+$<HTMLButtonElement>("exportar-mp3").addEventListener("click", async () => {
+  const boton = $<HTMLButtonElement>("exportar-mp3");
+  if (boton.disabled) return;
+  boton.disabled = true;
+  setStatus(t("mp3.renderizando", "Rendering the mix to MP3…"));
+  try {
+    const r = await renderEscucha.exportar({ midi: false, wav: false, mp3: true });
+    setStatus(r.texto.split("\n").pop() ?? r.texto);
+    if (!r.ok) window.alert(r.texto);
+  } finally {
+    boton.disabled = false;
+  }
 });
 
 $<HTMLInputElement>("audio-file").addEventListener("change", async (event) => {

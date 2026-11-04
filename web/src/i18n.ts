@@ -38,6 +38,8 @@ const ES: Diccionario = {
   audio: "Audio",
   guardar: "Guardar",
   "guardar.title": "Escribir el fichero maestro en workspace/proyectos/<slug>/proyecto.json (Ctrl+S)",
+  "mp3.title": "Renderizar la mezcla con el mismo motor que Play y guardarla como MP3 (320 kbps, título del proyecto en ID3) en salida/",
+  "mp3.renderizando": "Renderizando la mezcla a MP3…",
   proyectos: "Proyectos",
   "proyectos.title": "Abrir un proyecto guardado en workspace/proyectos/",
   "proyectos.dialogo": "Proyectos en disco",

@@ -1314,7 +1314,7 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
 
   async function exportar(peticion: { midi: boolean; wav: boolean; mp3?: boolean }, senal?: AbortSignal): Promise<ResultadoAccion> {
     if (!e.exportar) return { ok: false, texto: "This tab does not know how to export." };
-    if (!peticion.midi && !peticion.wav && !peticion.mp3) return { ok: false, texto: "Ask for midi, wav, mp3 or several." };
+    if (!peticion.midi && !peticion.wav) return { ok: false, texto: "Ask for midi, wav or both." };
     return e.exportar(peticion, senal);
   }
 
