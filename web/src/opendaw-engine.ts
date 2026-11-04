@@ -6,7 +6,7 @@
 import type { Project as MiuzikaProject } from "../../src/core/types.ts";
 import type { OpenDawAudioAsset, OpenDawDrumSample } from "../../src/host/opendaw/adapter.ts";
 import { projectToOpenDaw } from "../../src/host/opendaw/adapter.ts";
-import { repartirZonasGlobales } from "./soundfont-zonas.ts";
+import { afinarZonas, repartirZonasGlobales } from "./soundfont-zonas.ts";
 import { KIT_POR_DEFECTO } from "../../src/core/bateria.ts";
 import workletsUrl from "@opendaw/studio-core/processors.js?url";
 import workersUrl from "@opendaw/studio-core/workers-main.js?worker&url";
@@ -280,6 +280,8 @@ async function montarProyecto(
       const parseado = new SoundFont2(new Uint8Array(sf.bytes));
       // openDAW discards global zones: without this, 113 of the 128 GM presets lose the loop.
       repartirZonasGlobales(parseado as Parameters<typeof repartirZonasGlobales>[0]);
+      // openDAW also ignores scaleTuning/coarseTune: the GM snare played 22 semitones down (4-Nov).
+      afinarZonas(parseado as Parameters<typeof afinarZonas>[0]);
       parseados.set(clave, parseado);
     }
   }

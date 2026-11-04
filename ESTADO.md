@@ -377,10 +377,27 @@ on GPU ticks (A); filter has highpass 1; verificar_audio gives reasons, treats D
 and now sees 16-bit clipping; editar_proyecto takes ops as JSON text; the LLM proxy no longer
 crashes the dev server when a streaming answer is cut. All run headless; not with a real GPU take.
 
+**4-Nov, Carlos's browser tests 1-8** (all heard by him):
+- Passed: Steinway and VCSL sound (Steinway 84 zones); bus send tail (bar 5 at −66 dBFS with a
+  −3 dB send, silent at −60); mute silences everything; MP3 export with the tail intact; drumkit
+  tracks without a program now play GM kit 0 (`51897d0`).
+- **Fixed: GM drums were transposed.** openDAW reads only the root key of each SF2 zone and
+  ignores scaleTuning and coarseTune. GM kit 0 snare (key 38, root 60, scaleTuning 0) played 22
+  semitones down: measured 2.35 s and 60 Hz against 0.68 s and ~206 Hz in the raw sample (the
+  "bomb, metallic" snare Carlos heard). `afinarZonas` in `web/src/soundfont-zonas.ts` moves the
+  tuning into the root key (one zone per key when scaleTuning is not 100). Measured after, with
+  the real engine headless: kits 0 and 16 snare at 0.71 s, strongest 207 Hz. Not yet heard.
+  fineTune and preset-level tuning are still ignored.
+- Open: VCSL plays ~14 dB below GM (harp needed +8 dB, organ +12): normalize in `sfz2sf2.py`.
+  The Steinway has only 2 velocity layers (0-99, 100-127) because of the 40 MB cap: its color
+  changes only at velocity ≥100; try 3 layers with samples cut to ~4 s. The Power kit (16)
+  fires two layers on key 38 (by design of the SF2). The first hit is louder in live Play.
+  Agent leniency to add: `add_bus` with `{device:{...}}` inside devices, `set_instrument` with
+  `kind` for `type`.
+
 **For Carlos to decide or check** (not done on purpose):
-- Hear an MP3 export, and try mute/solo and the pad on two tracks with the same name.
-- The default drum kit: switch drumkit tracks without programa to the GM kit (every piece sounds)
-  changes how existing songs sound; only with listening.
+- Try mute/solo and the pad on two tracks with the same name.
+- Hear a GM drum part after the tuning fix.
 
 
 1. Draw buses and sends in the interface (mixer).
