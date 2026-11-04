@@ -26,6 +26,7 @@ import {
 } from "./mapping.ts";
 import { installNodeShims } from "./shims.ts";
 import { Option, UUID } from "@opendaw/lib-std";
+import { segundosPorTiempo } from "../../core/tiempo.ts";
 
 interface OpenDawExport {
   bytes: ArrayBuffer;
@@ -329,7 +330,7 @@ export async function projectToOpenDaw(
           unit.namedParameter.panning.setValue(track.pan);
           unit.namedParameter.mute.setValue(track.muted);
           unit.namedParameter.solo.setValue(track.solo);
-          const secondsPerBeat = 60 / source.bpm;
+          const secondsPerBeat = segundosPorTiempo(source.bpm);
 
           for (const clip of track.clips) {
             if (!clip.audio) continue;

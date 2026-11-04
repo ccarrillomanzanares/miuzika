@@ -34,3 +34,16 @@ export function compasesNecesarios(startBar: number, lengthBeats: number, barBea
   if (!(barBeats > 0)) return Math.max(1, Math.ceil(startBar + 1));
   return Math.max(1, startBar + Math.ceil(lengthBeats / barBeats - 1e-6));
 }
+
+/**
+ * Seconds of one beat (a quarter note: the timeline counts in quarter notes) at `bpm`.
+ * One place for 60/bpm (review of 3-Nov: nine inline copies across core, host and web).
+ */
+export function segundosPorTiempo(bpm: number): number {
+  return 60 / bpm;
+}
+
+/** Seconds → beats at `bpm`. */
+export function tiemposDeSegundos(segundos: number, bpm: number): number {
+  return (segundos * bpm) / 60;
+}

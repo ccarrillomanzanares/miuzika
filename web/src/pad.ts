@@ -15,6 +15,7 @@ import type { Note, Project, Track } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
 import { GrabadorPad, MapeoPad, MODOS_PAD, type ModoPad, type NotaPad } from "../../src/core/pad.ts";
 import type { OpenDawPlaybackHandle } from "./opendaw-engine.ts";
+import { segundosPorTiempo, tiemposDeSegundos } from "../../src/core/tiempo.ts";
 
 export interface DepsPad {
   proyecto(): Project | null;
@@ -316,7 +317,7 @@ export class PanelPad {
   private beatGrabacion(): number {
     const g = this.grabacion;
     if (!g) return 0;
-    return ((g.ctx.currentTime - g.t0) * g.bpm) / 60;
+    return tiemposDeSegundos(g.ctx.currentTime - g.t0, g.bpm);
   }
 
   private async empezarGrabacion(): Promise<void> {
@@ -334,7 +335,7 @@ export class PanelPad {
     const porCompas = beatsPerBar(project);
     // From the start of the bar where the cursor is.
     const inicioBeat = Math.floor(this.deps.cursor() / porCompas) * porCompas;
-    const segundosPorBeat = 60 / project.bpm;
+    const segundosPorBeat = segundosPorTiempo(project.bpm);
     const ahora = motor.context.currentTime + 0.1;
     // One bar of count-in with the metronome; then the transport starts.
     const t0 = ahora + porCompas * segundosPorBeat;

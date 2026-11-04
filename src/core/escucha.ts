@@ -11,6 +11,7 @@
  */
 
 import type { Track } from "./types.ts";
+import { segundosPorTiempo } from "./tiempo.ts";
 
 /** Below this peak (dBFS) a span counts as silence. A quiet pad at −40 dB still plays; an SF2 that fails to load gives −∞. */
 export const UMBRAL_SILENCIO_DB = -70;
@@ -69,7 +70,7 @@ export function nivelesPorTramo(
   tiemposPorTramo: number,
   tramos: number,
 ): NivelTramo[] {
-  const muestrasPorTramo = (tiemposPorTramo * 60 * sampleRate) / bpm;
+  const muestrasPorTramo = tiemposPorTramo * segundosPorTiempo(bpm) * sampleRate;
   const largo = canales[0]?.length ?? 0;
   const salida: NivelTramo[] = [];
   for (let i = 0; i < tramos; i += 1) {

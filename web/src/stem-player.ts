@@ -9,6 +9,8 @@
  * through openDAW. The transport is driven by main.ts (play/stop/seek).
  */
 
+import { segundosPorTiempo } from "../../src/core/tiempo.ts";
+
 export interface StemDef {
   /** Unique key of the clip (asset + clip), so the element is not duplicated. */
   clave: string;
@@ -92,7 +94,7 @@ export class StemPlayer {
     if (this.voces.size === 0) return;
     this.asegurarContexto();
     this.sonando = true;
-    const spb = 60 / this.bpm;
+    const spb = segundosPorTiempo(this.bpm);
     for (const voz of this.voces.values()) {
       const { startBeat, lengthBeat, offsetBeat } = voz.def;
       const fin = startBeat + lengthBeat;
@@ -121,7 +123,7 @@ export class StemPlayer {
   /** Syncs the state with the current beat (called by the playback loop). */
   sincronizar(beat: number): void {
     if (!this.sonando) return;
-    const spb = 60 / this.bpm;
+    const spb = segundosPorTiempo(this.bpm);
     for (const voz of this.voces.values()) {
       const { startBeat, lengthBeat, offsetBeat } = voz.def;
       const fin = startBeat + lengthBeat;

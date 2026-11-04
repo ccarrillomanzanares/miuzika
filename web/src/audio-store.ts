@@ -17,6 +17,7 @@ import type { Op } from "../../src/core/ops.ts";
 import { idsDeAssets } from "../../src/core/project.ts";
 import { rutaEnWorkspace } from "../../src/core/rutas.ts";
 import { slugDe } from "../../src/core/nombres.ts";
+import { tiemposDeSegundos } from "../../src/core/tiempo.ts";
 
 /** Up to these seconds the WAV is always decoded. */
 export const SEGUNDOS_STREAMING = 30;
@@ -177,7 +178,7 @@ export async function cargarWavDeDisco(datos: {
   const durationBeats =
     datos.durationBeats !== undefined && datos.durationBeats > 0
       ? datos.durationBeats
-      : Math.max(0.25, (duracionSeg * datos.bpm) / 60);
+      : Math.max(0.25, tiemposDeSegundos(duracionSeg, datos.bpm));
   const peaks = Float32Array.from(picos);
   const soltar = reservarDecodificado(duracionSeg);
   if (!soltar) {

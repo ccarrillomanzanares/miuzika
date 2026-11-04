@@ -6,6 +6,7 @@ import type { Mode } from "./types.ts";
 import { MODES } from "./theory.ts";
 import { hashString } from "./rng.ts";
 import { slugDe } from "./nombres.ts";
+import { segundosPorTiempo } from "./tiempo.ts";
 
 /**
  * Brings a project read from disk up to date: today, effect parameters using the
@@ -266,7 +267,7 @@ export function projectStats(project: Project): ProjectStats {
     clips,
     notes,
     bars: project.lengthBars,
-    seconds: (project.lengthBars * beatsPerBar(project) * 60) / project.bpm,
+    seconds: project.lengthBars * beatsPerBar(project) * segundosPorTiempo(project.bpm),
     midiTracks: project.tracks.filter((track) => track.kind === "midi").length,
     audioTracks: project.tracks.filter((track) => track.kind === "audio").length,
   };
