@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { createProject } from "../../src/core/project.ts";
+import { createProject } from "./project.ts";
 import {
   FORMATO,
   carpetaDeRuta,

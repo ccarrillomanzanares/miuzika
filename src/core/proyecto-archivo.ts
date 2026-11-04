@@ -10,8 +10,8 @@
  * JSON, so it can be tested with `node --test`.
  */
 
-import type { AudioAsset, Project } from "../../src/core/types.ts";
-import { carpetaDeNombre, idsDeAssets, migrarProyecto } from "../../src/core/project.ts";
+import type { AudioAsset, Project } from "./types.ts";
+import { carpetaDeNombre, idsDeAssets, migrarProyecto } from "./project.ts";
 
 export const FORMATO = "miuzika-proyecto";
 export const VERSION = 1;

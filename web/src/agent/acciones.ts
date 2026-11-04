@@ -36,7 +36,7 @@ import { buscarPista } from "../../../src/core/pistas.ts";
 import { MODE_NAMES, intervalosDe, pitchClass } from "../../../src/core/theory.ts";
 import { cargarWavDeDisco, idDeAsset, opsDeAudio } from "../audio-store.ts";
 import { listarProyectos } from "../proyecto-disco.ts";
-import { interpretarProyectoEnDisco } from "../proyecto-archivo.ts";
+import { interpretarProyectoEnDisco } from "../../../src/core/proyecto-archivo.ts";
 import { CARPETA_VERSIONES, describirVersion, restaurarVersion } from "../../../src/core/versiones.ts";
 import { cabeceraDeProyecto, cabecerasProyecto, GPU_NO_PERMITIDA } from "./tools.ts";
 import type {

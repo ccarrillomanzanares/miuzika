@@ -29,7 +29,7 @@ import {
   nombreDeProyectoDesdeFicheros,
   rutaDeProyecto,
   serializarProyecto,
-} from "./proyecto-archivo.ts";
+} from "../../src/core/proyecto-archivo.ts";
 import {
   guardarProyectoEnDisco,
   leerProyectoDeDisco,
