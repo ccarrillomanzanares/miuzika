@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { HERRAMIENTAS, MANEJADORES, ejecutarHerramienta, resumenLlamada, setDestino } from "./tools.ts";
+import { HERRAMIENTAS, MANEJADORES, ejecutarHerramienta, herramientasDelTurno, resumenLlamada, setDestino } from "./tools.ts";
 
 /** Runs escribir_fichero against a fake /api/fs/write and returns what the server got. */
 async function escribir(args: Record<string, unknown>): Promise<{ ok: boolean; texto: string; cuerpo: unknown }> {
@@ -112,4 +112,21 @@ test("an unknown tool name is refused, also one that names an Object method", as
     assert.equal(r.ok, false);
     assert.match(r.texto, /Unknown tool/, nombre);
   }
+});
+
+test("with the selector on CPU the GPU tools are not offered at all", () => {
+  // Carlos, 4-Nov: the person chooses, the code enforces (docs/PLAN-PROVEEDORES-GPU.md).
+  const nombres = (d: Parameters<typeof herramientasDelTurno>[0]) => herramientasDelTurno(d).map((h) => h.function.name);
+  assert.ok(!nombres("cpu").includes("generar_audio"));
+  assert.ok(!nombres("cpu").includes("proponer_midi"));
+  assert.ok(nombres("lambda").includes("generar_audio") && nombres("lambda").includes("proponer_midi"));
+  assert.equal(nombres("lambda").length, HERRAMIENTAS.length);
+  const enumDe = (d: Parameters<typeof herramientasDelTurno>[0], tool: string): string[] =>
+    ((herramientasDelTurno(d).find((h) => h.function.name === tool)!.function.parameters as { properties: Record<string, { enum: string[] }> })
+      .properties.destino!.enum);
+  assert.deepEqual(enumDe("cpu", "ejecutar_python"), ["cpu"]);
+  assert.deepEqual(enumDe("cpu", "crear_voz"), ["cpu"]);
+  assert.deepEqual(enumDe("lambda", "ejecutar_python"), ["cpu", "lambda"]);
+  // The shared list itself is not mutated by the CPU view.
+  assert.deepEqual(enumDe("lambda", "crear_voz"), ["cpu", "gpu"]);
 });

@@ -50,6 +50,11 @@ export function setDestino(destino: Destino): void {
   destinoPreferido = destino === "lambda" ? "lambda" : "cpu";
 }
 
+/** What the chat selector says right now (the agent loop reads it before every model call). */
+export function destinoActual(): Destino {
+  return destinoPreferido;
+}
+
 /**
  * Does this call reach a paid Lambda GPU? Every such tool asks the chat selector first.
  * Until 3-Nov only ejecutar_python did: generar_audio, proponer_midi and crear_voz
@@ -369,6 +374,45 @@ const SIN_REGISTRO =
   "The app does not have this action registered (it happens when the dev server restarts or " +
   "code is edited with the tab open and two copies of the module are left). Do NOT retry it: " +
   "ask the user to reload the page (F5) and try again afterwards.";
+/** Tools that only exist on a rented GPU: with the selector on CPU they are not offered. */
+const SOLO_GPU = new Set(["generar_audio", "proponer_midi"]);
+/** Parameter values that send a call to the GPU, per tool. */
+const OPCIONES_GPU: Record<string, { parametro: string; valor: string }> = {
+  ejecutar_python: { parametro: "destino", valor: "lambda" },
+  crear_voz: { parametro: "destino", valor: "gpu" },
+};
+
+/**
+ * The tool list for one model call, from the chat selector.
+ *
+ * Why (Carlos, 4-Nov, docs/PLAN-PROVEEDORES-GPU.md, step 3): the person chooses, the code
+ * enforces. Until 4-Nov the GPU tools were always offered and answered "The GPU is not
+ * allowed" on CPU (since 3-Nov), so the model still picked them and spent steps on the
+ * refusal. On CPU they are now absent, and ejecutar_python / crear_voz lose their GPU
+ * option; the refusal in ejecutarHerramienta stays as a second gate (crear_sonido with a GPU
+ * voice is only known there).
+ */
+export function herramientasDelTurno(destino: Destino): ToolSpec[] {
+  if (destino === "lambda") return HERRAMIENTAS;
+  return HERRAMIENTAS.filter((h) => !SOLO_GPU.has(h.function.name)).map((h) => {
+    const gpu = OPCIONES_GPU[h.function.name];
+    if (!gpu) return h;
+    const props = (h.function.parameters as { properties?: Record<string, { enum?: string[] }> }).properties ?? {};
+    const parametro = props[gpu.parametro];
+    if (!parametro?.enum) return h;
+    return {
+      ...h,
+      function: {
+        ...h.function,
+        parameters: {
+          ...h.function.parameters,
+          properties: { ...props, [gpu.parametro]: { ...parametro, enum: parametro.enum.filter((v) => v !== gpu.valor) } },
+        },
+      },
+    };
+  });
+}
+
 export const HERRAMIENTAS: ToolSpec[] = [
   {
     type: "function",

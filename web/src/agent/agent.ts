@@ -7,7 +7,7 @@
 
 import { chat } from "../llm.ts";
 import type { ChatMessage } from "../llm.ts";
-import { HERRAMIENTAS, ejecutarHerramienta, resumenLlamada } from "./tools.ts";
+import { destinoActual, ejecutarHerramienta, herramientasDelTurno, resumenLlamada } from "./tools.ts";
 import type { PasoHerramienta } from "./actividad.ts";
 
 /**
@@ -120,7 +120,7 @@ export async function ejecutarAgente(
     pasos += 1;
     let ultimoAviso = 0;
     let respuesta = await chat(mensajes, {
-      tools: HERRAMIENTAS,
+      tools: herramientasDelTurno(destinoActual()),
       temperature: 0.2,
       signal: senal,
       maxTokens: MAX_TOKENS_SALIDA,
@@ -142,7 +142,7 @@ export async function ejecutarAgente(
     // it off halfway is.
     if (respuesta.finishReason === "sin_salida") {
       respuesta = await chat(mensajes, {
-        tools: HERRAMIENTAS,
+        tools: herramientasDelTurno(destinoActual()),
         temperature: 0.2,
         signal: senal,
         maxTokens: MAX_TOKENS_SALIDA,
