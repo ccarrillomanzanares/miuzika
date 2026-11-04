@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { dirname } from "node:path";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
+import { FORMATO } from "../../src/core/proyecto-archivo.ts";
 
 export function rutasProyectos(server: ViteDevServer, ctx: Contexto): void {
   const { responderJson, leerCuerpo, resolverEnTrabajo, listarProyectosDisco } = ctx;
@@ -61,9 +62,10 @@ export function rutasProyectos(server: ViteDevServer, ctx: Contexto): void {
             });
             return;
           }
-          if (validado.formato !== "miuzika-proyecto" || validado.proyecto?.schemaVersion !== 1) {
+          // The same format the browser writes (src/core/proyecto-archivo.ts), not a copy of it.
+          if (validado.formato !== FORMATO || validado.proyecto?.schemaVersion !== 1) {
             responderJson(res, 400, {
-              error: 'the master file has to be { formato: "miuzika-proyecto", proyecto: { schemaVersion: 1 } }',
+              error: `the master file has to be { formato: "${FORMATO}", proyecto: { schemaVersion: 1 } }`,
             });
             return;
           }
