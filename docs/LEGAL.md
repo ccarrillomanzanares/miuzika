@@ -145,8 +145,9 @@ The legal reasoning behind each row stays in sections 1 to 6 and 9 of this file.
       (it uploads the user's audio: we must state what is stored and for how long).
 - [ ] Read the Stability AI Community License text and the Stable Audio 3 model cards;
       note the revenue threshold and any output-marking clause.
-- [ ] Decide the default consent posture per export with Carlos (§9) and where the
-      artist key lives.
+- [x] Default consent posture: notAllowed by default, per export (4-Nov,
+      `docs/DECISIONES.md` conflict 1).
+- [ ] Where the artist key lives (CONCEPT question 5).
 - [ ] Article 50 checklist against the Commission Code of Practice (10-Jun-2026) before
       2-Dec-2026, if any generative model ships.
 
@@ -168,8 +169,10 @@ not, legally:
 - **Who can be identified.** The manifest names the signer (certificate CN). Do not put
   an email or address in it without the artist's say; the identity assertion (CAWG
   Identity 1.2) is optional and a later decision.
-- **Article 50 EU AI Act** (in force 2-Aug-2026; deployed systems by 2-Dec-2026, per the
-  brainstorm report, not re-verified here): generated audio must be marked in a
+- **Article 50 EU AI Act** (applies from 2-Aug-2026; the Digital Omnibus, Reg. (EU)
+  2026/1744, gives until 2-Dec-2026 for the 50(2) marking only to generative systems placed
+  on the market before 2-Aug-2026; checked 4-Nov by web search, `docs/DECISIONES.md` conflict 9;
+  read the Official Journal text before shipping): generated audio must be marked in a
   machine-readable way. The Code of Practice asks for metadata (C2PA) **and** a
   watermark. The C2PA half exists; the watermark half (audiowmark, then a music-specific
   one) is the open track. Hand-made music is not covered by Art. 50, but the same

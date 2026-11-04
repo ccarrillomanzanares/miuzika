@@ -63,10 +63,10 @@ sidecar `.c2pa` and the `.ots` proof are not optional, and neither is the waterm
 1. Name and folder of the project.
 2. TypeScript confirmed? (recommended above)
 3. License of the new project; miuzika is AGPL-3.0-or-later (LEGAL.md §1 corrected).
-4. Default consent posture: training and mining notAllowed by default, as in the spike?
+4. ~~Default consent posture~~ Decided 4-Nov: notAllowed by default (`docs/DECISIONES.md`, conflict 1).
 5. Key management: file + passphrase, OS keychain, hardware key; CAI CA later?
-6. Default generation model: ACE-Step 1.5 (MIT) vs Stable Audio 3 (Community License).
+6. ~~Default generation model~~ Decided 4-Nov: ACE-Step 1.5; Stable Audio 3 parked (`docs/DECISIONES.md`, conflict 3).
 7. Timestamp anchor: OTS only, or also a transparency log we run.
-8. Split of the Lambda credits between the watermark benchmark and LoRA experiments,
+8. ~~Split of the Lambda credits~~ Decided 4-Nov: no pre-split, Carlos approves each run (`docs/DECISIONES.md`, conflict 6). Was: split of the Lambda credits between the watermark benchmark and LoRA experiments,
    knowing `PLAN.md` ("1-Nov") also wants them for a Qwen LoRA. Carlos said on
    2-Nov: try the existing models before training our own.

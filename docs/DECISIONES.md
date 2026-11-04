@@ -71,36 +71,23 @@ with their source; not in LEGAL §7 or ESTADO.
 | 2026-11-02 | Stable Audio 3 and ACE-Step 1.5 are candidates for local generation, pending a read of the licence text | LEGAL §6 | LEGAL §7 |
 | 2026-11-02 | Signature and timestamp are evidence, not registration; `cawg.training-mining` is a signal, not a right; publish TDMRep as well; no email or address in the manifest without the artist's say | LEGAL §9 | LEGAL §9 (positions stay there) |
 
-## Conflicts between sources (not resolved here)
+## Conflicts between sources, resolved 4-Nov-2026
 
-1. **Consent default.** LEGAL §7 and the `autoria/CONCEPT.md` body record "training and mining
-   notAllowed by default" as decided (2-Nov); CONCEPT "Open questions" 4 asks it again, and
-   LEGAL §8 lists "Decide the default consent posture per export with Carlos (§9)" as pending.
-2. **Local-first vs a paid tier.** `fable.md` §4.3: "no cloud service of ours in the loop".
-   PLAN.md "1-Nov" steps 6-7: accounts, server-side provider key, metering and margin, which
-   is a service of ours. Not reconciled.
-3. **Default generation model.** CONCEPT open question 6 (ACE-Step 1.5, MIT, vs Stable Audio 3,
-   Community Licence) and `fable.md` §6 step 4 leave it open; the 2-Nov music plan and ESTADO
-   treat ACE-Step as the first model and it is what is built. Stable Audio 3 is parked and its
-   licence text is still unread (LEGAL §8).
-4. **Stable Audio.** LEGAL §7 (23-Oct) bans MusicGen / Stable Audio (Open); the 2-Nov entry
-   lists Stable Audio 3 as a candidate. Different products, but the earlier row was never
-   amended (`fable.md` §3 flags it for revisit).
-5. **Authorship phase A.** `fable.md` §4.5 makes local generation + LoRA the first phase; the
-   2-Nov plan generates on Lambda and parks the LoRA; Carlos said "try existing models first".
-6. **Lambda credits.** `fable.md` §5 leaves them unassigned for the watermark research;
-   CONCEPT open question 8 says they also want a Qwen LoRA (PLAN.md "1-Nov"); the 2-Nov music
-   plan notes a Qwen3 8B LoRA does not fit in 7.7 GB RAM and suggests starting from a 1B that
-   speaks MIDI.
-7. **Where the authorship project lives.** `fable.md` §4.1: a project of its own; CONCEPT:
-   "provisional home `autoria/`", name and folder open (question 1); REVISION §9.4 asks again,
-   and where `fable.md` itself goes.
-8. **When ACE-Step is used.** ESTADO check 18 (3-Nov): only when the request names it. ESTADO
-   4-Nov: forced by the code (an "ACE-Step" box in the chat header, ticked by a new-song Brief
-   on GPU) because the model ignored the prompt. The later one supersedes, but the 3-Nov text
-   still reads as policy.
-9. **Article 50 date.** LEGAL §9 and `fable.md` give 2-Dec-2026 for deployed systems "per the
-   brainstorm report, not re-verified".
+Carlos, 4-Nov evening: "adelante con las decisiones, por mí ok". The rule used: the newest
+dated decision wins; where none is newer, the one that matches what is built and measured.
+Each can be reopened; the older text stays where it was, superseded by this section.
+
+| # | Conflict | Decision | Why |
+|---|---|---|---|
+| 1 | Consent default: LEGAL §7 and CONCEPT body "decided", CONCEPT question 4 and LEGAL §8 "open" | **Training and mining `notAllowed` by default**, per export, the artist can change it. CONCEPT question 4 and the LEGAL §8 item are closed | already decided 2-Nov and implemented in Spike B; the open entries were leftovers |
+| 2 | `fable.md` §4.3 "no cloud service of ours" vs the 1-Nov paid tier | **Local-first is the product.** The paid tier (1-Nov, steps 6-7) is optional and later; everything works with the user's own keys, own Lambda or local models. §4.3 applies to the authorship layer: signing, marking and consent never go through a service of ours | both stand once scoped: §4.3 is about authorship and privacy, the tier about who pays for the LLM |
+| 3 | Default generation model open (CONCEPT 6, `fable.md` §6.4) vs ACE-Step built | **ACE-Step 1.5 (MIT)** is the default. Stable Audio 3 stays parked until its licence text and model card are read (LEGAL §8) | it is built, run and heard ("very industrial, very good", 2-Nov); MIT has no revenue cap |
+| 4 | LEGAL 23-Oct bans "Stable Audio" vs 2-Nov candidate Stable Audio 3 | The 23-Oct ban is **Stable Audio Open (CC-BY-NC) and MusicGen (CC-BY-NC weights)**. Stable Audio 3 is a different product under the Community Licence: candidate, not cleared | the ban was about the NC licence, not the brand |
+| 5 | Authorship phase A = local generation + LoRA (`fable.md` §4.5) vs 2-Nov "Lambda, LoRA parked" | **Existing models on Lambda first**; local generation and the own-stems LoRA come after, still phase A | Carlos, 2-Nov: "try existing models first"; the laptop has 7.7 GB RAM |
+| 6 | Lambda credits: watermark (`fable.md` §5) vs Qwen LoRA (CONCEPT 8, PLAN 1-Nov) | **No pre-split.** Each run is approved by Carlos when it is proposed, with its estimated cost. A Qwen3 8B LoRA is out (does not run on 7.7 GB); the own-model LoRA starts from a ~1B model that speaks MIDI | spending is already per run (GPU counter, Off button); the 8B option was ruled out by measurement |
+| 7 | Where the authorship project lives (`fable.md` §4.1, CONCEPT 1, REVISION §9.4) | **`autoria/` in this repo until it has code that runs on its own**, then its own repo. `fable.md` moves to `autoria/HANDOFF-2026-11-02.md`, unescaped | one repo is cheaper while it is a spike; the handoff belongs with what it describes |
+| 8 | When ACE-Step is used: 3-Nov "only when named" vs 4-Nov "forced by the header box" | **The 4-Nov rule**: the "ACE-Step" box in the chat header decides, and a new-song Brief on GPU ticks it | the model ignored the prompt rule; the code rule is newer and enforceable |
+| 9 | Article 50 date "2-Dec-2026, not re-verified" | **Verified 4-Nov** (web search): Article 50 applies from 2-Aug-2026; the Digital Omnibus (Reg. (EU) 2026/1744, in force 27-Jul-2026) gives until **2-Dec-2026** for the machine-readable marking of 50(2) only to generative systems placed on the market before 2-Aug-2026. miuzika is not on the market (local dev server), so the date only matters if it ships | sources: usercentrics.com, technology.org (13-Oct-2026), joneswalker.com; check the Official Journal text before shipping |
 
 ## Open (Carlos), from REVISION §9 and CONCEPT
 
