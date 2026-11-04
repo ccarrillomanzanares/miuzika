@@ -1,30 +1,31 @@
-/** GPU on Lambda Cloud: status and spend, power on, power off and run a script. */
+/** The rented GPU (the provider chosen in the context; Lambda for now): status and spend, power on, power off and run a script. */
 
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
-import { apagablesDe, apagar as apagarLambda, Cancelado, ejecutarEnLambda, planDeEntradas, encender as encenderLambda, estado as estadoLambda, instancias as instanciasLambda } from "../lambda.ts";
+import { planDeEntradas } from "../lambda.ts";
+import { Cancelado } from "../gpu/proveedor.ts";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 
 export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
-  const { cfgLambda, faltanLambda, anotar, ficheroHerramientas, carpetaTrabajo, responderJson, leerCuerpo, slugProyecto, resolverEnTrabajo, escritosDesde } = ctx;
+  const { gpu, faltanGpu, anotar, ficheroHerramientas, carpetaTrabajo, responderJson, leerCuerpo, slugProyecto, resolverEnTrabajo, escritosDesde } = ctx;
 
   /** Instance used by this session (so it can be shut down without asking for the id). */
   let maquinaLambda: { id: string; ip: string } | null = null;
 
   // ---------------------------------------------------------- Lambda (GPU)
   server.middlewares.use("/api/gpu/estado", async (_req, res) => {
-    if (cfgLambda === null) {
+    if (gpu === null) {
       responderJson(res, 200, {
         configurado: false,
-        faltan: faltanLambda,
+        faltan: faltanGpu,
         instancias: [],
         precio_hora: 0,
       });
       return;
     }
     try {
-      const e = await estadoLambda(cfgLambda);
+      const e = await gpu.estado();
       // Generic provider shape: the app only needs price/hour and
       // since when it counts to render the spend counter.
       responderJson(res, 200, {
@@ -40,8 +41,8 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
         fase: e.fase,
         gastado: e.gastado,
         tipo: e.tipo,
-        region: cfgLambda.region,
-        nombre: cfgLambda.nombre,
+        region: gpu.region,
+        nombre: gpu.etiqueta,
       });
     } catch (error) {
       responderJson(res, 502, {
@@ -55,12 +56,12 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       responderJson(res, 405, { error: "use POST" });
       return;
     }
-    if (cfgLambda === null) {
-      responderJson(res, 400, { error: `missing ${faltanLambda.join(", ")} in .env` });
+    if (gpu === null) {
+      responderJson(res, 400, { error: `missing ${faltanGpu.join(", ")} in .env` });
       return;
     }
     const avisos: string[] = [];
-    encenderLambda(cfgLambda, (t) => avisos.push(t))
+    gpu.encender((t) => avisos.push(t))
       .then((r) => {
         maquinaLambda = { id: r.id, ip: r.ip };
         anotar(
@@ -89,8 +90,8 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       responderJson(res, 405, { error: "use POST" });
       return;
     }
-    if (cfgLambda === null) {
-      responderJson(res, 400, { error: `missing ${faltanLambda.join(", ")} in .env` });
+    if (gpu === null) {
+      responderJson(res, 400, { error: `missing ${faltanGpu.join(", ")} in .env` });
       return;
     }
     // Called by the off button next to the GPU counter (added 3-Nov: the cancel texts
@@ -98,8 +99,8 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
     // Without an id it shuts down every instance of ours that is on or starting; with
     // one, only if it is ours. It answers when Lambda confirms (up to ~200 s).
     leerCuerpo(req, res, async (cuerpo) => {
-      const cfg = cfgLambda;
-      if (cfg === null) return;
+      const proveedor = gpu;
+      if (proveedor === null) return;
       let pedido = "";
       try {
         const datos = JSON.parse(cuerpo === "" ? "{}" : cuerpo) as { id?: string };
@@ -108,19 +109,19 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
         /* no body: all of ours */
       }
       try {
-        const nuestras = apagablesDe(await instanciasLambda(cfg), cfg.nombre);
+        const nuestras = await proveedor.apagables();
         const objetivo = pedido === "" ? nuestras : nuestras.filter((i) => i.id === pedido);
         if (objetivo.length === 0) {
           responderJson(res, pedido === "" ? 409 : 403, {
             error:
               pedido === ""
-                ? `there is no instance named ${cfg.nombre} on or starting`
-                : `${pedido} is not an instance of this app (${cfg.nombre}) that is on or starting`,
+                ? `there is no instance named ${proveedor.etiqueta} on or starting`
+                : `${pedido} is not an instance of this app (${proveedor.etiqueta}) that is on or starting`,
           });
           return;
         }
         const hechas = await Promise.all(
-          objetivo.map(async (i) => ({ id: i.id, ...(await apagarLambda(cfg, i.id)) })),
+          objetivo.map(async (i) => ({ id: i.id, ...(await proveedor.apagar(i.id)) })),
         );
         if (hechas.some((h) => h.id === maquinaLambda?.id)) maquinaLambda = null;
         for (const h of hechas) {
@@ -142,8 +143,8 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       responderJson(res, 405, { error: "use POST" });
       return;
     }
-    if (cfgLambda === null) {
-      responderJson(res, 400, { error: `missing ${faltanLambda.join(", ")} in .env` });
+    if (gpu === null) {
+      responderJson(res, 400, { error: `missing ${faltanGpu.join(", ")} in .env` });
       return;
     }
     leerCuerpo(req, res, (cuerpo) => {
@@ -230,7 +231,7 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       res.on("close", () => {
         if (!res.writableEnded) corte.abort();
       });
-      ejecutarEnLambda(cfgLambda, {
+      gpu.ejecutar({
         senal: corte.signal,
         scriptRel: relativo,
         argumentos,

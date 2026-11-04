@@ -13,6 +13,8 @@ import { resolve } from "node:path";
 import { rutaEnWorkspace } from "../src/core/rutas.ts";
 import { slugDe } from "../src/core/nombres.ts";
 import { configDesdeEnv } from "./lambda.ts";
+import { proveedorLambda } from "./gpu/lambda.ts";
+import type { ProveedorGpu } from "./gpu/proveedor.ts";
 import { crearRegistros } from "./registro.ts";
 import { correrProceso } from "./proceso.ts";
 import { leerCuerpoCrudo, LIMITE_CUERPO, registroApi, responderJson, rutaJson, textoTamano } from "./ruta.ts";
@@ -31,6 +33,9 @@ export function crearContexto(env: Record<string, string>) {
     ? configDesdeEnv(env as Record<string, string>)
     : { cfg: null, faltan: ["MIUZIKA_LAMBDA=on (Lambda is disabled for now)"] };
   const { cfg: cfgLambda, faltan: faltanLambda } = leido;
+  /** The GPU provider the routes use (docs/PLAN-PROVEEDORES-GPU.md); only Lambda for now. */
+  const gpu: ProveedorGpu | null = cfgLambda ? proveedorLambda(cfgLambda) : null;
+  const faltanGpu = faltanLambda;
   if (!lambdaActivo) {
     console.warn("[miuzika] Lambda disabled (set MIUZIKA_LAMBDA=on in .env to enable it). The CPU will be used.");
   } else if (cfgLambda === null) {
@@ -241,8 +246,8 @@ export function crearContexto(env: Record<string, string>) {
   };
 
   return {
-    cfgLambda,
-    faltanLambda,
+    gpu,
+    faltanGpu,
     carpetaTmp,
     ficheroLog,
     TOPE_LOG,
