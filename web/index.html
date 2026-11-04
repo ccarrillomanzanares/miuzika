@@ -69,6 +69,9 @@
                 <option value="lambda">GPU (Lambda)</option>
               </select>
             </label>
+            <label class="ace-step" id="chat-acestep-label" data-i18n-title="acestep.title" title="The next message goes to ACE-Step (generar_audio) on the GPU: the agent must generate the song, not compose it in MIDI. Only with the selector on GPU.">
+              <input type="checkbox" id="chat-acestep" disabled> ACE-Step
+            </label>
             <span id="llm-coste" class="coste" hidden></span>
             <span id="gpu-coste" class="coste" hidden></span>
             <button id="gpu-apagar" class="gpu-apagar" type="button" hidden data-i18n-title="gpu.apagar.title" title="Shut down this app's Lambda GPU (it bills by the hour while on)">⏻ Off</button>

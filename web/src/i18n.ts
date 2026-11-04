@@ -38,6 +38,7 @@ const ES: Diccionario = {
   audio: "Audio",
   guardar: "Guardar",
   "guardar.title": "Escribir el fichero maestro en workspace/proyectos/<slug>/proyecto.json (Ctrl+S)",
+  "acestep.title": "El próximo mensaje va a ACE-Step (generar_audio) en la GPU: el agente tiene que generar la canción, no componerla en MIDI. Sólo con el selector en GPU.",
   "mp3.title": "Renderizar la mezcla con el mismo motor que Play y guardarla como MP3 (320 kbps, título del proyecto en ID3) en salida/",
   "mp3.renderizando": "Renderizando la mezcla a MP3…",
   proyectos: "Proyectos",

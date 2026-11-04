@@ -28,8 +28,8 @@ import {
 
 export interface DepsEncargo {
   proyecto(): Project | null;
-  /** Writes the text into the chat (without sending it). */
-  escribir(texto: string): void;
+  /** Writes the text into the chat (without sending it). `nueva`: it is a new song (the ACE-Step box may apply). */
+  escribir(texto: string, nueva: boolean): void;
 }
 
 function escapar(texto: string): string {
@@ -361,7 +361,7 @@ export class FormularioEncargo {
         entregaMidi: valor("e-midi") !== "",
         entregaWav: valor("e-wav") !== "",
       };
-      this.deps.escribir(textoDeEncargo(encargo, idioma(), project?.name ?? ""));
+      this.deps.escribir(textoDeEncargo(encargo, idioma(), project?.name ?? ""), encargo.tipo === "nueva");
       this.dialogo.close();
     });
   }

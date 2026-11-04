@@ -431,6 +431,26 @@ export function opsDeArgumento(valor: unknown): unknown[] {
   return [];
 }
 
+/**
+ * What a turn may use while it is forced to call `herramienta` and has not yet done so: that
+ * tool plus the few it needs to get there. [] when the tool is not offered at all (selector on
+ * CPU), so the caller can refuse instead of running a turn that cannot comply.
+ *
+ * Why (Carlos, 4-Nov): "hazme una canción" with the GPU on must go to ACE-Step, decided by the
+ * person, not by the model. Measured the same day: Ollama Cloud ignores `tool_choice` (with
+ * "required" and with the tool named, DeepSeek v4.1 flash answered text), and in "herminia" the
+ * model composed 84 bars in MIDI with generar_audio offered and prompt v5 loaded. So the loop
+ * narrows the list instead of asking the provider.
+ */
+export function herramientasForzadas(lista: ToolSpec[], herramienta: string, previas: readonly string[]): ToolSpec[] {
+  if (!lista.some((h) => h.function.name === herramienta)) return [];
+  const validas = new Set([herramienta, ...previas]);
+  return lista.filter((h) => validas.has(h.function.name));
+}
+
+/** The tools a forced generar_audio turn may use before generating (open or create the project, look). */
+export const PREVIAS_GENERAR = ["crear_proyecto", "leer_proyecto", "listar_ficheros"] as const;
+
 export const HERRAMIENTAS: ToolSpec[] = [
   {
     type: "function",

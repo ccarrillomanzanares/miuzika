@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { HERRAMIENTAS, MANEJADORES, ejecutarHerramienta, herramientasDelTurno, opsDeArgumento, resumenLlamada, setDestino } from "./tools.ts";
+import { HERRAMIENTAS, MANEJADORES, PREVIAS_GENERAR, ejecutarHerramienta, herramientasDelTurno, herramientasForzadas, opsDeArgumento, resumenLlamada, setDestino } from "./tools.ts";
 
 /** Runs escribir_fichero against a fake /api/fs/write and returns what the server got. */
 async function escribir(args: Record<string, unknown>): Promise<{ ok: boolean; texto: string; cuerpo: unknown }> {
@@ -138,4 +138,14 @@ test("editar_proyecto takes ops as a list or as that list in JSON text", () => {
   assert.deepEqual(opsDeArgumento("[{no json"), []);
   assert.deepEqual(opsDeArgumento('{"op":"set_master"}'), []);
   assert.deepEqual(opsDeArgumento(undefined), []);
+});
+
+test("a forced generar_audio turn only offers it and what leads to it, and nothing on CPU", () => {
+  // 4-Nov: Ollama Cloud ignores tool_choice, so the list itself is narrowed.
+  const nombres = (l: ReturnType<typeof herramientasForzadas>) => l.map((h) => h.function.name).sort();
+  assert.deepEqual(
+    nombres(herramientasForzadas(herramientasDelTurno("lambda"), "generar_audio", PREVIAS_GENERAR)),
+    ["crear_proyecto", "generar_audio", "leer_proyecto", "listar_ficheros"],
+  );
+  assert.deepEqual(herramientasForzadas(herramientasDelTurno("cpu"), "generar_audio", PREVIAS_GENERAR), []);
 });

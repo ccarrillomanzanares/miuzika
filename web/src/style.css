@@ -648,6 +648,24 @@ button.active {
   color: var(--muted);
 }
 
+/* "ACE-Step" box (4-Nov): forces generar_audio for the next message; greyed out on CPU. */
+.chat-head .ace-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chat-head .ace-step:has(input:checked) {
+  color: var(--accent);
+}
+.chat-head .ace-step:has(input:disabled) {
+  opacity: 0.45;
+  cursor: default;
+}
+
 /* GPU spending counter: live while the machine is on. */
 .chat-head .coste {
   margin-left: auto;

@@ -7,7 +7,7 @@
 
 import { chat } from "../llm.ts";
 import type { ChatMessage } from "../llm.ts";
-import { destinoActual, ejecutarHerramienta, herramientasDelTurno, resumenLlamada } from "./tools.ts";
+import { destinoActual, ejecutarHerramienta, herramientasDelTurno, herramientasForzadas, resumenLlamada } from "./tools.ts";
 import type { PasoHerramienta } from "./actividad.ts";
 
 /**
@@ -65,7 +65,16 @@ export interface OpcionesAgente {
    * not inside one because a call in flight is already paid for.
    */
   debeParar?: () => string | null;
+  /**
+   * The person asked for this turn to go through one tool (the "ACE-Step" box in the chat, or
+   * a new-song Brief with the GPU on): until it has run successfully, only it and `previas` are
+   * offered, and a reply without it gets reminded. See herramientasForzadas in tools.ts.
+   */
+  forzar?: { herramienta: string; previas: readonly string[] };
 }
+
+/** Reminders before a forced turn gives up (the model keeps answering without the tool). */
+const RECORDATORIOS_FORZAR = 2;
 
 /** Runs the loop over `mensajes` (they are modified: the history continues). */
 export async function ejecutarAgente(
@@ -95,6 +104,21 @@ export async function ejecutarAgente(
   // silently. If it repeats, it stops and warns (so as not to loop).
   let vaciosSeguidos = 0;
   let reanudaciones = 0;
+  /** A forced turn: has the tool run successfully yet, and how many reminders went out. */
+  const forzar = opciones.forzar;
+  let forzadaHecha = forzar === undefined;
+  let recordatorios = 0;
+  const herramientasAhora = (): ReturnType<typeof herramientasDelTurno> => {
+    const todas = herramientasDelTurno(destinoActual());
+    return forzar && !forzadaHecha ? herramientasForzadas(todas, forzar.herramienta, forzar.previas) : todas;
+  };
+  if (forzar && herramientasAhora().length === 0) {
+    const aviso =
+      `This turn was asked to use ${forzar.herramienta}, but it is not available (the chat selector is on CPU, ` +
+      "or the GPU is off in Models). Switch the selector to GPU and send it again.";
+    mensajes.push({ role: "assistant", content: aviso });
+    return { texto: aviso, pasos: 0, llamadas: 0, ms: 0, herramientas: [] };
+  }
 
   /** Closing answer when the user cancels. */
   const cancelado = (): ResultadoAgente => ({
@@ -120,7 +144,7 @@ export async function ejecutarAgente(
     pasos += 1;
     let ultimoAviso = 0;
     let respuesta = await chat(mensajes, {
-      tools: herramientasDelTurno(destinoActual()),
+      tools: herramientasAhora(),
       temperature: 0.2,
       signal: senal,
       maxTokens: MAX_TOKENS_SALIDA,
@@ -142,7 +166,7 @@ export async function ejecutarAgente(
     // it off halfway is.
     if (respuesta.finishReason === "sin_salida") {
       respuesta = await chat(mensajes, {
-        tools: herramientasDelTurno(destinoActual()),
+        tools: herramientasAhora(),
         temperature: 0.2,
         signal: senal,
         maxTokens: MAX_TOKENS_SALIDA,
@@ -224,6 +248,25 @@ export async function ejecutarAgente(
           herramientas,
         };
       }
+      // A forced turn does not end before the tool has run: remind it, then give up saying so.
+      if (forzar && !forzadaHecha) {
+        if (recordatorios < RECORDATORIOS_FORZAR) {
+          recordatorios += 1;
+          alEvento?.({ tipo: "aviso", texto: `Reminding the model to call ${forzar.herramienta}` });
+          mensajes.push({
+            role: "user",
+            content:
+              `[SYSTEM NOTICE] The person chose ${forzar.herramienta} for this request. Call it now ` +
+              "(write its prompt, and lyrics if the song has a voice); do not answer without calling it.",
+          });
+          continue;
+        }
+        const aviso =
+          `I stopped: the model answered ${recordatorios + 1} times without calling ${forzar.herramienta}, ` +
+          "which this request required. Nothing was composed instead. Try again, or change the model in Models.";
+        alEvento?.({ tipo: "aviso", texto: aviso.split(".")[0] });
+        return { texto: `${texto}\n\n${aviso}`.trim(), pasos, llamadas, ms: Date.now() - t0, herramientas };
+      }
       break;
     }
 
@@ -238,6 +281,7 @@ export async function ejecutarAgente(
       const tHerramienta = Date.now();
       const resultado = await ejecutarHerramienta(nombre, argumentos, senal);
       const msHerramienta = Date.now() - tHerramienta;
+      if (forzar && nombre === forzar.herramienta && resultado.ok) forzadaHecha = true;
       // `argumentos` is the string the model wrote: below, long ones are replaced in the
       // history with a summary, and the trajectory file needs the real thing.
       herramientas.push({

@@ -60,6 +60,24 @@ export function setAbrirEncargo(fn: (() => void) | null): void {
 }
 
 /** Writes `texto` into the chat composer without sending it (after whatever was there). */
+/**
+ * The "ACE-Step" box next to the selector (Carlos, 4-Nov, options A and B): the next message
+ * must go through generar_audio. Only usable with the selector on GPU; it unticks itself when
+ * the message is sent (`tomarAceStep`), so it applies to one request, not to the session.
+ */
+export function marcarAceStep(valor: boolean): void {
+  const caja = document.getElementById("chat-acestep") as HTMLInputElement | null;
+  if (caja && !caja.disabled) caja.checked = valor;
+}
+
+/** Whether the message being sent asked for ACE-Step; it unticks the box. */
+export function tomarAceStep(): boolean {
+  const caja = document.getElementById("chat-acestep") as HTMLInputElement | null;
+  if (!caja || caja.disabled || !caja.checked) return false;
+  caja.checked = false;
+  return true;
+}
+
 export function escribirEnCompositor(texto: string): void {
   const input = document.getElementById("chat-input") as HTMLTextAreaElement | null;
   if (!input || texto.trim() === "") return;
@@ -198,6 +216,12 @@ export function initChat(): ChatApi {
     const destino: Destino = valor === "lambda" ? "lambda" : "cpu";
     setDestino(destino);
     selectorDestino?.parentElement?.classList.toggle("gpu", destino === "lambda");
+    // ACE-Step only exists on the GPU: on CPU the box is greyed out and unticked.
+    const caja = document.getElementById("chat-acestep") as HTMLInputElement | null;
+    if (caja) {
+      caja.disabled = destino !== "lambda";
+      if (caja.disabled) caja.checked = false;
+    }
     return destino;
   };
   if (selectorDestino) {

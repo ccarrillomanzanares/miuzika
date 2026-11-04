@@ -1,7 +1,7 @@
 import type { CodeSource, Project } from "../../src/core/types.ts";
 import { promptDelSistema } from "./agente-prompt.ts";
 import { FormularioEncargo } from "./formulario-encargo.ts";
-import { escribirEnCompositor, setAbrirEncargo } from "./chat.ts";
+import { escribirEnCompositor, marcarAceStep, setAbrirEncargo, tomarAceStep } from "./chat.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
 import { carpetaDeProyecto, createProject, projectStats } from "../../src/core/project.ts";
 import { compasesDeAudio } from "../../src/core/tiempo.ts";
@@ -55,7 +55,7 @@ import {
 } from "./agent/contexto.ts";
 import type { TurnoAgente } from "./agent/contexto.ts";
 import { fraseBarra, lineaResumen, pasoTerminado, segundos } from "./agent/actividad.ts";
-import { cabeceraDeProyecto, registrarAcciones, setProyectoActivo } from "./agent/tools.ts";
+import { PREVIAS_GENERAR, cabeceraDeProyecto, registrarAcciones, setProyectoActivo } from "./agent/tools.ts";
 import { crearAcciones } from "./agent/acciones.ts";
 import { CARPETA_VERSIONES, nombreDeVersion } from "../../src/core/versiones.ts";
 import { construirTrayectoria, nombreDeTrayectoria, type DetallePaso, type EstadoTurno } from "../../src/core/trayectoria.ts";
@@ -211,8 +211,11 @@ async function responderAlUsuario(texto: string): Promise<void> {
   pasoDesde = null;
   arrancarLatido(t0);
   try {
+    // The "ACE-Step" box (or a new-song Brief on GPU) forces generar_audio for this turn.
+    const conAceStep = tomarAceStep();
     const resultado = await ejecutarAgente(conversacion, {
       signal: senalTurno,
+      ...(conAceStep ? { forzar: { herramienta: "generar_audio", previas: PREVIAS_GENERAR } } : {}),
       // Cost cap per turn (Models): the counter prices each call as it ends.
       debeParar: () => motivoDeTope(costeLlm.turno()?.usd ?? null, leerTope()),
       alEvento: (evento) => {
@@ -1242,7 +1245,12 @@ $<HTMLButtonElement>("ajustes-modelos").addEventListener("click", () => void aju
 // The chat's "Brief" button: a form that writes the message (it does not send it).
 const formularioEncargo = new FormularioEncargo({
   proyecto: () => project,
-  escribir: (texto) => escribirEnCompositor(texto),
+  escribir: (texto, nueva) => {
+    escribirEnCompositor(texto);
+    // Option A (Carlos, 4-Nov): a NEW song from the Brief with the selector on GPU goes to
+    // ACE-Step. The box is ticked, visible before sending, and can be unticked by hand.
+    if (nueva) marcarAceStep(true);
+  },
 });
 setAbrirEncargo(() => void formularioEncargo.abrir());
 
