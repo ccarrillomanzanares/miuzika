@@ -432,6 +432,28 @@ export function opsDeArgumento(valor: unknown): unknown[] {
 }
 
 /**
+ * Why `ops` gave no operations, said so the model can fix it. Measured on 4-Nov in
+ * "prueba-nivel": DeepSeek sent `ops` as JSON text missing the final `]` and got "Missing
+ * `ops`", which did not say what was wrong (it guessed right on the next step).
+ */
+export function motivoSinOps(valor: unknown): string {
+  if (typeof valor === "string" && valor.trim() !== "") {
+    try {
+      JSON.parse(valor);
+      return "`ops` is JSON text but not a list: send a list of operations, e.g. [{\"op\":\"set_master\",\"gainDb\":-3}].";
+    } catch (error) {
+      const fin = valor.trim().slice(-40);
+      return (
+        `\`ops\` is JSON text that does not parse (${error instanceof Error ? error.message : String(error)}); ` +
+        `it ends with: …${fin}. Check the closing brackets, or send ops as a list instead of text.`
+      );
+    }
+  }
+  if (Array.isArray(valor)) return "`ops` is an empty list: nothing to do.";
+  return "Missing `ops`: a list of operations (see the tool description).";
+}
+
+/**
  * What a turn may use while it is forced to call `herramienta` and has not yet done so: that
  * tool plus the few it needs to get there. [] when the tool is not offered at all (selector on
  * CPU), so the caller can refuse instead of running a turn that cannot comply.
@@ -1637,7 +1659,7 @@ export const MANEJADORES: Record<string, Manejador> = {
   },
   editar_proyecto: async (args, _senal, local) => {
     const ops = opsDeArgumento(args.ops);
-    if (ops.length === 0) return { ok: false, texto: "Missing `ops`: a list of operations (see the tool description)." };
+    if (ops.length === 0) return { ok: false, texto: motivoSinOps(args.ops) };
     return local.editarProyecto({ ops });
   },
   escribir_progresion: async (args, _senal, local) => {

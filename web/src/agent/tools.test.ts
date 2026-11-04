@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { HERRAMIENTAS, MANEJADORES, PREVIAS_GENERAR, ejecutarHerramienta, herramientasDelTurno, herramientasForzadas, opsDeArgumento, resumenLlamada, setDestino } from "./tools.ts";
+import { HERRAMIENTAS, MANEJADORES, PREVIAS_GENERAR, ejecutarHerramienta, herramientasDelTurno, herramientasForzadas, motivoSinOps, opsDeArgumento, resumenLlamada, setDestino } from "./tools.ts";
 
 /** Runs escribir_fichero against a fake /api/fs/write and returns what the server got. */
 async function escribir(args: Record<string, unknown>): Promise<{ ok: boolean; texto: string; cuerpo: unknown }> {
@@ -148,4 +148,13 @@ test("a forced generar_audio turn only offers it and what leads to it, and nothi
     ["crear_proyecto", "generar_audio", "leer_proyecto", "listar_ficheros"],
   );
   assert.deepEqual(herramientasForzadas(herramientasDelTurno("cpu"), "generar_audio", PREVIAS_GENERAR), []);
+});
+
+test("when ops gives nothing, the refusal says why (4-Nov, prueba-nivel: JSON text missing its final ])", () => {
+  const cortado = '[{"op": "set_song", "lengthBars": 8}, {"op": "set_send", "trackId": "Arpa", "busId": "sala", "levelDb": -12}';
+  assert.match(motivoSinOps(cortado), /does not parse/);
+  assert.match(motivoSinOps(cortado), /"levelDb": -12}$|levelDb": -12}\. Check/);
+  assert.match(motivoSinOps('{"op":"set_master"}'), /not a list/);
+  assert.match(motivoSinOps([]), /empty list/);
+  assert.match(motivoSinOps(undefined), /Missing `ops`/);
 });

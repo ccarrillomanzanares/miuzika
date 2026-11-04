@@ -390,10 +390,14 @@ crashes the dev server when a streaming answer is cut. All run headless; not wit
   fineTune and preset-level tuning are still ignored.
 - Fixed, not yet heard: VCSL played below GM because GM samples are normalized (median peak
   -0.1 dBFS) and VCSL keeps the recording level (loudest harp sample -11.8, organ -22.7,
-  Steinway -3.0) while openDAW ignores initialAttenuation. `sfz2sf2.py` now applies one gain per
-  instrument so its loudest sample peaks at -1 dBFS: harp +10.8 dB, organ +21.7, Steinway +2.0
-  (Carlos had needed +8 and +12 by ear, so the organ may now be too loud). Only new conversions:
-  the .sf2 already in projects keep the old level.
+  Steinway -3.0) while openDAW ignores initialAttenuation. First fix (loudest sample to -1 dBFS),
+  measured by the agent in "prueba-nivel" (RMS, gain 0): organ -15, GM piano -16, harp -25; one
+  loud harp sample capped the gain. Now the median peak goes to -6 dBFS and only samples above
+  -1 dBFS are turned down: harp +17.1 dB, organ +23.3, Steinway +3.6. Expected harp ~-19, not yet
+  measured in a project nor heard. Only new conversions: the .sf2 already in projects keep
+  the old level.
+- Fixed: when `ops` arrives as JSON text that does not parse (prueba-nivel: missing final `]`),
+  editar_proyecto says so and shows how it ends, instead of "Missing `ops`".
 - Fixed: `add_bus` accepts `{device:{type,...}}` and `{device:"reverb", params}` inside devices,
   and `set_instrument` accepts `kind` for `type` (the three calls rejected in "prueba-bus").
 - Open: the Steinway has only 2 velocity layers (0-99, 100-127) because of the 40 MB cap: its color
