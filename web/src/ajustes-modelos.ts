@@ -30,6 +30,31 @@ interface Estado {
   proveedores: ProveedorVista[];
 }
 
+/** /api/proveedores/gpu (4-Nov, docs/PLAN-PROVEEDORES-GPU.md): never carries the key itself. */
+interface CampoGpuVista {
+  clave: string;
+  es: string;
+  en: string;
+  variableEnv: string;
+  secreto: boolean;
+  origen: "ajustes" | "env" | "defecto" | "falta";
+  porDefecto: string;
+  valor?: string;
+  tiene?: boolean;
+  oculta?: string;
+}
+
+interface EstadoGpu {
+  activo: string;
+  activoDesde: "ajustes" | "env";
+  disponible: boolean;
+  faltan: string[];
+  proveedores: { id: string; nombre: string; ayuda: { es: string; en: string }; campos: CampoGpuVista[] }[];
+}
+
+/** List entries for GPU providers are "gpu:<id>", so they never clash with an LLM id. */
+const PREFIJO_GPU = "gpu:";
+
 function escapar(texto: string): string {
   return texto.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 }
@@ -37,6 +62,7 @@ function escapar(texto: string): string {
 export class AjustesModelos {
   private dialogo: HTMLDialogElement;
   private estado: Estado | null = null;
+  private estadoGpu: EstadoGpu | null = null;
   private elegido = "";
   private modelos = new Map<string, string[]>();
 
@@ -59,6 +85,11 @@ export class AjustesModelos {
 
   private async recargar(): Promise<void> {
     this.estado = (await (await fetch("/api/proveedores")).json()) as Estado;
+    try {
+      this.estadoGpu = (await (await fetch("/api/proveedores/gpu")).json()) as EstadoGpu;
+    } catch {
+      this.estadoGpu = null;
+    }
   }
 
   private async enviar(cuerpo: Record<string, unknown>): Promise<void> {
@@ -76,6 +107,10 @@ export class AjustesModelos {
     const tx = (a: string, b: string): string => this.tx(a, b);
     const estado = this.estado;
     if (!estado) return;
+    if (this.elegido.startsWith(PREFIJO_GPU) && this.estadoGpu) {
+      this.pintarGpu(this.estadoGpu);
+      return;
+    }
     const p = estado.proveedores.find((x) => x.id === this.elegido) ?? estado.proveedores[0]!;
     const lista = this.modelos.get(p.id) ?? [];
     const esActivo = p.id === estado.activo;
@@ -96,16 +131,7 @@ export class AjustesModelos {
         )}</small>
       </label>
       <div class="modelos">
-        <ul class="modelos-lista">
-          ${estado.proveedores
-            .map(
-              (x) => `<li><button type="button" data-prov="${x.id}" class="${x.id === p.id ? "activo" : ""}">
-                <span>${escapar(x.nombre)}</span>
-                <small>${x.id === estado.activo ? tx("en uso", "in use") : x.tieneClave || !x.necesitaClave ? "✓" : ""}</small>
-              </button></li>`,
-            )
-            .join("")}
-        </ul>
+        ${this.lista(p.id)}
         <div class="modelos-detalle">
           <h3>${escapar(p.nombre)}</h3>
           <p class="ayuda">${escapar(p.ayuda)}</p>
@@ -260,6 +286,174 @@ export class AjustesModelos {
         "Hecho: el próximo turno del agente usa este modelo.",
         "Done: the agent's next turn uses this model.",
       );
+    });
+  }
+
+  /** The left column: the LLM providers, then the GPU ones under their own heading. */
+  private lista(elegido: string): string {
+    const tx = (a: string, b: string): string => this.tx(a, b);
+    const estado = this.estado!;
+    const gpu = this.estadoGpu;
+    return `<ul class="modelos-lista">
+      ${estado.proveedores
+        .map(
+          (x) => `<li><button type="button" data-prov="${x.id}" class="${x.id === elegido ? "activo" : ""}">
+            <span>${escapar(x.nombre)}</span>
+            <small>${x.id === estado.activo ? tx("en uso", "in use") : x.tieneClave || !x.necesitaClave ? "✓" : ""}</small>
+          </button></li>`,
+        )
+        .join("")}
+      ${
+        gpu
+          ? `<li class="modelos-grupo"><small>${tx("GPU (alquiler por horas)", "GPU (rented by the hour)")}</small></li>` +
+            gpu.proveedores
+              .map(
+                (g) => `<li><button type="button" data-prov="${PREFIJO_GPU}${g.id}" class="${PREFIJO_GPU + g.id === elegido ? "activo" : ""}">
+                  <span>${escapar(g.nombre)}</span>
+                  <small>${gpu.activo === g.id ? (gpu.disponible ? tx("encendida", "on") : tx("incompleta", "incomplete")) : tx("apagada", "off")}</small>
+                </button></li>`,
+              )
+              .join("")
+          : ""
+      }
+    </ul>`;
+  }
+
+  private pintarGpu(estado: EstadoGpu): void {
+    const tx = (a: string, b: string): string => this.tx(a, b);
+    const g = estado.proveedores.find((x) => PREFIJO_GPU + x.id === this.elegido) ?? estado.proveedores[0]!;
+    const enUso = estado.activo === g.id;
+    const origen = (c: CampoGpuVista): string =>
+      c.origen === "ajustes"
+        ? tx("guardado aquí", "saved here")
+        : c.origen === "env"
+          ? `${c.variableEnv} ${tx("del .env", "from .env")}`
+          : c.origen === "defecto"
+            ? `${tx("por defecto", "default")}: ${c.porDefecto}`
+            : tx("falta", "missing");
+    const campo = (c: CampoGpuVista): string => {
+      const etiqueta = escapar(idioma() === "es" ? c.es : c.en);
+      if (c.secreto) {
+        return `<label>${etiqueta}
+          <input name="gpu-${c.clave}" type="password" autocomplete="off" placeholder="${escapar(
+            c.tiene ? `${tx("guardada", "saved")}: ${c.oculta ?? ""} (${origen(c)})` : tx("pega aquí la clave", "paste the key here"),
+          )}">
+        </label>`;
+      }
+      // Only a value saved here fills the box; one from .env or a default is the placeholder,
+      // so saving does not copy .env into the settings.
+      const propio = c.origen === "ajustes" ? (c.valor ?? "") : "";
+      const sugerido = c.origen === "env" ? (c.valor ?? "") : c.porDefecto;
+      return `<label>${etiqueta}
+        <input name="gpu-${c.clave}" value="${escapar(propio)}" placeholder="${escapar(sugerido)}">
+        <small class="ayuda">${escapar(origen(c))}</small>
+      </label>`;
+    };
+
+    this.dialogo.innerHTML = `
+      <div class="dialogo-cabeza">
+        <strong>${tx("Modelos", "Models")}</strong>
+        <button type="button" class="icon" data-cerrar title="${tx("Cerrar", "Close")}">✕</button>
+      </div>
+      <p class="modelos-actual">GPU: <b>${
+        estado.activo === "" ? tx("apagada", "off") : escapar(estado.proveedores.find((x) => x.id === estado.activo)?.nombre ?? estado.activo)
+      }</b>${estado.activoDesde === "env" ? ` <small class="ayuda">(${tx("lo decide MIUZIKA_LAMBDA del .env", "set by MIUZIKA_LAMBDA in .env")})</small>` : ""}</p>
+      <div class="modelos">
+        ${this.lista(this.elegido)}
+        <div class="modelos-detalle">
+          <h3>${escapar(g.nombre)}</h3>
+          <p class="ayuda">${escapar(idioma() === "es" ? g.ayuda.es : g.ayuda.en)}</p>
+          ${g.campos.map(campo).join("")}
+          ${enUso && !estado.disponible ? `<p class="modelos-mensaje error">${escapar(estado.faltan.join(" · "))}</p>` : ""}
+          <p class="modelos-mensaje" data-mensaje></p>
+          <div class="dialogo-acciones">
+            ${g.campos.some((c) => c.secreto && c.origen === "ajustes") ? `<button type="button" data-borrar>${tx("Borrar clave", "Remove key")}</button>` : ""}
+            <button type="button" data-probar>${tx("Probar", "Test")}</button>
+            <button type="button" data-guardar>${tx("Guardar", "Save")}</button>
+            ${
+              enUso
+                ? `<button type="button" data-apagar-gpu>${tx("No usar GPU", "Do not use the GPU")}</button>`
+                : `<button type="button" class="primario" data-usar>${tx("Usar esta GPU", "Use this GPU")}</button>`
+            }
+          </div>
+          <p class="ayuda">${tx(
+            "Probar sólo lista las instancias: no enciende nada ni cuesta dinero. Con la GPU apagada, las herramientas de GPU no se pueden usar.",
+            "Test only lists the instances: it starts nothing and costs nothing. With the GPU off, the GPU tools cannot be used.",
+          )}</p>
+        </div>
+      </div>`;
+
+    const q = <T extends Element>(sel: string): T | null => this.dialogo.querySelector<T>(sel);
+    const mensaje = q<HTMLElement>("[data-mensaje]")!;
+    const decir = (texto: string, error = false): void => {
+      mensaje.textContent = texto;
+      mensaje.classList.toggle("error", error);
+    };
+    const campos = (): Record<string, string> =>
+      Object.fromEntries(g.campos.map((c) => [c.clave, q<HTMLInputElement>(`[name=gpu-${c.clave}]`)?.value.trim() ?? ""]));
+    const enviar = async (accion: string, conCampos = true): Promise<boolean> => {
+      try {
+        const res = await fetch("/api/proveedores/gpu", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accion, id: g.id, ...(conCampos ? { campos: campos() } : {}) }),
+        });
+        const datos = (await res.json()) as EstadoGpu & { error?: string };
+        if (!res.ok) throw new Error(datos.error ?? `HTTP ${res.status}`);
+        this.estadoGpu = datos;
+        return true;
+      } catch (error) {
+        decir(error instanceof Error ? error.message : String(error), true);
+        return false;
+      }
+    };
+    const repintar = (texto: string): void => {
+      this.pintar();
+      const m = this.dialogo.querySelector<HTMLElement>("[data-mensaje]");
+      if (m) m.textContent = texto;
+    };
+
+    this.dialogo.querySelectorAll("[data-cerrar]").forEach((b) => b.addEventListener("click", () => this.dialogo.close()));
+    this.dialogo.querySelectorAll<HTMLButtonElement>("[data-prov]").forEach((b) =>
+      b.addEventListener("click", () => {
+        this.elegido = b.dataset.prov!;
+        this.pintar();
+      }),
+    );
+    q("[data-guardar]")?.addEventListener("click", async () => {
+      if (await enviar("guardar")) repintar(tx("Guardado.", "Saved."));
+    });
+    q("[data-usar]")?.addEventListener("click", async () => {
+      if (await enviar("activar")) repintar(tx("Hecho: las herramientas de GPU usan este proveedor.", "Done: the GPU tools use this provider."));
+    });
+    q("[data-apagar-gpu]")?.addEventListener("click", async () => {
+      if (await enviar("desactivar", false)) repintar(tx("GPU desactivada: no se encenderá ninguna instancia.", "GPU off: no instance will be started."));
+    });
+    q("[data-borrar]")?.addEventListener("click", async () => {
+      if (await enviar("borrarClave", false)) repintar(tx("Clave borrada (si el .env tiene una, se usa esa).", "Key removed (the .env one is used if there is one)."));
+    });
+    q("[data-probar]")?.addEventListener("click", async () => {
+      decir(tx("Probando…", "Testing…"));
+      if (!(await enviar("guardar"))) return;
+      try {
+        const r = (await (await fetch("/api/gpu/estado", { cache: "no-store" })).json()) as {
+          configurado?: boolean;
+          faltan?: string[];
+          fase?: string;
+          instancias?: unknown[];
+          ssh?: { ok: boolean; detalle: string };
+          error?: string;
+        };
+        if (r.error) decir(`✗ ${r.error}`, true);
+        else if (!r.configurado) decir(`✗ ${(r.faltan ?? []).join(" · ")}`, true);
+        else
+          decir(
+            `✓ ${tx("Responde", "Replies")}: ${r.fase ?? "?"} · ${(r.instancias ?? []).length} ${tx("instancia(s) en la cuenta", "instance(s) on the account")} · ssh ${r.ssh?.ok ? "ok" : `✗ ${r.ssh?.detalle ?? ""}`}`,
+            r.ssh?.ok === false,
+          );
+      } catch (error) {
+        decir(`✗ ${error instanceof Error ? error.message : String(error)}`, true);
+      }
     });
   }
 }
