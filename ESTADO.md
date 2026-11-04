@@ -370,6 +370,13 @@ to come). Review bug 7 done (`9c028ea`). Steps 1-3 built the same day (provider 
 .miuzika/proveedores.json + Models GPU section, GPU tools only offered on GPU); **prompt v5**
 (`622c6698`, item 15.5, approved by Carlos with the exact text). Carlos to try it in the browser.
 
+**4-Nov, after the "herminia" run** (a new-song Brief on GPU composed 84 MIDI bars, 128 calls,
+0.14 $, exported 7 times chasing a DC note): ACE-Step is now forced by the code, not the prompt
+(Ollama Cloud ignores tool_choice): an "ACE-Step" box in the chat header (B) that a new-song Brief
+on GPU ticks (A); filter has highpass 1; verificar_audio gives reasons, treats DC < 50 mL as a note
+and now sees 16-bit clipping; editar_proyecto takes ops as JSON text; the LLM proxy no longer
+crashes the dev server when a streaming answer is cut. All run headless; not with a real GPU take.
+
 **For Carlos to decide or check** (not done on purpose):
 - Hear an MP3 export, and try mute/solo and the pad on two tracks with the same name.
 - The default drum kit: switch drumkit tracks without programa to the GM kit (every piece sounds)
