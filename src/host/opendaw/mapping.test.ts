@@ -153,3 +153,16 @@ test("General MIDI preset by bank and program, with kits in bank 128", () => {
   assert.equal(indicePresetGm(presets, 99, false), 0);
   assert.equal(indicePresetGm([], 0, false), undefined);
 });
+
+test("filter highpass 1 drives Revamp's high-pass instead of its low-pass", () => {
+  // 4-Nov "herminia": filter at 28-40 Hz meant to remove DC silenced the tracks (low-pass only).
+  const valor = (m: ReturnType<typeof mapDevice>, nombre: string) => m.params.find((p) => p.name === nombre)?.value;
+  const alto = mapDevice({ id: "f", type: "filter", enabled: true, params: { cutoffHz: 30, q: 0.7, highpass: 1 } });
+  assert.equal(valor(alto, "highPass.enabled"), true);
+  assert.equal(valor(alto, "highPass.frequency"), 30);
+  assert.equal(valor(alto, "lowPass.enabled"), false);
+  const bajo = mapDevice({ id: "f", type: "filter", enabled: true, params: { cutoffHz: 2000, q: 1 } });
+  assert.equal(valor(bajo, "lowPass.enabled"), true);
+  assert.equal(valor(bajo, "lowPass.frequency"), 2000);
+  assert.equal(valor(bajo, "highPass.enabled"), false);
+});

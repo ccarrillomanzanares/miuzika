@@ -136,7 +136,28 @@ export function mapDevice(device: Device): MappedDevice {
         ],
       };
     }
-    case "filter":
+    case "filter": {
+      // Revamp has both passes; `highpass` picks which one cutoffHz drives (4-Nov).
+      const alto = (params.highpass ?? 0) >= 0.5;
+      const corte = clamp(params.cutoffHz ?? 2500, 20, 20000);
+      const q = clamp(params.q ?? 2.4, 0.5, 10);
+      if (alto) {
+        return {
+          factory: "Revamp",
+          params: [
+            { name: "lowPass.enabled", value: false },
+            { name: "lowShelf.enabled", value: false },
+            { name: "lowBell.enabled", value: false },
+            { name: "midBell.enabled", value: false },
+            { name: "highBell.enabled", value: false },
+            { name: "highShelf.enabled", value: false },
+            { name: "highPass.enabled", value: true },
+            { name: "highPass.frequency", value: corte },
+            { name: "highPass.q", value: q },
+            { name: "highPass.order", value: 1 },
+          ],
+        };
+      }
       return {
         factory: "Revamp",
         params: [
@@ -149,11 +170,12 @@ export function mapDevice(device: Device): MappedDevice {
           { name: "lowPass.enabled", value: true },
           // No floor: with explicit Hz, 400 Hz is what was requested. The 1,200 Hz
           // floor from the old mapping is kept in migrated projects.
-          { name: "lowPass.frequency", value: clamp(params.cutoffHz ?? 2500, 20, 20000) },
-          { name: "lowPass.q", value: clamp(params.q ?? 2.4, 0.5, 10) },
+          { name: "lowPass.frequency", value: corte },
+          { name: "lowPass.q", value: q },
           { name: "lowPass.order", value: 1 },
         ],
       };
+    }
     case "eq":
       return {
         factory: "Revamp",

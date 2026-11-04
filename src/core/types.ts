@@ -209,7 +209,9 @@ export const DEVICE_PARAMS: Record<DeviceType, Record<string, [number, number]>>
   delay: { wet: [0, 1], timeMs: [20, 1000], feedback: [0, 0.95], pingPong: [0, 1] },
   chorus: { wet: [0, 1], rateHz: [0.1, 5], depth: [0, 1] },
   distortion: { driveDb: [0, 40], mix: [0, 1] },
-  filter: { cutoffHz: [20, 20000], q: [0.5, 10] },
+  // highpass 1 = cutoffHz cuts BELOW (high-pass) instead of above. Added 4-Nov: in "herminia" the
+  // agent used filter at 28-40 Hz to remove DC and silenced drums, bass and guitar (it was low-pass only).
+  filter: { cutoffHz: [20, 20000], q: [0.5, 10], highpass: [0, 1] },
   eq: {
     low: [-24, 24],
     mid: [-24, 24],
@@ -230,7 +232,7 @@ export const DEVICE_DEFAULTS: Record<DeviceType, Record<string, number>> = {
   delay: { wet: 0.2, timeMs: 363, feedback: 0.35, pingPong: 1 },
   chorus: { wet: 0.3, rateHz: 0.9, depth: 0.5 },
   distortion: { driveDb: 9.6, mix: 0.6 },
-  filter: { cutoffHz: 2500, q: 2.4 },
+  filter: { cutoffHz: 2500, q: 2.4, highpass: 0 },
   eq: { low: 0, mid: 0, high: 0, lowHz: 100, midHz: 1000, highHz: 8000 },
   compressor: { thresholdDb: -24, ratio: 4, attackMs: 30, releaseMs: 600 },
   bitcrusher: { bits: 8, mix: 0.3 },
