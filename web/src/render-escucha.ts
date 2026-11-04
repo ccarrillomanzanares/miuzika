@@ -23,6 +23,7 @@ export interface Formatos {
   mp3?: boolean;
 }
 import { audioBufferToWav } from "./wav.ts";
+import { buscarPista } from "../../src/core/pistas.ts";
 
 type SoundfontCargado = { uuid: Uint8Array; name: string; bytes: ArrayBuffer };
 
@@ -159,9 +160,9 @@ export function crearRenderEscucha(d: DependenciasRender): {
       const tiemposTramo = compasesPorTramo * beatsPerBar(view);
       const tramos = Math.max(1, Math.ceil(view.lengthBars / compasesPorTramo));
       const pedidas = (opciones.pistas ?? []).map((p) => p.trim().toLowerCase()).filter(Boolean);
-      const elegidas = view.tracks.filter(
-        (t) => pedidas.length === 0 || pedidas.includes(t.id.toLowerCase()) || pedidas.includes(t.name.toLowerCase()),
-      );
+      // The same finder as editing (no accents, "pista 2"), so a name the agent can edit it can also hear.
+      const encontradas = new Set(pedidas.map((p) => buscarPista(view.tracks, p)).filter((t) => t !== undefined));
+      const elegidas = view.tracks.filter((t) => pedidas.length === 0 || encontradas.has(t));
       if (pedidas.length > 0 && elegidas.length === 0) {
         // 2-Nov "vidrio": the agent asked for its reverb bus by name and read "No tracks named
         // sala" as a broken bus. A bus has no row of its own; its return is inside the MIX.

@@ -18,6 +18,7 @@ import { validateProject } from "./project.ts";
 import type { Issue } from "./project.ts";
 import { ParamValueSchema, numericParam } from "./params.ts";
 import { slugDe } from "./nombres.ts";
+import { buscarPista, listaDePistas } from "./pistas.ts";
 
 export class OpError extends Error {
   constructor(message: string) {
@@ -356,25 +357,9 @@ export function parseOps(value: unknown): ParsedOp[] {
 // ---------------------------------------------------------------------------
 
 function resolveTrack(project: Project, ref: string): Track {
-  const cleaned = ref.trim();
-  const byId = project.tracks.find((track) => track.id === cleaned);
-  if (byId) return byId;
-
-  const lower = cleaned.toLowerCase();
-  const byName = project.tracks.filter((track) => track.name.toLowerCase() === lower);
-  if (byName.length === 1) return byName[0]!;
-
-  const byPrefix = project.tracks.filter((track) => track.id.startsWith(cleaned));
-  if (byPrefix.length === 1) return byPrefix[0]!;
-
-  const indexMatch = /^(?:track|pista|trk)?\s*(\d+)$/i.exec(cleaned);
-  if (indexMatch) {
-    const index = Number(indexMatch[1]) - 1;
-    if (index >= 0 && index < project.tracks.length) return project.tracks[index]!;
-  }
-
-  const available = project.tracks.map((track, index) => `${index + 1}:${track.id}(${track.name})`).join(", ");
-  throw new OpError(`I can't find track "${ref}". Available: ${available || "none"}`);
+  const track = buscarPista(project.tracks, ref);
+  if (track) return track;
+  throw new OpError(`I can't find track "${ref}". Available: ${listaDePistas(project.tracks) || "none"}`);
 }
 
 /**

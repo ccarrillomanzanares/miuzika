@@ -11,8 +11,9 @@
  * No DOM and no network: tested with `node --test`.
  */
 
-import type { Project, Track } from "./types.ts";
-import { normalizarTexto, slugDe } from "./nombres.ts";
+import type { Project } from "./types.ts";
+import { slugDe } from "./nombres.ts";
+import { buscarPista } from "./pistas.ts";
 
 /** Snapshots kept per project; the oldest ones are deleted. */
 export const MAX_VERSIONES = 40;
@@ -49,22 +50,6 @@ export function versionesSobrantes(nombres: readonly string[], max = MAX_VERSION
   return ordenadas.slice(0, Math.max(0, ordenadas.length - max));
 }
 
-function buscarPista(tracks: readonly Track[], clave: string): Track | undefined {
-  const limpia = clave.trim();
-  const porId = tracks.find((track) => track.id === limpia);
-  if (porId) return porId;
-  if (/^\d+$/.test(limpia)) return tracks[Number(limpia) - 1];
-  const nombre = normalizarTexto(limpia);
-  return (
-    tracks.find((track) => normalizarTexto(track.name) === nombre) ??
-    // "Bateria" finds "Batería oscura" if only one contains it.
-    (() => {
-      const parecidas = tracks.filter((track) => normalizarTexto(track.name).includes(nombre));
-      return parecidas.length === 1 ? parecidas[0] : undefined;
-    })()
-  );
-}
-
 export interface Restauracion {
   project: Project;
   /** One line per restored track. */
@@ -86,7 +71,8 @@ export function restaurarVersion(actual: Project, version: Project, pistas: read
   const project: Project = structuredClone(actual);
   const hechas: string[] = [];
   for (const clave of pistas) {
-    const antigua = buscarPista(version.tracks, clave);
+    // "Bateria" finds "Batería oscura" if only one contains it.
+    const antigua = buscarPista(version.tracks, clave, { parcial: true });
     if (!antigua) {
       const nombres = version.tracks.map((track, i) => `${i + 1}. ${track.name} (${track.id})`).join(", ");
       throw new Error(`That version has no track «${clave}». It has: ${nombres}.`);

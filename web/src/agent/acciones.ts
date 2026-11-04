@@ -32,6 +32,7 @@ import { leerNotacion, tramosIrregulares } from "../../../src/core/notacion.ts";
 import { notasDeBateria } from "../../../src/core/bateria.ts";
 import { nombreDeNota, resumenParaAgente } from "../../../src/core/resumen.ts";
 import { normalizarTexto, slugDe } from "../../../src/core/nombres.ts";
+import { buscarPista } from "../../../src/core/pistas.ts";
 import { MODE_NAMES, intervalosDe, pitchClass } from "../../../src/core/theory.ts";
 import { cargarWavDeDisco, idDeAsset, opsDeAudio } from "../audio-store.ts";
 import { listarProyectos } from "../proyecto-disco.ts";
@@ -86,16 +87,7 @@ export function nombreDesdeRuta(ruta: string): string {
 
 /** Track by id, by name (without accents or uppercase) or by part of the name if it is unique. */
 function pistaPorNombre(project: Project, nombre: string) {
-  const buscado = normalizarTexto(nombre);
-  if (buscado === "") return undefined;
-  const exacta =
-    project.tracks.find((t) => t.id === nombre.trim()) ??
-    project.tracks.find((t) => normalizarTexto(t.name) === buscado);
-  if (exacta) return exacta;
-  const parciales = project.tracks.filter(
-    (t) => normalizarTexto(t.name).includes(buscado) || buscado.includes(normalizarTexto(t.name)),
-  );
-  return parciales.length === 1 ? parciales[0] : undefined;
+  return buscarPista(project.tracks, nombre, { parcial: true });
 }
 
 const mensajeDe = (error: unknown): string => (error instanceof Error ? error.message : String(error));
