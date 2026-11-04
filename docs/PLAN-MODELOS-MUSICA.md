@@ -46,6 +46,16 @@ which order, and what was parked, so later sessions do not re-argue it.
 
 ## Parked (noted, not started)
 
+- **ACE-Step on the Contabo VPS, CPU only** (Carlos, 4-Nov: "me interesa pero no ahora"). The VPS is
+  a Contabo VM, 16 shared vCPU, 64 GB RAM, Ubuntu, no GPU; it also serves ccmai.org. 64 GB holds the
+  model (16 GB of VRAM on the A10); the guess, not measured, is 30-60x slower than the A10 (the
+  2 x 120 s takes that took 44 s could take 20-45 min) and the LM's vllm backend needs a GPU, so it
+  would need ACE-Step's other LM backend or no LM. Shared vCPUs at 100 % for that long may be
+  throttled by Contabo and slow the site. Use: free, unhurried generation (overnight queue). Test
+  when picked up, with Carlos's explicit yes (it installs ~10-15 GB on his server and loads its
+  CPU): one 30 s take, measuring time, RAM and CPU. Lambda stays the place for ACE-Step meanwhile;
+  the VPS suits CPU work (Stable Audio Small, basic-pitch, measuring, Python renders).
+
 4. **LoRA on Carlos's own stems** on Lambda, with ACE-Step and Stable Audio 3 (both ship
    training code). Measure VRAM, time, cost; the lineage record must name the LoRA.
 5. **Phase 2, Magenta RealTime 2 Small** only after measuring whether 230M runs in real
