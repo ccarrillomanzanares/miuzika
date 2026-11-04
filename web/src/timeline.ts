@@ -504,7 +504,8 @@ export class TimelineView {
   private resize(): void {
     const bars = this.project?.lengthBars ?? 16;
     const tracks = this.project?.tracks.length ?? 0;
-    this.width = Math.max(this.wrap.clientWidth - 2, Math.ceil(bars * this.pxPerBeat * 4) + 32);
+    const porCompas = this.project ? beatsPerBar(this.project) : 4;
+    this.width = Math.max(this.wrap.clientWidth - 2, Math.ceil(bars * this.pxPerBeat * porCompas) + 32);
     this.height = RULER + Math.max(1, tracks) * ROW;
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
 

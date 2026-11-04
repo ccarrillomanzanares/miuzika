@@ -14,7 +14,8 @@ const escape = (value: string) =>
 
 const quantize = (beat: number) => Math.round(beat / STEP) * STEP;
 
-export function openPianoRoll(clip: Clip, onApply: (notes: Note[]) => void): void {
+/** `tiemposPorCompas`: beats per bar of the song, for the bar lines (it assumed 4/4 until 4-Nov). */
+export function openPianoRoll(clip: Clip, tiemposPorCompas: number, onApply: (notes: Note[]) => void): void {
   const notes: Note[] = structuredClone(clip.notes);
   const width = Math.max(640, Math.ceil(clip.length * PX_PER_BEAT));
   const height = ROWS * ROW_HEIGHT;
@@ -77,7 +78,7 @@ export function openPianoRoll(clip: Clip, onApply: (notes: Note[]) => void): voi
     for (let step = 0; step <= steps; step++) {
       const x = step * STEP * PX_PER_BEAT;
       const isBeat = step % 4 === 0;
-      const isBar = step % 16 === 0;
+      const isBar = Math.abs((step * STEP) % tiemposPorCompas) < 1e-9;
       context.fillStyle = isBar ? "#394052" : isBeat ? "#2a303d" : "#1e2330";
       context.fillRect(x, 0, 1, height);
     }

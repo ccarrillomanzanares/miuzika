@@ -608,7 +608,7 @@ timeline.onEditClip = (trackId, clipId) => {
   const track = project.tracks.find((candidate) => candidate.id === trackId);
   const clip = track?.clips.find((candidate) => candidate.id === clipId);
   if (!track || !clip) return;
-  openPianoRoll(clip, (notes) => {
+  openPianoRoll(clip, beatsPerBar(project), (notes) => {
     if (!project) return;
     try {
       const { project: next } = applyOps(project, [
@@ -1052,7 +1052,8 @@ function pegarClips(): void {
     clipId: item.clipId,
     startBeat: Math.max(0, destino + (item.start - base)),
   }));
-  aplicarOpsClips(ops, `Pasted ${ops.length} clip(s) at bar ${Math.floor(destino / 4) + 1}.`, true);
+  // The bar number in the meter of the song, not 4/4 (review of 3-Nov).
+  aplicarOpsClips(ops, `Pasted ${ops.length} clip(s) at bar ${Math.floor(destino / beatsPerBar(project)) + 1}.`, true);
 }
 
 function duplicarClips(): void {
