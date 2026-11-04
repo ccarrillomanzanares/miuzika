@@ -403,13 +403,23 @@ crashes the dev server when a streaming answer is cut. All run headless; not wit
   editar_proyecto says so and shows how it ends, instead of "Missing `ops`".
 - Fixed: `add_bus` accepts `{device:{type,...}}` and `{device:"reverb", params}` inside devices,
   and `set_instrument` accepts `kind` for `type` (the three calls rejected in "prueba-bus").
-- Open: the Steinway has only 2 velocity layers (0-99, 100-127) because of the 40 MB cap: its color
-  changes only at velocity ≥100; try 3 layers with samples cut to ~4 s. The Power kit (16)
-  fires two layers on key 38 (by design of the SF2). The first hit is louder in live Play.
+- Kept on the list, not now (Carlos, 4-Nov): Steinway with 3 velocity layers (now 2, 0-99 and
+  100-127, because of the 40 MB cap; samples cut to ~4 s would make room). The first hit louder
+  in live Play: not chased unless it comes back. The Power kit (16) firing two layers on key 38
+  is the SF2's design.
+
+**4-Nov, review steps 5 and 6 done** (`docs/REVISION-2026-11-03.md` §10 has the detail):
+one track finder (`src/core/pistas.ts`), one note-name reader and spelling (`theory.ts`; the
+summary now says Bb4 where it said A#4), seconds/beats in `tiempo.ts`, the song's meter in
+paste, timeline and piano roll, the master-file format in `src/core`. ARCHITECTURE and README
+checked against the code; OPENDAW and TEST_PLAN marked superseded. Left for Carlos: the docs
+consolidation of §9.5, and the 0-based `inicio_compas` vs 1-based `desde_compas` in the tools.
+Step 7 (ACE-Step extract/lego) not started.
 
 **For Carlos to decide or check** (not done on purpose):
 - Try mute/solo and the pad on two tracks with the same name.
-- Hear a GM drum part after the tuning fix.
+- The agent says "lo que oigo" when it only reads the engine's numbers (seen 4-Nov in
+  prueba-nivel); that wording comes from the prompt, which only changes with Carlos's yes.
 
 
 1. Draw buses and sends in the interface (mixer).

@@ -1,5 +1,11 @@
 # openDAW integration
 
+> **Partly superseded (4-Nov-2026).** Written on 21-Oct, before the agent. The boundary and
+> the decisions still hold; the status lines do not: offline render (WAV export,
+> `escuchar_mezcla`) has worked since 28-Oct through `OfflineEngineRenderer`, buses and
+> sends exist, and SoundFonts go through `web/src/soundfont-zonas.ts`. Current state:
+> `ESTADO.md` and `docs/ARCHITECTURE.md`.
+
 This document sets the boundary between miuzika and the engine. The integration in
 `src/host/opendaw/` (export/import with round-trip of notes, tempo, mix and
 audio) and the WASM playback in `web/src/opendaw-engine.ts` are **implemented and verified**.

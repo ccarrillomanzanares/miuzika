@@ -1,5 +1,10 @@
 # miuzika test plan
 
+> **Superseded (4-Nov-2026).** This is the 21-Oct plan, before the agent, the Brief, buses,
+> export and the music models. It is kept for its P0 smoke checks (clean start, single
+> origin), which still apply. The checks done since then, with their evidence, are in
+> `ESTADO.md`; the automated gates are in `docs/ARCHITECTURE.md`, section 10.
+
 Target version: **0.11.0**. Scope: GUI/openDAW + Strudel → WAV.
 
 Runs at `http://localhost:5173`. Evidence per case: result, UI messages,

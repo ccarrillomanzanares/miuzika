@@ -15,8 +15,9 @@ disk                    every project is a folder: proyecto.json + its WAVs
 
 Architecture, boundaries and dangerous couplings are in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The daily status report is in
-[`ESTADO.md`](ESTADO.md); pending phases are in [`PLAN.md`](PLAN.md); the 27-Oct
-review is in [`docs/REVISION-2026-10-27.md`](docs/REVISION-2026-10-27.md).
+[`ESTADO.md`](ESTADO.md); pending phases are in [`PLAN.md`](PLAN.md); the reviews are
+[`docs/REVISION-2026-10-27.md`](docs/REVISION-2026-10-27.md) and
+[`docs/REVISION-2026-11-03.md`](docs/REVISION-2026-11-03.md).
 
 ## Getting started
 
@@ -57,11 +58,20 @@ And manually, because no test covers it: open a project, press play and **listen
   change (and `Save` / Ctrl+S).
 - **Open**: project (`.json`, `.miuzika.zip`), audio or MIDI, from the button or by
   dragging it onto the window.
-- **Agent**: right-hand panel. It reads the project, writes progressions and notes,
-  adjusts mix and effects, searches the CC0 library (4,231 VCSL samples), converts SFZ
-  instruments to SoundFont, creates sounds from words and runs Python. Its memory is
-  per project (`agente.json`). The system prompt is a fingerprinted literal: it does
-  not change by accident.
+- **Agent**: right-hand panel. It reads the project, writes progressions, notes and
+  drums, adjusts mix, effects, buses and sends, searches the CC0 library (4,231 VCSL
+  samples), converts SFZ instruments to SoundFont, creates sounds from words, runs
+  Python, listens to the mix through the engine (`escuchar_mezcla`), exports MIDI and
+  WAV, and restores earlier versions. Its memory is per project (`agente.json`). The
+  system prompt is a fingerprinted literal: it does not change by accident.
+- **Brief**: a form that writes the request for a new song or an arrangement.
+- **Models**: the LLM provider and model, and the GPU providers (Lambda first), with
+  the cost of each call shown as it happens.
+- **Music models on the GPU**: with the selector on GPU, ACE-Step 1.5 generates songs
+  as audio (`generar_audio`, or the "ACE-Step" box in the chat to force it) and
+  MIDI-LLM proposes MIDI; basic-pitch transcribes audio to MIDI on the laptop.
+- **MP3**: the MP3 button renders the mix and saves a 320 kbps MP3 next to the WAV.
+- **Pad**: the touchpad as an instrument.
 - **Strudel**: `Strudel` button, a pattern and `Render WAV`; it becomes an audio track
   (1 cycle = 1 bar).
 - **GPU**: CPU / GPU selector in the chat. The instance **does not shut down by
@@ -71,29 +81,33 @@ And manually, because no test covers it: open a project, press play and **listen
 ## Structure
 
 ```text
-src/core/          pure domain: types, transactional ops, theory, composition,
-                   summary for the agent, sounds and words, search, names
+src/core/          pure domain: types, transactional ops, the master-file format,
+                   theory and notation, track finder, time, summary and listening
+                   report for the agent, versions, drums, sounds, prices
 src/host/opendaw/  miuzika project -> openDAW (adapter, mapping, contract)
 web/src/           the app: main.ts (state and UI), timeline, piano roll, openDAW,
                    stems, Strudel, chat, i18n
 web/src/agent/     agent loop, tools (LLM contract), actions on the project,
                    context and activity
-server/            dev server API: context + one module per area
-                   (files, projects, audio, catalog, voices, gpu, python) and Lambda
-workspace/         numpy engine (codigo/), torch engine (gpu/), tools/,
-                   templates/, works/, CC0 catalog and projects (outside git)
+server/            dev server API: context, route wrapper, process helper, one module
+                   per area (files, projects, audio, catalog, voices, gpu, python,
+                   providers, prices, pad) and the GPU providers (gpu/, Lambda first)
+workspace/         numpy engine (codigo/), GPU scripts (gpu/), herramientas/,
+                   plantillas/, obras/, CC0 catalog and projects (outside git)
 docs/              architecture, openDAW, legal, test plan, reviews
 ```
 
 ## Limitations
 
 - It only exists with `npm run dev`: the API (`/api/*`) is Vite middleware. There is
-  no deployment, no users, no isolation: the agent runs Python with your permissions.
-  See "Product" in `docs/REVISION-2026-10-27.md`.
-- WAVs longer than 30 s are streamed (`<audio>`), outside the openDAW mixer: track FX
-  and the master do not affect them.
-- Effects use normalized parameters 0..1 (except EQ, in dB); no buses or automation.
-- The pattern engine assumes 4/4. Strudel depends on remote sample maps.
+  no deployment and no users. The agent's Python runs in a sandbox script
+  (`server/python/caja.py`: its project only, no keys, network or processes), a
+  guardrail rather than a cage. See "Product" in `docs/REVISION-2026-10-27.md`.
+- WAVs that do not fit openDAW's 400 MB decoded budget are streamed (`<audio>`),
+  outside the openDAW mixer: track FX and the master do not affect them.
+- Effects use real units (Hz, dB, ms) and there are buses and sends, but the interface
+  does not draw buses yet and there is no automation.
+- Strudel depends on remote sample maps.
 - The interface is in English and Spanish; the agent answers in the language of the user.
 
 ## License
