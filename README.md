@@ -1,117 +1,80 @@
 # miuzika
 
-A browser DAW with an agent that composes, arranges and produces. You can talk to it
-in any language; the agent writes directly into the project (notes, chords, effects,
-mix) and, when synthesized audio is needed, runs Python on your machine or on a
-Lambda Cloud GPU.
+miuzika is a DAW that runs in the browser, with an AI agent that composes, arranges and
+produces inside the project. You can talk to it in any language. It writes notes, chords,
+drums, effects and the mix straight into the song, through transactional operations (a bad
+edit is rejected as a whole, never half-applied). When a synthesized sound is needed, it
+writes and runs Python on your machine or on a GPU rented on Lambda Cloud. Playback runs on
+openDAW (WASM); generative patterns run on Strudel.
 
-```text
-GUI + openDAW (WASM)    timeline, piano roll, playback, drums, SoundFonts
-agent (LLM)             reads and edits the project with ops; composes with music theory
-numpy / torch engine    synthesis, render, analysis (workspace/codigo, workspace/gpu)
-Strudel -> WAV          generative patterns rendered to an audio track
-disk                    every project is a folder: proyecto.json + its WAVs
-```
+## Features
 
-Architecture, boundaries and dangerous couplings are in
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The daily status report is in
-[`ESTADO.md`](ESTADO.md); pending phases are in [`PLAN.md`](PLAN.md); the reviews are
-[`docs/REVISION-2026-10-27.md`](docs/REVISION-2026-10-27.md) and
-[`docs/REVISION-2026-11-03.md`](docs/REVISION-2026-11-03.md).
+- Timeline, piano roll, drum grid and playback on openDAW, with General MIDI and SoundFonts.
+- CC0 sample library (VCSL) and conversion of SFZ instruments to SoundFont.
+- Agent that reads and edits the project: progressions, notes, drums, mix, effects, buses
+  and sends, earlier versions, listening to the mix through the engine, MIDI and WAV export.
+- Agent memory per project, and a fingerprinted system prompt that does not change by accident.
+- Models dialog: LLM provider and model (Ollama Cloud, Anthropic, OpenAI, Gemini, OpenRouter,
+  DeepSeek, Mistral, Groq, local Ollama, LM Studio, any OpenAI-compatible endpoint), with the
+  cost of each call shown.
+- Brief: a form that writes the request for a new song or an arrangement.
+- GPU music models: ACE-Step 1.5 generates audio, MIDI-LLM proposes MIDI, basic-pitch
+  transcribes audio to MIDI.
+- Strudel patterns rendered to an audio track (1 cycle = 1 bar).
+- Pad: the laptop touchpad as an instrument.
+- Export to WAV, MIDI and 320 kbps MP3.
+- Open project files (`.json`, `.miuzika.zip`), audio or MIDI, by button or drag and drop.
+- Every project is a folder whose `proyecto.json` is the single source of truth. Autosave
+  runs 1.5 s after each change; Ctrl+S saves at once.
 
 ## Getting started
 
-Requirements: **Node 24** and **Python 3 with numpy** (`MIUZIKA_PYTHON` in `.env` if
-the executable is not called `python`).
+Requirements: **Node 24** or later, and **Python 3 with numpy**. If the Python executable is
+not called `python`, set `MIUZIKA_PYTHON` in `.env`.
 
 ```bash
 npm install
-npm run dev          # http://localhost:5173  (not 127.0.0.1: the origin matters)
+npm run dev          # http://localhost:5173 (use localhost, not 127.0.0.1)
 ```
 
-`.env` (only the server reads it; the browser never sees the keys):
+**API keys** never go in this repository or in the browser's code. Open **Models** in the
+app, pick a provider and paste its key: it is stored in `.miuzika/proveedores.json`, which is
+outside git. Web search uses the Ollama Cloud key.
 
-```text
-OLLAMA_API_KEY=...            # Ollama Cloud (and web search); other providers and keys, in the "Models" menu
-OLLAMA_BASE_URL=https://ollama.com
-# Optional, GPU on Lambda Cloud:
-LAMBDA_API_KEY=...  LAMBDA_SSH_KEY=...  LAMBDA_SSH_KEY_NAME=...  LAMBDA_SSH_USER=ubuntu
-LAMBDA_REGION=us-east-1  LAMBDA_INSTANCE_TYPE=gpu_1x_a10  LAMBDA_NOMBRE=miuzika-gpu
-```
+**GPU (optional)**: Lambda Cloud settings go in `.env`. Variable names and defaults (no
+secrets here): `LAMBDA_API_KEY`, `LAMBDA_SSH_KEY` (path), `LAMBDA_SSH_KEY_NAME`,
+`LAMBDA_SSH_USER=ubuntu`, `LAMBDA_REGION=us-east-1`, `LAMBDA_INSTANCE_TYPE=gpu_1x_a10`,
+`LAMBDA_NOMBRE=miuzika-gpu`. `OLLAMA_BASE_URL` defaults to `https://ollama.com`.
+A started GPU instance keeps billing until you turn it off. The header counter shows the
+hourly rate and the spend; the Off button shuts down the instance.
 
 ## Checks
 
 | command | what it does |
 |---|---|
-| `npm run typecheck` | TypeScript without emitting (0 errors) |
-| `npm run test:unit` | domain, agent and file tests (`node --test`) |
-| `npm test` | the above + openDAW contract (export/import an `.odw`) |
+| `npm run typecheck` | TypeScript, no emit |
+| `npm run test:unit` | unit tests (`node --test`) for `src/`, `web/` and `server/` |
+| `npm test` | the unit tests plus the openDAW contract (export and import an `.odw`) |
 | `npm run build:web` | production bundle |
+| `python workspace/herramientas/smoke.py` | the Python engine |
 
-And manually, because no test covers it: open a project, press play and **listen to it**.
+No test covers how the music sounds. Open a project, press Play and listen to it.
 
-## How it works
+## Documentation
 
-- **Projects**: `workspace/proyectos/<folder>/proyecto.json` is the single source of
-  truth. The folder is fixed when the project is created and does not change when the
-  project is renamed; it accepts names in any alphabet. Autosave 1.5 s after every
-  change (and `Save` / Ctrl+S).
-- **Open**: project (`.json`, `.miuzika.zip`), audio or MIDI, from the button or by
-  dragging it onto the window.
-- **Agent**: right-hand panel. It reads the project, writes progressions, notes and
-  drums, adjusts mix, effects, buses and sends, searches the CC0 library (4,231 VCSL
-  samples), converts SFZ instruments to SoundFont, creates sounds from words, runs
-  Python, listens to the mix through the engine (`escuchar_mezcla`), exports MIDI and
-  WAV, and restores earlier versions. Its memory is per project (`agente.json`). The
-  system prompt is a fingerprinted literal: it does not change by accident.
-- **Brief**: a form that writes the request for a new song or an arrangement.
-- **Models**: the LLM provider and model, and the GPU providers (Lambda first), with
-  the cost of each call shown as it happens.
-- **Music models on the GPU**: with the selector on GPU, ACE-Step 1.5 generates songs
-  as audio (`generar_audio`, or the "ACE-Step" box in the chat to force it) and
-  MIDI-LLM proposes MIDI; basic-pitch transcribes audio to MIDI on the laptop.
-- **MP3**: the MP3 button renders the mix and saves a 320 kbps MP3 next to the WAV.
-- **Pad**: the touchpad as an instrument.
-- **Strudel**: `Strudel` button, a pattern and `Render WAV`; it becomes an audio track
-  (1 cycle = 1 bar).
-- **GPU**: CPU / GPU selector in the chat. The instance **does not shut down by
-  itself**: the header counter shows the real hourly rate and spend; turn it off from
-  there.
+- [`ESTADO.md`](ESTADO.md): current status, what works and what is pending. Single source of truth for status.
+- [`PLAN.md`](PLAN.md): roadmap.
+- [`docs/DECISIONES.md`](docs/DECISIONES.md): decision log.
+- [`docs/DIARIO.md`](docs/DIARIO.md): dated work log.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): layers, boundaries, data model, endpoints, dangerous couplings.
+- [`docs/LEGAL.md`](docs/LEGAL.md): licensing and third-party material.
 
-## Structure
+## Known caveat
 
-```text
-src/core/          pure domain: types, transactional ops, the master-file format,
-                   theory and notation, track finder, time, summary and listening
-                   report for the agent, versions, drums, sounds, prices
-src/host/opendaw/  miuzika project -> openDAW (adapter, mapping, contract)
-web/src/           the app: main.ts (state and UI), timeline, piano roll, openDAW,
-                   stems, Strudel, chat, i18n
-web/src/agent/     agent loop, tools (LLM contract), actions on the project,
-                   context and activity
-server/            dev server API: context, route wrapper, process helper, one module
-                   per area (files, projects, audio, catalog, voices, gpu, python,
-                   providers, prices, pad) and the GPU providers (gpu/, Lambda first)
-workspace/         numpy engine (codigo/), GPU scripts (gpu/), herramientas/,
-                   plantillas/, obras/, CC0 catalog and projects (outside git)
-docs/              architecture, openDAW, legal, test plan, reviews
-```
-
-## Limitations
-
-- It only exists with `npm run dev`: the API (`/api/*`) is Vite middleware. There is
-  no deployment and no users. The agent's Python runs in a sandbox script
-  (`server/python/caja.py`: its project only, no keys, network or processes), a
-  guardrail rather than a cage. See "Product" in `docs/REVISION-2026-10-27.md`.
-- WAVs that do not fit openDAW's 400 MB decoded budget are streamed (`<audio>`),
-  outside the openDAW mixer: track FX and the master do not affect them.
-- Effects use real units (Hz, dB, ms) and there are buses and sends, but the interface
-  does not draw buses yet and there is no automation.
 - Strudel depends on remote sample maps.
-- The interface is in English and Spanish; the agent answers in the language of the user.
 
 ## License
 
-**AGPL-3.0-or-later**. openDAW is dual-licensed (AGPL/commercial); Strudel,
-superdough and the sample packs are third-party. See [LICENSE](LICENSE),
-[NOTICE.md](NOTICE.md) and [docs/LEGAL.md](docs/LEGAL.md).
+**AGPL-3.0-or-later**. See [LICENSE](LICENSE), [NOTICE.md](NOTICE.md) and
+[docs/LEGAL.md](docs/LEGAL.md). openDAW is dual-licensed (AGPL or commercial); Strudel,
+superdough and the sample packs are third-party.

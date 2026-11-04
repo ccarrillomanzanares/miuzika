@@ -132,17 +132,8 @@ checked are noted here.** If it is not clear, it does not go in.
 
 ## 7. Decision log
 
-| Date | Decision | Reason |
-|---|---|---|
-| 2026-10-23 | Do not analyze or train with commercial phonograms | §3, §4 |
-| 2026-10-23 | Mixing knowledge is extracted from CC material and from our own renders | §2 |
-| 2026-10-23 | Do not use MusicGen/Stable Audio (Open) in the product | §6 |
-| 2026-11-02 | The project license is AGPL-3.0-or-later; the MIT statement here was an error | §1 |
-| 2026-11-02 | Stable Audio 3 and ACE-Step 1.5 are candidates for local generation, pending a read of the license text | §6 |
-| 2026-11-02 | Generation runs on Lambda first (laptop has no CUDA, 7.7 GB RAM); ACE-Step 1.5 is the first model; basic-pitch and MIDI-LLM approved; LoRA, Magenta RT2 and the rest parked (`docs/PLAN-MODELOS-MUSICA.md`) | §6 |
-| 2026-11-02 | Exports carry a C2PA manifest, a `cawg.training-mining` assertion (generative training and data mining **notAllowed** by default, inference allowed) and an OpenTimestamps proof; no NFT, no blockchain beyond the OTS anchor | §9 |
-| 2026-10-23 | CLAP allowed: Apache-2.0 verified | §6 |
-| 2026-10-23 | The scoring pilot uses **only our own audio** (no third-party phonograms) | §3, §4 |
+Moved to [`DECISIONES.md`](DECISIONES.md) on 2026-11-04 (one log for the whole project).
+The legal reasoning behind each row stays in sections 1 to 6 and 9 of this file.
 
 ## 8. Pending
 

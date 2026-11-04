@@ -144,6 +144,6 @@ Why, measured:
 - 2-Nov, "Stahl": material to compare was stacked after the last bar (bars 81, 90, 112, 121) and
   the song grew from 80 to 136 bars.
 
-"si tienes generar_audio" works because of the same day's code change (docs/PLAN-PROVEEDORES-GPU.md,
+"si tienes generar_audio" works because of the same day's code change (PLAN.md, section "4-Nov",
 step 3): with the chat selector on CPU the GPU tools are not offered at all, so the rule only
 applies when the person chose GPU.

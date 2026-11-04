@@ -313,7 +313,7 @@ selector on CPU, `generar_audio` and `proponer_midi` are not offered.
 `ejecutar_python` · `verificar_audio` · `buscar_sonido` · `listar_voces` ·
 `crear_voz` · `medir_referencia` · `buscar_web` · `leer_web`
 
-**Music models (2-Nov-2026, `docs/PLAN-MODELOS-MUSICA.md`):** `generar_audio` and
+**Music models (2-Nov-2026, `PLAN.md` ("2-Nov: music models")):** `generar_audio` and
 `proponer_midi` run `workspace/gpu/generar_audio.py` (ACE-Step 1.5) and
 `workspace/gpu/proponer_midi.py` (MIDI-LLM) on Lambda through `/api/run/lambda`; both
 scripts bootstrap their own environment on the instance and print a `RESULT {...}` line

@@ -68,5 +68,5 @@ sidecar `.c2pa` and the `.ots` proof are not optional, and neither is the waterm
 6. Default generation model: ACE-Step 1.5 (MIT) vs Stable Audio 3 (Community License).
 7. Timestamp anchor: OTS only, or also a transparency log we run.
 8. Split of the Lambda credits between the watermark benchmark and LoRA experiments,
-   knowing `docs/PLAN-MODELO-PROPIO.md` also wants them for a Qwen LoRA. Carlos said on
+   knowing `PLAN.md` ("1-Nov") also wants them for a Qwen LoRA. Carlos said on
    2-Nov: try the existing models before training our own.
