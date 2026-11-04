@@ -7,7 +7,7 @@ import { nombreDeNota, resumenParaAgente } from "./resumen.ts";
 test("note name with C4 = 60", () => {
   assert.equal(nombreDeNota(60), "C4");
   assert.equal(nombreDeNota(21), "A0");
-  assert.equal(nombreDeNota(70), "A#4");
+  assert.equal(nombreDeNota(70), "Bb4", "the same spelling as the compact notation");
 });
 
 test("the summary carries ids, devices, and, if requested, the clip notes", () => {

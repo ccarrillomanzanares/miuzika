@@ -14,13 +14,9 @@ import type { Clip, Device, Project, Track } from "./types.ts";
 import { DEVICE_PARAMS, beatsPerBar } from "./types.ts";
 import { projectStats } from "./project.ts";
 import { aNotacion } from "./notacion.ts";
+import { nombreDeNota } from "./theory.ts";
 
-const NOMBRES_NOTA = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-
-/** 60 → "C4". */
-export function nombreDeNota(pitch: number): string {
-  return `${NOMBRES_NOTA[((pitch % 12) + 12) % 12]}${Math.floor(pitch / 12) - 1}`;
-}
+export { nombreDeNota };
 
 function redondear(valor: number, decimales = 2): string {
   return String(Number(valor.toFixed(decimales)));

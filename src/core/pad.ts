@@ -18,7 +18,7 @@
  */
 
 import type { KeySignature } from "./types.ts";
-import { intervalosDe, pitchClass } from "./theory.ts";
+import { intervalosDe, nombreDeNota, pitchClass } from "./theory.ts";
 
 export const MODOS_PAD = ["teclas", "pads", "deslizar"] as const;
 export type ModoPad = (typeof MODOS_PAD)[number];
@@ -40,11 +40,7 @@ const FILAS = 2;
 const VEL_MIN = 45;
 const VEL_MAX = 127;
 
-const NOMBRES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
-
-export function nombreCorto(nota: number): string {
-  return `${NOMBRES[((nota % 12) + 12) % 12]}${Math.floor(nota / 12) - 1}`;
-}
+export const nombreCorto = nombreDeNota;
 
 export interface OpcionesPad {
   modo: ModoPad;

@@ -51,3 +51,17 @@ test("degree 2 is the third (III), not the fourth", () => {
   assert.equal(diatonicTriad({ tonic: "C", mode: "major" }, 2), "Em");
   assert.equal(diatonicTriad({ tonic: "F", mode: "minor" }, 5), "Db");
 });
+
+test("one reader for note names: letters, solfège, ♯/♭ and accidentals that cross the octave", async () => {
+  const { leerNombreDeNota, nombreDeNota, pitchClass } = await import("./theory.ts");
+  const { alturaDe } = await import("./notacion.ts");
+  assert.equal(alturaDe("sol#3"), 56);
+  assert.equal(alturaDe("B#3"), 60, "B#3 is C4, not C3");
+  assert.equal(alturaDe("Cb4"), 59);
+  assert.equal(alturaDe("E♭4"), 63);
+  assert.equal(pitchClass("sib"), 10);
+  assert.equal(pitchClass("sol#"), 8, "solfège with an accidental (pitchClass only took bare solfège)");
+  assert.throws(() => pitchClass("C4"), /Invalid note/, "a pitch class has no octave");
+  assert.equal(leerNombreDeNota("x4"), null);
+  assert.deepEqual([60, 61, 63, 68, 70].map(nombreDeNota), ["C4", "C#4", "Eb4", "Ab4", "Bb4"]);
+});

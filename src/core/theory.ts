@@ -19,26 +19,40 @@ const PITCH_CLASSES = [
   "B",
 ] as const;
 
-const LETTER_SEMITONES: Record<string, number> = {
-  C: 0,
-  D: 2,
-  E: 4,
-  F: 5,
-  G: 7,
-  A: 9,
-  B: 11,
+/**
+ * Semitones above C of a natural note, by letter or by the Spanish solfège people write in
+ * prompts. The one table for reading note names (review of 3-Nov: theory.ts and notacion.ts
+ * each had their own pair of tables and their own parser).
+ */
+const SEMITONOS_NATURALES: Record<string, number> = {
+  c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11,
+  do: 0, re: 2, mi: 4, fa: 5, sol: 7, la: 9, si: 11,
 };
 
-/** Spanish names that people write in prompts. */
-const SOLFEGE: Record<string, string> = {
-  do: "C",
-  re: "D",
-  mi: "E",
-  fa: "F",
-  sol: "G",
-  la: "A",
-  si: "B",
-};
+/**
+ * A note name split into its natural (semitones above C) and its accidentals, NOT wrapped to
+ * 0-11, so "B#3" can be C4 and "Cb4" B3. Accepts ♯/♭, one or two accidentals. Null if it is not
+ * a note name. The octave, if any, is left in `resto`.
+ */
+export function leerNombreDeNota(texto: string): { semitonos: number; resto: string } | null {
+  const limpio = texto.trim().replace(/♯/g, "#").replace(/♭/g, "b");
+  const m = /^(do|re|mi|fa|sol|la|si|[a-g])(#{1,2}|b{1,2})?(.*)$/i.exec(limpio);
+  if (!m) return null;
+  const alteracion = (m[2] ?? "").split("").reduce((suma, c) => suma + (c === "#" ? 1 : -1), 0);
+  return { semitonos: SEMITONOS_NATURALES[m[1]!.toLowerCase()]! + alteracion, resto: m[3] ?? "" };
+}
+
+/**
+ * How notes are written back to the agent and the pad: sharps for C#/F#, flats for Eb/Ab/Bb,
+ * the usual spelling in pop harmony. One table, so leer_proyecto and the compact notation
+ * no longer show the same clip as "D#4" in one place and "Eb4" in the other (4-Nov).
+ */
+const NOMBRES_DE_NOTA = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"] as const;
+
+/** 60 → "C4", 70 → "Bb4" (MIDI octave convention: C4 = 60). */
+export function nombreDeNota(pitch: number): string {
+  return `${NOMBRES_DE_NOTA[((pitch % 12) + 12) % 12]}${Math.floor(pitch / 12) - 1}`;
+}
 
 const SCALES: Record<Mode, readonly number[]> = {
   major: [0, 2, 4, 5, 7, 9, 11],
@@ -62,15 +76,9 @@ export function intervalosDe(mode: Mode): readonly number[] {
 export const MODE_NAMES = Object.keys(SCALES) as [Mode, ...Mode[]];
 
 export function pitchClass(name: string): number {
-  const cleaned = name.trim();
-  const solfege = SOLFEGE[cleaned.toLowerCase()];
-  const source = solfege ?? cleaned;
-  const match = /^([A-Ga-g])([#b]{0,2})$/.exec(source);
-  if (!match) throw new MusicError(`Invalid note: "${name}"`);
-  const letter = match[1]!.toUpperCase();
-  let semitones = LETTER_SEMITONES[letter]!;
-  for (const char of match[2] ?? "") semitones += char === "#" ? 1 : -1;
-  return ((semitones % 12) + 12) % 12;
+  const leido = leerNombreDeNota(name);
+  if (!leido || leido.resto !== "") throw new MusicError(`Invalid note: "${name}"`);
+  return ((leido.semitonos % 12) + 12) % 12;
 }
 
 export function canonicalPitchClass(name: string): string {

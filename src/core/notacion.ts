@@ -22,9 +22,7 @@
  */
 
 import type { Note } from "./types.ts";
-
-const LETRAS: Record<string, number> = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 };
-const SOLFEO: Record<string, number> = { do: 0, re: 2, mi: 4, fa: 5, sol: 7, la: 9, si: 11 };
+import { leerNombreDeNota, nombreDeNota } from "./theory.ts";
 
 export class ErrorNotacion extends Error {}
 
@@ -36,12 +34,11 @@ export function alturaDe(texto: string): number {
     if (n > 127) throw new ErrorNotacion(`"${texto}" is not a MIDI note (0-127)`);
     return n;
   }
-  const m = /^(do|re|mi|fa|sol|la|si|[a-g])(#{1,2}|b{1,2})?(-?\d)$/i.exec(limpio);
-  if (!m) throw new ErrorNotacion(`"${texto}" is not a note: use a letter or solfège, accidental, and octave (D2, Eb4, sol3)`);
-  const nombre = m[1]!.toLowerCase();
-  const base = SOLFEO[nombre] ?? LETRAS[nombre]!;
-  const alteracion = (m[2] ?? "").split("").reduce((suma, c) => suma + (c === "#" ? 1 : -1), 0);
-  const pitch = (Number(m[3]) + 1) * 12 + base + alteracion;
+  const leido = leerNombreDeNota(limpio);
+  if (!leido || !/^-?\d$/.test(leido.resto)) {
+    throw new ErrorNotacion(`"${texto}" is not a note: use a letter or solfège, accidental, and octave (D2, Eb4, sol3)`);
+  }
+  const pitch = (Number(leido.resto) + 1) * 12 + leido.semitonos;
   if (pitch < 0 || pitch > 127) throw new ErrorNotacion(`"${texto}" is outside the MIDI range`);
   return pitch;
 }
@@ -169,11 +166,7 @@ export function leerNotacion(texto: string, velocidad = 90): ResultadoNotacion {
   return { notas, beats: Number(t.toFixed(4)), tramos };
 }
 
-const NOMBRES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
-
-function nombreCorto(pitch: number): string {
-  return `${NOMBRES[((pitch % 12) + 12) % 12]}${Math.floor(pitch / 12) - 1}`;
-}
+const nombreCorto = nombreDeNota;
 
 function numero(valor: number): string {
   const redondo = Number(valor.toFixed(3));
