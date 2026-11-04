@@ -44,7 +44,9 @@ def main():
     pico = float(np.max(np.abs(x)))
     rms = float(np.sqrt(np.mean(mono ** 2)))
     dur = len(mono) / sr
-    clip = int(np.sum(np.abs(x) >= 0.99999))
+    # Full scale in 16 bits reads as 32767/32768 = 0.99997: the old 0.99999 threshold never saw
+    # a clipped 16-bit file (found 4-Nov with a sine driven to 3x). One step below full scale.
+    clip = int(np.sum(np.abs(x) >= 0.99996))
     dc = float(np.mean(mono))
     crest = db(pico) - db(rms) if rms > 0 else 0.0
     corr = float(np.corrcoef(x[:, 0], x[:, 1])[0, 1]) if x.ndim > 1 and nch >= 2 else float("nan")
@@ -60,8 +62,25 @@ def main():
     print(f"peak={db(pico):.2f} dBFS  rms={db(rms):.2f} dBFS  crest={crest:.2f} dB")
     print(f"dc={dc * 1000:.3f} mL  clipped={clip}  correlation={corr:.3f}")
     print(f"useful tail up to t={cola:.2f}s")
-    ok = clip == 0 and pico > 0.01 and abs(dc) < 0.01
-    print("VERDICT:", "OK" if ok else "REVIEW")
+    # The reasons, not just a word. Measured 4-Nov in "herminia": "VERDICT: REVIEW" with no reason
+    # came only from a DC of 10-34 mL (-40 to -29 dBFS, inaudible), and the agent exported seven
+    # times chasing it with a low-pass filter. Below 50 mL (-26 dBFS) DC is a note, not a fault.
+    problemas = []
+    notas = []
+    if clip > 0:
+        problemas.append(f"{clip} clipped samples: lower the master or the loudest track")
+    if pico <= 0.01:
+        problemas.append("almost silent (peak below -40 dBFS)")
+    if abs(dc) >= 0.05:
+        problemas.append(f"DC offset {dc * 1000:.0f} mL ({db(abs(dc)):.0f} dBFS): filter with highpass 1 at 20-30 Hz on the track that carries it")
+    elif abs(dc) >= 0.01:
+        notas.append(f"DC offset {dc * 1000:.0f} mL ({db(abs(dc)):.0f} dBFS) is inaudible; if wanted, filter with highpass 1 at 20-30 Hz removes it. Not a reason to export again")
+    for nota in notas:
+        print("NOTE:", nota)
+    if problemas:
+        print("VERDICT: REVIEW -", "; ".join(problemas))
+    else:
+        print("VERDICT: OK")
 
 
 if __name__ == "__main__":
