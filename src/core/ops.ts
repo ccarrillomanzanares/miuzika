@@ -50,10 +50,16 @@ const InstrumentSchema = z.object({
  * `"instrument": "bass"` instead of `{ "type": "bass" }` (it happened on Oct 27, and
  * cost a step). Both forms mean the same thing.
  */
-const InstrumentInput = z.preprocess(
-  (valor) => (typeof valor === "string" ? { type: valor.trim().toLowerCase() } : valor),
-  InstrumentSchema,
-);
+const InstrumentInput = z.preprocess((valor) => {
+  if (typeof valor === "string") return { type: valor.trim().toLowerCase() };
+  // `kind` for `type`: measured on 4-Nov in "prueba-bus", DeepSeek sent
+  // {kind:"drumkit", program:8} and the call was rejected.
+  if (valor && typeof valor === "object" && !Array.isArray(valor)) {
+    const { kind, ...resto } = valor as Record<string, unknown>;
+    if (kind !== undefined && resto.type === undefined) return { ...resto, type: kind };
+  }
+  return valor;
+}, InstrumentSchema);
 
 const KeySchema = z.object({
   tonic: z.string().min(1).max(4).describe("Tonic: C, D, F#, Bb..."),
@@ -144,6 +150,14 @@ const DeviceInput = z.preprocess(
   (valor) => {
     if (typeof valor === "string") return { type: valor.trim().toLowerCase() };
     if (!valor || typeof valor !== "object" || Array.isArray(valor)) return valor;
+    // The device wrapped once more, measured on 4-Nov in "prueba-bus" (add_bus, two calls
+    // rejected in a row): {device:{type:"reverb", decay:0.9}, id} and
+    // {device:"reverb", params:{decay:0.9}}. `device` holds the type or the whole device.
+    const { device, ...fuera } = valor as Record<string, unknown>;
+    if (device !== undefined && fuera.type === undefined) {
+      if (typeof device === "string") valor = { ...fuera, type: device.trim().toLowerCase() };
+      else if (device && typeof device === "object" && !Array.isArray(device)) valor = { ...fuera, ...device };
+    }
     // id and name are labels, not parameters: if the model puts them here, they are ignored.
     const { type, params, id: _id, name: _name, ...sueltos } = valor as Record<string, unknown>;
     if (Object.keys(sueltos).length === 0) return valor;

@@ -327,3 +327,24 @@ test("set_song takes the key as text, keeping the mode when only the tonic is gi
   }
   assert.throws(() => applyOps(baseProject(), [{ op: "set_song", key: "H blues" } as unknown as Op]), /Invalid key "H blues"/);
 });
+
+test("the device and instrument shapes DeepSeek sent on 4-Nov are accepted", () => {
+  // The three calls rejected in "prueba-bus", as they arrived.
+  for (const devices of [
+    [{ device: { decay: 0.9, preDelayMs: 20, type: "reverb", wet: 1 }, id: "dev_sala_rev" }],
+    [{ device: "reverb", params: { decay: 0.9, preDelayMs: 20, wet: 1 } }],
+  ]) {
+    const [op] = parseOps([{ op: "add_bus", id: "bus_sala", name: "Sala", devices }]);
+    const { project } = applyOps(baseProject(), [op!]);
+    const reverb = project.buses?.[0]?.devices[0];
+    assert.equal(reverb?.type, "reverb");
+    assert.equal(reverb?.params.wet, 1, "the parameters are kept, not dropped");
+    assert.equal(reverb?.params.preDelayMs, 20);
+  }
+  const ops = parseOps([
+    { op: "add_track", name: "Caja", instrument: { type: "drumkit" } },
+    { op: "set_instrument", trackId: "Caja", instrument: { kind: "drumkit", program: 8 } },
+  ]);
+  const { project } = applyOps(baseProject(), ops);
+  assert.deepEqual(project.tracks[0]?.instrument, { type: "drumkit", program: 8 });
+});

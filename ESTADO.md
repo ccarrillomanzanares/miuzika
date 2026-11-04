@@ -388,12 +388,17 @@ crashes the dev server when a streaming answer is cut. All run headless; not wit
   tuning into the root key (one zone per key when scaleTuning is not 100). Measured after, with
   the real engine headless: kits 0 and 16 snare at 0.71 s, strongest 207 Hz. Not yet heard.
   fineTune and preset-level tuning are still ignored.
-- Open: VCSL plays ~14 dB below GM (harp needed +8 dB, organ +12): normalize in `sfz2sf2.py`.
-  The Steinway has only 2 velocity layers (0-99, 100-127) because of the 40 MB cap: its color
+- Fixed, not yet heard: VCSL played below GM because GM samples are normalized (median peak
+  -0.1 dBFS) and VCSL keeps the recording level (loudest harp sample -11.8, organ -22.7,
+  Steinway -3.0) while openDAW ignores initialAttenuation. `sfz2sf2.py` now applies one gain per
+  instrument so its loudest sample peaks at -1 dBFS: harp +10.8 dB, organ +21.7, Steinway +2.0
+  (Carlos had needed +8 and +12 by ear, so the organ may now be too loud). Only new conversions:
+  the .sf2 already in projects keep the old level.
+- Fixed: `add_bus` accepts `{device:{type,...}}` and `{device:"reverb", params}` inside devices,
+  and `set_instrument` accepts `kind` for `type` (the three calls rejected in "prueba-bus").
+- Open: the Steinway has only 2 velocity layers (0-99, 100-127) because of the 40 MB cap: its color
   changes only at velocity ≥100; try 3 layers with samples cut to ~4 s. The Power kit (16)
   fires two layers on key 38 (by design of the SF2). The first hit is louder in live Play.
-  Agent leniency to add: `add_bus` with `{device:{...}}` inside devices, `set_instrument` with
-  `kind` for `type`.
 
 **For Carlos to decide or check** (not done on purpose):
 - Try mute/solo and the pad on two tracks with the same name.
