@@ -119,6 +119,19 @@ assert.equal(exportadoBus.stats.devices, 1, "the bus reverb");
 const reimportadoBus = await openDawToProject(exportadoBus.bytes);
 assert.equal(reimportadoBus.project.tracks.length, 2, "the bus does not sneak in as a track when reimporting");
 
+// --- A drumkit without program plays the GM kit when the GM SoundFont is there (4-Nov):
+// it goes through the SoundFont branch, so its notes and effects are exported like GM tracks.
+const sinPrograma = applyOps(createProject({ name: "openDAW kit", lengthBars: 1 }), [
+  { op: "add_track", id: "trk_k", name: "Kit", instrument: { type: "drumkit" } },
+  { op: "add_device", trackId: "trk_k", device: { type: "compressor" } },
+  { op: "add_notes", trackId: "trk_k", startBar: 0, notes: [{ pitch: 41, start: 0, duration: 0.25, velocity: 100 }] },
+]).project;
+const exportadoKit = await projectToOpenDaw(sinPrograma, { gm });
+assert.equal(exportadoKit.stats.notes, 1, "the floor tom note is exported");
+assert.equal(exportadoKit.stats.devices, 1, "the kit keeps its effect through the GM branch");
+assert.ok(!exportadoKit.warnings.some((w) => /Kit/.test(w)), `no warning for the kit: ${exportadoKit.warnings.join("; ")}`);
+console.log("kit without program: GM branch, 1 note, 1 FX");
+
 // --- Units by track id (review 3-Nov bug 10): two tracks with the same name must map to
 // two different units, and those UUIDs must exist after Project.load (the engine's view).
 const gemelas = applyOps(createProject({ name: "openDAW twins", lengthBars: 1 }), [

@@ -399,9 +399,15 @@ export async function projectToOpenDaw(
           track.instrument.type === "soundfont" && track.instrument.archivo
             ? options.soundfonts?.get(track.instrument.archivo)
             : undefined;
+        // A drumkit without program plays the GM standard kit (program 0), which has every named
+        // piece; the 13-sample Playfield kit only stays for a setup without the GM SoundFont.
+        // Carlos, 4-Nov ("pasa el kit de batería"): before, floor tom, high tom, china, bell,
+        // tambourine, splash and shaker were silent on those tracks (review 3-Nov, bug 6).
+        const programa =
+          track.instrument.program ?? (track.instrument.type === "drumkit" ? 0 : undefined);
         const presetGm =
-          !soundfont && options.gm && track.instrument.program !== undefined
-            ? indicePresetGm(options.gm.presets, track.instrument.program, track.instrument.type === "drumkit")
+          !soundfont && options.gm && programa !== undefined
+            ? indicePresetGm(options.gm.presets, programa, track.instrument.type === "drumkit")
             : undefined;
         let product: { audioUnitBox: never; instrumentBox: unknown; trackBox: never };
         if (soundfont || (options.gm && presetGm !== undefined)) {

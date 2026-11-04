@@ -29,7 +29,7 @@ import { OpError, applyOps } from "../../../src/core/ops.ts";
 import type { Op } from "../../../src/core/ops.ts";
 import { notasDeProgresion } from "../../../src/core/composicion.ts";
 import { leerNotacion, tramosIrregulares } from "../../../src/core/notacion.ts";
-import { notasDeBateria, piezasSinSonido } from "../../../src/core/bateria.ts";
+import { notasDeBateria } from "../../../src/core/bateria.ts";
 import { nombreDeNota, resumenParaAgente } from "../../../src/core/resumen.ts";
 import { normalizarTexto, slugDe } from "../../../src/core/nombres.ts";
 import { MODE_NAMES, intervalosDe, pitchClass } from "../../../src/core/theory.ts";
@@ -1118,15 +1118,9 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     const r = escribirEnPista({ ...peticion, instrumento: peticion.instrumento ?? "drumkit" }, resultado.notas, resultado.beats, "drumkit");
     if (!r.ok) return r;
     const piezas = [...Object.keys(peticion.patrones), ...Object.keys(peticion.final ?? {})];
-    const pista = e.proyecto()?.tracks.find((t) => t.id === r.trackId);
-    // Only a drumkit without program plays the 13-sample default kit; the GM kit has them all.
-    const mudas = pista?.instrument.type === "drumkit" && pista.instrument.program === undefined ? piezasSinSonido(piezas) : [];
-    const aviso =
-      mudas.length > 0
-        ? ` WARNING: the default kit has no sample for ${[...new Set(mudas.map((m) => `${m.pieza} (${m.nota})`))].join(", ")}: ` +
-          `those hits are written but SILENT. Pass programa=0 (GM standard kit, every piece) or use the pieces it has.`
-        : "";
-    return { ok: true, texto: `${dondeQueda(r, resultado.notas.length)} Pieces: ${[...new Set(piezas)].join(", ")}.${aviso}` };
+    // No silent-piece warning since 4-Nov: a drumkit without program plays the GM kit, which has
+    // every piece (src/host/opendaw/adapter.ts). piezasSinSonido stays for the Playfield fallback.
+    return { ok: true, texto: `${dondeQueda(r, resultado.notas.length)} Pieces: ${[...new Set(piezas)].join(", ")}.` };
   }
 
   /**
