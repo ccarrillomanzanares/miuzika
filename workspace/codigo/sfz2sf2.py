@@ -83,6 +83,13 @@ MAX_SEGUNDOS = 6.0
 MIN_SEGUNDOS = 2.5
 FUNDIDO_S = 0.25
 
+# One gain per instrument so its loudest sample peaks here. Measured on 4-Nov: GeneralUser GS
+# samples are normalized (median peak -0.1 dBFS) while VCSL keeps the recording level (concert
+# harp loudest -11.8, pipe organ -22.7, Steinway -3.0 dBFS), and openDAW ignores
+# initialAttenuation, so in Carlos's test the harp needed +8 dB and the organ +12 to sit with
+# GM. A single gain keeps the soft/loud layer difference; -1 dBFS leaves room for no clipping.
+PICO_OBJETIVO_DBFS = -1.0
+
 
 def suenan_por_defecto(regiones):
     """The regions that sound when a key is pressed without touching anything else.
@@ -223,10 +230,11 @@ def _campo(region, nombre, defecto=None):
 
 
 def construir(regiones, carpeta_sfz, nombre_preset, max_segundos=None):
-    """Returns (pcm_bytes, shdr_list, zones) ready to write."""
+    """Returns (pcm_bytes, shdr_list, zones, gain_db) ready to write."""
     pcm = bytearray()
     shdr = []
     zonas = []
+    leidas = []
     for region in regiones:
         ruta = os.path.join(carpeta_sfz, region["sample"])
         if not os.path.exists(ruta):
@@ -241,6 +249,11 @@ def construir(regiones, carpeta_sfz, nombre_preset, max_segundos=None):
             datos = datos[: int(max_segundos * SR)].copy()
             n = int(FUNDIDO_S * SR)
             datos[-n:] *= np.linspace(1.0, 0.0, n)
+        leidas.append((region, datos))
+    pico = max((float(np.abs(d).max()) for _, d in leidas), default=0.0)
+    ganancia = 10 ** (PICO_OBJETIVO_DBFS / 20) / pico if pico > 0 else 1.0
+    for region, datos in leidas:
+        datos = datos * ganancia
         # SF2 requires 46 samples of silence at the end of each sample.
         datos = np.concatenate([datos, np.zeros(46)])
         entero = np.clip(datos * 32767.0, -32768, 32767).astype("<i2")
@@ -287,7 +300,7 @@ def construir(regiones, carpeta_sfz, nombre_preset, max_segundos=None):
                 "atenuacion": int(round(min(0.0, volumen) * -10.0)),
             }
         )
-    return bytes(pcm), shdr, zonas
+    return bytes(pcm), shdr, zonas, round(20 * np.log10(ganancia), 1)
 
 
 def _chunk(chunk_id, cuerpo):
@@ -423,7 +436,7 @@ def main(argv):
     carpeta = os.path.dirname(os.path.abspath(entrada))
     regiones_sfz = len(regiones)
     regiones, segundos = ajustar_tamano(suenan_por_defecto(regiones), carpeta)
-    pcm, shdr, zonas = construir(regiones, carpeta, nombre, segundos)
+    pcm, shdr, zonas, ganancia_db = construir(regiones, carpeta, nombre, segundos)
     escribir(salida, pcm, shdr, zonas, nombre)
     print(
         json.dumps(
@@ -433,6 +446,7 @@ def main(argv):
                 "regiones_sfz": regiones_sfz,
                 "segundos_por_muestra": segundos,
                 "zonas": len(zonas),
+                "ganancia_db": ganancia_db,
                 "muestras_pcm": len(pcm) // 2,
                 "bytes": os.path.getsize(salida),
                 "notas": [min(z["lokey"] for z in zonas), max(z["hikey"] for z in zonas)] if zonas else [],
