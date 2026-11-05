@@ -16,6 +16,7 @@ import { carpetaDeNombre, carpetaDeProyecto, createProject } from "../../../src/
 import { compasesDeAudio } from "../../../src/core/tiempo.ts";
 import {
   CARPETA_GENERADO,
+  TAREAS_CON_AUDIO,
   argumentosGeneracion,
   leerResultadoGeneracion,
   resumenTiempos,
@@ -35,6 +36,7 @@ import { normalizarTexto, slugDe } from "../../../src/core/nombres.ts";
 import { buscarPista } from "../../../src/core/pistas.ts";
 import { MODE_NAMES, intervalosDe, pitchClass } from "../../../src/core/theory.ts";
 import { cargarWavDeDisco, idDeAsset, opsDeAudio } from "../audio-store.ts";
+import type { EntradaRenderizada, OpcionesEntrada } from "../render-escucha.ts";
 import { listarProyectos } from "../proyecto-disco.ts";
 import { interpretarProyectoEnDisco } from "../../../src/core/proyecto-archivo.ts";
 import { CARPETA_VERSIONES, describirVersion, restaurarVersion } from "../../../src/core/versiones.ts";
@@ -72,6 +74,8 @@ export interface Estudio {
   exportar?(formatos: { midi: boolean; wav: boolean; mp3?: boolean }, senal?: AbortSignal): Promise<ResultadoAccion>;
   /** Renders with openDAW and measures the level per bar range of the mix and of each track alone. */
   escuchar?(opciones: { pistas?: string[]; compasesPorTramo?: number }, senal?: AbortSignal): Promise<ResultadoAccion>;
+  /** Renders the mix, a track alone or the mix without a track to entrada/<nombre>.wav, for a GPU task. */
+  renderizarEntrada?(opciones: OpcionesEntrada, senal?: AbortSignal): Promise<EntradaRenderizada>;
 }
 
 /** Project name from the delivered file (salida/sacramento_multitrack.mid -> sacramento). */
@@ -591,18 +595,76 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
   async function generarAudio(peticion: PeticionGenerar, senal?: AbortSignal): Promise<ResultadoAccion> {
     const project = e.proyecto();
     if (!project) return { ok: false, texto: "There is no open project: the generated audio has to go into one." };
-    const problema = validarGeneracion(peticion);
-    if (problema) return { ok: false, texto: problema };
+    const tarea = peticion.tarea ?? "text2music";
     const slug = carpetaDeProyecto(project);
     const nombre = slugDe(peticion.nombre, { max: 40, defecto: "generado" });
-    const argumentos = argumentosGeneracion({ ...peticion, nombre }, project);
 
-    let corrida: { ok?: boolean; codigo?: number | null; salida?: string; errores?: string; error?: string; por_timeout?: boolean };
+    // The source tasks (4-Nov) work from a WAV in the project. `fuente` is "mix", a track
+    // name or a file path: the first two are rendered here with the Play engine, cut to the
+    // bar range when the model does not take one itself (repaint and lego do, in seconds).
+    let audio = peticion.audio;
+    let fuenteTexto = "";
+    let fuenteRenderizada = false;
+    const rangoEnFichero = tarea !== "repaint" && tarea !== "lego";
+    const conRango = peticion.desdeCompas !== undefined || peticion.hastaCompas !== undefined;
+    // Checked BEFORE rendering the source: an extract on the default turbo checkpoint is
+    // refused in milliseconds, not after a full-song render.
+    const fuenteDada = (peticion.fuente ?? "").trim();
+    const problema = validarGeneracion({ ...peticion, ...(audio || fuenteDada ? { audio: audio ?? fuenteDada } : {}) });
+    if (problema) return { ok: false, texto: problema };
+    if (TAREAS_CON_AUDIO.has(tarea) && !audio) {
+      const fuente = (peticion.fuente ?? "").trim();
+      if (fuente === "") {
+        return { ok: false, texto: `${tarea} works from a source audio: give \`fuente\` ("mix", a track name or a WAV path in the project).` };
+      }
+      const esFichero = /\.(wav|flac|mp3|ogg|aiff?)$/i.test(fuente) || fuente.includes("/");
+      if (esFichero) {
+        if (peticion.sinPista) return { ok: false, texto: "`sin_pista` only applies when `fuente` is \"mix\"." };
+        if (conRango && rangoEnFichero) {
+          return { ok: false, texto: `With a file as \`fuente\`, ${tarea} takes the whole file; the bar range only cuts "mix" or a track.` };
+        }
+        audio = fuente;
+        fuenteTexto = `Source: ${fuente}. `;
+      } else {
+        if (!e.renderizarEntrada) return { ok: false, texto: "This tab cannot render the source for the model." };
+        const esMix = /^(mix|mezcla|master|todo|all)$/i.test(fuente);
+        if (!esMix && peticion.sinPista) return { ok: false, texto: "`sin_pista` only applies when `fuente` is \"mix\"." };
+        const r = await e.renderizarEntrada(
+          {
+            nombre: `${nombre}-fuente`,
+            ...(esMix ? {} : { pista: fuente }),
+            ...(peticion.sinPista ? { sinPista: peticion.sinPista } : {}),
+            ...(rangoEnFichero && peticion.desdeCompas !== undefined ? { desdeCompas: peticion.desdeCompas } : {}),
+            ...(rangoEnFichero && peticion.hastaCompas !== undefined ? { hastaCompas: peticion.hastaCompas } : {}),
+          },
+          senal,
+        );
+        if (!r.ok) return r;
+        audio = r.ruta;
+        fuenteRenderizada = true;
+        fuenteTexto =
+          `Source: ${r.que}, ${r.segundos.toFixed(1)} s, peak ${r.picoDb.toFixed(1)} dBFS, rendered to ${r.ruta}` +
+          `${r.aviso ? ` (${r.aviso})` : ""}. `;
+      }
+    }
+    const argumentos = argumentosGeneracion({ ...peticion, ...(audio ? { audio } : {}), nombre }, project);
+
+    let corrida: {
+      ok?: boolean; codigo?: number | null; salida?: string; errores?: string; error?: string; por_timeout?: boolean;
+      lambda?: { nota?: string; traidos?: string[]; traida_fallo?: string };
+    };
     try {
       const r = await fetch("/api/run/lambda", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...cabeceraDeProyecto(slug) },
-        body: JSON.stringify({ path: "gpu/generar_audio.py", argumentos, timeout_segundos: 1500 }),
+        body: JSON.stringify({
+          path: "gpu/generar_audio.py",
+          argumentos,
+          // base/sft run 50 steps and a cover covers the whole song: the server caps at 1800 s.
+          timeout_segundos: tarea === "text2music" ? 1500 : 1800,
+          // Uploaded whatever its size: `sincronizar` skips files over 50 MB (a 4:20 mix).
+          entradas: audio ? [audio] : [],
+        }),
         ...(senal ? { signal: senal } : {}),
       });
       corrida = (await r.json()) as typeof corrida;
@@ -623,27 +685,67 @@ export function crearAcciones(e: Estudio): AccionesEstudio {
     const resultado = leerResultadoGeneracion(corrida.salida ?? "");
     if ((corrida.codigo ?? 1) !== 0 || !resultado) {
       const cola = (corrida.errores || corrida.salida || "").trim().slice(-700);
+      // Three different failures, three different texts: on 5-Nov a 60 s ssh hang during the
+      // sync was reported as "ran out of time (25 min)" and the model told the user that 25
+      // minutes of GPU had been spent; nothing had run.
+      const nota = corrida.lambda?.nota;
+      const cabecera =
+        nota === "sync" || nota === "inputs"
+          ? "The GPU instance could not be reached over ssh before the run started; nothing ran and no GPU time was spent. Say so and let the user retry. "
+          : corrida.por_timeout
+            ? "The model ran out of time (25 min). "
+            : "The model did not produce audio. ";
+      return { ok: false, texto: cabecera + (cola ? `Last lines:
+${cola}` : "No output.") };
+    }
+
+    // The run finished but the files did not come back (5-Nov: the listing ssh hung, the server
+    // said "0 file(s) brought back" and the agent told the user the take did not exist).
+    const traidos = corrida.lambda?.traidos ?? [];
+    const perdidos = resultado.ficheros.filter((f) => !traidos.includes(f));
+    if (perdidos.length > 0) {
+      const porque = corrida.lambda?.traida_fallo ? ` (${corrida.lambda.traida_fallo})` : "";
       return {
         ok: false,
         texto:
-          (corrida.por_timeout ? "The model ran out of time (25 min). " : "The model did not produce audio. ") +
-          (cola ? `Last lines:\n${cola}` : "No output."),
+          `The model finished and wrote ${perdidos.join(", ")} on the GPU instance, but the file${perdidos.length > 1 ? "s" : ""} could not be brought back${porque}. ` +
+          "Nothing to regenerate: tell the user the take exists on the instance and that Carlos can fetch it by hand; do not run the model again.",
       };
     }
 
-    const inicio = Math.max(0, Math.trunc(peticion.inicioCompas ?? 0));
+    // Where the output lands. A source cut to bars desde-hasta comes back as long as the cut,
+    // so it goes to its first bar; a whole-source output (repaint, lego, a file) starts at bar 1.
+    const inicio = Math.max(
+      0,
+      Math.trunc(peticion.inicioCompas ?? (fuenteRenderizada && rangoEnFichero && peticion.desdeCompas !== undefined ? peticion.desdeCompas - 1 : 0)),
+    );
     const puesto = await importarPistas({
       midis: [],
       wavs: resultado.ficheros.map((f) => `${CARPETA_GENERADO}/${f}`),
       inicioCompas: inicio,
       ...(peticion.compases && peticion.compases > 0 ? { compases: peticion.compases } : {}),
     }, senal);
+    // A cover or a repaint is the SAME song again: it enters muted, to compare with the
+    // original by ear, never stacked on top of it (PLAN 3-Nov, "one door back", item 5).
+    const comparacion = tarea === "cover" || tarea === "cover-nofsq" || tarea === "repaint";
+    let nota = "";
+    if (comparacion && puesto.ok) {
+      const actual = e.proyecto();
+      if (actual) {
+        const nuevas = actual.tracks.filter((t) => t.kind === "audio" && (t.name === nombre || /^.+-\d+$/.test(t.name) && t.name.startsWith(`${nombre}-`)));
+        if (nuevas.length > 0) {
+          e.enVivo(applyOps(actual, nuevas.map((t) => ({ op: "set_track" as const, trackId: t.id, muted: true }))).project);
+          nota = ` The new track${nuevas.length > 1 ? "s are" : " is"} MUTED: it is the same song again, for the user to compare; unmute one and mute the originals to hear it.`;
+        }
+      }
+    }
+    const modelo = argumentos[argumentos.indexOf("--modelo") + 1] ?? "";
     return {
       ok: puesto.ok,
       texto:
-        `Generated with ACE-Step 1.5 (${resumenTiempos(resultado.tiempos)}): ` +
+        `${tarea} with ACE-Step 1.5 ${modelo} (${resumenTiempos(resultado.tiempos)}). ${fuenteTexto}Output: ` +
         `${resultado.ficheros.map((f) => `proyectos/${slug}/${CARPETA_GENERADO}/${f}`).join(", ")}. ` +
-        `Lineage: ${CARPETA_GENERADO}/${nombre}.lineage.json. NOT heard by anyone yet: ask the user to listen ` +
+        `Lineage: ${CARPETA_GENERADO}/${nombre}.lineage.json.${nota} NOT heard by anyone yet: ask the user to listen ` +
         "before building on it.\n" +
         puesto.texto,
     };

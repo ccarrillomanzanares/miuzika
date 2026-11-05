@@ -10,17 +10,16 @@ Labels: "Phase N" no longer exists as a bare name. The 27-Oct plan uses **Stage 
 authorship handoff's two phases are **Authorship phase A / B** (`autoria/HANDOFF-2026-11-02.md`), the own-model
 note uses **P1-P8**, and the music-models list keeps its numbered approvals (**M1-M6**).
 
-## Now / next (4-Nov-2026)
+## Now / next (5-Nov-2026)
 
 1. **Review step 6, the rest** (`docs/REVISION-2026-11-03.md` §10): one state table in
    `ESTADO.md`; README reduced to pitch + install + links. (PLAN and DECISIONES: this file.)
    Still Carlos's call: §9 items 1-4, 6 (Strudel, Pad, Python synthesis engine, `autoria/`
    location, what to delete).
-2. **Review step 7**: ACE-Step `extract` / `lego` (then the other tasks) as a source behind
-   `importarPistas`, with `--tarea` and `--modelo acestep-v15-xl-base` in `generar_audio.py`.
-   Design: section "2-Nov: music models", last subsection. Prerequisites: one WAV intake
-   (done 3-Nov), the render-to-file module for inputs, explicit Lambda inputs (built, not
-   run on a real instance).
+2. **Review step 7**: built 4-Nov night, run 5-Nov with Carlos listening (tests 1-10,
+   `docs/PRUEBAS-ACESTEP-2026-11-04.md`; verdicts in ESTADO §1). Next: the eight changes listed in
+   ESTADO §3 item 1, starting with the "mix" source that must not depend on mute and the server-side
+   mixdown of streaming WAVs (Carlos, 5-Nov: "no se pueden leer desde disco?").
 3. **GPU providers** (section "4-Nov"): prompt text for `generar_audio` on GPU (done, prompt
    v5); still to do: rename `/api/run/lambda` to `/api/run/gpu` with the old path as an
    alias; Carlos to try a GPU turn and the Models GPU section in his browser.
@@ -357,6 +356,31 @@ To measure before building on it: VRAM with the base XL model plus the LM on the
 basic-pitch onsets on 2-Nov); how long a full-song `cover` takes warm. First listening test
 proposed: "Vidrio" mix with two `cover` strengths, one `lego` drum stem, and the same mix
 through a mastering chain, the four heard by Carlos.
+
+**Built 4-Nov-2026, night** (Carlos: "quiero usar base, sft y turbo y poder usarlos con las
+propiedades de que dispongan"; nothing run on an instance yet):
+- `src/core/generacion.ts`: `MODELOS` (the six checkpoints with family, steps, CFG and the
+  tasks each supports, from the README tables) and `TAREAS` / `PISTAS_MODELO` verbatim from
+  `acestep/constants.py`. `PeticionGeneracion` gained `tarea`, `audio`, `fuerza`, `desdeCompas`,
+  `hastaCompas`, `pista`, `pasos`; validation refuses a task the checkpoint cannot do and
+  names the ones that can. Bars go to the model in seconds (`segundosHastaCompas`) only for
+  repaint and lego; for the rest the range is cut in the source file.
+- `gpu/generar_audio.py`: `--tarea`, `--audio`, `--fuerza`, `--desde/--hasta`, `--pista`,
+  `--guia`, `--pasos` by family (8 turbo, 50 sft/base), the exact `TASK_INSTRUCTIONS` strings,
+  the LM loaded only for text2music (the handler skips it for the rest), SHA-256 of the
+  source in the lineage.
+- `web/src/render-escucha.ts` `renderizarEntrada`: the mix, a track alone or the mix without a
+  track, cut to bars, written to **`entrada/`** (not a new `entradas/` folder: the upload route
+  already knows `entrada` and `salida`) and passed as `entradas` to `/api/run/lambda`.
+- `generar_audio` tool: `tarea`, `fuente` ("mix", a track, a path), `sin_pista`, `pista`,
+  `fuerza`, `desde_compas`, `hasta_compas`, `modelo`, `pasos`. Still one tool.
+- Door back: extract / lego / complete at the first bar of the cut (or bar 1); **cover and
+  repaint enter as a whole muted track at bar 1**, to compare by ear. Point 5 above wanted
+  repaint as a clip over its range: that needs an offset into the file that `importarPistas`
+  does not have; left for after the first run.
+- To measure first (unchanged): VRAM of xl-base on the A10 without the LM, whether a cover keeps
+  the bars in place, how long a full-song cover takes warm. Carlos: if it does not fit the A10,
+  `LAMBDA_INSTANCE_TYPE` moves to a bigger instance; the design does not depend on it.
 
 Order: after steps 1-6 of the review §10, as its step 7 says. Steps 2 (one WAV intake) and
 the axis-4 render module are prerequisites; the explicit Lambda inputs (point 3) are new.

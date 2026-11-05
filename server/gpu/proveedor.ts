@@ -42,6 +42,8 @@ export interface ResultadoGpu {
   ms: number;
   traidos: string[];
   nota: string;
+  /** Non-empty when the run finished but its outputs did not reach the project folder (5-Nov). */
+  traidaFallo: string;
 }
 
 export interface ProveedorGpu {

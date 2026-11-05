@@ -10,6 +10,7 @@
 
 import type { Project } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
+import { segundosPorTiempo } from "../../src/core/tiempo.ts";
 import { carpetaDeProyecto } from "../../src/core/project.ts";
 import { midiDeProyecto } from "../../src/core/midi-export.ts";
 import { informeEscucha, nivelesPorTramo, notasPorTramo, tramosMixMudo, type PistaEscuchada } from "../../src/core/escucha.ts";
@@ -37,9 +38,38 @@ export interface DependenciasRender {
   estado(texto: string): void;
 }
 
+/** What a GPU task works from: the mix, one track alone or the mix without one track, cut to bars. */
+export interface OpcionesEntrada {
+  /** File name without extension, written to entrada/<nombre>.wav. */
+  nombre: string;
+  /** One track alone (name, id or part of the name). */
+  pista?: string;
+  /** The mix without this track (lego: the context for a new stem). */
+  sinPista?: string;
+  /** Bar range, from 1 and inclusive; omitted = the whole render. */
+  desdeCompas?: number;
+  hastaCompas?: number;
+}
+
+export type EntradaRenderizada =
+  | { ok: true; ruta: string; segundos: number; picoDb: number; que: string; aviso: string }
+  | { ok: false; texto: string };
+
+/**
+ * The view the model's source is rendered from: the project with the master at 0 dB.
+ * Measured 5-Nov on still-here (master -6 dB): every source rendered for extract/cover/repaint
+ * peaked at -7.0 dBFS where the take peaks at -1.0, and the repaint came back 6 dB below the
+ * original everywhere but in the repainted bars. Track gains, mutes and effects are kept: they
+ * are the mix; the master is the listening level, not part of the song.
+ */
+export function sinMaster(vista: Project): Project {
+  return { ...vista, master: { ...vista.master, gainDb: 0 } };
+}
+
 export function crearRenderEscucha(d: DependenciasRender): {
   exportar(formatos: Formatos, senal?: AbortSignal): Promise<{ ok: boolean; texto: string }>;
   escuchar(opciones: { pistas?: string[]; compasesPorTramo?: number }, senal?: AbortSignal): Promise<{ ok: boolean; texto: string }>;
+  renderizarEntrada(opciones: OpcionesEntrada, senal?: AbortSignal): Promise<EntradaRenderizada>;
 } {
   /**
    * Brief export: the project to MIDI and/or the mix to WAV, in
@@ -224,5 +254,79 @@ export function crearRenderEscucha(d: DependenciasRender): {
     }
   }
 
-  return { exportar: exportarProyecto, escuchar: escucharMezcla };
+  /**
+   * The source WAV for an ACE-Step task (cover, repaint, extract, lego, complete; 4-Nov):
+   * rendered with the same engine as Play and written to `entrada/`, where the Lambda run
+   * uploads it explicitly. MIDI tracks reach the model as audio: ACE-Step does not read MIDI.
+   * The range is cut here, in samples, so the model gets exactly those bars and the output
+   * can be put back at the first of them.
+   */
+  async function renderizarEntrada(opciones: OpcionesEntrada, senal?: AbortSignal): Promise<EntradaRenderizada> {
+    const view = d.proyecto();
+    if (!view) return { ok: false, texto: "There is no open project." };
+    const nombres = (): string => view.tracks.map((t) => t.name).join(", ");
+    let vista: Project = view;
+    let que = "the mix";
+    if (opciones.pista) {
+      const pista = buscarPista(view.tracks, opciones.pista, { parcial: true });
+      if (!pista) return { ok: false, texto: `No track named "${opciones.pista}". Tracks: ${nombres()}.` };
+      // Alone, without mute or solo: the same view escuchar_mezcla measures.
+      vista = { ...view, tracks: [{ ...pista, muted: false, solo: false }] };
+      que = `track "${pista.name}" alone`;
+    } else if (opciones.sinPista) {
+      const pista = buscarPista(view.tracks, opciones.sinPista, { parcial: true });
+      if (!pista) return { ok: false, texto: `No track named "${opciones.sinPista}". Tracks: ${nombres()}.` };
+      vista = { ...view, tracks: view.tracks.filter((t) => t.id !== pista.id) };
+      que = `the mix without "${pista.name}"`;
+    }
+    vista = sinMaster(vista);
+    if (!vista.tracks.some((t) => t.clips.some((c) => c.audio !== undefined || c.notes.length > 0))) {
+      return { ok: false, texto: `${que} has no notes and no audio clips: there is nothing to render for the model.` };
+    }
+    const cancelado: EntradaRenderizada = { ok: false, texto: "Cancelled by the user before the source was rendered." };
+    try {
+      if (senal?.aborted) return cancelado;
+      d.estado(`Rendering ${que} for the model…`);
+      const render = await prepararRender(view, carpetaDeProyecto(view));
+      if (senal?.aborted) return cancelado;
+      const r = await render.renderizar(vista);
+      if (senal?.aborted) return cancelado;
+      // Plain copies: the offline render hands back SharedArrayBuffer-backed channels (see exportar).
+      const canales = r.canales.slice(0, 2).map((c) => new Float32Array(c));
+      if (canales.length === 0 || canales[0]!.length === 0) throw new Error("the render came out empty");
+      // The render starts at bar 1 (beat 0), so bars map to samples with the project's tempo.
+      const muestrasPorCompas = beatsPerBar(view) * segundosPorTiempo(view.bpm) * r.sampleRate;
+      const largo = canales[0]!.length;
+      const desde = Math.min(largo, Math.round(((opciones.desdeCompas ?? 1) - 1) * muestrasPorCompas));
+      const hasta = opciones.hastaCompas === undefined ? largo : Math.min(largo, Math.round(opciones.hastaCompas * muestrasPorCompas));
+      if (hasta <= desde) {
+        return {
+          ok: false,
+          texto: `Bars ${opciones.desdeCompas ?? 1}-${opciones.hastaCompas ?? "end"} fall after the end of the render (${(largo / r.sampleRate).toFixed(1)} s): nothing to send.`,
+        };
+      }
+      const trozos = canales.map((c) => c.slice(desde, hasta));
+      const buffer = new AudioBuffer({ length: hasta - desde, numberOfChannels: trozos.length, sampleRate: r.sampleRate });
+      trozos.forEach((datos, i) => buffer.copyToChannel(datos, i));
+      let pico = 0;
+      for (const datos of trozos) for (let i = 0; i < datos.length; i += 1) pico = Math.max(pico, Math.abs(datos[i]!));
+      const fichero = new File([audioBufferToWav(buffer)], `${opciones.nombre}.wav`, { type: "audio/wav" });
+      const { path } = await subirAudio(fichero, carpetaDeProyecto(view), "entrada");
+      const fuera = assetsPorStreaming(vista);
+      return {
+        ok: true,
+        ruta: path,
+        segundos: buffer.length / buffer.sampleRate,
+        picoDb: pico > 0 ? 20 * Math.log10(pico) : -Infinity,
+        que: opciones.desdeCompas !== undefined || opciones.hastaCompas !== undefined
+          ? `${que}, bars ${opciones.desdeCompas ?? 1}-${opciones.hastaCompas ?? "end"}`
+          : que,
+        aviso: fuera.length > 0 ? `Not in the source (long WAVs through streaming, outside openDAW): ${fuera.join(", ")}.` : "",
+      };
+    } catch (error) {
+      return { ok: false, texto: `Could not render the source: ${error instanceof Error ? error.message : String(error)}` };
+    }
+  }
+
+  return { exportar: exportarProyecto, escuchar: escucharMezcla, renderizarEntrada };
 }

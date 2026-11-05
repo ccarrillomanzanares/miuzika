@@ -232,6 +232,13 @@ export interface PeticionGenerar extends PeticionGeneracion {
   inicioCompas?: number;
   /** Clip length in bars (default: what the audio lasts). */
   compases?: number;
+  /**
+   * Source for the audio tasks: "mix", a track name, or a WAV path in the project. The
+   * action renders the first two to entrada/ and fills `audio` with the result.
+   */
+  fuente?: string;
+  /** With fuente "mix": leave this track out (lego: the context for the stem it will replace). */
+  sinPista?: string;
 }
 
 /** WAV → MIDI with basic-pitch and, optionally, straight into the project. */
@@ -974,23 +981,58 @@ export const HERRAMIENTAS: ToolSpec[] = [
     function: {
       name: "generar_audio",
       description:
-        "Generates REAL audio (a riff, a texture, a pad, a full passage, with or without voice) with a music " +
-        "model (ACE-Step 1.5) on the Lambda GPU and puts it in the project as an audio track in " +
-        "generado/<nombre>.wav, with a lineage record next to it. Tempo, key and time signature are " +
-        "taken from the project unless given. It costs GPU time: ~3 min to start the instance the " +
-        "first time, ~2.5 min to load the model, then ~15 s per 30 s of audio (measured 2-Nov on an A10). " +
-        "Use it when the engine's voices and the libraries do not have the sound; not for things " +
-        "escribir_notas does better. Never say it sounds good: tell the user to listen.",
+        "Runs a music model (ACE-Step 1.5) on the Lambda GPU and puts the result in the project as an audio " +
+        "track in generado/<nombre>.wav, with a lineage record next to it. `tarea` chooses what it does: " +
+        "text2music (default) makes REAL new audio from the caption (a riff, a texture, a full passage, with or " +
+        "without voice); cover regenerates the project's mix (fuente='mix') or a track in the caption's style " +
+        "(fuerza 1.0 faithful, 0.2 style only) and enters MUTED to compare; repaint redoes bars desde_compas-" +
+        "hasta_compas of the source and enters MUTED; extract pulls one stem (pista) out of a mix; lego adds a new " +
+        "stem (pista) that fits the source as context (use fuente='mix' and sin_pista=<the track it replaces>); " +
+        "complete writes accompaniment for a lone track (fuente=<track>). extract, lego and complete need " +
+        "modelo acestep-v15-xl-base (50 steps, slower); the default xl-turbo does text2music, cover and repaint " +
+        "in 8 steps. Tempo, key and time signature are taken from the project unless given. It costs GPU time: " +
+        "~3 min to start the instance the first time, ~2.5 min to load the model, then ~15 s per 30 s of audio " +
+        "with turbo (measured 2-Nov on an A10); base is several times slower. Use text2music when the engine's " +
+        "voices and the libraries do not have the sound; not for things escribir_notas does better. Never say " +
+        "it sounds good: tell the user to listen.",
       parameters: {
         type: "object",
         properties: {
+          tarea: {
+            type: "string",
+            enum: ["text2music", "cover", "cover-nofsq", "repaint", "extract", "lego", "complete"],
+            description: "What to do (default text2music). Every task but text2music needs `fuente`.",
+          },
           prompt: {
             type: "string",
             description:
               "Caption in English for the model, max 512 characters: style, instruments, mood, era " +
-              "(e.g. '90s industrial rock, distorted guitar riffs, metallic percussion, dark synth drone').",
+              "(e.g. '90s industrial rock, distorted guitar riffs, metallic percussion, dark synth drone'). " +
+              "Not needed for extract.",
           },
           nombre: { type: "string", description: "Name of the file and the track (e.g. 'riff-industrial')" },
+          fuente: {
+            type: "string",
+            description:
+              "Source audio for cover/repaint/extract/lego/complete: 'mix' (the whole project rendered with the " +
+              "Play engine), a track name (that track alone), or a WAV path in the project (entrada/x.wav).",
+          },
+          sin_pista: { type: "string", description: "With fuente='mix': render the mix WITHOUT this track (lego context)" },
+          pista: {
+            type: "string",
+            description:
+              "extract/lego: the instrument to pull out or to add, one of vocals, backing_vocals, drums, percussion, " +
+              "bass, guitar, keyboard, synth, strings, brass, woodwinds, fx. complete: comma list of those to add.",
+          },
+          fuerza: { type: "number", description: "cover only: 0-1, how closely to follow the source (default 1.0; 0.2 = style transfer)" },
+          desde_compas: { type: "integer", description: "First bar of the range, from 1 (repaint/lego: what the model redoes; cover/extract/complete: what is cut from the source)" },
+          hasta_compas: { type: "integer", description: "Last bar of the range, inclusive" },
+          modelo: {
+            type: "string",
+            enum: ["acestep-v15-xl-turbo", "acestep-v15-xl-sft", "acestep-v15-xl-base", "acestep-v15-turbo", "acestep-v15-sft", "acestep-v15-base"],
+            description: "Checkpoint (default acestep-v15-xl-turbo). *-base for extract/lego/complete; *-sft is base fine-tuned, 50 steps with guidance; *-turbo is distilled, 8 steps.",
+          },
+          pasos: { type: "integer", description: "Diffusion steps; default 8 for turbo, 50 for sft/base" },
           letra: {
             type: "string",
             description: "Lyrics with [Verse]/[Chorus] tags for a sung part; omit for instrumental.",
@@ -1534,6 +1576,18 @@ export const MANEJADORES: Record<string, Manejador> = {
         ...(entero(args.semilla) !== undefined ? { semilla: entero(args.semilla) } : {}),
         ...(compasDesdeUno(args.inicio_compas) !== undefined ? { inicioCompas: compasDesdeUno(args.inicio_compas) } : {}),
         ...((entero(args.compases) ?? 0) > 0 ? { compases: entero(args.compases) } : {}),
+        // 4-Nov: the six source tasks. `tarea` goes through as given: the core refuses an
+        // unknown one with the list, better than silently falling back to text2music.
+        ...(txt(args.tarea) ? { tarea: txt(args.tarea) as PeticionGenerar["tarea"] } : {}),
+        ...(txt(args.fuente) ? { fuente: txt(args.fuente) } : {}),
+        ...(txt(args.sin_pista) ? { sinPista: txt(args.sin_pista) } : {}),
+        ...(txt(args.pista) ? { pista: txt(args.pista) } : {}),
+        ...(txt(args.modelo) ? { modelo: txt(args.modelo) } : {}),
+        ...(num(args.fuerza) !== undefined ? { fuerza: num(args.fuerza) } : {}),
+        ...(entero(args.pasos) !== undefined ? { pasos: entero(args.pasos) } : {}),
+        // Bars as the person counts them, from 1: the core turns them into seconds.
+        ...(entero(args.desde_compas) !== undefined ? { desdeCompas: entero(args.desde_compas) } : {}),
+        ...(entero(args.hasta_compas) !== undefined ? { hastaCompas: entero(args.hasta_compas) } : {}),
       },
       senal,
     );

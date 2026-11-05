@@ -344,6 +344,24 @@ export async function comprobarSsh(): Promise<{ ok: boolean; detalle: string }> 
 
 const comillas = (texto: string): string => `'${texto.replace(/'/g, `'\\''`)}'`;
 
+/**
+ * Project folders that `sincronizar` never walks. The GPU scripts read their inputs from
+ * `entradas` (uploaded by `subirEntradas`, whatever the size) and write to generado/; the
+ * rest is the app's own bookkeeping. Measured 5-Nov on still-here: every run re-sent the
+ * whole folder (68 files, ~290 MB of WAVs in entrada/ and generado/) and the upload took
+ * 518 s, against 22 s for 28 files the night before, when no WAV existed yet.
+ */
+const CARPETAS_NO_SINCRONIZADAS = new Set(["salida", "__pycache__", "entrada", "generado", "versiones", "trayectorias", ".cache"]);
+const EXTENSIONES_AUDIO = /\.(wav|flac|mp3|ogg|aif|aiff|m4a)$/i;
+
+/** Does a project file travel with the sync? Path relative to the project folder, "/" separated. */
+export function seSincroniza(relativo: string, bytes: number): boolean {
+  const partes = relativo.split("/");
+  if (partes.slice(0, -1).some((c) => CARPETAS_NO_SINCRONIZADAS.has(c))) return false;
+  if (EXTENSIONES_AUDIO.test(partes[partes.length - 1] ?? "")) return false;
+  return bytes <= MAX_SUBIDA;
+}
+
 /** Project files that make sense to upload (scripts and small data). */
 function ficherosDelProyecto(carpetaProyecto: string): string[] {
   const salida: string[] = [];
@@ -351,10 +369,11 @@ function ficherosDelProyecto(carpetaProyecto: string): string[] {
     if (!existsSync(dir)) return;
     for (const entrada of readdirSync(dir, { withFileTypes: true })) {
       const completo = join(dir, entrada.name);
+      const relativo = relative(carpetaProyecto, completo).split(sep).join("/");
       if (entrada.isDirectory()) {
-        if (entrada.name === "salida" || entrada.name === "__pycache__") continue;
+        if (CARPETAS_NO_SINCRONIZADAS.has(entrada.name)) continue;
         recorrer(completo);
-      } else if (statSync(completo).size <= MAX_SUBIDA) {
+      } else if (seSincroniza(relativo, statSync(completo).size)) {
         salida.push(completo);
       }
     }
@@ -435,7 +454,13 @@ export async function sincronizar(
     `${REMOTO}/plantillas`,
     `${REMOTO}/proyectos/${slug}/salida`,
   ];
-  const mk = await ssh(cfg, ip, `mkdir -p ${dirs.map((d) => `~/${d}`).join(" ")}`, 60, senal);
+  // The first ssh after a reuse sometimes hangs: on 5-Nov, 2 of 5 reuses were cut off here
+  // at 60 s while a probe from the same machine seconds later answered in 1.7 s. One retry
+  // costs a minute; without it the turn died and the agent read it as a 25-minute model timeout.
+  let mk = await ssh(cfg, ip, `mkdir -p ${dirs.map((d) => `~/${d}`).join(" ")}`, 60, senal);
+  if (mk.codigo !== 0 && mk.errores.includes("cut off after") && !senal?.aborted) {
+    mk = await ssh(cfg, ip, `mkdir -p ${dirs.map((d) => `~/${d}`).join(" ")}`, 60, senal);
+  }
   if (mk.codigo !== 0) return { codigo: mk.codigo, errores: mk.errores, ficheros: 0 };
 
   let total = 0;
@@ -467,24 +492,44 @@ export async function sincronizar(
 }
 
 /** Brings back whatever the script wrote (newer than the mark). */
+/**
+ * Whether the remote listing of new files failed (so "no files" would be a lie). Measured
+ * 5-Nov: the `find` ssh hung and was cut off after 120 s, the run had produced cover-piano.wav,
+ * and the server said "done; 0 file(s) brought back" with no error; the agent told the user the
+ * take did not exist.
+ */
+export function listadoFallido(r: { codigo: number | null; errores: string }): boolean {
+  return r.codigo !== 0 || r.errores.includes("cut off after");
+}
+
 async function traerNuevos(
   cfg: ConfigLambda,
   ip: string,
   carpetaTrabajo: string,
   slug: string,
-): Promise<{ traidos: string[]; errores: string }> {
+): Promise<{ traidos: string[]; errores: string; fallo: string }> {
   const rutaRemota = `~/${REMOTO}/proyectos/${slug}`;
-  const lista = await ssh(
+  const listar = () => ssh(
     cfg,
     ip,
     `find ${rutaRemota} -type f -newer ~/${REMOTO}/.marca -printf '%P\\n' 2>/dev/null | head -200`,
     120,
   );
+  let lista = await listar();
+  // One retry: the same first-ssh hang that hits the sync (5-Nov, 2 of 5 reuses).
+  if (listadoFallido(lista)) lista = await listar();
+  if (listadoFallido(lista)) {
+    return {
+      traidos: [],
+      errores: "",
+      fallo: `the outputs could not be listed on the instance (ssh${lista.codigo === null ? " cut off" : ` exit ${lista.codigo}`}); whatever the script wrote is still there`,
+    };
+  }
   const relativos = lista.salida
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l !== "" && !l.includes("__pycache__") && !l.endsWith(".pyc"));
-  if (relativos.length === 0) return { traidos: [], errores: "" };
+  if (relativos.length === 0) return { traidos: [], errores: "", fallo: "" };
 
   // One scp per group of files with the same destination directory.
   const porDestino = new Map<string, string[]>();
@@ -511,7 +556,7 @@ async function traerNuevos(
     if (r.codigo === 0) traidos.push(...fuentes.map((f) => f.split("/").pop() ?? ""));
     else errores += r.errores;
   }
-  return { traidos: traidos.filter((n) => n !== ""), errores };
+  return { traidos: traidos.filter((n) => n !== ""), errores, fallo: errores ? "some outputs could not be copied back (scp)" : "" };
 }
 
 // ------------------------------------------------------------------ run
@@ -542,6 +587,8 @@ export async function ejecutarEnLambda(
   ms: number;
   traidos: string[];
   nota: string;
+  /** Non-empty when the run finished but its outputs did not reach the project folder. */
+  traidaFallo: string;
 }> {
   const t0 = Date.now();
   const arranque = await encender(cfg, p.aviso, p.senal);
@@ -551,7 +598,7 @@ export async function ejecutarEnLambda(
     return {
       ok: false, id: arranque.id, ip: arranque.ip, codigo: sinc.codigo, salida: "",
       errores: `could not sync: ${sinc.errores}`, ms: Date.now() - t0, traidos: [],
-      nota: "sync",
+      nota: "sync", traidaFallo: "",
     };
   }
   if (p.entradas && p.entradas.length > 0) {
@@ -561,7 +608,7 @@ export async function ejecutarEnLambda(
       return {
         ok: false, id: arranque.id, ip: arranque.ip, codigo: subida.codigo, salida: "",
         errores: `could not upload the inputs: ${subida.errores}`, ms: Date.now() - t0, traidos: [],
-        nota: "inputs",
+        nota: "inputs", traidaFallo: "",
       };
     }
   }
@@ -594,7 +641,7 @@ export async function ejecutarEnLambda(
     throw new Cancelado();
   }
   const traida = await traerNuevos(cfg, arranque.ip, p.carpetaTrabajo, p.slug);
-  p.aviso(`done; ${traida.traidos.length} file(s) brought back`);
+  p.aviso(traida.fallo ? `done; ${traida.fallo}` : `done; ${traida.traidos.length} file(s) brought back`);
 
   return {
     ok: r.codigo === 0,
@@ -606,7 +653,19 @@ export async function ejecutarEnLambda(
     ms: Date.now() - t0,
     traidos: traida.traidos,
     nota: arranque.reutilizada ? "reused instance" : "new instance",
+    traidaFallo: traida.fallo,
   };
+}
+
+/**
+ * Did the MODEL run out of time? True when the remote `timeout` killed the script (exit 124)
+ * or the local ssh of the run itself was cut off. A cut-off during sync or upload is not a
+ * model timeout: on 5-Nov the API labelled a 60 s ssh hang as "ran out of time (25 min)" and
+ * the agent told Carlos that 25 minutes of GPU had been burnt (nothing had run).
+ */
+export function esTimeoutDelModelo(r: { codigo: number | null; errores: string; nota: string }): boolean {
+  if (r.nota === "sync" || r.nota === "inputs") return false;
+  return r.codigo === 124 || r.errores.includes("cut off after");
 }
 
 /** State for the bar/panel: configured, alive, cost and ssh available. */

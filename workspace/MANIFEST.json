@@ -1,5 +1,5 @@
 {
- "generado": "2026-11-04T07:54:20",
+ "generado": "2026-11-05T22:12:37",
  "raiz": "workspace/",
  "regla": "These symbols ALREADY exist. Reuse them with 'from <module> import <symbol>'. The server rejects (409) new files in codigo/ or gpu/, patch*/parche* scripts and scripts named like a Python or engine module.",
  "modulos": {

@@ -442,3 +442,50 @@ Step 7 (ACE-Step extract/lego) not started.
      the Steinway samples themselves peak at a median −6 dBFS (24 of 351 measured), so
      the samples are not quiet; look at velocity layers → attenuation in `sfz2sf2.py`
      and at how openDAW applies `initialAttenuation`. Needs listening to confirm.
+
+## 4-Nov (night): ACE-Step, every checkpoint and every task
+
+Carlos: "vamos ace-step", then "quiero usar base, sft y turbo y poder usarlos con las
+propiedades de que dispongan y no te preocupes por la ram y lambda". The task API was read
+from the repo (`constants.py`, `inference.py`, README, `docs/en/INFERENCE.md`, `main` on
+4-Nov), not from the 3-Nov design: seven `task_type` strings, twelve track names, base-only
+stem tasks, length locked to the source, LM skipped for every source task (the docs say
+otherwise; the code wins). Built in one pass: core tables and validation with tests, the GPU
+script, the render-to-file of the source (`renderizarEntrada`), the tool arguments, the
+muted door for cover/repaint. Typecheck clean, 328 unit tests green. Nothing run on Lambda;
+decision and gaps in `docs/DECISIONES.md` and `PLAN.md` ("Built 4-Nov-2026, night").
+
+Later the same night, Carlos tested with his own brief, "crea una canción parecida a ghosts again
+de depeche mode en inglés", ACE-Step box ticked: the agent created "still-here" (118 BPM, A minor),
+wrote full English lyrics and asked for two 210 s takes. Numbers: boot 231 s, install 19 s, DiT
+39 s, LM 33 s, generation 73 s for both, VRAM 16.1 GB. Then, with the tool list widened again, it
+deleted take 2 from the project, muted take 1 and composed the song in MIDI for 25 minutes in a
+mix-measuring loop (the Arp row "oscillates 10 dB between passes"); Carlos cancelled, switched the
+instance off and stopped for the night. Takes not heard. Tests moved to tomorrow:
+`docs/PRUEBAS-ACESTEP-2026-11-04.md`, source `still-here-1`.
+
+## 5-Nov: ACE-Step tests 1-10 on still-here, and the agent on Claude
+
+The whole day on one A10 (07:12-21:16 UTC, 14.1 h, ~18 $), Carlos listening, one doc for the
+plan, the numbers and the verdicts: `docs/PRUEBAS-ACESTEP-2026-11-04.md`. By ear: complete
+(voz -> band) PASS, extract vocals PASS, cover turbo 0.6 with lyrics PASS, cover sft 0.6 PASS and
+preferred ("muy industrial, me encanta, mejor que cover-piano2 pero más sucia, oscura, intensa";
+the band profile had predicted a cleaner piano cover: the ear decides). Extract drums FAIL/partial,
+lego FAIL. xl-base and xl-sft fit the A10 (11-13 GB), 50 steps take 20-72 s for 32 bars against
+4.7 s on turbo; covers line up (envelope lag 0 ms).
+
+Mid-day the agent moved from DeepSeek to Claude Sonnet 5.5 on Carlos's API credit ("dejaré de
+usar deepseek si funciona"). The Anthropic OpenAI-compatible endpoint returned 400 on the agent's
+`temperature: 0.2`; `adaptarCuerpo` now drops `temperature`/`top_p` for anthropic and keeps
+`stream_options` so the cost is logged. 16 calls, 1.05 $, 0.05-0.09 $ each (25-31K input tokens
+per call, no caching there). Tests 7-10 ran on Sonnet: exact arguments, read the lineage on its
+own, "No la he oído", unmuted a track by itself when the mix would have been silent. Prompt
+untouched during the trial.
+
+Defects found by running: the "mix" source honours mute and leaves out the streaming WAVs, so a
+lego ran over 220 s of digital silence (190 s of GPU, 0.23 $) and Carlos set the rule (DECISIONES
+5-Nov); the progress line names `generar_audio.py` 70-90 s before it runs, so Cancel was pressed
+three times in earlier phases and the GPU-phase cancel is still unexercised; the tab freezes
+during the offline render (5-6 presses once); lego/repaint clips are not trimmed to their range;
+a control ssh hung 3 of 16 runs (sshd had authenticated; 75 stdin-variant runs reproduced
+nothing). ⏻ Off confirmed in 81 s. Eight changes queued in ESTADO §3 item 1, none built today.

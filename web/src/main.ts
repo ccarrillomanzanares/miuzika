@@ -1272,6 +1272,7 @@ const acciones = crearAcciones({
   avisar: (texto) => addMessage("system", texto),
   exportar: renderEscucha.exportar,
   escuchar: renderEscucha.escuchar,
+  renderizarEntrada: renderEscucha.renderizarEntrada,
 });
 registrarAcciones(acciones);
 

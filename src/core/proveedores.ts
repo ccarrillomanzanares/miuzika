@@ -192,7 +192,15 @@ export function adaptarCuerpo(p: Proveedor, cuerpo: Record<string, unknown>): Re
   if (salida.reasoning_effort === "none" && !["ollama-cloud", "ollama-local", "openai", "openrouter"].includes(p.id)) {
     delete salida.reasoning_effort;
   }
-  if (p.id === "anthropic" || p.id === "google") delete salida.stream_options;
+  // Anthropic's OpenAI-compatible endpoint (doc read 5-Nov-2026): `temperature` below 1 and
+  // `top_p` other than the default return 400 on Claude 4.7 and later, `reasoning_effort` is
+  // ignored, `stream_options` is fully supported (it was dropped here on 28-Oct without a
+  // measurement; usage per call is needed to see what the 100 $ of credit buy).
+  if (p.id === "anthropic") {
+    delete salida.temperature;
+    delete salida.top_p;
+  }
+  if (p.id === "google") delete salida.stream_options;
   return salida;
 }
 

@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
-import { planDeEntradas } from "../lambda.ts";
+import { planDeEntradas, esTimeoutDelModelo } from "../lambda.ts";
 import { Cancelado } from "../gpu/proveedor.ts";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
@@ -273,14 +273,14 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
             codigo: r.codigo,
             senal: null,
             ms: r.ms,
-            por_timeout: r.errores.includes("cut off after"),
+            por_timeout: esTimeoutDelModelo(r),
             salida: r.salida.slice(-8000),
             errores: r.errores.slice(-8000),
             // Only what has changed in the project folder: the whole tree
             // is 573 KB of JSON that nobody reads (and the catalog, 4,231
             // files, takes seconds to walk on every call).
             escritos: escritosDesde(slug, t0Lambda),
-            lambda: { ip: r.ip, id: r.id, nota: r.nota, traidos: r.traidos, avisos },
+            lambda: { ip: r.ip, id: r.id, nota: r.nota, traidos: r.traidos, traida_fallo: r.traidaFallo, avisos },
           });
         })
         .catch((error) => {

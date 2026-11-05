@@ -16,13 +16,17 @@ test("the base is editable only for those that can be edited", () => {
 });
 
 test("the body loses what the provider does not understand", () => {
-  const cuerpo = { model: "x", keep_alive: "30m", reasoning_effort: "none", stream_options: { include_usage: true } };
+  const cuerpo = { model: "x", keep_alive: "30m", reasoning_effort: "none", stream_options: { include_usage: true }, temperature: 0.2 };
   assert.deepEqual(adaptarCuerpo(proveedorPorId("ollama-cloud")!, cuerpo), cuerpo);
   const openai = adaptarCuerpo(proveedorPorId("openai")!, cuerpo);
   assert.equal(openai.keep_alive, undefined);
   assert.equal(openai.reasoning_effort, "none");
+  assert.equal(openai.temperature, 0.2);
+  // Anthropic (OpenAI-compatible endpoint): temperature 0.2 is a 400 on Claude 4.7+, usage
+  // in the stream is wanted to log the cost.
   const anthropic = adaptarCuerpo(proveedorPorId("anthropic")!, cuerpo);
-  assert.deepEqual(Object.keys(anthropic), ["model"]);
+  assert.deepEqual(Object.keys(anthropic).sort(), ["model", "stream_options"]);
+  assert.equal(adaptarCuerpo(proveedorPorId("google")!, cuerpo).stream_options, undefined);
 });
 
 test("models are read from /models and /api/tags", () => {

@@ -181,3 +181,33 @@ test("inicio_compas counts from 1 in the three tools that place material, like d
   await MANEJADORES.transcribir_audio!({ archivo: "a.wav", inicio_compas: 0 }, undefined, local);
   assert.deepEqual(vistos, { anadir: 0, generar: undefined, transcribir: 0 });
 });
+
+test("generar_audio passes the ACE-Step task, source, track, strength, range and checkpoint through (4-Nov)", async () => {
+  let visto: Record<string, unknown> = {};
+  const local = {
+    generarAudio: async (p: Record<string, unknown>) => {
+      visto = p;
+      return { ok: true, texto: "" };
+    },
+  } as unknown as Parameters<(typeof MANEJADORES)["generar_audio"]>[2];
+  await MANEJADORES.generar_audio!(
+    {
+      tarea: "lego", prompt: "tight acoustic drums", nombre: "bateria", fuente: "mix", sin_pista: "Drums",
+      pista: "drums", modelo: "acestep-v15-xl-base", pasos: 40, desde_compas: 5, hasta_compas: 8, fuerza: 0.4,
+    },
+    undefined,
+    local,
+  );
+  assert.equal(visto.tarea, "lego");
+  assert.equal(visto.fuente, "mix");
+  assert.equal(visto.sinPista, "Drums");
+  assert.equal(visto.pista, "drums");
+  assert.equal(visto.modelo, "acestep-v15-xl-base");
+  assert.equal(visto.pasos, 40);
+  // Bars stay as the person counts them (from 1): the core turns them into seconds.
+  assert.equal(visto.desdeCompas, 5);
+  assert.equal(visto.hastaCompas, 8);
+  assert.equal(visto.fuerza, 0.4);
+  await MANEJADORES.generar_audio!({ prompt: "x", nombre: "t" }, undefined, local);
+  assert.ok(!("tarea" in visto) && !("fuente" in visto), "text2music by default, nothing invented");
+});
