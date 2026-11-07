@@ -99,6 +99,8 @@ function pintarBotones(): void {
   seleccion.pintarBarra();
 }
 
+// Read before the session exists: setting its first project would overwrite it.
+const ultimoAbierto = Sesion.ultimoAbierto();
 const sesion = new Sesion(avisos, {
   alAplicar(next) {
     transporte.detenerPorCambio();
@@ -130,7 +132,8 @@ const sesion = new Sesion(avisos, {
 const transporte = new Transporte({ sesion, timeline, avisos, pintarPlay, avisarFaltan });
 const seleccion = new Seleccion({ sesion, timeline, avisos, beatActual: () => transporte.beat });
 const importador = crearImportador({ sesion, avisos, beatActual: () => transporte.beat, avisarFaltan });
-initDialogoProyectos({ sesion, avisos, avisarFaltan });
+const dialogoProyectos = initDialogoProyectos({ sesion, avisos, avisarFaltan });
+if (ultimoAbierto) void dialogoProyectos.reabrir(ultimoAbierto);
 const exportador = crearExportador({
   proyecto: () => sesion.project,
   cargarSoundfonts: cargarSoundfontsDelProyecto,

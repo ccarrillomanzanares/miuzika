@@ -61,3 +61,16 @@ The 14 listed on 6-Nov-2026 when the GUI was separated from miuzika, and how eac
   Workaround: type the last bar. FIXED 7-Nov (afternoon): with no last bar, the source ends at the last bar the chosen tracks' clips reach
   (`ultimoCompasDeClips`), and Review says "bars 1-8 (end)". Simulated path: source 14.118 s = 8+2 bars at 170, clips 32 beats. `bajo-1` and
   `bajo-1-2` in `bateria-1` keep their 9-bar clips: shorten them by hand or leave them.
+- **25. A chosen file looks unchosen.** Seen by Carlos on 7-Nov (screenshot): the Reference row says "Ningún archivo seleccionado" next to
+  "Chosen: Depeche Mode - Ghosts Again….mp3". The window repaints its HTML and the browser empties every `<input type="file">`, while the app
+  keeps the file (`archivoReferencia`). The same for the File source. What is sent is right, but it made him doubt it. Fix proposed: hide the
+  browser's text and show only "Chosen: …" with Change and Remove. FIXED 7-Nov (Carlos: "arregla los bugs"): the Reference row is gone,
+  and the File source is a hidden input inside a button-styled label ("Choose a file…" / "Change…") beside the kept file's name. Seen
+  headless: "Choose a file… none chosen", then "Change… corto.wav".
+- **26. A reload leaves the app empty and the next drop starts another project.** Seen 7-Nov: my edit to `web/` reloaded the page, and the app
+  does not reopen the last project. Carlos dropped `vein-cover-1.wav`, which made a new project `vein-cover-1` at the default 120 BPM instead
+  of vein's 92. The run `vein-cover-ref` then went there: bars 1-24 = 48 s, bpm 120 sent. The fix is the pending proposal "reopen the last
+  project on load"; until then a reload must be announced together with "reopen your project". FIXED 7-Nov: the open project's folder
+  was already kept in localStorage but never read. `main.ts` reads it before the session exists and reopens it through the Projects
+  path, so nothing is rewritten. A folder deleted since is skipped. Seen headless: open `vein`, reload, it comes back with
+  "Opened from disk “vein”… 92 BPM".

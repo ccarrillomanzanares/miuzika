@@ -199,6 +199,8 @@ def comprobar(args):
             sys.exit(f"--audio {args.audio} does not exist in {os.getcwd()}")
     elif args.audio:
         _log("--audio is ignored by text2music (flow-edit is not wired here)")
+    if args.referencia and not Path(args.referencia).exists():
+        sys.exit(f"--referencia {args.referencia} does not exist in {os.getcwd()}")
     pistas = [p.strip() for p in (args.pista or "").split(",") if p.strip()]
     if args.tarea in ("extract", "lego") and len(pistas) != 1:
         sys.exit(f"--tarea {args.tarea} needs exactly one --pista: {', '.join(PISTAS_MODELO)}")
@@ -304,6 +306,15 @@ def generar(args):
     if args.tarea != "text2music":
         fuente = {"path": args.audio, "sha256": sha256_de(args.audio), "bytes": os.path.getsize(args.audio)}
         _log(f"source {args.audio} ({fuente['bytes']} bytes, sha256 {fuente['sha256'][:12]}…)")
+    # The reference (Carlos, 7-Nov: a punk bass that came out "not hardcore punk"). Upstream reads it for
+    # every task (process_reference_audio, ca1e85f): 48 kHz stereo, 30 s, a longer file gives three random
+    # 10 s pieces. The browser sends the 30 s the person chose, so it is used whole and the same each run.
+    # ACE-Step's docs say it shapes timbre and style, not melody or rhythm; whether the DiT uses it for
+    # lego is not read in its code, only heard.
+    referencia = None
+    if args.referencia:
+        referencia = {"path": args.referencia, "sha256": sha256_de(args.referencia), "bytes": os.path.getsize(args.referencia)}
+        _log(f"reference {args.referencia} ({referencia['bytes']} bytes, sha256 {referencia['sha256'][:12]}…)")
 
     # The lyrics arrive as they are. What was learned on 5-Nov now lives in the form, which fills
     # the value in sight: a vocal extract with "[Instrumental]" rebuilt the source (RMS flat at
@@ -336,6 +347,7 @@ def generar(args):
         seed=semilla,
         thinking=llm is not None,
         src_audio=os.path.abspath(args.audio) if fuente else None,
+        reference_audio=os.path.abspath(args.referencia) if referencia else None,
         repainting_start=float(args.desde) if args.desde is not None else 0.0,
         repainting_end=float(args.hasta) if args.hasta is not None else -1,
         audio_cover_strength=float(args.fuerza) if args.fuerza is not None else 1.0,
@@ -387,6 +399,7 @@ def generar(args):
             "inference_steps": pasos, "guidance_scale": params.guidance_scale, "shift": params.shift,
             "instruction": params.instruction, "track": pistas or None,
             "source_audio": fuente,
+            "reference_audio": referencia,
             "cover_strength": params.audio_cover_strength if args.tarea.startswith("cover") else None,
             "range_s": [params.repainting_start, params.repainting_end] if args.tarea in ("repaint", "lego") else None,
             "lora": None,
@@ -429,6 +442,7 @@ def main():
     ap.add_argument("--backend", default="vllm", choices=["vllm", "pt"])
     ap.add_argument("--offload", action="store_true", help="CPU offload (GPUs under 20 GB)")
     ap.add_argument("--audio", default=None, help="Source WAV, relative to the project folder (every task but text2music)")
+    ap.add_argument("--referencia", default=None, help="Reference WAV whose sound to aim for (reference_audio), relative to the project folder")
     ap.add_argument("--fuerza", type=float, default=None, help="cover: 1.0 faithful to the source, 0.2 style only")
     ap.add_argument("--desde", type=float, default=None, help="repaint/lego: start of the range, seconds into the source")
     ap.add_argument("--hasta", type=float, default=None, help="repaint/lego: end of the range, seconds (-1 = to the end)")

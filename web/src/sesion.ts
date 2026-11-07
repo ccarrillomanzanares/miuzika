@@ -132,6 +132,15 @@ export class Sesion {
     this.persist();
   }
 
+  /** The folder of the project open when the page was left, read before anything can overwrite it. */
+  static ultimoAbierto(): string | null {
+    try {
+      return localStorage.getItem(CLAVE_ABIERTO);
+    } catch {
+      return null;
+    }
+  }
+
   private persist(): void {
     try {
       if (this.project) localStorage.setItem(CLAVE_ABIERTO, carpetaDeProyecto(this.project));

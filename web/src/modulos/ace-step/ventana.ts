@@ -50,12 +50,15 @@ const MARGEN_COMPASES = 2;
  */
 const EXPECTATIVAS: Record<Tarea, string> = {
   text2music: "Makes a whole song: drums, bass, chords and voice together. Not for one instrument alone: asked for drums only, it still added synths and melody. Say what you want; “no X” tends to bring X.",
-  lego: "Adds one instrument that plays along with the tracks you choose, or over silence. The instrument usually comes out and fits the song; the style in the caption is often ignored, and some takes come out as another instrument or nearly silent. Make 2-3 takes and keep the best. Over a full mix it fails: choose a few tracks.",
+  // Not offered since 7-Nov evening; kept because the type lists every task the script knows.
+  lego: "Removed from this window: it could not be steered.",
   complete: "Builds a band around one track. Tested from a voice: good result.",
   cover: "Plays the source again with another sound; the caption changes the instruments. If there is a voice, paste the lyrics or the voice is lost.",
-  "cover-nofsq": "Undocumented by ACE-Step; never tested here.",
-  repaint: "Redoes some bars and keeps the rest. The range works; the sound has not been judged yet.",
-  extract: "Pulls one instrument out of a mix. Voice: good. Drums: comes out with leftovers; for clean stems use a dedicated separator.",
+  // Not run by us (ESTADO). Not stated to the user: it is our test log, not theirs.
+  "cover-nofsq": "A variant of cover that ACE-Step does not document.",
+  // The range was checked, the sound not judged by ear yet (ESTADO).
+  repaint: "Redoes the bars you choose and keeps the rest.",
+  extract: "Pulls one instrument out of a mix. Voice and bass: good, the bass with a little of the rest. Drums: comes out with leftovers; for clean stems use a dedicated separator.",
 };
 /**
  * Before Run, where money is spent. Carlos, 7-Nov: a disclaimer of no guarantee and of the money a
@@ -64,8 +67,18 @@ const EXPECTATIVAS: Record<Tarea, string> = {
  */
 const SIN_GARANTIA =
   "This is free software provided as is, without any warranty (AGPL-3.0). No result is guaranteed: the same request can give a good take, the wrong instrument or near silence. The GPU is rented from a provider with your account: it bills the machine's time whether the take is useful or not, failed and cancelled runs included, and keeps billing until you press Off. Every cost is yours.";
-/** Only the Track tab (lego, complete): the tasks where the short ending was measured. */
-const conMargen = (tarea: Tarea): boolean => tarea === "lego" || tarea === "complete";
+/** Only the Track tab (complete): the short ending was measured on lego, its sibling over a context. */
+const conMargen = (tarea: Tarea): boolean => tarea === "complete";
+/**
+ * Lego is gone from the window (Carlos, 7-Nov evening: "lo quitamos de la app"). Of every take he
+ * heard, the ones he kept were what the model chose, not what was asked ("todo lo que ha salido bien,
+ * no siguió casi el caption"); bass over bateria-1 failed 5 of 5, with and without a reference.
+ * Repeat does not offer its takes either. The script still runs it, so old lineages stay readable.
+ * The Reference field went the same evening ("sí la quitamos"): with lego a full mix gave a mix and a
+ * bass gave a sub block; with cover, "un pegote de instrumentos bastante estridente". Takes made with
+ * a reference are not offered for Repeat either. The script keeps `--referencia`.
+ */
+const OFRECIDA = (tarea: unknown): boolean => tarea !== "lego";
 
 interface FuentePreparada {
   clave: string;
@@ -82,7 +95,7 @@ interface FuentePreparada {
   compases: number | null;
   /** Bars of margin the source carries after them. */
   margen: number;
-  /** Silence or tracks for lego/complete; a file is sent as it is. */
+  /** Tracks for complete; a file is sent as it is. */
   margenEditable: boolean;
 }
 
@@ -213,12 +226,12 @@ export class VentanaAceStep {
 
   private tareaDelFormulario(): Tarea {
     if (this.pestana === "song") return "text2music";
-    if (this.pestana === "track") return this.vacio || this.v.modoPista !== "complete" ? "lego" : "complete";
+    if (this.pestana === "track") return "complete";
     return (this.v.transformar as Tarea | undefined) ?? "cover";
   }
 
   private pistaDelFormulario(tarea: Tarea): string | null {
-    if (tarea === "lego" || tarea === "extract") return this.v.instrumento ?? "drums";
+    if (tarea === "extract") return this.v.instrumento ?? "vocals";
     if (tarea === "complete") return [...this.acompanamiento].join(", ") || null;
     return null;
   }
@@ -226,10 +239,6 @@ export class VentanaAceStep {
   private modeloDelFormulario(tarea: Tarea): string {
     const validos = modelosPara(tarea).map((m) => m.nombre);
     if (this.v.modelo && validos.includes(this.v.modelo)) return this.v.modelo;
-    // Lego proposes base, not xl-base (Carlos, 7-Nov). Evidence: one guitar batch, "pegan muy bien
-    // con el resto" on base against xl-base; his own intuition is that both work the same. Not
-    // measured beyond that: a default, not a finding.
-    if (tarea === "lego" && validos.includes("acestep-v15-base")) return "acestep-v15-base";
     return validos[0]!;
   }
 
@@ -274,6 +283,7 @@ export class VentanaAceStep {
         nombre: "",
         audio: null,
         silencio: null,
+        referencia: null,
       };
       return { ...vacio, ...base, ...edit } as Parametros;
     }
@@ -302,6 +312,8 @@ export class VentanaAceStep {
       nombre: this.v.nombre ?? "",
       audio: this.fuente?.audio ?? null,
       silencio: this.fuente?.silencio ?? null,
+      // The Reference field was removed (7-Nov evening): it never reaches the recipe from this window.
+      referencia: null,
     };
     return { ...base, ...edit } as Parametros;
   }
@@ -350,16 +362,15 @@ export class VentanaAceStep {
     );
   }
 
-  private htmlFuente(tarea: Tarea, conSilencio: boolean): string {
+  private htmlFuente(tarea: Tarea): string {
     const p = this.a.proyecto();
     const hayPistas = Boolean(p && p.tracks.length > 0);
     const tipos: [string, string][] = [];
-    if (conSilencio) tipos.push(["silencio", "Silence"]);
     if (hayPistas) tipos.push(["pistas", "Tracks"]);
     tipos.push(["archivo", "File"]);
     const tipo = this.tipoFuente(tipos.map(([v]) => v));
     let html = this.fila(
-      tarea === "lego" ? "Context" : "Source",
+      "Source",
       tipos.map(([v, t]) => `<label class="ace-opcion"><input type="radio" name="tipoFuente" value="${v}"${v === tipo ? " checked" : ""}> ${t}</label>`).join(""),
       "Only what you choose here is sent. Mute and solo do not count.",
     );
@@ -372,13 +383,15 @@ export class VentanaAceStep {
       );
     }
     if (tipo === "archivo") {
-      html += this.fila("File", `<input type="file" data-archivo accept="audio/*,.wav">`, this.archivo ? `Chosen: ${esc(this.archivo.name)}` : "");
+      // Bug 25, 7-Nov: every repaint empties a native file input, which then said "no file chosen"
+      // beside "Chosen: …". The input is hidden; the window says what it keeps.
+      html += this.fila(
+        "File",
+        `<label class="file"><input type="file" data-archivo accept="audio/*,.wav" hidden>${this.archivo ? "Change…" : "Choose a file…"}</label> ` +
+          `<span>${this.archivo ? esc(this.archivo.name) : "none chosen"}</span>`,
+      );
     }
-    if (tipo === "silencio" && !hayPistas) {
-      html += this.fila("Length", `${this.num("compases", 1, 256, "8", "1")} bars`);
-    } else {
-      html += this.fila("Bars", `${this.num("desdeCompas", 1, 512, "1", "1")} to ${this.num("hastaCompas", 1, 512, tipo === "silencio" ? "8" : "end", "1")}`, tarea === "repaint" ? "The part to redo." : "The result lands at the first of them.");
-    }
+    html += this.fila("Bars", `${this.num("desdeCompas", 1, 512, "1", "1")} to ${this.num("hastaCompas", 1, 512, "end", "1")}`, tarea === "repaint" ? "The part to redo." : "The result lands at the first of them.");
     return html;
   }
 
@@ -397,8 +410,8 @@ export class VentanaAceStep {
     const caption = this.fila(
       "Caption",
       `${areaDeTexto('name="prompt"', 3, this.v.prompt ?? "")}<small data-cuenta>${(this.v.prompt ?? "").length}/512</small>`,
-      "Sent as you write it. Negations seem to attract what they deny: “no bass” primed a bass on 5-Nov." +
-        (this.pestana === "track" ? " Write it in English: in one test it changed the sound more than the same idea in Spanish." : ""),
+      // Evidence: "no bass" primed a bass (5-Nov); English moved the timbre more than Spanish (7-Nov, one pair).
+      "Sent as you write it. Write it in English and say what you want: negations tend to bring what they deny.",
     );
     const espera = (tarea: Tarea): string => `<p class="ace-nota">${esc(EXPECTATIVAS[tarea])}</p>`;
     const letra = (ayuda: string): string => this.fila("Lyrics", areaDeTexto('name="letra"', 5, this.v.letra ?? ""), ayuda);
@@ -416,28 +429,17 @@ export class VentanaAceStep {
     }
     if (this.pestana === "track") {
       const tarea = this.tareaDelFormulario();
-      const modo = this.vacio
-        ? ""
-        : this.fila(
-            "What",
-            `<label class="ace-opcion"><input type="radio" name="modoPista" value="lego"${tarea === "lego" ? " checked" : ""}> One new instrument</label>
-             <label class="ace-opcion"><input type="radio" name="modoPista" value="complete"${tarea === "complete" ? " checked" : ""}> Accompaniment for a track</label>`,
-            tarea === "complete" ? "complete: the result is one track with all those instruments together." : "",
-          );
-      const instrumento =
-        tarea === "lego"
-          ? this.fila("Instrument", this.selector("instrumento", PISTAS_MODELO.map((p): [string, string] => [p, p]), this.v.instrumento ?? "drums"), "One track per take.")
-          : this.fila(
-              "Instruments",
-              `<div class="ace-lista">${PISTAS_MODELO.map((p) => `<label class="ace-opcion"><input type="checkbox" data-acomp="${p}"${this.acompanamiento.has(p) ? " checked" : ""}> ${p}</label>`).join("")}</div>`,
-              "None: the model chooses.",
-            );
+      const instrumento = this.fila(
+        "Instruments",
+        `<div class="ace-lista">${PISTAS_MODELO.map((p) => `<label class="ace-opcion"><input type="checkbox" data-acomp="${p}"${this.acompanamiento.has(p) ? " checked" : ""}> ${p}</label>`).join("")}</div>`,
+        "The result is one track with all of them together. None: the model chooses.",
+      );
       return (
         espera(tarea) +
-        nombre + modo + instrumento + caption +
+        nombre + instrumento + caption +
         letra("Only if it sings. Empty: [Instrumental] is sent.") +
         idioma +
-        this.htmlFuente(tarea, tarea === "lego") +
+        this.htmlFuente(tarea) +
         this.htmlComun(tarea, { requiereTempo: this.vacio })
       );
     }
@@ -454,19 +456,21 @@ export class VentanaAceStep {
       espera(tarea) +
       (tarea === "extract" ? this.fila("Instrument", this.selector("instrumento", PISTAS_MODELO.map((p): [string, string] => [p, p]), this.v.instrumento ?? "vocals")) : caption) +
       (tarea.startsWith("cover") ? this.fila("Strength", this.num("fuerza", 0, 1, "1"), "1 follows the source, 0.2 keeps only its style.") : "") +
-      letra(tarea === "extract" ? (this.v.instrumento === "drums" ? "Empty: [Instrumental] is sent." : "Empty: Review shows what is sent for this instrument.") : "A sung cover needs its lyrics: without them the voice went missing on 5-Nov. Empty: [Instrumental].") +
+      letra(tarea === "extract" ? (this.v.instrumento === "drums" ? "Empty: [Instrumental] is sent." : "Empty: Review shows what is sent for this instrument.") : "A sung cover needs its lyrics: without them the voice is usually lost. Empty: [Instrumental].") /* evidence: 5-Nov test 4 */ +
       idioma +
-      this.htmlFuente(tarea, false) +
+      this.htmlFuente(tarea) +
       this.htmlComun(tarea, { requiereTempo: false })
     );
   }
 
   private htmlTomas(): string {
-    if (this.tomas.length === 0) return "";
-    const opciones = this.tomas.map((t, i) => `<option value="${i}">${esc(t.nombre)} · ${esc(String(t.receta.parametros.tarea ?? ""))} · ${esc(String(t.receta.parametros.modelo ?? ""))}</option>`).join("");
-    return `<details class="ace-tomas"><summary>Takes of this project (${this.tomas.length})</summary>
+    // Every take still counts for the names in use (nombresOcupados); only the offered tasks can be repeated.
+    const repetibles = this.tomas.map((t, i) => [t, i] as const).filter(([t]) => OFRECIDA(t.receta.parametros.tarea) && !t.receta.parametros.referencia);
+    if (repetibles.length === 0) return "";
+    const opciones = repetibles.map(([t, i]) => `<option value="${i}">${esc(t.nombre)} · ${esc(String(t.receta.parametros.tarea ?? ""))} · ${esc(String(t.receta.parametros.modelo ?? ""))}</option>`).join("");
+    return `<details class="ace-tomas"><summary>Takes of this project (${repetibles.length})</summary>
       <div class="ace-fila"><label>Take</label><div><select data-toma>${opciones}</select>
-      <button type="button" data-accion="repetir" title="Same recipe, same seed as its first take. Measured on 7-Nov: identical audio on the same machine, for lego with xl-base. Other models and other machines have not been measured.">Repeat</button>
+      <button type="button" data-accion="repetir" title="Same recipe, same seed as its first take. On the same machine it gives the same or nearly the same audio.">Repeat</button>
       <button type="button" data-accion="nueva-semilla">New seed</button></div></div></details>`;
   }
 
@@ -506,7 +510,7 @@ export class VentanaAceStep {
         ${c.pista ? this.fila("instrument", t("pista", p.pista)) : ""}
         ${c.duracion ? this.fila("duration (s)", n("duracion", p.duracion)) : ""}
         ${c.fuerza ? this.fila("cover strength", n("fuerza", p.fuerza)) : ""}
-        ${c.rango ? this.fila("range (s)", `${n("desde", p.desde)} to ${n("hasta", p.hasta)}`, p.tarea === "lego" ? "Empty: the whole source. With a range, on 5-Nov the rest came back as a copy of the source." : "") : ""}
+        ${c.rango ? this.fila("range (s)", `${n("desde", p.desde)} to ${n("hasta", p.hasta)}`) : ""}
         ${this.fila("bpm", n("bpm", p.bpm))}
         ${this.fila("key", t("tonalidad", p.tonalidad))}
         ${this.fila("time", t("compas", p.compas))}
@@ -515,7 +519,7 @@ export class VentanaAceStep {
         ${this.fila("steps", n("pasos", p.pasos))}
         ${this.fila("guidance", n("guia", p.guia), "The handler forces 1.0 on turbo.")}
         ${this.fila("shift", n("shift", p.shift))}
-        ${c.lm ? this.fila("LM", s("lm", [...LMS], p.lm), "ACE-Step's own LM. It has always been on here; “none” has not been run yet.") : ""}
+        ${c.lm ? this.fila("LM", s("lm", [...LMS], p.lm), "ACE-Step's own language model: it plans the song from the caption. “none” skips it.") : ""}
         ${this.fila("normalize", `<label class="ace-opcion"><input type="checkbox" data-param="normalizar" data-tipo="booleano"${p.normalizar ? " checked" : ""}> to -1 dBFS</label>`)}
         ${this.fila("instruction", t("instruccion", p.instruccion))}
       </div>
@@ -533,7 +537,8 @@ export class VentanaAceStep {
 
   /** Editable while the source is this window's; a repeat shows what its recipe carried. */
   private htmlMargen(tarea: Tarea): string {
-    const ayuda = "Bars of silence sent after the last asked bar so the take has room to end; the clip is cut to the asked bars, the WAV keeps them all. Measured 7-Nov: 8 asked bars stopped sounding at 6.2-7.1.";
+    // Evidence (7-Nov): 8 asked bars stopped sounding at 6.2-7.1 without margin.
+    const ayuda = "Bars of silence sent after the last asked bar so the take has room to end; without them it tends to stop early. The clip is cut to the asked bars; the WAV keeps them all.";
     if (this.cargada) {
       const e = this.cargada.receta.entrega;
       return e?.margen ? this.fila("margin (bars)", `<code>${e.margen}, clip ${e.compases ?? "?"} bars</code>`, "From the repeated take's recipe.") : "";
@@ -570,7 +575,7 @@ export class VentanaAceStep {
     if (!zona || !error || !boton) return;
     const est = estimar(p, { encendida: e?.activo === true, precioHora: e?.precio_hora ?? null }, this.cargada ? 0 : (this.fuente?.bytes ?? 0));
     const rate = e?.configurado ? `${e.tipo} on ${e.proveedor}, ${e.precio_hora} $/h` : "no GPU configured";
-    zona.textContent = `Run on: ${rate} · Estimated ~${formatoDuracion(est.segundos)}${est.coste === null ? "" : `, ~${est.coste.toFixed(2)} $`} (${est.detalle.join(", ")}). Measured on an A10 on 4-5 Nov: a guide, not a promise. The machine stays on after the run until you press Off.`;
+    zona.textContent = `Run on: ${rate} · Estimated ~${formatoDuracion(est.segundos)}${est.coste === null ? "" : `, ~${est.coste.toFixed(2)} $`} (${est.detalle.join(", ")}). Based on runs on an A10: a guide, not a promise. The machine stays on after the run until you press Off.`;
     let motivo = validarParametros(p);
     if (!motivo && !e?.configurado) motivo = `The GPU is not configured. Missing in Settings: ${(e?.faltan ?? ["its keys"]).join(", ")}.`;
     const ajustes = this.dialogo.querySelector<HTMLButtonElement>('[data-accion="ajustes"]');
@@ -753,12 +758,12 @@ export class VentanaAceStep {
       return;
     }
     const p = this.a.proyecto();
-    const validos = [...(tarea === "lego" ? ["silencio"] : []), ...(p && p.tracks.length > 0 ? ["pistas"] : []), "archivo"];
+    // Silence was lego's context only; it went with lego (7-Nov evening).
+    const validos = [...(p && p.tracks.length > 0 ? ["pistas"] : []), "archivo"];
     const tipo = this.tipoFuente(validos);
     const desdeCompas = numero(this.v.desdeCompas) ?? 1;
     const hastaCompas = numero(this.v.hastaCompas);
     if (hastaCompas !== null && hastaCompas < desdeCompas) throw new Error("The last bar comes before the first.");
-    if (this.vacio && numero(this.v.bpm) === null && tipo === "silencio") throw new Error("This project has no tracks: give the BPM, which also sets the project's tempo.");
     const repaint = tarea === "repaint";
     if (repaint && hastaCompas === null) throw new Error("Repaint needs the last bar of the part to redo.");
     // A file is sent as it is: no margin is added to it.
@@ -773,24 +778,6 @@ export class VentanaAceStep {
     const inicioCompas = repaint ? 1 : desdeCompas;
     const textoMargen = margen > 0 ? ` + ${margen} bars of margin, cut on delivery` : "";
 
-    if (tipo === "silencio") {
-      const compases = p && p.tracks.length > 0 ? (hastaCompas ?? desdeCompas + 7) - desdeCompas + 1 : (numero(this.v.compases) ?? 8);
-      const segundos = Math.round((compases + margen) * compas * 1000) / 1000;
-      this.fuente = {
-        clave,
-        audio: null,
-        silencio: segundos,
-        descripcion: `Silence, ${compases} bars${textoMargen} = ${segundos} s, created on the GPU (nothing to upload)`,
-        bytes: 0,
-        inicioCompas: p && p.tracks.length > 0 ? desdeCompas : 1,
-        carpeta: await this.carpetaDestino(nombre),
-        ...rango,
-        compases: margen > 0 ? compases : null,
-        margen,
-        margenEditable: conMargen(tarea),
-      };
-      return;
-    }
     if (tipo === "pistas") {
       if (this.pistas.size === 0) throw new Error("Choose the tracks to send.");
       // "To the end" = the last bar the chosen tracks' clips reach, not the render's length (bug 24).
@@ -887,7 +874,12 @@ export class VentanaAceStep {
       const res = await fetch("/api/gpu/ejecutar", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...cabeceraDeProyecto(carpeta) },
-        body: JSON.stringify({ script: "generar_audio.py", nombre: p.nombre, receta, entradas: p.audio && !p.silencio ? [p.audio] : [] }),
+        body: JSON.stringify({
+          script: "generar_audio.py",
+          nombre: p.nombre,
+          receta,
+          entradas: p.audio && !p.silencio ? [p.audio] : [],
+        }),
         signal: control.signal,
       });
       if (!res.ok || !res.body) {

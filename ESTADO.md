@@ -1,4 +1,4 @@
-# STATUS — 7-Nov-2026 (afternoon)
+# STATUS — 7-Nov-2026 (evening)
 
 ## START HERE
 
@@ -6,30 +6,103 @@ Carlos, 7-Nov: **"hay que evitar tener que pasar de nuevo por dónde ya hemos pa
 "What ACE-Step can and cannot do" below: it holds every verdict by ear so far. When a new verdict or conclusion arrives, write it there
 in the same session, not at the end.
 
-Where we are:
-- The song in progress is project **`bateria-1`** (170 BPM, D minor): `bateria-1` (drums, kept), `bajo-1` ("xilófono sintetizado") and
-  `bajo-1-2` ("mejor pero no es hardcore punk"). Both basses have 9-bar clips from bug 24 (fixed since; shorten them by hand or leave them).
-  Project `ace-step` (named "toma") is the 7-Nov morning song, kept as it is.
+**7-Nov evening, in short (committed at his request):**
+- **Removed from the window:** lego ("lo quitamos de la app": not steerable) and the Reference field (it failed in lego and in cover).
+- **Works:** text2music with a detailed English caption (project `vein`: "están muy bien").
+- **Half:** extract (it pulls what stands out in the mix); cover (keeps the song and sounds good, but ignored "dirtier").
+- **Fixed:** bugs 25 (the file picker looked empty) and 26 (a reload now reopens the last project).
+- **Texts:** the help texts no longer carry our test dates or anecdotes. That rule is kept in memory.
+- **Projects:** he deleted the older ones; `vein` is the current one. `vein-cover-1` is a stray project from bug 26, his to delete.
+- **Still to do:**
+  - Feature noted but not designed: build a caption from web descriptions of a known song.
+  - Proposed, not approved: a dedicated stem separator such as Demucs.
+- **GPU:** on since 19:29, unless he has pressed Off since.
+
+Where we were before (7-Nov morning and afternoon, partly superseded above):
+- Song project **`bateria-1`**, now deleted: drums kept; basses `bajo-1` ("xilófono sintetizado") and `bajo-1-2` ("mejor pero no es
+  hardcore punk"). Project `ace-step` ("toma"), the morning song.
 - Built and checked on 7-Nov: bar margin (heard: "llega hasta el 8 inclusive"), instruction as upstream, context starts on Tracks,
   bugs 15, 16, 22, 23, 24 fixed (detail in the dated section below and in `BUGS.md`). typecheck and 177 unit tests green. Committed in
   `8996a73` (7-Nov afternoon, at his request; local only).
-- GPU: off since ~11:25 on 7-Nov (he pressed Off; confirmed "apagada").
+- GPU: off at ~11:25 on 7-Nov; on again from 19:29 for the evening runs.
 - In the window since 7-Nov afternoon (Carlos: "no quiero quejas de usuarios de no sirve"): each tab and task says what it is good for
   and what fails (`EXPECTATIVAS` in `ventana.ts`, one sentence per verdict of the table below: change them together), and Review shows a
   framed **No warranty** notice before Run: free software as is (AGPL-3.0, as in LICENSE, "como todo el software libre"), no result
   guaranteed, the rented GPU bills every run, failed and cancelled ones included, until Off. Seen headless; not a lawyer's text.
-- Lego proposes `acestep-v15-base` by default since 7-Nov (was xl-base by list order). Carlos: "habría que probar más veces, tengo la
-  intuición que funcionan igual": one guitar batch is all the evidence; compare base and xl-base on more takes before calling it.
+- (Superseded: lego was removed from the window that evening.) Lego had proposed `acestep-v15-base` by default.
 
 Next, his choice (nothing decided):
-- **Reference audio** field: the candidate to steer style without words, since the caption does not steer it in lego. Upstream accepts a
-  style reference; not exposed by us; unknown whether it works in lego.
+- **Reference audio** field: the candidate to steer style without words, since the caption does not steer it in lego. Read in upstream
+  `ca1e85f` on 7-Nov (code, not run): `GenerationParams.reference_audio` (a file path), processed for **every** task with no task gate, so
+  it can go together with lego's context (`src_audio`). `io_audio.py process_reference_audio`: to 48 kHz stereo, a silent file fails the
+  whole call, then exactly 30 s are taken: shorter files are looped, and three 10 s pieces are picked with `random.randint` from the
+  front, middle and back thirds (so a file of exactly 30 s is used whole and deterministically: cut it to 30 s on our side). Encoded by
+  the VAE (no separate timbre encoder seen). Docs: "global reference for timbre or style", "mainly controls the acoustic features"
+  (timbre, mixing, performance style), not melody or rhythm (a docs claim). Not read: the DiT forward, so whether lego really uses it is
+  unknown until heard. **REMOVED from the window the same evening.** Carlos: "sí la quitamos", after it failed in lego and in cover (see
+  the verdict table). Takes made with a reference are not offered for Repeat; `generar_audio.py` keeps `--referencia`, and
+  `Parametros.referencia` remains. What had been built:
+  - "Reference" in Track and Transform, but not for extract: any file the browser decodes, MP3 included, plus "from N s".
+  - On Review the browser cuts that 30 s window to a 48 kHz stereo WAV in `entrada/ref-<file>-<N>s.wav` (5.5 MB, ~52 s to upload).
+  - Start editable on Review: it re-cuts, and a cut already made is not uploaded again. A start past the end refuses and Run goes off;
+    under 30 s left, it says ACE-Step loops it; a silent cut is refused.
+  - Saved as `parametros.referencia` and `fuente.referencia` in the recipe, so Repeat keeps it. The script passes `reference_audio`,
+    and the lineage keeps its sha256.
+  - Checked headless on 5181 with the simulated GPU (mono 100 s MP3): every point above held.
+  - **First real run, 7-Nov 19:30, `bajo-ref-1`:**
+    - Recipe: lego bass on base over bateria-1 bars 1-9 + 2 bars of margin, seed 4024297871. Caption "synth pop dark wave",
+      without BPM or key.
+    - Reference: Ghosts Again, a full mix, 0:00-0:30.
+    - Carlos by ear: "una mezcolanza de batería, pad y algo de bajo", not a clean bass.
+    - Measured: 91 % of the energy under 120 Hz, centroid 91 Hz, peak 0.0 dBFS. These numbers could not tell a mix from a bass.
+    - Not separable: the caption also changed, to a genre with no instrument word. Hypothesis: a full-mix reference pulls lego
+      towards a full mix (the docs say it steers "mixing").
+    - **Separated 19:41, measured:** `bass-dark` (with the reference) and `synth-pop-dark-wave` (without it) share the source
+      (sha256 59695bbcaf7c), the seed, the caption and the model.
+      - With the reference: centroid 90 Hz, 91 % of the energy under 120 Hz.
+      - Without it: centroid 4229 Hz, 61 % above 2 kHz.
+      - Correlation between the two: 0.10.
+      - **The reference steers lego hard**: the drum-pad-bass mix came from the full-mix reference, not from the caption.
+      - `bass-dark` against `bajo-ref-1`, same inputs: correlation 0.9955, not byte-identical. With a reference, repeats are near
+        but not exact.
+      - Carlos on `synth-pop-dark-wave`: "es un xilófono". bajo-1 was the same. Lego bass over bateria-1 without a reference gave
+        a xylophone twice, with two different captions.
+      - Next: a bass-only reference. Proposed: extract bass from the 30 s Ghosts Again cut (extract on bass never tried), then
+        use it as the reference. The other way: a CC bass-only loop.
+      - **Extract on bass works**, `ghosts-bass`, 7-Nov 19:50: base, 50 steps, `[Instrumental]`, 41 s on a GPU already on.
+        - Carlos: "suena al bajo de la canción de ejemplo, está muy bien, aunque la extracción lleva algo de sonido del resto".
+        - Measured: centroid 164 -> 90 Hz, above 2 kHz 1.0 -> 0.0 %, correlation 0.70 with its source (not a copy).
+        - The extract text in the window (EXPECTATIVAS) does not say this yet: change it when he is not using the app.
+      - **`bass-ghostref`, 7-Nov 19:52:** lego with the extracted bass as the reference; source, seed and caption as above.
+        - Measured: centroid 46 Hz, 97 % of the energy under 120 Hz, about -9 dB RMS, sounding without pause through the margin.
+        - Carlos: "se oye fatal, es otro de esos pegotes".
+        - **Verdict: the reference changes lego's output a lot, but does not make a usable bass.** With a full mix it gave a mix;
+          with a bass alone, a block of sub-bass. It seems to copy the sound's colour, not the playing.
+        - Also, these three runs had no key or BPM, over a context of drums only: the bass had no harmony to follow.
+        - Do not retry lego plus reference for bass.
+        - Proposed instead, not tried: text2music for the whole punk song (170 BPM, D minor), then extract its bass and
+          drums. Both tasks were judged good.
+  - Repeat cannot add a reference to a take that had none. So the first real test is `bajo-1-2` rebuilt from the form, adding only
+    the reference. Its values: Track tab, One new instrument, bass, base, the same caption, D minor, 170 BPM, Tracks with
+    bateria-1 only, bars 1 to 9 (its recipe asked 9 bars), margin 2, seed 4024297871. Then compare it by ear with `bajo-1-2`.
 - Keep building `bateria-1` with lego on `acestep-v15-base`, English caption with positive words, 2-3 takes per track.
 - Proposed earlier, not tried: he writes the notes (MIDI), the app renders them and `cover` dresses each track ("Direction for the song").
   Gap: the GUI cannot create an empty MIDI track.
 - Proposals waiting for his yes (do not build without it): lower a multi-track source instead of clipping (bug 21), flag a near-silent
   take, refuse a taken name on Review, keep form values across reloads, reopen the last project on load. His own requests, "ya lo
   veremos": ask whether to delete the file when a track is deleted; Open and Audio starting in the project folder.
+- **Feature he asked to note, 7-Nov evening (not designed, not built): "buscar por internet descripciones de canciones que los
+  usuarios puedan escoger ya conocidas para usar de referencia".**
+  - Why: the `vein` caption came from an AI that searched the web for descriptions of the style, and it worked ("muy bien").
+  - Idea: the person picks a known song, the app gathers what is published about it (reviews, interviews, production notes,
+    BPM/key databases such as Tunebat), and turns it into a caption under 512 chars. English, positive words only, tempo and key
+    in their own fields.
+  - Open points to settle with him before designing:
+    - It needs a search API and probably an LLM, keys kept server-side. Carlos, 7-Nov: the "no LLM" of 6-Nov meant the ACE-Step
+      path needs none, not that the app never has one.
+    - What is gathered must be shown and editable before anything is sent, as Review does now.
+    - Gathered descriptions can be wrong or invented: show the sources.
+    - Only text descriptions travel. Song audio is not downloaded: the YouTube decision of 7-Nov.
 - Unresolved: twice the Review instruction edit did not reach the recipe (`guitarra-f`, `guitarra-g`); on 7-Nov afternoon his edit
   ("Generate the DRUMS track") did reach it. Ask him whether the box showed the change those two times.
 - Lyrics for a vocal track: he writes them or asks for a draft he edits.
@@ -62,7 +135,7 @@ What was built and measured (headless Chrome on :5181, `MIUZIKA_GPU=simulado`: p
   `track_name.upper()`, complete joins with " | "). The simulated script received "Generate the GUITAR track based on the audio context:".
 - **Context (3)**: with tracks, the form starts on Tracks with none ticked (measured: 0 of 1), so Review stops at "Choose the tracks to send";
   empty project starts on Silence.
-typecheck and 175 unit tests green. Not committed.
+typecheck and 175 unit tests green. Committed in 8996a73.
 
 ## Why this project exists
 
@@ -214,11 +287,15 @@ file from "First real run" (7-Nov). Update this table when a new verdict arrives
 | complete (voice -> band) | PASS, "está muy bien" | xl-base | 5-Nov test 7 |
 | cover 0.6 with lyrics | PASS: turbo "hay voz… piano con menos notas"; sft "muy industrial, me encanta" (preferred). Without lyrics: no voice | xl-turbo, xl-sft | 5-Nov tests 4, 4b, 8 |
 | extract vocals | PASS on the 2nd try, "se escucha sólo la voz" | xl-base | 5-Nov test 2b |
+| extract bass from `vein-1`, bars 1-24 | NOT GOOD, but the source is to blame: Carlos, "vein-1 no deja muy claro si hay un bajo". Measured like the good `ghosts-bass` (highs gone, centroid 286 -> 80 Hz, correlation 0.57). Extract needs a distinct line in the mix. xl-base (the window's default), 95 s | xl-base | 7-Nov 20:22 |
+| cover of `vein-1`, bars 1-24, strength 0.6, caption pushed to "harsher and dirtier" industrial | HALF. Carlos: "suena synth-pop, es chula, pero NO es más industrial y sucia". It keeps the song and sounds good, but the caption's push did not reach the sound, like the style in lego. Seed 7111, 70 s run | xl-sft | 7-Nov 20:41 |
+| cover with reference: `vein-cover-ref`, the `vein-cover-1` recipe plus Ghosts Again 1:24-1:54 | FAIL. Carlos: "un pegote de instrumentos bastante estridente". Same source (sha 09df95507fff) and seed. Measured: 5.5 dB louder, stereo narrowed to the reference's (-5.0 -> -9.1 dB side), correlation 0.61 with the cover without reference. A full-mix reference pulls the mix and makes a jumble, as it did in lego. A first try went to a stray project at 120 BPM without the reference (bug 26) | xl-sft | 7-Nov 20:58 |
+| extract synth / drums from `vein-1`, bars 1-24 | HALF. Carlos: "extract se puede usar pero a medias". Synth: vein-1 has several synths and it pulled the least present one. Drums: the opening came out as something that is not drums, then a kit quite like vein-1's. No vocals heard in vein-1 to extract | base | 7-Nov evening |
 | extract drums | FAIL / partial ("pegote con restos"). A real separator (Demucs or similar) is the honest tool | xl-base | 5-Nov tests 3, 3b |
-| lego over silence or a few tracks | WORKS as an instrument generator: the instrument mostly holds and base fits the song ("pegan muy bien con el resto"); with the margin it reaches bar 8 | base, xl-base | 7-Nov |
+| lego over silence or a few tracks | NOT STEERABLE. Carlos, 7-Nov evening: "todo lo que ha salido bien, no siguió casi el caption". The takes he kept were what the model chose, not what was asked. The instrument holds sometimes; bass over bateria-1 failed 5 of 5 (xylophone x2, pad mix, sub block, "not punk"). The reference changes it a lot without making it usable. Best case: drums over silence | base, xl-base | 7-Nov |
 | lego over a full mix | FAIL: strings came back as a track with voice and everything | xl-base | 5-Nov |
 | lego / repaint with a range | the rest came back as a copy of the source | — | 5-Nov |
-| text2music | good full songs ("muy industrial, muy bueno"), but not for one instrument: the LM completes a song, negations prime what they deny | xl-turbo + LM | 2-Nov, 5-Nov evening |
+| text2music | good full songs ("muy industrial, muy bueno"), but not for one instrument: the LM completes a song, negations prime what they deny. **7-Nov 20:07, project `vein`:** a detailed English caption (483 chars: instruments, drums, production, no negations), 92 BPM, D minor, 4/4, 180 s, 2 takes. Carlos: "están muy bien, son buenos ejemplos para el prompt que le dimos". The LM kept the caption, BPM, key and duration. Seeds 782922162/3, 220 s run | xl-turbo + LM 1.7B | 2-Nov, 5-Nov evening, 7-Nov |
 | repaint | range control works; heard "igual, algo más", level then falsified by our -6 dB master (fixed) | xl-turbo | 5-Nov test 5 |
 
 **The weak point: style in lego.** The instrument mostly comes out, the caption's style almost never: 16 guitars on 7-Nov, none followed
@@ -226,10 +303,17 @@ it; on 7-Nov afternoon neither drums nor bass sounded "punk hardcore". Sometimes
 or harp) and sometimes a near-silent take (-57 dBFS). One counter-sign: same seed, an English caption moved the bass timbre a lot (better, not
 punk), one pair only. Rough share of lego takes he kept: between one in three and two in three (a count over his verdicts, not a measure).
 
-**Not tested:** repaint judged properly by ear, `cover-nofsq`, text2music without the LM, the **reference audio** (the next candidate to
-steer style without words; unknown whether it works in lego).
+**Not tested:** repaint judged properly by ear, `cover-nofsq`, text2music without the LM.
+**Tested 7-Nov evening:** the reference audio in lego. It steers the sound hard but not usefully (see "Built 7-Nov evening" above).
+**Extract bass: PASS** ("suena al bajo de la canción", a little bleed), base, 7-Nov.
 
-**Working method that follows (proposed to Carlos 7-Nov, not a decision):** lego on `acestep-v15-base`, first track over silence, each next
+**Dropped 7-Nov evening. Carlos: "lo quitamos de la app". Done, committed the same evening:**
+- Track is complete only. Silence went with lego.
+- Repeat lists no lego takes, though every take still counts for the names in use.
+- The script still runs lego, so old lineages stay readable.
+- The extract text now says that voice and bass are good.
+- Extract's default instrument was drums when untouched, while the form showed vocals; now it is vocals.
+- Checked headless. Was proposed: lego on `acestep-v15-base`, first track over silence, each next
 one over a few finished tracks, English caption with positive words only, 2-3 takes per track to keep one.
 
 ## Then: validate ACE-Step

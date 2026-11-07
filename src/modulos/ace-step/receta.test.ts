@@ -24,7 +24,16 @@ const cancion = (cambios: Partial<Parametros> = {}): Parametros => ({
   nombre: "toma",
   audio: null,
   silencio: null,
+  referencia: null,
   ...cambios,
+});
+
+test("the reference travels only for the tasks that offer it", () => {
+  const lego = cancion({ tarea: "lego", modelo: "acestep-v15-base", pista: "bass", silencio: 30, duracion: null, referencia: "entrada/ref.wav" });
+  assert.equal(parametrosParaEnviar(lego).referencia, "entrada/ref.wav");
+  assert.equal(parametrosParaEnviar(cancion({ referencia: "entrada/ref.wav" })).referencia, undefined);
+  assert.equal(parametrosParaEnviar({ ...lego, tarea: "extract", modelo: "acestep-v15-base" }).referencia, undefined);
+  assert.equal(parametrosParaEnviar({ ...lego, referencia: null }).referencia, undefined);
 });
 
 test("the text travels untouched: spaces, accents, quotes and line breaks", () => {

@@ -76,6 +76,11 @@ export interface Parametros {
   audio: string | null;
   /** ...or this many seconds of silence, created on the instance. */
   silencio: number | null;
+  /**
+   * A WAV in the project folder whose sound to aim for: ACE-Step's `reference_audio`. The window no
+   * longer offers it (removed 7-Nov evening, see ventana.ts); kept so the script and old recipes agree.
+   */
+  referencia: string | null;
 }
 
 /**
@@ -129,8 +134,11 @@ export function valoresDeModelo(tarea: Tarea, modelo: string): Pick<Parametros, 
 }
 
 /** Which Review fields apply to a task: the others are not shown and not sent. */
-export function camposDe(tarea: Tarea): { duracion: boolean; fuerza: boolean; rango: boolean; pista: boolean; fuente: boolean; lm: boolean } {
+export function camposDe(tarea: Tarea): { duracion: boolean; fuerza: boolean; rango: boolean; pista: boolean; fuente: boolean; lm: boolean; referencia: boolean } {
   return {
+    // Upstream takes it for every task; offered where a style to aim for makes sense (Carlos, 7-Nov:
+    // the punk bass). Extract pulls out what is already there: a style has nothing to do.
+    referencia: tarea !== "text2music" && tarea !== "extract",
     duracion: tarea === "text2music",
     fuerza: tarea === "cover" || tarea === "cover-nofsq",
     rango: tarea === "repaint" || tarea === "lego",
@@ -203,6 +211,7 @@ export function parametrosParaEnviar(p: Parametros): Record<string, unknown> {
   if (campos.pista && p.pista) salida.pista = p.pista;
   if (campos.fuente && p.silencio) salida.silencio = p.silencio;
   else if (campos.fuente && p.audio) salida.audio = p.audio;
+  if (campos.referencia && p.referencia) salida.referencia = p.referencia;
   return salida;
 }
 
@@ -235,6 +244,7 @@ export interface Estimacion {
  * per second of audio: turbo 12.5 s / 210 s, base and sft 70 s / 210 s, per batch.
  */
 export function estimar(p: Parametros, gpu: { encendida: boolean; precioHora: number | null }, bytesFuente: number): Estimacion {
+  // bytesFuente counts everything that goes up: source and reference.
   const detalle: string[] = [];
   let segundos = 0;
   const suma = (s: number, texto: string): void => {

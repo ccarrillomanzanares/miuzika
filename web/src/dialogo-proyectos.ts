@@ -17,7 +17,9 @@ function fechaCorta(iso: string): string {
   return fecha.toLocaleString(locale(), { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-export function initDialogoProyectos(d: { sesion: Sesion; avisos: Avisos; avisarFaltan: (faltan: string[]) => void }): void {
+export function initDialogoProyectos(d: { sesion: Sesion; avisos: Avisos; avisarFaltan: (faltan: string[]) => void }): {
+  reabrir(carpeta: string): Promise<void>;
+} {
   const { sesion, avisos } = d;
   const dialogo = $<HTMLDialogElement>("dialogo-proyectos");
   const lista = $("lista-proyectos");
@@ -90,4 +92,19 @@ export function initDialogoProyectos(d: { sesion: Sesion; avisos: Avisos; avisar
   });
   $("proyectos-cerrar").addEventListener("click", () => dialogo.close());
   $("proyectos").addEventListener("click", () => void abrirLista());
+
+  return {
+    /**
+     * Bug 26, 7-Nov: a reload (any edit to web/) left the app empty, and the next dropped WAV made a
+     * new project at 120 BPM: the run `vein-cover-ref` went there. A folder deleted since is skipped.
+     */
+    async reabrir(carpeta: string): Promise<void> {
+      try {
+        const proyecto = (await listarProyectos()).find((p) => p.slug === carpeta && !p.error);
+        if (proyecto) await abrir(proyecto.ruta);
+      } catch {
+        /* without the list the app starts empty, as before */
+      }
+    },
+  };
 }
