@@ -33,7 +33,7 @@ not known to work in lego), to steer the sound without words. Lyrics for a vocal
 
 State at handoff: GPU instance `bec6a1d0be85` (A10, us-east-1) **left on** by his choice: he wants the credits spent ("en un año me los
 quitarán"), do not keep warning about cost (memory `creditos-lambda`). SSH key `~/.ssh/miuzika-lambda`, registered in Lambda and saved in
-Settings; Test connection passes. Nothing is committed: no commit unless he asks. Clock: logs are UTC, Carlos reads local time (UTC+1); give
+Settings; Test connection passes. First commit `1e07535` made 7-Nov at his request (local only, no remote); further commits only when he asks. Clock: logs are UTC, Carlos reads local time (UTC+1); give
 local times.
 
 
@@ -48,7 +48,7 @@ project: first the GUI, then the code that runs ACE-Step on a GPU provider with 
 
 The GUI, separated from the agent: timeline, piano roll, openDAW playback, projects on disk, import (audio, MIDI, project
 files), MP3 export, undo, mute/solo, Space = play/pause and twice = stop. Agent, chat, Models, Sounds, Strudel and Pad
-stayed in miuzika. Local git repository with **no commits and no remote**.
+stayed in miuzika. Local git repository, **no remote**; first commit 7-Nov.
 
 All 14 bugs from the copy are in `BUGS.md`: 11 fixed and verified, 1 in part (long WAVs play without their effects, and the
 Log says so), 2 never reproduced.
