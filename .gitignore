@@ -1,0 +1,11 @@
+node_modules/
+out/
+tmp/
+dist-web/
+*.log
+.env
+.miuzika/
+__pycache__/
+*.pyc
+workspace/proyectos/
+workspace/catalogo/**/*.sf2

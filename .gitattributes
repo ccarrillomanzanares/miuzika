@@ -1,0 +1,10 @@
+# Line endings: LF in the repository for all text. This machine had a mix
+# of CRLF and LF files (tiempo.ts, picos.py...), and any non-Windows tool
+# saw them as "modified" when they were not.
+* text=auto eol=lf
+
+*.wav binary
+*.sf2 binary
+*.mid binary
+*.wasm binary
+*.png binary

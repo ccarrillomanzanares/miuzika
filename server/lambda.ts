@@ -1,0 +1,790 @@
+/**
+ * Run Python on a Lambda Cloud GPU, just like on the local CPU.
+ *
+ * The browser does not talk to the cloud: the key lives in Settings' file (or `.env`) and
+ * only the dev server uses it. The flow is the same as locally —
+ * same script, same arguments, same output — but the process runs on the
+ * instance:
+ *
+ *   1. the `LAMBDA_NOMBRE` instance is powered on (or reused)
+ *   2. the engine and the project scripts are uploaded
+ *   3. it runs with `python3 -u <script>` inside the project folder
+ *   4. the new files are brought back (timestamp based)
+ *
+ * The instance does NOT shut itself down: shutting it down costs one click and starting it again
+ * costs three minutes, so the person decides, not the process.
+ */
+
+import { correrProceso } from "./proceso.ts";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { dentroDe } from "./dentro.ts";
+
+export interface ConfigLambda {
+  apiKey: string;
+  sshKey: string;
+  sshKeyName: string;
+  usuario: string;
+  region: string;
+  tipo: string;
+  nombre: string;
+  precioHora: number;
+}
+
+export interface Instancia {
+  id: string;
+  status: string;
+  ip: string | null;
+  nombre: string;
+  tipo: string;
+  /** When it started billing (ISO). Base for the spend counter. */
+  desde: string | null;
+  /** Last state change (ISO): useful for timing the boot. */
+  cambio: string | null;
+  /** Actual rate for the instance type, in money/hour. */
+  precioHora: number;
+  /** Hours since it started and money accumulated at the rate price. */
+  horas: number;
+  gastado: number;
+}
+
+const BASE = "https://cloud.lambda.ai/api/v1";
+/** Instance folder where workspace/ is replicated. */
+const REMOTO = "miuzika";
+/** Above this, a project file is not uploaded (stems, masters...). */
+const MAX_SUBIDA = 50 * 1024 * 1024;
+
+export function configDesdeEnv(env: Record<string, string>): {
+  cfg: ConfigLambda | null;
+  faltan: string[];
+} {
+  const faltan: string[] = [];
+  const apiKey = (env.LAMBDA_API_KEY ?? "").trim();
+  const sshKey = (env.LAMBDA_SSH_KEY ?? "").trim();
+  if (!apiKey) faltan.push("LAMBDA_API_KEY");
+  if (!sshKey) {
+    faltan.push("LAMBDA_SSH_KEY");
+  } else if (!existsSync(sshKey)) {
+    faltan.push(`LAMBDA_SSH_KEY (does not exist: ${sshKey})`);
+  }
+  if (faltan.length > 0) return { cfg: null, faltan };
+  return {
+    cfg: {
+      apiKey,
+      sshKey,
+      sshKeyName: (env.LAMBDA_SSH_KEY_NAME ?? "aios-agent-rag").trim(),
+      usuario: (env.LAMBDA_SSH_USER ?? "ubuntu").trim() || "ubuntu",
+      region: (env.LAMBDA_REGION ?? "us-east-1").trim(),
+      tipo: (env.LAMBDA_INSTANCE_TYPE ?? "gpu_1x_a10").trim(),
+      nombre: (env.LAMBDA_NOMBRE ?? "miuzika-gpu").trim(),
+      precioHora: Number(env.LAMBDA_PRECIO_HORA ?? 1.29) || 1.29,
+    },
+    faltan: [],
+  };
+}
+
+// ------------------------------------------------------------------ API REST
+
+async function api(
+  cfg: ConfigLambda,
+  ruta: string,
+  cuerpo?: unknown,
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${BASE}/${ruta}`, {
+    method: cuerpo === undefined ? "GET" : "POST",
+    headers: {
+      Authorization: `Bearer ${cfg.apiKey}`,
+      // Cloudflare answers 1010 (and it looks like a 401) to clients without a User-Agent.
+      "User-Agent": "miuzika/1.0 (curl/8.0)",
+      ...(cuerpo === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
+    signal: AbortSignal.timeout(40000),
+  });
+  const texto = await res.text();
+  if (!res.ok) throw new Error(`Lambda ${ruta}: HTTP ${res.status} ${texto.slice(0, 200)}`);
+  return texto === "" ? {} : (JSON.parse(texto) as Record<string, unknown>);
+}
+
+/** Rates by instance type, as published by Lambda (cached for 10 min). */
+const preciosTipo = new Map<string, number>();
+let preciosCuando = 0;
+
+async function preciosDeTipos(cfg: ConfigLambda): Promise<Map<string, number>> {
+  if (preciosTipo.size > 0 && Date.now() - preciosCuando < 10 * 60_000) return preciosTipo;
+  try {
+    const datos = (await api(cfg, "instance-types")) as { data?: unknown };
+    preciosTipo.clear();
+    // Lambda returns an object indexed by name (not a list): each value
+    // carries the type inside `instance_type`. Both shapes are accepted.
+    const bruto = datos.data;
+    const lista: Record<string, unknown>[] = Array.isArray(bruto)
+      ? (bruto as Record<string, unknown>[])
+      : Object.values((bruto ?? {}) as Record<string, unknown>).map((valor) => {
+          const dentro = (valor as { instance_type?: unknown }).instance_type;
+          return (dentro ?? valor) as Record<string, unknown>;
+        });
+    for (const tipo of lista) {
+      const nombre = String(tipo.name ?? "");
+      const specs = (tipo.specs ?? {}) as { price_cents_per_hour?: number };
+      const centimos = tipo.price_cents_per_hour ?? specs.price_cents_per_hour;
+      if (nombre !== "" && typeof centimos === "number" && centimos > 0) {
+        preciosTipo.set(nombre, centimos / 100);
+      }
+    }
+    preciosCuando = Date.now();
+  } catch {
+    /* no published rates: the .env price is used as an estimate */
+  }
+  return preciosTipo;
+}
+
+export async function instancias(cfg: ConfigLambda): Promise<Instancia[]> {
+  const [datos, tarifas] = await Promise.all([
+    api(cfg, "instances") as Promise<{ data?: Record<string, unknown>[] }>,
+    preciosDeTipos(cfg).catch(() => new Map<string, number>()),
+  ]);
+  return (datos.data ?? []).map((i) => {
+    const tipo = (i.instance_type ?? {}) as { name?: string; price_cents_per_hour?: number };
+    // first_healthy is when the machine started being alive; billing starts
+    // from there. If it has not booted yet, count from now (0 hours).
+    const desde = typeof i.first_healthy === "string" ? i.first_healthy : null;
+    const horas = desde ? Math.max(0, (Date.now() - Date.parse(desde)) / 3_600_000) : 0;
+    // REAL price: the one the API gives for that type; if it does not provide it, the table of
+    // published rates; and only if there is nothing, the .env one (estimate).
+    const nombreTipo = String(tipo.name ?? "");
+    const centimos = typeof tipo.price_cents_per_hour === "number" ? tipo.price_cents_per_hour : null;
+    const precio = centimos !== null ? centimos / 100 : (tarifas.get(nombreTipo) ?? cfg.precioHora);
+    return {
+      id: String(i.id ?? ""),
+      status: String(i.status ?? ""),
+      ip: typeof i.ip === "string" ? i.ip : null,
+      nombre: String(i.name ?? ""),
+      tipo: nombreTipo,
+      desde,
+      cambio: typeof i.last_state_change === "string" ? i.last_state_change : null,
+      precioHora: Math.round(precio * 1000) / 1000,
+      horas: Math.round(horas * 1000) / 1000,
+      gastado: Math.round(horas * precio * 100) / 100,
+    };
+  });
+}
+
+/**
+ * Settings' Test connection: only reads, so it starts nothing and costs nothing. The key's name is
+ * checked because a wrong one otherwise shows only when the boot is refused.
+ */
+export async function comprobarConfig(cfg: ConfigLambda): Promise<{ que: string; ok: boolean; detalle: string }[]> {
+  const salida: { que: string; ok: boolean; detalle: string }[] = [];
+  try {
+    const lista = await instancias(cfg);
+    salida.push({ que: "API key", ok: true, detalle: `accepted, ${lista.filter((i) => i.status !== "terminated").length} instance(s) on the account` });
+  } catch (error) {
+    salida.push({ que: "API key", ok: false, detalle: error instanceof Error ? error.message : String(error) });
+    return salida;
+  }
+  salida.push({ que: "SSH key file", ok: true, detalle: "found on this machine" });
+  try {
+    const datos = (await api(cfg, "ssh-keys")) as { data?: { name?: unknown }[] };
+    const nombres = (datos.data ?? []).map((k) => String(k.name ?? ""));
+    salida.push(
+      nombres.includes(cfg.sshKeyName)
+        ? { que: "SSH key name", ok: true, detalle: `“${cfg.sshKeyName}” exists in Lambda` }
+        : { que: "SSH key name", ok: false, detalle: `no key named “${cfg.sshKeyName}” in Lambda. It has: ${nombres.join(", ") || "none"}` },
+    );
+  } catch (error) {
+    salida.push({ que: "SSH key name", ok: false, detalle: error instanceof Error ? error.message : String(error) });
+  }
+  const ssh = await comprobarSsh();
+  salida.push({ que: "ssh program", ok: ssh.ok, detalle: ssh.detalle });
+  return salida;
+}
+
+/** The client went away (Cancel in the app). Thrown so no further step starts. */
+export class Cancelado extends Error {
+  constructor() {
+    super("cancelled by the user");
+    this.name = "Cancelado";
+  }
+}
+
+function comprobarCancelado(senal?: AbortSignal): void {
+  if (senal?.aborted) throw new Cancelado();
+}
+
+/** A pause that ends early, with Cancelado, when the turn is cancelled. */
+const esperar = (ms: number, senal?: AbortSignal): Promise<void> =>
+  new Promise((listo, fallo) => {
+    if (senal?.aborted) {
+      fallo(new Cancelado());
+      return;
+    }
+    const alAbortar = (): void => {
+      clearTimeout(t);
+      fallo(new Cancelado());
+    };
+    const t = setTimeout(() => {
+      senal?.removeEventListener("abort", alAbortar);
+      listo();
+    }, ms);
+    senal?.addEventListener("abort", alAbortar, { once: true });
+  });
+
+/** Powers on the instance or reuses the one already alive with that name. */
+export async function encender(
+  cfg: ConfigLambda,
+  aviso: (texto: string) => void,
+  senal?: AbortSignal,
+): Promise<{ id: string; ip: string; reutilizada: boolean; minutos: number }> {
+  const t0 = Date.now();
+  comprobarCancelado(senal);
+  const vivas = (await instancias(cfg)).filter(
+    (i) => i.nombre === cfg.nombre && i.status !== "terminated",
+  );
+  const lista = vivas.find((i) => i.status === "active" && i.ip);
+  if (lista?.ip) {
+    aviso(`reusing instance ${lista.id.slice(0, 12)} (${lista.ip})`);
+    return { id: lista.id, ip: lista.ip, reutilizada: true, minutos: 0 };
+  }
+
+  let id = vivas[0]?.id ?? "";
+  // Last check before the call that starts billing: a turn cancelled while the
+  // instance list was loading must not launch a machine.
+  comprobarCancelado(senal);
+  if (id === "") {
+    aviso(`launching ${cfg.tipo} in ${cfg.region}`);
+    const resp = (await api(cfg, "instance-operations/launch", {
+      region_name: cfg.region,
+      instance_type_name: cfg.tipo,
+      ssh_key_names: [cfg.sshKeyName],
+      file_system_names: [],
+      name: cfg.nombre,
+      quantity: 1,
+    })) as { data?: { instance_ids?: string[] } };
+    id = resp.data?.instance_ids?.[0] ?? "";
+    if (id === "") throw new Error("Lambda returned no instance");
+  }
+
+  for (let intento = 0; intento < 90; intento++) {
+    // Cancel stops the 9-minute wait here (3-Nov review, bug 3). An instance already
+    // launched keeps booting and billing: shutting it down is the person's call.
+    await esperar(6000, senal);
+    const mia = (await instancias(cfg)).find((i) => i.id === id);
+    if (mia?.status === "active" && mia.ip) {
+      aviso(`active in ${Math.round((Date.now() - t0) / 1000)} s: ${mia.ip}`);
+      return {
+        id,
+        ip: mia.ip,
+        reutilizada: false,
+        minutos: Math.round((Date.now() - t0) / 6000) / 10,
+      };
+    }
+    if (mia === undefined) throw new Error(`instance ${id} disappeared while booting`);
+    if (intento % 5 === 4) aviso(`waiting... ${mia.status} (${Math.round((Date.now() - t0) / 1000)} s)`);
+  }
+  throw new Error("the instance did not reach 'active' within 9 minutes");
+}
+
+/**
+ * Instances the app's off button may shut down: only the ones named like ours
+ * (LAMBDA_NOMBRE) that are on or starting. The account is shared with other projects
+ * (the SSH key is "aios-agent-rag"), and /api/gpu/estado lists every live instance in
+ * it: the button must never terminate someone else's machine (3-Nov).
+ */
+export function apagablesDe(lista: Instancia[], nombre: string): Instancia[] {
+  const vivos = new Set(["active", "booting", "loading", "unhealthy"]);
+  return lista.filter((i) => i.nombre === nombre && vivos.has(i.status));
+}
+
+/** Shuts down (terminates) the instance and confirms it disappears from the account. */
+export async function apagar(
+  cfg: ConfigLambda,
+  id: string,
+): Promise<{ apagada: boolean; segundos: number }> {
+  const t0 = Date.now();
+  await api(cfg, "instance-operations/terminate", { instance_ids: [id] });
+  for (let intento = 0; intento < 40; intento++) {
+    await esperar(5000);
+    const queda = (await instancias(cfg)).some((i) => i.id === id);
+    if (!queda) return { apagada: true, segundos: Math.round((Date.now() - t0) / 1000) };
+  }
+  return { apagada: false, segundos: Math.round((Date.now() - t0) / 1000) };
+}
+
+// ------------------------------------------------------------------ ssh / scp
+
+async function correrComando(
+  comando: string,
+  args: string[],
+  segundos: number,
+  senal?: AbortSignal,
+): Promise<{ codigo: number | null; salida: string; errores: string }> {
+  const r = await correrProceso(comando, args, { segundos, senal, windowsHide: true });
+  return { codigo: r.codigo, salida: r.salida, errores: r.errores };
+}
+
+const opcionesSsh = (cfg: ConfigLambda): string[] => [
+  "-i",
+  cfg.sshKey,
+  "-o",
+  "StrictHostKeyChecking=accept-new",
+  "-o",
+  "ConnectTimeout=15",
+  "-o",
+  "ServerAliveInterval=15",
+  "-o",
+  "LogLevel=ERROR",
+];
+
+/**
+ * A short control command (mkdir, touch, find), capped at 20 s and retried once. Measured 5-Nov:
+ * these hung 3 of 16 runs, authenticated on the server and never returning; a probe seconds later
+ * answered in 1.7 s, and 75 runs of the same command from Node did not hang, so the cause is still
+ * unknown. A hang used to cost 60 s and the whole run; now it costs 20 s.
+ */
+export async function sshControl(
+  cfg: ConfigLambda,
+  ip: string,
+  comando: string,
+  senal?: AbortSignal,
+): Promise<{ codigo: number | null; salida: string; errores: string }> {
+  const r = await ssh(cfg, ip, comando, 20, senal);
+  if (r.codigo === 0 || senal?.aborted) return r;
+  return ssh(cfg, ip, comando, 20, senal);
+}
+
+/**
+ * What stops a script on the instance. generar_audio.py re-executes itself with its absolute path,
+ * so the "../../gpu/generar_audio.py" the run was launched with no longer matches it and pkill
+ * found nothing: found 6-Nov reading the code, never exercised (test 9b did not reach the GPU
+ * phase). The brackets keep pkill from matching the remote shell that runs it.
+ */
+export function patronDeScript(script: string): string {
+  const base = script.split("/").pop() ?? script;
+  return `[${base.charAt(0)}]${base.slice(1)}`;
+}
+
+export function ssh(
+  cfg: ConfigLambda,
+  ip: string,
+  comando: string,
+  segundos = 300,
+  senal?: AbortSignal,
+): Promise<{ codigo: number | null; salida: string; errores: string }> {
+  return correrComando("ssh", [...opcionesSsh(cfg), `${cfg.usuario}@${ip}`, comando], segundos, senal);
+}
+
+function scp(
+  cfg: ConfigLambda,
+  ip: string,
+  locales: string[],
+  destinoRemoto: string,
+  segundos = 900,
+  senal?: AbortSignal,
+): Promise<{ codigo: number | null; salida: string; errores: string }> {
+  return correrComando(
+    "scp",
+    ["-q", "-r", "-i", cfg.sshKey, "-o", "StrictHostKeyChecking=accept-new", "-o", "LogLevel=ERROR",
+      ...locales, `${cfg.usuario}@${ip}:${destinoRemoto}`],
+    segundos,
+    senal,
+  );
+}
+
+/** Are ssh and scp on the server's PATH? (on Windows they come with git-bash) */
+export async function comprobarSsh(): Promise<{ ok: boolean; detalle: string }> {
+  const r = await correrComando("ssh", ["-V"], 15);
+  const texto = (r.errores + r.salida).trim();
+  return { ok: /OpenSSH/i.test(texto), detalle: texto.split("\n")[0] ?? "" };
+}
+
+// ------------------------------------------------------------------ sync
+
+const comillas = (texto: string): string => `'${texto.replace(/'/g, `'\\''`)}'`;
+
+/**
+ * Project folders that `sincronizar` never walks. The GPU scripts read their inputs from
+ * `entradas` (uploaded by `subirEntradas`, whatever the size) and write to generado/; the
+ * rest is the app's own bookkeeping. Measured 5-Nov on still-here: every run re-sent the
+ * whole folder (68 files, ~290 MB of WAVs in entrada/ and generado/) and the upload took
+ * 518 s, against 22 s for 28 files the night before, when no WAV existed yet.
+ */
+const CARPETAS_NO_SINCRONIZADAS = new Set(["salida", "__pycache__", "entrada", "generado", "versiones", "trayectorias", ".cache"]);
+const EXTENSIONES_AUDIO = /\.(wav|flac|mp3|ogg|aif|aiff|m4a)$/i;
+
+/** Does a project file travel with the sync? Path relative to the project folder, "/" separated. */
+export function seSincroniza(relativo: string, bytes: number): boolean {
+  const partes = relativo.split("/");
+  if (partes.slice(0, -1).some((c) => CARPETAS_NO_SINCRONIZADAS.has(c))) return false;
+  if (EXTENSIONES_AUDIO.test(partes[partes.length - 1] ?? "")) return false;
+  return bytes <= MAX_SUBIDA;
+}
+
+/** Project files that make sense to upload (scripts and small data). */
+function ficherosDelProyecto(carpetaProyecto: string): string[] {
+  const salida: string[] = [];
+  const recorrer = (dir: string): void => {
+    if (!existsSync(dir)) return;
+    for (const entrada of readdirSync(dir, { withFileTypes: true })) {
+      const completo = join(dir, entrada.name);
+      const relativo = relative(carpetaProyecto, completo).split(sep).join("/");
+      if (entrada.isDirectory()) {
+        if (CARPETAS_NO_SINCRONIZADAS.has(entrada.name)) continue;
+        recorrer(completo);
+      } else if (seSincroniza(relativo, statSync(completo).size)) {
+        salida.push(completo);
+      }
+    }
+  };
+  recorrer(carpetaProyecto);
+  return salida;
+}
+
+const pyDe = (carpeta: string): string[] => {
+  if (!existsSync(carpeta)) return [];
+  return readdirSync(carpeta)
+    .filter((n) => n.endsWith(".py"))
+    .map((n) => join(carpeta, n));
+};
+
+/**
+ * Files a GPU run reads as input (the mix for an ACE-Step cover, a stem for lego...),
+ * uploaded whatever their folder and size. `sincronizar` skips salida/, where exportar
+ * writes the mix, and any file over MAX_SUBIDA: a 16-bit stereo 48 kHz WAV is 192 KB/s,
+ * so the mix of a song over ~4:20 never reached the instance (found 3-Nov while planning
+ * the ACE-Step tasks). Returns where each file goes, relative to the project folder on
+ * the instance, or the reason it is refused (only files inside the project).
+ */
+export function planDeEntradas(
+  carpetaProyecto: string,
+  entradas: string[],
+): { local: string; remoto: string }[] | { error: string } {
+  const raiz = resolve(carpetaProyecto);
+  const plan: { local: string; remoto: string }[] = [];
+  for (const entrada of entradas) {
+    const local = resolve(entrada);
+    if (!dentroDe(raiz, local)) return { error: `${entrada} is not inside the project folder` };
+    const remoto = relative(raiz, local).split(sep).join("/");
+    if (!plan.some((p) => p.remoto === remoto)) plan.push({ local, remoto });
+  }
+  return plan;
+}
+
+async function subirEntradas(
+  cfg: ConfigLambda,
+  ip: string,
+  carpetaProyecto: string,
+  slug: string,
+  entradas: string[],
+  senal?: AbortSignal,
+): Promise<{ codigo: number | null; errores: string }> {
+  const plan = planDeEntradas(carpetaProyecto, entradas);
+  if ("error" in plan) return { codigo: 1, errores: plan.error };
+  const base = `${REMOTO}/proyectos/${slug}`;
+  const porCarpeta = new Map<string, string[]>();
+  for (const { local, remoto } of plan) {
+    const carpeta = remoto.includes("/") ? remoto.slice(0, remoto.lastIndexOf("/")) : "";
+    porCarpeta.set(carpeta, [...(porCarpeta.get(carpeta) ?? []), local]);
+  }
+  const dirs = [...porCarpeta.keys()].map((c) => comillas(`${base}/${c}`.replace(/\/$/, "")));
+  const mk = await sshControl(cfg, ip, `cd ~ && mkdir -p ${dirs.join(" ")}`, senal);
+  if (mk.codigo !== 0) return { codigo: mk.codigo, errores: mk.errores };
+  for (const [carpeta, locales] of porCarpeta) {
+    // A mix can be hundreds of MB: the limit is generous, Cancel still cuts it.
+    const r = await scp(cfg, ip, locales, `${base}/${carpeta}`.replace(/\/$/, "") + "/", 1800, senal);
+    if (r.codigo !== 0) return { codigo: r.codigo, errores: r.errores };
+  }
+  return { codigo: 0, errores: "" };
+}
+
+/** Replicates engine + project on the instance. */
+export async function sincronizar(
+  cfg: ConfigLambda,
+  ip: string,
+  carpetaTrabajo: string,
+  slug: string,
+  senal?: AbortSignal,
+): Promise<{ codigo: number | null; errores: string; ficheros: number }> {
+  const dirs = [
+    `${REMOTO}/codigo`,
+    `${REMOTO}/gpu`,
+    `${REMOTO}/herramientas`,
+    `${REMOTO}/plantillas`,
+    `${REMOTO}/proyectos/${slug}/salida`,
+  ];
+  const mk = await sshControl(cfg, ip, `mkdir -p ${dirs.map((d) => `~/${d}`).join(" ")}`, senal);
+  if (mk.codigo !== 0) return { codigo: mk.codigo, errores: mk.errores, ficheros: 0 };
+
+  let total = 0;
+  const motor = pyDe(join(carpetaTrabajo, "codigo"));
+  if (motor.length > 0) {
+    const r = await scp(cfg, ip, motor, `${REMOTO}/codigo/`, 900, senal);
+    if (r.codigo !== 0) return { codigo: r.codigo, errores: `motor: ${r.errores}`, ficheros: 0 };
+    total += motor.length;
+  }
+  const gpu = pyDe(join(carpetaTrabajo, "gpu"));
+  if (gpu.length > 0) {
+    const r = await scp(cfg, ip, gpu, `${REMOTO}/gpu/`, 900, senal);
+    if (r.codigo !== 0) return { codigo: r.codigo, errores: `gpu: ${r.errores}`, ficheros: 0 };
+    total += gpu.length;
+  }
+  const herramientas = pyDe(join(carpetaTrabajo, "herramientas"));
+  if (herramientas.length > 0) {
+    const r = await scp(cfg, ip, herramientas, `${REMOTO}/herramientas/`, 900, senal);
+    if (r.codigo !== 0) return { codigo: r.codigo, errores: `herramientas: ${r.errores}`, ficheros: 0 };
+    total += herramientas.length;
+  }
+  const proyecto = ficherosDelProyecto(join(carpetaTrabajo, "proyectos", slug));
+  if (proyecto.length > 0) {
+    const r = await scp(cfg, ip, proyecto, `${REMOTO}/proyectos/${slug}/`, 900, senal);
+    if (r.codigo !== 0) return { codigo: r.codigo, errores: `proyecto: ${r.errores}`, ficheros: 0 };
+    total += proyecto.length;
+  }
+  return { codigo: 0, errores: "", ficheros: total };
+}
+
+/** Brings back whatever the script wrote (newer than the mark). */
+/**
+ * Whether the remote listing of new files failed (so "no files" would be a lie). Measured
+ * 5-Nov: the `find` ssh hung and was cut off after 120 s, the run had produced cover-piano.wav,
+ * and the server said "done; 0 file(s) brought back" with no error; the agent told the user the
+ * take did not exist.
+ */
+export function listadoFallido(r: { codigo: number | null; errores: string }): boolean {
+  return r.codigo !== 0 || r.errores.includes("cut off after");
+}
+
+async function traerNuevos(
+  cfg: ConfigLambda,
+  ip: string,
+  carpetaTrabajo: string,
+  slug: string,
+): Promise<{ traidos: string[]; errores: string; fallo: string }> {
+  const rutaRemota = `~/${REMOTO}/proyectos/${slug}`;
+  const lista = await sshControl(
+    cfg,
+    ip,
+    `find ${rutaRemota} -type f -newer ~/${REMOTO}/.marca -printf '%P\\n' 2>/dev/null | head -200`,
+  );
+  if (listadoFallido(lista)) {
+    return {
+      traidos: [],
+      errores: "",
+      fallo: `the outputs could not be listed on the instance (ssh${lista.codigo === null ? " cut off" : ` exit ${lista.codigo}`}); whatever the script wrote is still there`,
+    };
+  }
+  const relativos = lista.salida
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "" && !l.includes("__pycache__") && !l.endsWith(".pyc"));
+  if (relativos.length === 0) return { traidos: [], errores: "", fallo: "" };
+
+  // One scp per group of files with the same destination directory.
+  const porDestino = new Map<string, string[]>();
+  for (const rel of relativos) {
+    // Inside THIS project, not just workspace/: the names come from the instance.
+    const carpetaDelProyecto = resolve(carpetaTrabajo, "proyectos", slug);
+    const destinoLocal = resolve(join(carpetaDelProyecto, rel));
+    if (!dentroDe(carpetaDelProyecto, destinoLocal)) continue;
+    mkdirSync(dirname(destinoLocal), { recursive: true });
+    const clave = dirname(destinoLocal);
+    const listaDestino = porDestino.get(clave) ?? [];
+    listaDestino.push(`${cfg.usuario}@${ip}:${rutaRemota}/${rel}`);
+    porDestino.set(clave, listaDestino);
+  }
+  const traidos: string[] = [];
+  let errores = "";
+  for (const [destino, fuentes] of porDestino) {
+    const r = await correrComando(
+      "scp",
+      ["-q", "-i", cfg.sshKey, "-o", "StrictHostKeyChecking=accept-new", "-o", "LogLevel=ERROR",
+        ...fuentes, destino],
+      600,
+    );
+    if (r.codigo === 0) traidos.push(...fuentes.map((f) => f.split("/").pop() ?? ""));
+    else errores += r.errores;
+  }
+  return { traidos: traidos.filter((n) => n !== ""), errores, fallo: errores ? "some outputs could not be copied back (scp)" : "" };
+}
+
+// ------------------------------------------------------------------ run
+
+export interface PeticionLambda {
+  scriptRel: string;
+  argumentos: string[];
+  segundos: number;
+  carpetaTrabajo: string;
+  slug: string;
+  aviso: (texto: string) => void;
+  /** Absolute paths of project files the script reads, uploaded explicitly (see planDeEntradas). */
+  entradas?: string[];
+  /** Aborted when the HTTP client goes away: no later step starts (3-Nov review, bug 3). */
+  senal?: AbortSignal;
+}
+
+export async function ejecutarEnLambda(
+  cfg: ConfigLambda,
+  p: PeticionLambda,
+): Promise<{
+  ok: boolean;
+  id: string;
+  ip: string;
+  codigo: number | null;
+  salida: string;
+  errores: string;
+  ms: number;
+  traidos: string[];
+  nota: string;
+  /** Non-empty when the run finished but its outputs did not reach the project folder. */
+  traidaFallo: string;
+}> {
+  const t0 = Date.now();
+  const arranque = await encender(cfg, p.aviso, p.senal);
+  const sinc = await sincronizar(cfg, arranque.ip, p.carpetaTrabajo, p.slug, p.senal);
+  comprobarCancelado(p.senal);
+  if (sinc.codigo !== 0) {
+    return {
+      ok: false, id: arranque.id, ip: arranque.ip, codigo: sinc.codigo, salida: "",
+      errores: `could not sync: ${sinc.errores}`, ms: Date.now() - t0, traidos: [],
+      nota: "sync", traidaFallo: "",
+    };
+  }
+  if (p.entradas && p.entradas.length > 0) {
+    const subida = await subirEntradas(cfg, arranque.ip, join(p.carpetaTrabajo, "proyectos", p.slug), p.slug, p.entradas, p.senal);
+    comprobarCancelado(p.senal);
+    if (subida.codigo !== 0) {
+      return {
+        ok: false, id: arranque.id, ip: arranque.ip, codigo: subida.codigo, salida: "",
+        errores: `could not upload the inputs: ${subida.errores}`, ms: Date.now() - t0, traidos: [],
+        nota: "inputs", traidaFallo: "",
+      };
+    }
+  }
+  p.aviso(`${sinc.ficheros + (p.entradas?.length ?? 0)} file(s) uploaded; running ${p.scriptRel}`);
+
+  await sshControl(cfg, arranque.ip, `touch ~/${REMOTO}/.marca`, p.senal);
+  // The remote cwd is the project folder: what lives inside it is passed relative
+  // to it; shared things (codigo/, herramientas/) are passed relative upwards
+  // ("../../codigo/..."), otherwise the prefix would be doubled ("proyectos/<slug>/codigo/...").
+  const prefijo = `proyectos/${p.slug}/`;
+  // Shared things are passed RELATIVE to the project cwd (../.. = ~/miuzika), not
+  // as "$HOME/...": the path goes quoted, the shell does not expand $HOME and
+  // python resolved it against the cwd ("proyectos/<slug>/$HOME/miuzika/..."),
+  // which is exactly the error that left the render unexecuted.
+  const script = p.scriptRel.startsWith(prefijo)
+    ? p.scriptRel.slice(prefijo.length)
+    : `../../${p.scriptRel}`;
+  const args = p.argumentos.map(comillas).join(" ");
+  const comando =
+    `cd ~/${REMOTO}/proyectos/${p.slug} && ` +
+    `PYTHONPATH=~/${REMOTO}/codigo PYTHONUNBUFFERED=1 PYTHONIOENCODING=utf-8 ` +
+    `timeout -k 5 ${p.segundos} python3 -u ${comillas(script)} ${args}`;
+
+  comprobarCancelado(p.senal);
+  const r = await ssh(cfg, arranque.ip, comando, p.segundos + 60, p.senal);
+  if (p.senal?.aborted) {
+    // Killing the local ssh does not stop the remote python: it would keep the GPU
+    // memory (ACE-Step takes 16 of the A10's 24 GB) and the next run would not fit.
+    await sshControl(cfg, arranque.ip, `pkill -f -- ${comillas(patronDeScript(script))}`);
+    throw new Cancelado();
+  }
+  const traida = await traerNuevos(cfg, arranque.ip, p.carpetaTrabajo, p.slug);
+  p.aviso(traida.fallo ? `done; ${traida.fallo}` : `done; ${traida.traidos.length} file(s) brought back`);
+
+  return {
+    ok: r.codigo === 0,
+    id: arranque.id,
+    ip: arranque.ip,
+    codigo: r.codigo,
+    salida: r.salida,
+    errores: r.errores + traida.errores,
+    ms: Date.now() - t0,
+    traidos: traida.traidos,
+    nota: arranque.reutilizada ? "reused instance" : "new instance",
+    traidaFallo: traida.fallo,
+  };
+}
+
+/**
+ * Did the MODEL run out of time? True when the remote `timeout` killed the script (exit 124)
+ * or the local ssh of the run itself was cut off. A cut-off during sync or upload is not a
+ * model timeout: on 5-Nov the API labelled a 60 s ssh hang as "ran out of time (25 min)" and
+ * the agent told Carlos that 25 minutes of GPU had been burnt (nothing had run).
+ */
+export function esTimeoutDelModelo(r: { codigo: number | null; errores: string; nota: string }): boolean {
+  if (r.nota === "sync" || r.nota === "inputs") return false;
+  return r.codigo === 124 || r.errores.includes("cut off after");
+}
+
+/** State for the bar/panel: configured, alive, cost and ssh available. */
+/**
+ * Aggregated state. The shape is DELIBERATELY generic: any provider
+ * (Lambda, RunPod, Paperspace...) can fill it and the app's counter
+ * works the same, because it only needs price/hour and when it started counting.
+ */
+export async function estado(cfg: ConfigLambda): Promise<{
+  configurado: boolean;
+  instancias: Instancia[];
+  ssh: { ok: boolean; detalle: string };
+  /** Rate applied RIGHT NOW: the live instance's or the configured type's. */
+  precioHora: number;
+  tipo: string;
+  /** apagada | arrancando | activa | apagandose */
+  fase: "apagada" | "arrancando" | "activa" | "apagandose";
+  activo: boolean;
+  desde: string | null;
+  /** Start of the boot in progress (for the "starting" clock). */
+  arranque: string | null;
+  gastado: number;
+  moneda: string;
+  proveedor: string;
+}> {
+  const [lista, sshOk] = await Promise.all([
+    instancias(cfg).catch(() => [] as Instancia[]),
+    comprobarSsh(),
+  ]);
+  const vivas = lista.filter((i) => i.status !== "terminated");
+  // Only ACTIVE ones count: an instance stuck in "terminating"
+  // for days keeps its first_healthy and added thousands of dollars to the counter.
+  const activas = vivas.filter((i) => i.status === "active");
+  const arrancando = vivas.filter(
+    (i) => i.status === "booting" || i.status === "loading" || i.status === "unhealthy",
+  );
+  const apagandose = vivas.filter(
+    // Only count the one shutting down NOW: a zombie instance in
+    // "terminating" for months (open support case) cannot leave the
+    // header saying "shutting down" forever.
+    (i) =>
+      i.status === "terminating" &&
+      (i.desde === null || Date.now() - Date.parse(i.desde) < 30 * 60_000),
+  );
+  const fase = activas.length > 0
+    ? "activa"
+    : arrancando.length > 0
+      ? "arrancando"
+      : apagandose.length > 0
+        ? "apagandose"
+        : "apagada";
+  const contando = activas
+    .filter((i) => i.desde !== null)
+    .sort((a, b) => Date.parse(a.desde ?? "") - Date.parse(b.desde ?? ""));
+  const principal = contando[0] ?? null;
+  // The rate shown is the one of the instance in front, not the .env
+  // one: an A10 does not cost the same as an A100 and the .env is only the fallback.
+  const tarifas = await preciosDeTipos(cfg).catch(() => new Map<string, number>());
+  const precioHora = (activas[0] ?? arrancando[0])?.precioHora ?? tarifas.get(cfg.tipo) ?? cfg.precioHora;
+  return {
+    configurado: true,
+    instancias: vivas,
+    ssh: sshOk,
+    precioHora: Math.round(precioHora * 1000) / 1000,
+    tipo: (activas[0] ?? arrancando[0])?.tipo || cfg.tipo,
+    fase,
+    activo: activas.length > 0,
+    desde: principal?.desde ?? null,
+    arranque: arrancando[0]?.cambio ?? arrancando[0]?.desde ?? null,
+    gastado: Math.round(activas.reduce((total, i) => total + i.gastado, 0) * 100) / 100,
+    moneda: "USD",
+    proveedor: "lambda",
+  };
+}

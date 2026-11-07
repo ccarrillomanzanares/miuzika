@@ -1,0 +1,18 @@
+miuzika
+Copyright (C) 2026
+
+Este programa es software libre: puedes redistribuirlo y/o modificarlo bajo
+los términos de la GNU Affero General Public License, versión 3 o posterior,
+publicada por la Free Software Foundation.
+
+Este programa se distribuye con la esperanza de que sea útil, pero SIN NINGUNA
+GARANTÍA; ni siquiera la garantía implícita de COMERCIABILIDAD o IDONEIDAD
+PARA UN PROPÓSITO PARTICULAR. Consulta la GNU Affero General Public License
+para más detalles.
+
+Deberías haber recibido una copia de la GNU Affero General Public License
+junto con este programa. Si no, consulta <https://www.gnu.org/licenses/agpl-3.0.html>.
+
+La elección de AGPL-3.0-or-later es coherente con openDAW, que se integra como
+motor de audio. Si en el futuro se usa la licencia comercial de openDAW, este
+fichero deberá revisarse.

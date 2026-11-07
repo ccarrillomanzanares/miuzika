@@ -1,0 +1,147 @@
+/**
+ * Cancelling a GPU run (review 3-Nov, bug 3): the Lambda API is replaced by a fake
+ * `fetch`, so no machine is launched and no money is spent.
+ */
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import { apagablesDe, Cancelado, encender, ejecutarEnLambda, esTimeoutDelModelo, listadoFallido, planDeEntradas, seSincroniza, type ConfigLambda, type Instancia } from "./lambda.ts";
+import { join } from "node:path";
+
+const cfg: ConfigLambda = {
+  apiKey: "falsa",
+  sshKey: "no-existe",
+  sshKeyName: "k",
+  usuario: "ubuntu",
+  region: "us-east-1",
+  tipo: "gpu_1x_a10",
+  nombre: "miuzika-gpu",
+  precioHora: 0.75,
+};
+
+/** Fake Lambda API: the instance list it is given, and a record of every call. */
+function lambdaFalsa(lista: Record<string, unknown>[]) {
+  const llamadas: string[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL) => {
+    const ruta = String(url).split("/api/v1/")[1] ?? "";
+    llamadas.push(ruta);
+    const cuerpo = ruta === "instances" ? { data: lista } : ruta === "instance-types" ? { data: {} } : { data: { instance_ids: ["nueva"] } };
+    return new Response(JSON.stringify(cuerpo), { status: 200 });
+  }) as typeof fetch;
+  return { llamadas, restaurar: () => (globalThis.fetch = original) };
+}
+
+test("a cancel during the boot wait stops polling at once instead of waiting up to 9 minutes", async () => {
+  const api = lambdaFalsa([{ id: "abc", status: "booting", ip: null, name: "miuzika-gpu" }]);
+  try {
+    const corte = new AbortController();
+    const t0 = Date.now();
+    setTimeout(() => corte.abort(), 50);
+    await assert.rejects(encender(cfg, () => {}, corte.signal), Cancelado);
+    assert.ok(Date.now() - t0 < 2000, "it did not sit in the 6 s poll");
+    assert.ok(!api.llamadas.includes("instance-operations/launch"), "the booting instance is reused, not launched again");
+  } finally {
+    api.restaurar();
+  }
+});
+
+test("a turn already cancelled never launches a machine", async () => {
+  const api = lambdaFalsa([]);
+  try {
+    const corte = new AbortController();
+    corte.abort();
+    await assert.rejects(
+      ejecutarEnLambda(cfg, { scriptRel: "gpu/generar_audio.py", argumentos: [], segundos: 60, carpetaTrabajo: ".", slug: "x", aviso: () => {}, senal: corte.signal }),
+      Cancelado,
+    );
+    assert.deepEqual(api.llamadas.filter((r) => r.startsWith("instance-operations")), []);
+  } finally {
+    api.restaurar();
+  }
+});
+
+test("a cancel while the instance list loads stops before the launch call that starts billing", async () => {
+  const api = lambdaFalsa([]);
+  const corte = new AbortController();
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+    const r = await original(url, init);
+    corte.abort(); // the user cancels while the list is in flight
+    return r;
+  }) as typeof fetch;
+  try {
+    await assert.rejects(encender(cfg, () => {}, corte.signal), Cancelado);
+    assert.ok(!api.llamadas.includes("instance-operations/launch"));
+  } finally {
+    globalThis.fetch = original;
+    api.restaurar();
+  }
+});
+
+test("the off button only targets our own instances that are on or starting", () => {
+  const i = (id: string, nombre: string, status: string): Instancia => ({
+    id, nombre, status, ip: null, tipo: "gpu_1x_a10", desde: null, cambio: null, precioHora: 0.75, horas: 0, gastado: 0,
+  });
+  const lista = [
+    i("a", "miuzika-gpu", "active"),
+    i("b", "miuzika-gpu", "booting"),
+    i("c", "miuzika-gpu", "terminating"),
+    i("d", "aios-agent-rag", "active"), // another project on the same account
+  ];
+  assert.deepEqual(apagablesDe(lista, "miuzika-gpu").map((x) => x.id), ["a", "b"]);
+});
+
+test("inputs are uploaded by path inside the project, salida/ and big files included", () => {
+  const proyecto = join("/w", "proyectos", "vidrio");
+  const plan = planDeEntradas(proyecto, [
+    join(proyecto, "salida", "vidrio.wav"), // skipped by sincronizar: exportar writes here
+    join(proyecto, "stems", "bateria.wav"),
+    join(proyecto, "salida", "vidrio.wav"), // repeated: uploaded once
+  ]);
+  assert.deepEqual(
+    "error" in plan ? plan : plan.map((p) => p.remoto),
+    ["salida/vidrio.wav", "stems/bateria.wav"],
+  );
+});
+
+test("an input outside the project is refused before anything boots", () => {
+  const proyecto = join("/w", "proyectos", "vidrio");
+  for (const fuera of [join("/w", "codigo", "dsp.py"), join("/w", "proyectos", "otro", "x.wav"), join("/w", "proyectos", "vidrio-2", "x.wav")]) {
+    const plan = planDeEntradas(proyecto, [fuera]);
+    assert.ok("error" in plan, fuera);
+  }
+});
+
+test("the sync skips audio and the app's own folders, keeps scripts and small data (5-Nov: 290 MB re-sent per run)", () => {
+  const MB = 1024 * 1024;
+  assert.equal(seSincroniza("proyecto.json", 460_000), true);
+  assert.equal(seSincroniza("agente.json", 1_500), true);
+  assert.equal(seSincroniza("codigo/render.py", 3_000), true);
+  assert.equal(seSincroniza("entrada/x-fuente.wav", 40 * MB), false); // inputs travel via planDeEntradas
+  assert.equal(seSincroniza("generado/x.wav", 40 * MB), false);
+  assert.equal(seSincroniza("generado/x.lineage.json", 1_600), false);
+  assert.equal(seSincroniza("versiones/2026-11-05_08-07-47.json", 1_100), false);
+  assert.equal(seSincroniza("trayectorias/2026-11-05_08-07-47.json", 376_000), false);
+  assert.equal(seSincroniza(".cache/picos.bin", 2_000), false);
+  assert.equal(seSincroniza("salida/mezcla.wav", 30 * MB), false);
+  assert.equal(seSincroniza("stems/bateria.flac", 9 * MB), false); // audio anywhere
+  assert.equal(seSincroniza("notas/grande.bin", 60 * MB), false); // over MAX_SUBIDA
+});
+
+test("a cut-off during sync or upload is not a model timeout; exit 124 and a cut-off run are", () => {
+  const corte = "\n[miuzika] ssh cut off after 60 s\n";
+  assert.equal(esTimeoutDelModelo({ codigo: 1, errores: `could not sync: ${corte}`, nota: "sync" }), false);
+  assert.equal(esTimeoutDelModelo({ codigo: 1, errores: corte, nota: "inputs" }), false);
+  assert.equal(esTimeoutDelModelo({ codigo: 124, errores: "", nota: "reused instance" }), true);
+  assert.equal(esTimeoutDelModelo({ codigo: null, errores: corte, nota: "new instance" }), true);
+  assert.equal(esTimeoutDelModelo({ codigo: 2, errores: "FAILED: no audio", nota: "reused instance" }), false);
+});
+
+test("a cut-off or failed listing of the outputs is a failed fetch, not \"0 new files\" (5-Nov: cover-piano.wav left on the instance)", () => {
+  assert.equal(listadoFallido({ codigo: 0, errores: "" }), false);
+  assert.equal(listadoFallido({ codigo: 0, errores: "Warning: Permanently added host" }), false);
+  assert.equal(listadoFallido({ codigo: null, errores: "\n[miuzika] ssh cut off after 120 s\n" }), true);
+  assert.equal(listadoFallido({ codigo: 255, errores: "ssh: connect to host: Connection refused" }), true);
+});
