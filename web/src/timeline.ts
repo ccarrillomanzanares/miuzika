@@ -559,7 +559,7 @@ export class TimelineView {
         <div class="ruler-spacer"></div>
         <div class="pista-vacia">
           <strong>${escapeHtml(this.project.name)}</strong> has no tracks yet.
-          <small>Ask the agent for a piece in the chat, or drop a WAV, a .mid or a project here.</small>
+          <small>Generate one from Modules, or drop a WAV, a .mid or a project here.</small>
         </div>
       </div>`;
       this.aplicarScrollCabeceras();

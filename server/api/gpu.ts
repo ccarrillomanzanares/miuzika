@@ -77,20 +77,22 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
     rutaJson({ metodo: "GET" }, ({ req, res }) => {
       const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
       const carpeta = resolve(carpetaTrabajo, "proyectos", slug, "generado");
-      const tomas: { nombre: string; receta: unknown; semillas: unknown[]; creada: unknown }[] = [];
+      const tomas: { nombre: string; receta: unknown; semillas: unknown[]; ficheros: string[]; creada: unknown }[] = [];
       if (existsSync(carpeta)) {
         for (const fichero of readdirSync(carpeta).filter((n) => n.endsWith(".lineage.json"))) {
           try {
             const linaje = JSON.parse(readFileSync(resolve(carpeta, fichero), "utf8")) as {
               recipe?: unknown;
               created_at?: unknown;
-              outputs?: { seed?: unknown }[];
+              outputs?: { seed?: unknown; file?: unknown }[];
             };
             if (linaje.recipe) {
               tomas.push({
                 nombre: fichero.replace(/\.lineage\.json$/, ""),
                 receta: linaje.recipe,
                 semillas: (linaje.outputs ?? []).map((o) => o.seed),
+                // Bug 22: a take of 3 writes name-1..3.wav, so those names are taken too.
+                ficheros: (linaje.outputs ?? []).map((o) => o.file).filter((f): f is string => typeof f === "string"),
                 creada: linaje.created_at,
               });
             }

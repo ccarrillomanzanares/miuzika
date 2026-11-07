@@ -48,11 +48,20 @@ export interface OpcionesFuente {
   /** From 1 and inclusive; omitted = the whole render. */
   desdeCompas?: number;
   hastaCompas?: number;
+  /**
+   * Bars of silence after the asked part, so the model has room to end. Measured 7-Nov: lego
+   * takes asked for 8 bars stopped sounding at 6.2-7.1 bars. The tracks ending early is padded
+   * with silence too, so the file is always the asked bars plus the margin.
+   */
+  margenCompases?: number;
 }
 
 export interface FuenteRenderizada {
   ruta: string;
+  /** The whole file, margin included. */
   segundos: number;
+  /** The asked part alone, without the margin. */
+  segundosPedidos: number;
   picoDb: number;
   bytes: number;
   avisos: string[];
@@ -235,13 +244,25 @@ export function crearExportador(d: DependenciasRender): {
     const desde = Math.min(largo, Math.round(((o.desdeCompas ?? 1) - 1) * muestrasPorCompas));
     const hasta = o.hastaCompas === undefined ? largo : Math.min(largo, Math.round(o.hastaCompas * muestrasPorCompas));
     if (hasta <= desde) throw new Error(`Those bars fall after the end of the render (${(largo / motor.sampleRate).toFixed(1)} s): nothing to send.`);
-    const trozos: [Float32Array<ArrayBuffer>, Float32Array<ArrayBuffer>] = [mezcla[0].slice(desde, hasta), mezcla[1].slice(desde, hasta)];
-    const buffer = new AudioBuffer({ length: hasta - desde, numberOfChannels: 2, sampleRate: motor.sampleRate });
+    const pedidas = o.hastaCompas === undefined ? hasta - desde : Math.round(o.hastaCompas * muestrasPorCompas) - desde;
+    const total = pedidas + Math.round((o.margenCompases ?? 0) * muestrasPorCompas);
+    // Float32Array starts at zero: whatever the tracks do not reach stays silence.
+    const trozos: [Float32Array<ArrayBuffer>, Float32Array<ArrayBuffer>] = [new Float32Array(total), new Float32Array(total)];
+    trozos[0].set(mezcla[0].subarray(desde, Math.min(hasta, desde + total)));
+    trozos[1].set(mezcla[1].subarray(desde, Math.min(hasta, desde + total)));
+    const buffer = new AudioBuffer({ length: total, numberOfChannels: 2, sampleRate: motor.sampleRate });
     trozos.forEach((datos, i) => buffer.copyToChannel(datos, i));
     const pico = picoDe(trozos);
     const fichero = new File([audioBufferToWav(buffer)], `${o.nombre}.wav`, { type: "audio/wav" });
     const { path, bytes } = await subirAudio(fichero, slug);
-    return { ruta: path, segundos: buffer.length / buffer.sampleRate, picoDb: pico > 0 ? 20 * Math.log10(pico) : -Infinity, bytes, avisos };
+    return {
+      ruta: path,
+      segundos: total / motor.sampleRate,
+      segundosPedidos: pedidas / motor.sampleRate,
+      picoDb: pico > 0 ? 20 * Math.log10(pico) : -Infinity,
+      bytes,
+      avisos,
+    };
   }
 
   return { exportar: exportarProyecto, renderizarFuente };

@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, rmSync, statSync, writeFileSync, createReadStrea
 import { basename, relative, resolve, sep } from "node:path";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
-import { rutaJson } from "../ruta.ts";
+import { otroOrigen, rutaJson } from "../ruta.ts";
 import { argumentosAWav, debeConvertirse } from "../convertir-audio.ts";
 import { KBPS_MP3, argumentosMedir, argumentosMp3, leerMedida, problemasMp3 } from "../mp3.ts";
 
@@ -19,6 +19,11 @@ export function rutasAudio(server: ViteDevServer, ctx: Contexto): void {
   server.middlewares.use("/api/audio/subir", (req, res) => {
     if (req.method !== "POST") {
       responderJson(res, 405, { error: "use POST" });
+      return;
+    }
+    // Bug 16: it writes into a project folder; another site's page must not.
+    if (otroOrigen(req)) {
+      responderJson(res, 403, { error: "only from the app itself" });
       return;
     }
     const url = new URL(req.url ?? "/", "http://localhost");

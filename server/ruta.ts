@@ -63,6 +63,20 @@ export interface OpcionesRuta {
 
 export type Manejador<T> = (p: PeticionJson<T>) => void | Promise<void>;
 
+/**
+ * True when a browser says the request comes from a page of another site. Scripts (curl, Python)
+ * send no Origin and pass; the app's own page sends its own host.
+ */
+export function otroOrigen(req: IncomingMessage): boolean {
+  const origen = req.headers.origin;
+  if (!origen) return false;
+  try {
+    return new URL(origen).host !== req.headers.host;
+  } catch {
+    return true;
+  }
+}
+
 export function rutaJson<T = Record<string, unknown>>(
   op: OpcionesRuta,
   manejador: Manejador<T>,
@@ -71,6 +85,13 @@ export function rutaJson<T = Record<string, unknown>>(
     const responder = (codigo: number, cuerpo: unknown): void => responderJson(res, codigo, cuerpo);
     if (req.method !== op.metodo) {
       responder(405, { error: `use ${op.metodo}` });
+      return;
+    }
+    // Bug 16 (6-Nov): any web page open in the same browser could POST to localhost, and
+    // /api/gpu/ejecutar spends money. A text/plain POST needs no preflight, so CORS alone does not
+    // stop it. Only Settings checked this; now every JSON POST does.
+    if (op.metodo === "POST" && otroOrigen(req)) {
+      responder(403, { error: "only from the app itself" });
       return;
     }
     const url = new URL(req.url ?? "/", "http://localhost");

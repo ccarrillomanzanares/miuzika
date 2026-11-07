@@ -78,9 +78,16 @@ export interface Parametros {
   silencio: number | null;
 }
 
-/** The instruction ACE-Step uses for each task (TASK_INSTRUCTIONS in constants.py, verbatim). */
+/**
+ * The instruction ACE-Step builds for each task: TASK_INSTRUCTIONS in `acestep/constants.py`
+ * filled the way `generate_instruction` in `acestep/core/generation/handler/task_utils.py` fills
+ * it (both read at `ca1e85f`, 7-Nov): track names upper-cased, and `complete` joins them with
+ * " | ". Until 7-Nov this sent lowercase and ", "; measured 7-Nov, the capitals change the audio
+ * (correlation 0.79-0.89 against 0.97-0.99 for a plain repeat) but did not improve the guitar by
+ * ear. Matching upstream is about sending what the model was trained on, not a sound promise.
+ */
 export function instruccionDe(tarea: Tarea, pista: string | null): string {
-  const pistas = (pista ?? "").split(",").map((p) => p.trim()).filter(Boolean);
+  const pistas = (pista ?? "").split(",").map((p) => p.trim().toUpperCase()).filter(Boolean);
   switch (tarea) {
     case "text2music":
       return "Fill the audio semantic mask based on the given conditions:";
@@ -94,7 +101,7 @@ export function instruccionDe(tarea: Tarea, pista: string | null): string {
     case "lego":
       return pistas[0] ? `Generate the ${pistas[0]} track based on the audio context:` : "Generate the track based on the audio context:";
     case "complete":
-      return pistas.length > 0 ? `Complete the input track with ${pistas.join(", ")}:` : "Complete the input track:";
+      return pistas.length > 0 ? `Complete the input track with ${pistas.join(" | ")}:` : "Complete the input track:";
   }
 }
 

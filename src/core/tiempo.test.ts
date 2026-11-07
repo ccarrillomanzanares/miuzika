@@ -1,7 +1,23 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { compasesDeAudio, compasesNecesarios } from "./tiempo.ts";
+import { compasesDeAudio, compasesNecesarios, largoDeClip, ultimoCompasDeClips } from "./tiempo.ts";
+
+test("'to the end' stops at the last clip's bar, not at the render's tail", () => {
+  // bateria-1 on 7-Nov: one 32-beat clip from 0 in 4/4 -> bar 8 (the render ran to 8.19).
+  assert.equal(ultimoCompasDeClips([{ start: 0, length: 32 }], 4), 8);
+  assert.equal(ultimoCompasDeClips([{ start: 0, length: 32 }, { start: 32, length: 2 }], 4), 9);
+  assert.equal(ultimoCompasDeClips([], 4), null);
+});
+
+test("a take with a margin is placed at the asked bars; without them, whole", () => {
+  // 8 bars asked + 2 of margin in 4/4: the file has 40 beats, the clip 32.
+  assert.equal(largoDeClip(40, 4, 8), 32);
+  assert.equal(largoDeClip(40, 4, null), 40);
+  // A file shorter than asked is not stretched with silence that does not exist.
+  assert.equal(largoDeClip(26, 4, 8), 28);
+  assert.equal(largoDeClip(40, 3, 8), 24);
+});
 
 test("a file that ends exactly on the edge does not gain a bar", () => {
   assert.equal(compasesDeAudio(336, 4), 336);

@@ -60,6 +60,25 @@ test("an empty POST body is {} and a body over the limit names the route's own l
   });
 });
 
+test("a POST from another site's page is 403; the app's own page and scripts without Origin pass (bug 16)", async () => {
+  let llamadas = 0;
+  const ruta = rutaJson({ metodo: "POST" }, ({ responder }) => {
+    llamadas += 1;
+    responder(200, { ok: true });
+  });
+  await servir(ruta, async (base) => {
+    const host = new URL(base).host;
+    const ajena = await fetch(`${base}/api/gpu/ejecutar`, { method: "POST", headers: { origin: "https://evil.example", "content-type": "text/plain" }, body: "{}" });
+    assert.equal(ajena.status, 403);
+    assert.equal(llamadas, 0);
+    const propia = await fetch(`${base}/api/gpu/ejecutar`, { method: "POST", headers: { origin: `http://${host}` }, body: "{}" });
+    assert.equal(propia.status, 200);
+    const script = await fetch(`${base}/api/gpu/ejecutar`, { method: "POST", body: "{}" });
+    assert.equal(script.status, 200);
+    assert.equal(llamadas, 2);
+  });
+});
+
 test("GET gets the query in url", async () => {
   const ruta = rutaJson({ metodo: "GET" }, ({ url, responder }) => {
     responder(200, { c: url.searchParams.get("c") });

@@ -82,9 +82,12 @@ test("the lyrics proposed follow what was heard on 5-Nov", () => {
   assert.equal(letraPropuesta("lego", "vocals"), "[Instrumental]");
 });
 
-test("the instructions name the instrument", () => {
-  assert.equal(instruccionDe("lego", "drums"), "Generate the drums track based on the audio context:");
-  assert.equal(instruccionDe("complete", "drums, bass"), "Complete the input track with drums, bass:");
+// Strings as upstream's generate_instruction builds them (task_utils.py at ca1e85f).
+test("the instructions name the instrument as upstream does", () => {
+  assert.equal(instruccionDe("lego", "guitar"), "Generate the GUITAR track based on the audio context:");
+  assert.equal(instruccionDe("extract", "backing_vocals"), "Extract the BACKING_VOCALS track from the audio:");
+  assert.equal(instruccionDe("lego", null), "Generate the track based on the audio context:");
+  assert.equal(instruccionDe("complete", "drums, bass"), "Complete the input track with DRUMS | BASS:");
   assert.equal(instruccionDe("complete", null), "Complete the input track:");
 });
 

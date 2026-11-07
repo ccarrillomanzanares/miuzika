@@ -9,23 +9,12 @@
  * last digits, and the names of the fields that changed.
  */
 
-import type { IncomingMessage } from "node:http";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 import { guardarFicheroProveedores, leerConfigGpu } from "../config-proveedores.ts";
-import { mensajeDe, rutaJson } from "../ruta.ts";
+// A page from another site can POST to localhost: it must not be able to change the keys.
+import { mensajeDe, otroOrigen, rutaJson } from "../ruta.ts";
 import { PROVEEDORES_GPU, ajustesEfectivos, claveOculta, limpiarAjustesGpu, proveedorGpuPorId } from "../../src/core/proveedores-gpu.ts";
-
-/** A page from another site can POST to localhost: it must not be able to change the keys. */
-function otroOrigen(req: IncomingMessage): boolean {
-  const origen = req.headers.origin;
-  if (!origen) return false;
-  try {
-    return new URL(origen).host !== req.headers.host;
-  } catch {
-    return true;
-  }
-}
 
 export function rutasAjustes(server: ViteDevServer, ctx: Contexto): void {
   const { gpuActual, envGpu, anotarGpu, responderJson } = ctx;

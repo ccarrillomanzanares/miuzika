@@ -25,7 +25,7 @@ import {
 import { avisoDeToma, avisoDeVersion, type Upstream } from "../../../../src/modulos/ace-step/version.ts";
 import { beatsPerBar } from "../../../../src/core/types.ts";
 import { carpetaDeProyecto } from "../../../../src/core/project.ts";
-import { segundosPorTiempo } from "../../../../src/core/tiempo.ts";
+import { segundosPorTiempo, ultimoCompasDeClips } from "../../../../src/core/tiempo.ts";
 import { metadatosWav, rutaEnProyecto } from "../../audio-store.ts";
 import { cabeceraDeProyecto, subirAudio } from "../../proyecto-disco.ts";
 import type { BarraGpu } from "../../gpu-barra.ts";
@@ -37,6 +37,14 @@ const TONICAS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"
 const MODOS = ["minor", "major", "dorian", "phrygian", "lydian", "mixolydian", "harmonic minor", "minor pentatonic"];
 /** Under this a source counts as silence (the 5-Nov run that uploaded 42 MB of nothing). */
 const SILENCIO_DBFS = -60;
+/**
+ * Bars asked from the model beyond the last one, cut off on delivery. Measured 7-Nov on lego,
+ * "from 1 to 8": the sound stopped at 6.94, 7.08, 6.23 and 7.08 bars, so up to ~1.8 bars short.
+ * Two covers that; whether the asked bars then sound to the end is not measured yet.
+ */
+const MARGEN_COMPASES = 2;
+/** Only the Track tab (lego, complete): the tasks where the short ending was measured. */
+const conMargen = (tarea: Tarea): boolean => tarea === "lego" || tarea === "complete";
 
 interface FuentePreparada {
   clave: string;
@@ -49,12 +57,24 @@ interface FuentePreparada {
   /** Repaint works over the whole source: its bars, in seconds. */
   desde: number | null;
   hasta: number | null;
+  /** Bars the delivered clip lasts (the asked ones); null = the whole file. */
+  compases: number | null;
+  /** Bars of margin the source carries after them. */
+  margen: number;
+  /** Silence or tracks for lego/complete; a file is sent as it is. */
+  margenEditable: boolean;
 }
 
 interface TomaGuardada {
   nombre: string;
-  receta: { parametros: Partial<Parametros>; fuente?: { descripcion?: string }; entrega?: { inicioCompas?: number; bpmProyecto?: number | null; tonalidad?: string } };
+  receta: {
+    parametros: Partial<Parametros>;
+    fuente?: { descripcion?: string };
+    entrega?: { inicioCompas?: number; compases?: number | null; margen?: number; bpmProyecto?: number | null; tonalidad?: string };
+  };
   semillas: unknown[];
+  /** The WAVs it wrote (absent from servers before 7-Nov). */
+  ficheros?: string[];
 }
 
 const esc = (texto: string): string => texto.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -336,8 +356,14 @@ export class VentanaAceStep {
     return html;
   }
 
+  /**
+   * Until chosen: Tracks when the project has them (none ticked, so Review asks which), else the
+   * first valid. 7-Nov: after a reload the form fell back to Silence and `guitarra-d` was made
+   * with no context unnoticed.
+   */
   private tipoFuente(validos: string[]): string {
-    return this.v.tipoFuente && validos.includes(this.v.tipoFuente) ? this.v.tipoFuente : validos[0]!;
+    if (this.v.tipoFuente && validos.includes(this.v.tipoFuente)) return this.v.tipoFuente;
+    return validos.includes("pistas") ? "pistas" : validos[0]!;
   }
 
   private htmlPestana(): string {
@@ -441,6 +467,7 @@ export class VentanaAceStep {
         ${this.fila("lyrics", areaDeTexto('data-param="letra"', 4, p.letra))}
         ${this.fila("language", t("idioma", p.idioma))}
         ${c.fuente && fuente ? this.fila("source", `<code>${esc(fuente)}</code>`) : ""}
+        ${this.htmlMargen(p.tarea)}
         ${c.pista ? this.fila("instrument", t("pista", p.pista)) : ""}
         ${c.duracion ? this.fila("duration (s)", n("duracion", p.duracion)) : ""}
         ${c.fuerza ? this.fila("cover strength", n("fuerza", p.fuerza)) : ""}
@@ -465,6 +492,36 @@ export class VentanaAceStep {
         <button type="button" data-accion="ajustes" hidden>Settings…</button>
         <button type="button" class="primario" data-accion="lanzar">Run</button>
       </div>`;
+  }
+
+  /** Editable while the source is this window's; a repeat shows what its recipe carried. */
+  private htmlMargen(tarea: Tarea): string {
+    const ayuda = "Bars of silence sent after the last asked bar so the take has room to end; the clip is cut to the asked bars, the WAV keeps them all. Measured 7-Nov: 8 asked bars stopped sounding at 6.2-7.1.";
+    if (this.cargada) {
+      const e = this.cargada.receta.entrega;
+      return e?.margen ? this.fila("margin (bars)", `<code>${e.margen}, clip ${e.compases ?? "?"} bars</code>`, "From the repeated take's recipe.") : "";
+    }
+    if (!conMargen(tarea) || !this.fuente?.margenEditable) return "";
+    return this.fila("margin (bars)", `<input class="corto" data-margen type="number" min="0" max="16" step="1" value="${this.fuente.margen}">`, ayuda);
+  }
+
+  /** A new margin is a new source: silence is recomputed, tracks are rendered again. */
+  private async cambiarMargen(valor: string): Promise<void> {
+    this.v.margen = valor;
+    const error = this.dialogo.querySelector<HTMLElement>("[data-error]");
+    const boton = this.dialogo.querySelector<HTMLButtonElement>('[data-accion="lanzar"]');
+    if (boton) boton.disabled = true;
+    if (error) error.textContent = "Preparing the source again with the new margin…";
+    try {
+      await this.prepararFuente();
+      this.pintar();
+    } catch (e) {
+      // The old source does not match the margin any more: without a source Run stays off.
+      this.fuente = null;
+      this.pintarEstimacion();
+      const zona = this.dialogo.querySelector<HTMLElement>("[data-error]");
+      if (zona) zona.textContent = e instanceof Error ? e.message : String(e);
+    }
   }
 
   private pintarEstimacion(): void {
@@ -522,6 +579,10 @@ export class VentanaAceStep {
 
   private alCambiar(evento: Event): void {
     const el = evento.target as HTMLInputElement;
+    if ("margen" in el.dataset) {
+      void this.cambiarMargen(el.value);
+      return;
+    }
     if (el.dataset.param) {
       this.leerParametro(el, el.dataset.param as keyof Parametros);
       this.pintarEstimacion();
@@ -590,12 +651,20 @@ export class VentanaAceStep {
     }
   }
 
+  /**
+   * Names a new take cannot use: every lineage and every WAV a take wrote. Bug 22, 7-Nov: Repeat of
+   * `guitarra-c` (3 takes) proposed `guitarra-c-2`, refused because `guitarra-c-2.wav` existed.
+   */
+  private nombresOcupados(): Set<string> {
+    return new Set(this.tomas.flatMap((t) => [t.nombre, ...(t.ficheros ?? []).map((f) => f.replace(/\.wav$/i, ""))]));
+  }
+
   private cargarToma(nuevaSemilla: boolean): void {
     const i = Number(this.dialogo.querySelector<HTMLSelectElement>("[data-toma]")?.value ?? 0);
     const toma = this.tomas[i];
     if (!toma) return;
     const semilla = typeof toma.semillas[0] === "number" ? toma.semillas[0] : -1;
-    const ocupados = new Set(this.tomas.map((t) => t.nombre));
+    const ocupados = this.nombresOcupados();
     this.cargada = {
       ...toma,
       receta: {
@@ -615,11 +684,13 @@ export class VentanaAceStep {
     this.ocupada = true;
     this.pintar();
     try {
-      await this.prepararFuente();
+      // The name first: a new project's folder is chosen from it (bug 23, 7-Nov: with Name empty the
+      // folder became the default "ace-step" while the project took the proposed "toma").
       if (!this.v.nombre && !this.editados.nombre) {
         const propuesto = nombreDeArchivo(this.v.prompt?.slice(0, 24) ?? "");
-        this.v.nombre = nombreLibre(propuesto || "toma", new Set(this.tomas.map((t) => t.nombre)));
+        this.v.nombre = nombreLibre(propuesto || "toma", this.nombresOcupados());
       }
+      await this.prepararFuente();
       this.vista = "review";
     } catch (error) {
       this.mensaje = error instanceof Error ? error.message : String(error);
@@ -641,7 +712,7 @@ export class VentanaAceStep {
     const nombre = nombreDeArchivo(this.v.nombre ?? "");
     if (tarea === "text2music") {
       const carpeta = this.fuente?.clave === `song:${nombre}` ? this.fuente.carpeta : await this.carpetaDestino(nombre);
-      this.fuente = { clave: `song:${nombre}`, audio: null, silencio: null, descripcion: "", bytes: 0, inicioCompas: 1, carpeta, desde: null, hasta: null };
+      this.fuente = { clave: `song:${nombre}`, audio: null, silencio: null, descripcion: "", bytes: 0, inicioCompas: 1, carpeta, desde: null, hasta: null, compases: null, margen: 0, margenEditable: false };
       return;
     }
     const p = this.a.proyecto();
@@ -653,50 +724,67 @@ export class VentanaAceStep {
     if (this.vacio && numero(this.v.bpm) === null && tipo === "silencio") throw new Error("This project has no tracks: give the BPM, which also sets the project's tempo.");
     const repaint = tarea === "repaint";
     if (repaint && hastaCompas === null) throw new Error("Repaint needs the last bar of the part to redo.");
-    const clave = JSON.stringify({ tarea, tipo, desdeCompas, hastaCompas, nombre, compases: this.v.compases, bpm: this.v.bpm, pistas: [...this.pistas], archivo: this.archivo?.name });
+    // A file is sent as it is: no margin is added to it.
+    const margen = conMargen(tarea) && tipo !== "archivo" ? (numero(this.v.margen) ?? MARGEN_COMPASES) : 0;
+    if (!(Number.isInteger(margen) && margen >= 0 && margen <= 16)) throw new Error("The margin: a whole number of bars from 0 to 16.");
+    const clave = JSON.stringify({ tarea, tipo, desdeCompas, hastaCompas, nombre, margen, compases: this.v.compases, bpm: this.v.bpm, pistas: [...this.pistas], archivo: this.archivo?.name });
     if (this.fuente?.clave === clave) return;
     const compas = this.compasSegundos();
     const rango = repaint
       ? { desde: (desdeCompas - 1) * compas, hasta: (hastaCompas ?? desdeCompas) * compas }
       : { desde: null, hasta: null };
     const inicioCompas = repaint ? 1 : desdeCompas;
+    const textoMargen = margen > 0 ? ` + ${margen} bars of margin, cut on delivery` : "";
 
     if (tipo === "silencio") {
       const compases = p && p.tracks.length > 0 ? (hastaCompas ?? desdeCompas + 7) - desdeCompas + 1 : (numero(this.v.compases) ?? 8);
-      const segundos = Math.round(compases * compas * 1000) / 1000;
+      const segundos = Math.round((compases + margen) * compas * 1000) / 1000;
       this.fuente = {
         clave,
         audio: null,
         silencio: segundos,
-        descripcion: `Silence, ${compases} bars = ${segundos} s, created on the GPU (nothing to upload)`,
+        descripcion: `Silence, ${compases} bars${textoMargen} = ${segundos} s, created on the GPU (nothing to upload)`,
         bytes: 0,
         inicioCompas: p && p.tracks.length > 0 ? desdeCompas : 1,
         carpeta: await this.carpetaDestino(nombre),
         ...rango,
+        compases: margen > 0 ? compases : null,
+        margen,
+        margenEditable: conMargen(tarea),
       };
       return;
     }
     if (tipo === "pistas") {
       if (this.pistas.size === 0) throw new Error("Choose the tracks to send.");
+      // "To the end" = the last bar the chosen tracks' clips reach, not the render's length (bug 24).
+      const elegidas = p!.tracks.filter((t) => this.pistas.has(t.id));
+      const hasta = hastaCompas ?? ultimoCompasDeClips(elegidas.flatMap((t) => t.clips), beatsPerBar(p!));
+      if (!repaint && hasta === null) throw new Error("The chosen tracks have no clips: nothing to send.");
+      if (!repaint && hasta !== null && hasta < desdeCompas) throw new Error(`The chosen tracks end at bar ${hasta}, before bar ${desdeCompas}.`);
       const r = await this.a.renderizarPistas({
         pistas: [...this.pistas],
         nombre: `${nombre || "fuente"}-fuente`,
-        ...(repaint ? {} : { desdeCompas, ...(hastaCompas !== null ? { hastaCompas } : {}) }),
+        ...(repaint ? {} : { desdeCompas, hastaCompas: hasta! }),
+        margenCompases: margen,
       });
+      const compases = repaint ? Math.ceil(r.segundosPedidos / compas - 1e-6) : hasta! - desdeCompas + 1;
       if (r.picoDb < SILENCIO_DBFS) {
         throw new Error(`The chosen tracks sound silent in that range (peak ${r.picoDb.toFixed(1)} dBFS). Nothing was sent. If you want silence as the context, choose Silence.`);
       }
       for (const aviso of r.avisos) this.a.avisos.error(aviso);
-      const nombres = p!.tracks.filter((t) => this.pistas.has(t.id)).map((t) => t.name).join(", ");
+      const nombres = elegidas.map((t) => t.name).join(", ");
       this.fuente = {
         clave,
         audio: r.ruta,
         silencio: null,
-        descripcion: `${nombres}: bars ${repaint ? "all" : `${desdeCompas}-${hastaCompas ?? "end"}`}, ${r.segundos.toFixed(1)} s, peak ${r.picoDb.toFixed(1)} dBFS, ${(r.bytes / 1048576).toFixed(1)} MB`,
+        descripcion: `${nombres}: bars ${repaint ? "all" : `${desdeCompas}-${hasta}${hastaCompas === null ? " (end)" : ""}`}${textoMargen}, ${r.segundos.toFixed(1)} s, peak ${r.picoDb.toFixed(1)} dBFS, ${(r.bytes / 1048576).toFixed(1)} MB`,
         bytes: r.bytes,
         inicioCompas,
         carpeta: carpetaDeProyecto(p!),
         ...rango,
+        compases: margen > 0 ? compases : null,
+        margen,
+        margenEditable: conMargen(tarea),
       };
       return;
     }
@@ -716,6 +804,9 @@ export class VentanaAceStep {
       inicioCompas,
       carpeta,
       ...rango,
+      compases: null,
+      margen: 0,
+      margenEditable: false,
     };
   }
 
@@ -726,14 +817,23 @@ export class VentanaAceStep {
     const motivo = validarParametros(p);
     if (motivo || this.enMarcha) return;
     const proyecto = this.a.proyecto();
-    const carpeta = proyecto ? carpetaDeProyecto(proyecto) : (this.fuente?.carpeta ?? (await this.a.carpetaParaNuevo(p.nombre)));
+    // A new project follows the name as it leaves Review (bug 23), unless a file was already
+    // uploaded into the folder chosen earlier: then that folder holds the source and stays.
+    const carpeta = proyecto
+      ? carpetaDeProyecto(proyecto)
+      : this.fuente?.audio
+        ? this.fuente.carpeta
+        : await this.a.carpetaParaNuevo(p.nombre);
     const inicioCompas = this.cargada?.receta.entrega?.inicioCompas ?? this.fuente?.inicioCompas ?? 1;
     const descripcion = this.cargada?.receta.fuente?.descripcion ?? this.fuente?.descripcion ?? "";
+    // A repeat keeps its recipe's cut: its source already carries that margin.
+    const compases = this.cargada ? (this.cargada.receta.entrega?.compases ?? null) : (this.fuente?.compases ?? null);
+    const margen = this.cargada ? (this.cargada.receta.entrega?.margen ?? 0) : (this.fuente?.margen ?? 0);
     const receta = {
       modulo: "ace-step",
       parametros: parametrosParaEnviar(p),
       fuente: { descripcion },
-      entrega: { inicioCompas },
+      entrega: { inicioCompas, compases, margen },
     };
     const control = new AbortController();
     this.enMarcha = true;
@@ -758,7 +858,7 @@ export class VentanaAceStep {
         throw new Error(datos.error ?? `HTTP ${res.status}`);
       }
       const resultado = await this.leerFlujo(res.body, p.nombre);
-      if (resultado) await this.entregar(resultado, p, carpeta, inicioCompas);
+      if (resultado) await this.entregar(resultado, p, carpeta, inicioCompas, compases);
     } catch (error) {
       if (control.signal.aborted) {
         this.a.avisos.info(`ACE-Step “${p.nombre}” cancelled: no track was added. The GPU stays on until you press Off.`);
@@ -797,7 +897,7 @@ export class VentanaAceStep {
     return resultado;
   }
 
-  private async entregar(r: ResultadoRun, p: Parametros, carpeta: string, inicioCompas: number): Promise<void> {
+  private async entregar(r: ResultadoRun, p: Parametros, carpeta: string, inicioCompas: number, compases: number | null): Promise<void> {
     const leido = leerResultado(r.salida);
     if (!r.ok || !leido) {
       const causa = r.por_timeout ? "the time limit cut the run off" : (r.errores.trim().split("\n").slice(-4).join(" ") || `exit ${r.codigo}`);
@@ -815,7 +915,7 @@ export class VentanaAceStep {
     // Without a BPM the model decided: a new project takes the one the LM reported, when it did.
     const bpm = p.bpm ?? (typeof linaje?.lm_metadata?.bpm === "number" ? linaje.lm_metadata.bpm : null);
     const nombreProyecto = this.a.proyecto()?.name ?? p.nombre;
-    const hecha = await this.a.entregarAudio({ carpeta, nombreProyecto, bpm, tonalidad: p.tonalidad, inicioCompas, tomas });
+    const hecha = await this.a.entregarAudio({ carpeta, nombreProyecto, bpm, tonalidad: p.tonalidad, inicioCompas, compases, tomas });
     if (!hecha) return;
     const semillas = (linaje?.outputs ?? []).map((o) => o.seed).join(", ");
     const tiempos = leido.tiempos;

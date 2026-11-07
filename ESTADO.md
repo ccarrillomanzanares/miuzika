@@ -1,41 +1,62 @@
-# STATUS — 7-Nov-2026 (morning, handoff before a /clear)
+# STATUS — 7-Nov-2026 (afternoon)
 
-## START HERE: what to build next, approved by Carlos on 7-Nov ("claro sí")
+## START HERE
 
-Context: on 7-Nov Carlos built a song track by track on a real A10 (project `workspace/proyectos/ace-step`, kept as it is). The sections below
-from "First real run" on hold every take, measure and verdict. Conclusion so far: `acestep-v15-base` fits the song better than `xl-base` (one
-guitar batch: "pegan muy bien con el resto"), and **the caption does not steer the sound in `lego` on either model** (16 guitar takes, guidance
-7 and 11, with and without context, with and without capitals). His plan: start a **new project on `acestep-v15-base`**, drums first, once these
-three are built. Touching `web/` reloads his tab and the reload closes the project: say so before starting.
+Carlos, 7-Nov: **"hay que evitar tener que pasar de nuevo por dónde ya hemos pasado"**. Before proposing a test or a feature, read
+"What ACE-Step can and cannot do" below: it holds every verdict by ear so far. When a new verdict or conclusion arrives, write it there
+in the same session, not at the end.
 
-1. **Bars that sound to the end.** "From 1 to 8" gives 8-bar files whose sound stops near bar 7 (measured: `toma` 6.94, `toma-2` 7.08,
-   `bajo-1` 6.23, `synth-b-2` 7.08). Bar arithmetic is right; the silence is in the generated audio. Build: generate about 2 bars more than asked
-   (silence longer, or the tracks' source rendered 2 bars further, padded with silence if the tracks end), then cut the delivered clip to the
-   bars asked. Show the margin in Review, editable. Untested whether it fills bar 8: measure where the sound ends after building. Pieces:
-   `web/src/modulos/ace-step/ventana.ts` (`prepararFuente`, `lanzar`, `entregar`), `web/src/modulos/anfitrion.ts` (`entregarAudio` length),
-   recipe `entrega`, and Repeat must keep working.
-2. **Instruction as upstream writes it.** ACE-Step `ca1e85f`, `acestep/core/generation/handler/task_utils.py`: lego and extract put the track
-   in capitals (`track_name.upper()`: "Generate the GUITAR track based on the audio context:"), complete joins upper-case names with " | ".
-   Ours uses lowercase and ", ", in `src/modulos/ace-step/receta.ts` (`instruccionDe`, tests in `receta.test.ts`) and in
-   `workspace/gpu/generar_audio.py` (`INSTRUCCIONES`, whose comment wrongly says verbatim). Measured: capitals change the audio (correlation
-   0.79-0.89 against 0.97-0.99 for a plain repeat) but did not improve the guitar by ear. Fix both, same seed keeps working.
-3. **Context starts on Tracks** when the project has tracks, none ticked; on Silence when it is empty. After a reload the form fell back to
-   Silence and `guitarra-d` was made with no context unnoticed.
+Where we are:
+- The song in progress is project **`bateria-1`** (170 BPM, D minor): `bateria-1` (drums, kept), `bajo-1` ("xilófono sintetizado") and
+  `bajo-1-2` ("mejor pero no es hardcore punk"). Both basses have 9-bar clips from bug 24 (fixed since; shorten them by hand or leave them).
+  Project `ace-step` (named "toma") is the 7-Nov morning song, kept as it is.
+- Built and checked on 7-Nov: bar margin (heard: "llega hasta el 8 inclusive"), instruction as upstream, context starts on Tracks,
+  bugs 15, 16, 22, 23, 24 fixed (detail in the dated section below and in `BUGS.md`). typecheck and 177 unit tests green. **Not committed**
+  (only `1e07535` and `304fb6e` exist; commit when he asks).
+- GPU: off since ~11:25 on 7-Nov (he pressed Off; confirmed "apagada").
 
-Also from this session, listed below under "Improvements" and in `BUGS.md` (19-22): his own requests (ask whether to delete the file when a
-track is deleted; Open and Audio starting in the project folder, "ya lo veremos"), and proposals not yet approved (taken name refused on Review,
-form values kept across reloads, reopen the last project on load, flag a near-silent take, lower a multi-track source instead of clipping, Repeat
-proposing a taken name). Unresolved: twice the Review instruction edit did not reach the recipe (`guitarra-f`, `guitarra-g`), never reproduced on
-the simulated path where a typed edit arrives; ask him whether the box showed the change.
+Next, his choice (nothing decided):
+- **Reference audio** field: the candidate to steer style without words, since the caption does not steer it in lego. Upstream accepts a
+  style reference; not exposed by us; unknown whether it works in lego.
+- Keep building `bateria-1` with lego on `acestep-v15-base`, English caption with positive words, 2-3 takes per track.
+- Proposed earlier, not tried: he writes the notes (MIDI), the app renders them and `cover` dresses each track ("Direction for the song").
+  Gap: the GUI cannot create an empty MIDI track.
+- Proposals waiting for his yes (do not build without it): lower a multi-track source instead of clipping (bug 21), flag a near-silent
+  take, refuse a taken name on Review, keep form values across reloads, reopen the last project on load. His own requests, "ya lo
+  veremos": ask whether to delete the file when a track is deleted; Open and Audio starting in the project folder.
+- Unresolved: twice the Review instruction edit did not reach the recipe (`guitarra-f`, `guitarra-g`); on 7-Nov afternoon his edit
+  ("Generate the DRUMS track") did reach it. Ask him whether the box showed the change those two times.
+- Lyrics for a vocal track: he writes them or asks for a draft he edits.
 
-After building: the next idea inside ACE-Step is a **reference audio** field (upstream accepts a style reference for these tasks; not exposed;
-not known to work in lego), to steer the sound without words. Lyrics for a vocal track still to come: he writes them or asks for a draft he edits.
+Standing facts: he wants the Lambda credits spent ("en un año me los quitarán"), do not keep warning about cost (memory
+`creditos-lambda`), but say when a machine is left on. SSH key `~/.ssh/miuzika-lambda`, registered in Lambda and saved in Settings.
+Commits only when he asks (local only, no remote). Logs are UTC, Carlos reads local time (UTC+1): give local times.
 
-State at handoff: GPU instance `bec6a1d0be85` (A10, us-east-1) **left on** by his choice: he wants the credits spent ("en un año me los
-quitarán"), do not keep warning about cost (memory `creditos-lambda`). SSH key `~/.ssh/miuzika-lambda`, registered in Lambda and saved in
-Settings; Test connection passes. First commit `1e07535` made 7-Nov at his request (local only, no remote); further commits only when he asks. Clock: logs are UTC, Carlos reads local time (UTC+1); give
-local times.
+## 7-Nov afternoon: margin, instruction, context (built, checked on the simulated path, margin HEARD)
 
+What was built and measured (headless Chrome on :5181, `MIUZIKA_GPU=simulado`: proves the path, not the music):
+- **Margin (1)**: lego and complete send 2 bars of margin by default (silence longer, or tracks rendered further and padded with silence;
+  a File source is sent as it is, no margin). Review shows "margin (bars)", editable 0-16: a change re-prepares the source. The clip is cut
+  to the asked bars, the WAV keeps everything (`largoDeClip` in `src/core/tiempo.ts`). Recipe `entrega` carries `compases` and `margen`, so
+  Repeat keeps the cut; older takes without them are placed whole, as before. Measured: 8 bars of silence at 120 -> 20 s source, clip 32
+  beats, WAV 40; tracks bars 1-4 with the margin edited to 1 -> 10 s source, clip 16 beats, WAV 20; Repeat of it -> clip 16. Side effect:
+  a tracks source asked past the project's end is now padded to the asked length (it used to be cut short). Each margin edit leaves the
+  previous render in `entrada/` (`-fuente.wav`, `-fuente_2.wav`). **First A10 take with the margin, 7-Nov ~11:00**, project `bateria-1`
+  (lego drums over 8+2 bars of silence, `acestep-v15-base`, 170 BPM, instruction edited by Carlos to "Generate the DRUMS track"): bars 1-8 at
+  rms ~-19 dB (bar 8 -17.8), bar 9 only a tail (rms -39), bar 10 silent (-62); sound ends 0.1 s into bar 9. Clip 32 beats, WAV 10 bars. One
+  take only. **HEARD**, Carlos: "llega hasta el 8 inclusive".
+  Then `bajo-1` (lego bass over `bateria-1`, base, D minor, caption "bajo eléctrico, estillo punk hardcore"): sounds to bar 8.04, but Carlos:
+  "se parece a un xilófono sintetizado". Measured over bars 1-8: 15 % of energy above 2 kHz, almost none at 500-2000 Hz, centroid 800 Hz
+  (yesterday's `toma` basses: ~0 % above 2 kHz, centroid 66-137 Hz). `bajo-1-2` = Repeat with the same seed 4024297871 and source, only the
+  caption changed to "electric bass guitar, distorted, fast punk hardcore, eighth notes locked to the kick": above 2 kHz 7.6 %, 120-500 Hz
+  52 %, centroid 447 Hz, 6 dB louder. Carlos: "está mejor pero no es hardcore punk". So here the caption did move the timbre (one seed, one
+  pair). Both clips are 9 bars: bug 24. Carlos stopped at ~11:25 and shut the GPU down himself. Carlos: "suena a batería clásica y rockera aunque no punk hardcore" (caption "batería real, estillo punk hardcore"). Peak
+  -0.0 dBFS in bar 1, normalize off: possible clipping, not heard as such.
+- **Instruction (2)**: `instruccionDe` and `generar_audio.py` now build it as upstream's `generate_instruction` (read at `ca1e85f` on 7-Nov:
+  `track_name.upper()`, complete joins with " | "). The simulated script received "Generate the GUITAR track based on the audio context:".
+- **Context (3)**: with tracks, the form starts on Tracks with none ticked (measured: 0 of 1), so Review stops at "Choose the tracks to send";
+  empty project starts on Silence.
+typecheck and 175 unit tests green. Not committed.
 
 ## Why this project exists
 
@@ -69,7 +90,7 @@ Log says so), 2 never reproduced.
 
 Gates at that point: typecheck, 132 unit tests, openDAW contract and build green.
 
-## The ACE-Step module (built 6-Nov, MEASURED with a simulated GPU, never run on a real one, nobody has heard it)
+## The ACE-Step module (built 6-Nov; run on a real A10 and heard since 7-Nov: see "First real run" and the verdict table)
 
 Decided with Carlos on 6-Nov: the app is modular and the GUI is where each module leaves its result. ACE-Step only for now, but
 open to other models and GPU providers. No LLM touches what is sent; ACE-Step's own LM is accepted, as a visible option.
@@ -142,13 +163,13 @@ Worked for the first time on a real GPU: new SSH key, pinned commit, recipe file
 
 **Synth over drums and two basses, 7-Nov, HEARD, did not pass:** `synth-1` "un pegote extraño como si se hubiese extraído de otra canción"; `synth-2` very low, "podría servir" but off style and with a touch of drums. By measure `synth-1` looked promising (E minor 0.83, no copy of the source, level fine): the numbers said nothing about whether it belongs. To try: a simpler caption over fewer tracks.
 
-## Needed from Carlos before the first run
+## Needed from Carlos before the first run (all done 7-Nov)
 
 Done 7-Nov: Settings filled and Test connection passes. The API key in `../miuzika/.env` is dead (401), and the SSH key `aios-agent-rag` no longer exists in Lambda: a new one, `~/.ssh/miuzika-lambda`, was created and registered, no passphrase because the server runs ssh with nobody to type it. The default name `aios-agent-rag` in `proveedores-gpu.ts` and `lambda.ts` is stale but overridden. Next: the first real run, whose go is Carlos's.
 
 ## Undecided: do not assume any of this
 
-1. **Where the project lives on GitHub**: a new repository, or replacing miuzika's content with its history behind it. No commits yet.
+1. **Where the project lives on GitHub**: a new repository, or replacing miuzika's content with its history behind it. Local commits only, no remote.
 2. **What cannot be missing before he stops using miuzika.** Asked, not answered. Candidates: faders, effects and buses;
    WAV and MIDI export; Sounds; Strudel; Pad; the agent as an optional piece.
 
@@ -157,17 +178,17 @@ change the key by hand, rename, gain and pan, effects, WAV and MIDI export.
 
 ## Direction for the song (Carlos, 7-Nov)
 
-Rejected: a whole song from text2music, then separated: "quiero tener el control desde 0". After 13 lego takes with context, lego does not follow the caption at guidance 7 (11 not run) and fits unevenly. Proposed, not decided or tried: he writes the notes (MIDI), the app renders them and `cover` dresses each track. Evidence for: `cover` passed his ear on 5-Nov, aligned at lag 0 ms. Against: only on full material, never one instrument at a time. Gap: the GUI edits a clip's notes and imports .mid, but cannot create an empty MIDI track.
+Rejected: a whole song from text2music, then separated: "quiero tener el control desde 0". After 13 lego takes with context, lego does not follow the caption at guidance 7 (11 run later, `guitarra-c`: no better) and fits unevenly. Proposed, not decided or tried: he writes the notes (MIDI), the app renders them and `cover` dresses each track. Evidence for: `cover` passed his ear on 5-Nov, aligned at lag 0 ms. Against: only on full material, never one instrument at a time. Gap: the GUI edits a clip's notes and imports .mid, but cannot create an empty MIDI track.
 
 ## Improvements Carlos is noting while making a song (7-Nov), not built yet
 
 - Deleting a track from the GUI should also ask whether to delete its file from disk.
 - Open and Audio should start in the project's folder if there is one, else the app's (Carlos, 7-Nov). A browser's file dialog cannot be given a folder by path, so proposed: a list inside the app of the project's files (generado/, entrada/), served by the server, with the system dialog as a second option.
-- Approved by Carlos 7-Nov: in a project with tracks, Context starts on Tracks, none ticked; in an empty one, on Silence.
+- BUILT 7-Nov: in a project with tracks, Context starts on Tracks, none ticked; in an empty one, on Silence.
 - Proposed: the form keeps its last values per project across reloads; a taken name refused on Review; a near-silent take flagged; a multi-track source lowered instead of clipped (BUGS 21).
 - A tab reload closes the project. It happened 7-Nov also with no change of ours (no file touched, last request 29 min before, cause unknown; a browser discarding an idle tab is a guess). Proposed: reopen the last project on load.
 - A taken name should be refused on Review, with Run disabled and the reason there. Today Run closes the window, the server answers 409, the reason only reaches the Log, and the form's edits are gone (Carlos, 7-Nov: "creo que no está haciendo nada").
-- "From bar 1 to 8" should fill bar 8. Measured 7-Nov: files and sources do last 8 bars (16.52 s of 16.552 s), but the model ends before: `toma` at bar 6.94, `toma-2` at 7.08, `bajo-1` at 6.23, `synth-b-2` at 7.08. Bar arithmetic is right; the silence is in the generated audio. Why is not known (a written ending is a guess). Proposed, not built: generate about 2 bars more and cut the clip to the bars asked, shown in Review. Untested whether the margin fills it.
+- "From bar 1 to 8" should fill bar 8. Measured 7-Nov: files and sources do last 8 bars (16.52 s of 16.552 s), but the model ends before: `toma` at bar 6.94, `toma-2` at 7.08, `bajo-1` at 6.23, `synth-b-2` at 7.08. Bar arithmetic is right; the silence is in the generated audio. Why is not known (a written ending is a guess). BUILT and HEARD 7-Nov: 2 bars of margin, clip cut to the bars asked ("llega hasta el 8 inclusive", one take).
 
 ## Idea to keep: continuing ACE-Step ourselves (noted at Carlos's request, 6-Nov; nothing decided or started)
 
@@ -176,6 +197,34 @@ keep our own copy of the code (MIT, 14 MB) and of the weights (Hugging Face, MIT
 20 recommended, "8 songs, 1 hour on a 3090"); retrain all parameters from the current weights (minimum 8x40 GB GPUs, about 2 TB, 116K songs,
 code changes: `docs/en/Large_Scale_SFT_Training_Guide.md`, whose Muse dataset has folders named `suno_*`, to clear up before using it). No guide
 seen for training from zero. A LoRA can lean the sound towards his; it adds no function and fixes no task.
+
+## What ACE-Step can and cannot do: the verdict so far (written 7-Nov afternoon, at Carlos's request)
+
+Only his ear counts as a verdict here; sources: `../miuzika/docs/PRUEBAS-ACESTEP-2026-11-04.md` (5-Nov) and the sections of this
+file from "First real run" (7-Nov). Update this table when a new verdict arrives, instead of letting it scatter again.
+
+| task | verdict by ear | model | source |
+|---|---|---|---|
+| complete (voice -> band) | PASS, "está muy bien" | xl-base | 5-Nov test 7 |
+| cover 0.6 with lyrics | PASS: turbo "hay voz… piano con menos notas"; sft "muy industrial, me encanta" (preferred). Without lyrics: no voice | xl-turbo, xl-sft | 5-Nov tests 4, 4b, 8 |
+| extract vocals | PASS on the 2nd try, "se escucha sólo la voz" | xl-base | 5-Nov test 2b |
+| extract drums | FAIL / partial ("pegote con restos"). A real separator (Demucs or similar) is the honest tool | xl-base | 5-Nov tests 3, 3b |
+| lego over silence or a few tracks | WORKS as an instrument generator: the instrument mostly holds and base fits the song ("pegan muy bien con el resto"); with the margin it reaches bar 8 | base, xl-base | 7-Nov |
+| lego over a full mix | FAIL: strings came back as a track with voice and everything | xl-base | 5-Nov |
+| lego / repaint with a range | the rest came back as a copy of the source | — | 5-Nov |
+| text2music | good full songs ("muy industrial, muy bueno"), but not for one instrument: the LM completes a song, negations prime what they deny | xl-turbo + LM | 2-Nov, 5-Nov evening |
+| repaint | range control works; heard "igual, algo más", level then falsified by our -6 dB master (fixed) | xl-turbo | 5-Nov test 5 |
+
+**The weak point: style in lego.** The instrument mostly comes out, the caption's style almost never: 16 guitars on 7-Nov, none followed
+it; on 7-Nov afternoon neither drums nor bass sounded "punk hardcore". Sometimes another instrument (bass like a xylophone, guitars like synth
+or harp) and sometimes a near-silent take (-57 dBFS). One counter-sign: same seed, an English caption moved the bass timbre a lot (better, not
+punk), one pair only. Rough share of lego takes he kept: between one in three and two in three (a count over his verdicts, not a measure).
+
+**Not tested:** repaint judged properly by ear, `cover-nofsq`, text2music without the LM, the **reference audio** (the next candidate to
+steer style without words; unknown whether it works in lego).
+
+**Working method that follows (proposed to Carlos 7-Nov, not a decision):** lego on `acestep-v15-base`, first track over silence, each next
+one over a few finished tracks, English caption with positive words only, 2-3 takes per track to keep one.
 
 ## Then: validate ACE-Step
 
@@ -189,9 +238,8 @@ material, his ear as the verdict. Earlier results and measurements: `../miuzika/
 **His musical goal:** a dark wave / synth pop song, sinister, dirty, at moments industrial, mid-tempo, nihilistic English
 lyrics, **one track per instrument and one for the voice, mixed by him**. Not a finished mix from the model.
 
-**First test, still pending:** does `lego` over real silence give one clean instrument? The only evidence is one accidental
-violin. The 6-Nov attempt in miuzika does not count: the source was `bateria-1`, not silence. If it fails, the fallback is built
-from what passed (generate a voice or a base, and complete from there).
+**Answered 7-Nov:** `lego` over real silence gives one instrument: drums twice, heard ("sólo batería" for `toma`, `bateria-1` "clásica y
+rockera"). See the verdict table above.
 
 ## Outside this folder
 

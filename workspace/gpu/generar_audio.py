@@ -82,8 +82,13 @@ MODELOS = {
     "acestep-v15-xl-base": ("base", TAREAS_BASE),
 }
 PASOS_POR_FAMILIA = {"turbo": 8, "sft": 50, "base": 50}
-# TASK_INSTRUCTIONS in acestep/constants.py, verbatim. The handler does not fill the track
-# name by itself: without it extract/lego get the "_default" wording, which is a guess.
+# TASK_INSTRUCTIONS in acestep/constants.py (ca1e85f). Called directly, the handler does not
+# fill the track name: without it extract/lego get the "_default" wording, which is a guess.
+# instruccion_de fills them as upstream's generate_instruction does (task_utils.py, ca1e85f):
+# names upper-cased, complete joined with " | ". Until 7-Nov this was lowercase and ", ";
+# measured 7-Nov, capitals change the audio (correlation 0.79-0.89 vs 0.97-0.99 for a repeat).
+# The browser always sends its own instruction (receta.ts instruccionDe, same rule); this is
+# only the default when the script runs by hand.
 INSTRUCCIONES = {
     "text2music": "Fill the audio semantic mask based on the given conditions:",
     "repaint": "Repaint the mask area based on the given conditions:",
@@ -207,9 +212,9 @@ def comprobar(args):
 
 def instruccion_de(tarea, pistas):
     if tarea in ("extract", "lego"):
-        return INSTRUCCIONES[tarea].format(pista=pistas[0]) if pistas else INSTRUCCIONES[f"{tarea}_default"]
+        return INSTRUCCIONES[tarea].format(pista=pistas[0].upper()) if pistas else INSTRUCCIONES[f"{tarea}_default"]
     if tarea == "complete":
-        return INSTRUCCIONES[tarea].format(pistas=", ".join(pistas)) if pistas else INSTRUCCIONES["complete_default"]
+        return INSTRUCCIONES[tarea].format(pistas=" | ".join(p.upper() for p in pistas)) if pistas else INSTRUCCIONES["complete_default"]
     return INSTRUCCIONES[tarea]
 
 

@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 import type { ViteDevServer } from "vite";
 import type { Contexto } from "../contexto.ts";
 import { FORMATO } from "../../src/core/proyecto-archivo.ts";
+import { otroOrigen } from "../ruta.ts";
 
 export function rutasProyectos(server: ViteDevServer, ctx: Contexto): void {
   const { responderJson, leerCuerpo, resolverEnTrabajo, listarProyectosDisco } = ctx;
@@ -40,6 +41,11 @@ export function rutasProyectos(server: ViteDevServer, ctx: Contexto): void {
     }
 
     if (req.method === "POST") {
+      // Bug 16: this overwrites a project's master file; another site's page must not.
+      if (otroOrigen(req)) {
+        responderJson(res, 403, { error: "only from the app itself" });
+        return;
+      }
       leerCuerpo(req, res, (cuerpo) => {
         try {
           const datos = JSON.parse(cuerpo) as { path?: string; contenido?: string };

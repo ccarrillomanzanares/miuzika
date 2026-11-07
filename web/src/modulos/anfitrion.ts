@@ -8,7 +8,7 @@ import type { Project } from "../../../src/core/types.ts";
 import { beatsPerBar } from "../../../src/core/types.ts";
 import { applyOps, type Op } from "../../../src/core/ops.ts";
 import { carpetaDeNombre, carpetaDeProyecto, carpetaLibre, createProject } from "../../../src/core/project.ts";
-import { compasesDeAudio } from "../../../src/core/tiempo.ts";
+import { largoDeClip } from "../../../src/core/tiempo.ts";
 import { cargarWavDeDisco, idDeAsset, opsDeAudio } from "../audio-store.ts";
 import { listarProyectos } from "../proyecto-disco.ts";
 import type { Avisos } from "../avisos.ts";
@@ -25,6 +25,11 @@ export interface EntregaAudio {
   tonalidad: string;
   /** Bar where the audio starts, from 1. */
   inicioCompas: number;
+  /**
+   * Bars the clip lasts, when the module asked the model for more than it wants placed (the
+   * margin, 7-Nov). The WAV keeps everything; only the clip is shorter. Null = the whole file.
+   */
+  compases?: number | null;
   tomas: { ruta: string; nombre: string; silenciada: boolean }[];
 }
 
@@ -95,7 +100,7 @@ export function crearAnfitrion(d: {
             durationBeats: asset.durationBeats,
             ruta: toma.ruta,
             startBar: Math.max(0, entrega.inicioCompas - 1),
-            lengthBeats: compasesDeAudio(asset.durationBeats, beatsPerBar(actual)),
+            lengthBeats: largoDeClip(asset.durationBeats, beatsPerBar(actual), entrega.compases ?? null),
             reemplazar: false,
           }),
         ).project;
