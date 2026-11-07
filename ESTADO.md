@@ -17,6 +17,14 @@ in the same session, not at the end.
   - Feature noted but not designed: build a caption from web descriptions of a known song.
   - Proposed, not approved: a dedicated stem separator such as Demucs.
 - **GPU:** on since 19:29, unless he has pressed Off since.
+- **Tests left (proposed 7-Nov night, his choice; recommended first: 1):**
+  1. text2music with sung English lyrics written from his imagery: static as prayer, mornings of tin and rain, cables holding the
+     body in shape, a sky factory that stamps your name in steel and lets it rust, halos swapped for a flickering light, love as a
+     transmission through the crack. Use `[Verse]`/`[Chorus]`, the `vein` caption, 92 BPM, D minor. His goal includes a voice.
+  2. Cover at strength 0.3: the `vein-cover-1` recipe changing only that, to see whether the caption's "dirtier" then lands.
+  3. Repaint 4-8 bars of `vein-1`, never judged by ear.
+  4. text2music on xl-sft / xl-base against xl-turbo: same caption and seed.
+  5. text2music with LM none; 6. cover-nofsq. Both never run.
 
 Where we were before (7-Nov morning and afternoon, partly superseded above):
 - Song project **`bateria-1`**, now deleted: drums kept; basses `bajo-1` ("xilófono sintetizado") and `bajo-1-2` ("mejor pero no es
