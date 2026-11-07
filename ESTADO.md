@@ -11,8 +11,8 @@ Where we are:
   `bajo-1-2` ("mejor pero no es hardcore punk"). Both basses have 9-bar clips from bug 24 (fixed since; shorten them by hand or leave them).
   Project `ace-step` (named "toma") is the 7-Nov morning song, kept as it is.
 - Built and checked on 7-Nov: bar margin (heard: "llega hasta el 8 inclusive"), instruction as upstream, context starts on Tracks,
-  bugs 15, 16, 22, 23, 24 fixed (detail in the dated section below and in `BUGS.md`). typecheck and 177 unit tests green. **Not committed**
-  (only `1e07535` and `304fb6e` exist; commit when he asks).
+  bugs 15, 16, 22, 23, 24 fixed (detail in the dated section below and in `BUGS.md`). typecheck and 177 unit tests green. Committed in
+  `8996a73` (7-Nov afternoon, at his request; local only).
 - GPU: off since ~11:25 on 7-Nov (he pressed Off; confirmed "apagada").
 
 Next, his choice (nothing decided):
