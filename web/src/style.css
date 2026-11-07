@@ -831,6 +831,15 @@ small.ace-pasado {
   color: var(--accent);
 }
 
+/* The no-warranty notice before Run: framed, so it reads as a notice and not as help text. */
+.dialogo p.ace-aviso-coste {
+  margin: 8px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
 .dialogo p.ace-error:empty {
   display: none;
 }

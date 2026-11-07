@@ -43,6 +43,27 @@ const SILENCIO_DBFS = -60;
  * Two covers that; whether the asked bars then sound to the end is not measured yet.
  */
 const MARGEN_COMPASES = 2;
+/**
+ * What each task is good for and what fails, shown before anything is spent. Carlos, 7-Nov: "no
+ * quiero quejas de usuarios de no sirve". Every sentence comes from a take he judged by ear
+ * (ESTADO.md, "What ACE-Step can and cannot do"); change them when a verdict changes.
+ */
+const EXPECTATIVAS: Record<Tarea, string> = {
+  text2music: "Makes a whole song: drums, bass, chords and voice together. Not for one instrument alone: asked for drums only, it still added synths and melody. Say what you want; “no X” tends to bring X.",
+  lego: "Adds one instrument that plays along with the tracks you choose, or over silence. The instrument usually comes out and fits the song; the style in the caption is often ignored, and some takes come out as another instrument or nearly silent. Make 2-3 takes and keep the best. Over a full mix it fails: choose a few tracks.",
+  complete: "Builds a band around one track. Tested from a voice: good result.",
+  cover: "Plays the source again with another sound; the caption changes the instruments. If there is a voice, paste the lyrics or the voice is lost.",
+  "cover-nofsq": "Undocumented by ACE-Step; never tested here.",
+  repaint: "Redoes some bars and keeps the rest. The range works; the sound has not been judged yet.",
+  extract: "Pulls one instrument out of a mix. Voice: good. Drums: comes out with leftovers; for clean stems use a dedicated separator.",
+};
+/**
+ * Before Run, where money is spent. Carlos, 7-Nov: a disclaimer of no guarantee and of the money a
+ * rented GPU costs, "como todo el software libre": the AGPL-3.0 in LICENSE already says WITHOUT ANY
+ * WARRANTY; this says what that means here.
+ */
+const SIN_GARANTIA =
+  "This is free software provided as is, without any warranty (AGPL-3.0). No result is guaranteed: the same request can give a good take, the wrong instrument or near silence. The GPU is rented from a provider with your account: it bills the machine's time whether the take is useful or not, failed and cancelled runs included, and keeps billing until you press Off. Every cost is yours.";
 /** Only the Track tab (lego, complete): the tasks where the short ending was measured. */
 const conMargen = (tarea: Tarea): boolean => tarea === "lego" || tarea === "complete";
 
@@ -204,7 +225,12 @@ export class VentanaAceStep {
 
   private modeloDelFormulario(tarea: Tarea): string {
     const validos = modelosPara(tarea).map((m) => m.nombre);
-    return this.v.modelo && validos.includes(this.v.modelo) ? this.v.modelo : validos[0]!;
+    if (this.v.modelo && validos.includes(this.v.modelo)) return this.v.modelo;
+    // Lego proposes base, not xl-base (Carlos, 7-Nov). Evidence: one guitar batch, "pegan muy bien
+    // con el resto" on base against xl-base; his own intuition is that both work the same. Not
+    // measured beyond that: a default, not a finding.
+    if (tarea === "lego" && validos.includes("acestep-v15-base")) return "acestep-v15-base";
+    return validos[0]!;
   }
 
   private tonalidadDelFormulario(): string {
@@ -368,11 +394,18 @@ export class VentanaAceStep {
 
   private htmlPestana(): string {
     const nombre = this.fila("Name", this.texto("nombre", "the take's file and track"), this.a.proyecto() ? "" : "It also names the new project.");
-    const caption = this.fila("Caption", `${areaDeTexto('name="prompt"', 3, this.v.prompt ?? "")}<small data-cuenta>${(this.v.prompt ?? "").length}/512</small>`, "Sent as you write it. Negations seem to attract what they deny: “no bass” primed a bass on 5-Nov.");
+    const caption = this.fila(
+      "Caption",
+      `${areaDeTexto('name="prompt"', 3, this.v.prompt ?? "")}<small data-cuenta>${(this.v.prompt ?? "").length}/512</small>`,
+      "Sent as you write it. Negations seem to attract what they deny: “no bass” primed a bass on 5-Nov." +
+        (this.pestana === "track" ? " Write it in English: in one test it changed the sound more than the same idea in Spanish." : ""),
+    );
+    const espera = (tarea: Tarea): string => `<p class="ace-nota">${esc(EXPECTATIVAS[tarea])}</p>`;
     const letra = (ayuda: string): string => this.fila("Lyrics", areaDeTexto('name="letra"', 5, this.v.letra ?? ""), ayuda);
     const idioma = this.fila("Language", this.texto("idioma", "en, es… (empty = unknown)"));
     if (this.pestana === "song") {
       return (
+        espera("text2music") +
         nombre + caption +
         letra("Empty: [Instrumental] is sent. Review shows it.") +
         idioma +
@@ -393,13 +426,14 @@ export class VentanaAceStep {
           );
       const instrumento =
         tarea === "lego"
-          ? this.fila("Instrument", this.selector("instrumento", PISTAS_MODELO.map((p): [string, string] => [p, p]), this.v.instrumento ?? "drums"), "One track per take. Lego over silence is still untested: one accidental violin so far.")
+          ? this.fila("Instrument", this.selector("instrumento", PISTAS_MODELO.map((p): [string, string] => [p, p]), this.v.instrumento ?? "drums"), "One track per take.")
           : this.fila(
               "Instruments",
               `<div class="ace-lista">${PISTAS_MODELO.map((p) => `<label class="ace-opcion"><input type="checkbox" data-acomp="${p}"${this.acompanamiento.has(p) ? " checked" : ""}> ${p}</label>`).join("")}</div>`,
               "None: the model chooses.",
             );
       return (
+        espera(tarea) +
         nombre + modo + instrumento + caption +
         letra("Only if it sings. Empty: [Instrumental] is sent.") +
         idioma +
@@ -417,6 +451,7 @@ export class VentanaAceStep {
     return (
       nombre +
       this.fila("Task", this.selector("transformar", opciones, tarea)) +
+      espera(tarea) +
       (tarea === "extract" ? this.fila("Instrument", this.selector("instrumento", PISTAS_MODELO.map((p): [string, string] => [p, p]), this.v.instrumento ?? "vocals")) : caption) +
       (tarea.startsWith("cover") ? this.fila("Strength", this.num("fuerza", 0, 1, "1"), "1 follows the source, 0.2 keeps only its style.") : "") +
       letra(tarea === "extract" ? (this.v.instrumento === "drums" ? "Empty: [Instrumental] is sent." : "Empty: Review shows what is sent for this instrument.") : "A sung cover needs its lyrics: without them the voice went missing on 5-Nov. Empty: [Instrumental].") +
@@ -484,6 +519,8 @@ export class VentanaAceStep {
         ${this.fila("normalize", `<label class="ace-opcion"><input type="checkbox" data-param="normalizar" data-tipo="booleano"${p.normalizar ? " checked" : ""}> to -1 dBFS</label>`)}
         ${this.fila("instruction", t("instruccion", p.instruccion))}
       </div>
+      <p class="ace-nota">${esc(EXPECTATIVAS[p.tarea])}</p>
+      <p class="ace-aviso-coste"><strong>No warranty.</strong> ${esc(SIN_GARANTIA)}</p>
       <p class="ace-estimacion" data-estimacion></p>
       <p class="ace-error" data-error></p>
       <div class="dialogo-acciones">

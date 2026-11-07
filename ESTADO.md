@@ -14,6 +14,12 @@ Where we are:
   bugs 15, 16, 22, 23, 24 fixed (detail in the dated section below and in `BUGS.md`). typecheck and 177 unit tests green. Committed in
   `8996a73` (7-Nov afternoon, at his request; local only).
 - GPU: off since ~11:25 on 7-Nov (he pressed Off; confirmed "apagada").
+- In the window since 7-Nov afternoon (Carlos: "no quiero quejas de usuarios de no sirve"): each tab and task says what it is good for
+  and what fails (`EXPECTATIVAS` in `ventana.ts`, one sentence per verdict of the table below: change them together), and Review shows a
+  framed **No warranty** notice before Run: free software as is (AGPL-3.0, as in LICENSE, "como todo el software libre"), no result
+  guaranteed, the rented GPU bills every run, failed and cancelled ones included, until Off. Seen headless; not a lawyer's text.
+- Lego proposes `acestep-v15-base` by default since 7-Nov (was xl-base by list order). Carlos: "habría que probar más veces, tengo la
+  intuición que funcionan igual": one guitar batch is all the evidence; compare base and xl-base on more takes before calling it.
 
 Next, his choice (nothing decided):
 - **Reference audio** field: the candidate to steer style without words, since the caption does not steer it in lego. Upstream accepts a
