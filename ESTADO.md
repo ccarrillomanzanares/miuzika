@@ -104,7 +104,17 @@ second copy of superdough (`superdoughoutput.mjs` vs the bundled dist) with no c
 audio context" and the delay arpeggio was silent; (2) superdough's private node pools reuse filters etc. from the previous render's
 dead OfflineAudioContext. Fixed: the library builds its own controller, and stale pooled nodes read as collected during a render.
 Measured after: the 5 examples, then three again, all sound with no warnings. Renders peaked up to +6.6 dBFS (909 kit): turned down to
--1 dBFS before the WAV. Added one as a track headless: 4 bars on the grid, waveform drawn. **Not heard by Carlos yet.**
+-1 dBFS before the WAV. Added one as a track headless: 4 bars on the grid, waveform drawn. **Not heard by Carlos yet.** Committed 6ee39da.
+
+**8-Nov: MIDI-LLM module** (Carlos reviewed what old miuzika had: "vamos primero con proponer_midi", named "MIDI-LLM", import
+path approved). Old `proponer_midi.py` ported to `generar_midillm.py`: repo pinned 93c660c, weights revision 8b82ab9 (not gated),
+packages pinned to its requirements.txt without vllm, torch 2.8.0 cu128; the generation driven through the repo's own
+`generate_from_prompts_hf` so the seed is set and recorded (its script has none); tempo stamped on each .mid (ticks unchanged).
+Window: description, instruments, key, time signature, tempo in words and chords composed into its training captions' shape
+("Set in the key of D minor with a 4/4 time signature… a chord progression of Dm, Bb, F, and C."), its README's examples, 1-8
+proposals, start bar, Advanced (length in tokens, temperature, top-p, seed). Delivery: `entregarMidi` now takes a start bar, names
+each proposal's tracks "<file> · <instrument>", mutes proposals after the first, and makes the project if none is open.
+Licence: Llama 3.2 Community ("Built with Llama"). Checked headless to Review. **Not run on the GPU yet.**
 
 **8-Nov: HeartMuLa researched for a module of its own (Carlos: "documéntate de heartmula para hacer su propio formulario").**
 Read from heartlib at `5858ca8` (8-Oct-2026, shallow clone, nothing run) and the HF cards. Nothing designed or built yet.

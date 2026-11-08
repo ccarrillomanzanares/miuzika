@@ -34,6 +34,21 @@ export interface EntregaAudio {
   tomas: { ruta: string; nombre: string; silenciada: boolean }[];
 }
 
+export interface EntregaMidi {
+  carpeta: string;
+  rutas: string[];
+  /** Bar where the notes start, from 1. Default 1. */
+  inicioCompas?: number;
+  /**
+   * MIDI-LLM, 8-Nov: several proposals come at once. Each file's tracks are named after it ("idea-2 · Bass"), and the
+   * files after the first come in muted, like audio takes, so they do not all sound together.
+   */
+  porPropuesta?: boolean;
+  /** With no project open, one is made in `carpeta` with this name and tempo (MuLaCover's audio opened it before). */
+  nombreProyecto?: string;
+  bpm?: number | null;
+}
+
 export interface Anfitrion {
   proyecto(): Project | null;
   avisos: Avisos;
@@ -41,7 +56,7 @@ export interface Anfitrion {
   renderizarPistas(opciones: OpcionesFuente): Promise<FuenteRenderizada>;
   entregarAudio(entrega: EntregaAudio): Promise<boolean>;
   /** .mid files already in the project folder become MIDI tracks at bar 1 (8-Nov: MuLaCover's transcription). */
-  entregarMidi(entrega: { carpeta: string; rutas: string[] }): Promise<string[]>;
+  entregarMidi(entrega: EntregaMidi): Promise<string[]>;
   /** Settings, for a module that finds the GPU not configured. Resolves when it closes. */
   abrirAjustes(): Promise<void>;
 }
@@ -119,24 +134,45 @@ export function crearAnfitrion(d: {
 
     async entregarMidi(entrega) {
       const abierto = sesion.project;
-      // Called right after entregarAudio, which opened the project if there was none.
-      if (!abierto || carpetaDeProyecto(abierto) !== entrega.carpeta) {
+      if (abierto && carpetaDeProyecto(abierto) !== entrega.carpeta) {
+        avisos.error(`The MIDI files are in proyectos/${entrega.carpeta}/generado/, but another project is open now: open that project and import them from there.`);
+        return [];
+      }
+      // MuLaCover calls this right after entregarAudio, which opened the project; MIDI-LLM brings no audio.
+      if (!abierto && !entrega.nombreProyecto) {
         avisos.error(`The MIDI files are in proyectos/${entrega.carpeta}/generado/, but that project is not open: import them from there.`);
         return [];
       }
-      let actual = abierto;
+      const nuevo = !abierto;
+      let actual = abierto ?? createProject({ name: entrega.nombreProyecto!, bpm: entrega.bpm ?? 120, lengthBars: 8, carpeta: entrega.carpeta });
+      const inicio = Math.max(0, (entrega.inicioCompas ?? 1) - 1);
       const hechas: string[] = [];
-      for (const ruta of entrega.rutas) {
+      for (const [i, ruta] of entrega.rutas.entries()) {
         try {
-          const r = await pistasDesdeMidi(actual, ruta, 0, false);
+          const antes = actual.tracks.length;
+          // A new project already has the tempo the script stamped: nothing to warn about.
+          const r = await pistasDesdeMidi(actual, ruta, inicio, false);
           actual = r.project;
-          hechas.push(...r.hechas);
+          if (entrega.porPropuesta) {
+            const propuesta = ruta.split("/").pop()!.replace(/\.midi?$/i, "");
+            const ops: Op[] = actual.tracks.slice(antes).flatMap((t): Op[] => [
+              { op: "set_track", trackId: t.id, name: `${propuesta} · ${t.name}`.slice(0, 60) },
+              ...(i > 0 ? [{ op: "set_track", trackId: t.id, muted: true } as Op] : []),
+            ]);
+            actual = applyOps(actual, ops).project;
+            hechas.push(`${propuesta}${i > 0 ? " (muted)" : ""}: ${r.hechas.join(", ")}`);
+          } else {
+            hechas.push(...r.hechas);
+          }
           for (const nota of r.avisos) avisos.error(nota);
         } catch (error) {
           avisos.error(`${ruta}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
-      if (hechas.length > 0) sesion.commitLive(actual, true);
+      if (hechas.length > 0) {
+        if (nuevo) sesion.setProject(actual);
+        else sesion.commitLive(actual, true);
+      }
       return hechas;
     },
   };

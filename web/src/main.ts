@@ -24,6 +24,7 @@ import { VentanaMulaCover } from "./modulos/mulacover/ventana.ts";
 import { VentanaDemucs } from "./modulos/demucs/ventana.ts";
 import { VentanaStableAudio } from "./modulos/stableaudio/ventana.ts";
 import { VentanaStrudel } from "./modulos/strudel/ventana.ts";
+import { VentanaMidiLlm } from "./modulos/midillm/ventana.ts";
 import { VentanaAjustes } from "./ajustes.ts";
 import { crearAvisos } from "./avisos.ts";
 import { crearDetectorDoble } from "./doble-pulsacion.ts";
@@ -162,6 +163,7 @@ const modulos: Record<string, { abrir(): Promise<void> }> = {
   demucs: new VentanaDemucs(anfitrion, gpu),
   stableaudio: new VentanaStableAudio(anfitrion, gpu),
   strudel: new VentanaStrudel(anfitrion),
+  midillm: new VentanaMidiLlm(anfitrion, gpu),
 };
 
 $("modulos").addEventListener("click", (event) => {
