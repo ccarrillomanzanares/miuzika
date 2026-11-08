@@ -11,6 +11,7 @@ import { carpetaDeNombre, carpetaDeProyecto, carpetaLibre, createProject } from 
 import { largoDeClip } from "../../../src/core/tiempo.ts";
 import { cargarWavDeDisco, idDeAsset, opsDeAudio } from "../audio-store.ts";
 import { listarProyectos } from "../proyecto-disco.ts";
+import { pistasDesdeMidi } from "../importar-midi.ts";
 import type { Avisos } from "../avisos.ts";
 import type { FuenteRenderizada, OpcionesFuente } from "../exportar.ts";
 import type { Sesion } from "../sesion.ts";
@@ -39,6 +40,8 @@ export interface Anfitrion {
   carpetaParaNuevo(nombre: string): Promise<string>;
   renderizarPistas(opciones: OpcionesFuente): Promise<FuenteRenderizada>;
   entregarAudio(entrega: EntregaAudio): Promise<boolean>;
+  /** .mid files already in the project folder become MIDI tracks at bar 1 (8-Nov: MuLaCover's transcription). */
+  entregarMidi(entrega: { carpeta: string; rutas: string[] }): Promise<string[]>;
   /** Settings, for a module that finds the GPU not configured. Resolves when it closes. */
   abrirAjustes(): Promise<void>;
 }
@@ -112,6 +115,29 @@ export function crearAnfitrion(d: {
       if (nuevo) sesion.setProject(actual);
       else sesion.commitLive(actual, true);
       return true;
+    },
+
+    async entregarMidi(entrega) {
+      const abierto = sesion.project;
+      // Called right after entregarAudio, which opened the project if there was none.
+      if (!abierto || carpetaDeProyecto(abierto) !== entrega.carpeta) {
+        avisos.error(`The MIDI files are in proyectos/${entrega.carpeta}/generado/, but that project is not open: import them from there.`);
+        return [];
+      }
+      let actual = abierto;
+      const hechas: string[] = [];
+      for (const ruta of entrega.rutas) {
+        try {
+          const r = await pistasDesdeMidi(actual, ruta, 0, false);
+          actual = r.project;
+          hechas.push(...r.hechas);
+          for (const nota of r.avisos) avisos.error(nota);
+        } catch (error) {
+          avisos.error(`${ruta}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      if (hechas.length > 0) sesion.commitLive(actual, true);
+      return hechas;
     },
   };
 }

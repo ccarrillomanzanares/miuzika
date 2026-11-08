@@ -108,6 +108,7 @@ interface FuentePreparada {
 interface TomaGuardada {
   nombre: string;
   receta: {
+    modulo?: string;
     parametros: Partial<Parametros>;
     fuente?: { descripcion?: string };
     entrega?: { inicioCompas?: number; compases?: number | null; margen?: number; bpmProyecto?: number | null; tonalidad?: string };
@@ -471,7 +472,10 @@ export class VentanaAceStep {
 
   private htmlTomas(): string {
     // Every take still counts for the names in use (nombresOcupados); only the offered tasks can be repeated.
-    const repetibles = this.tomas.map((t, i) => [t, i] as const).filter(([t]) => OFRECIDA(t.receta.parametros.tarea) && !t.receta.parametros.referencia);
+    // Since 8-Nov other modules (MuLaCover, Demucs) leave lineages in the same generado/: only ACE-Step's are its takes.
+    const repetibles = this.tomas
+      .map((t, i) => [t, i] as const)
+      .filter(([t]) => (t.receta.modulo ?? "ace-step") === "ace-step" && OFRECIDA(t.receta.parametros.tarea) && !t.receta.parametros.referencia);
     if (repetibles.length === 0) return "";
     const opciones = repetibles.map(([t, i]) => `<option value="${i}">${esc(t.nombre)} · ${esc(String(t.receta.parametros.tarea ?? ""))} · ${esc(String(t.receta.parametros.modelo ?? ""))}</option>`).join("");
     return `<details class="ace-tomas"><summary>Takes of this project (${repetibles.length})</summary>

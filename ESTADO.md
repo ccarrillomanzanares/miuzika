@@ -11,6 +11,28 @@ usuarios". Do not propose more ACE-Step tests (shared chords for stems, more str
 glitches, MIDI dressed by cover): they stay as ideas below, for users to find. Recipe that came out best: text2music on xl-sft + LM 4B
 with the `vein` caption at a given BPM; stems by describing one instrument alone; bass/drums by extract. GPU shut down after it (89 s).
 
+**8-Nov, decided by Carlos: non-commercial models are allowed, with disclaimers.** "Este proyecto es experimental, y como tal y
+poniendo los disclaimers podemos usar modelos como MuLaCover". Conditions agreed: each such module states its licence before Run;
+each take's lineage records the licence; the notice also reminds that a third-party source (a known song) has its own rights; if
+miuzika ever becomes a paid service, these modules are reviewed. YuE2 and MusicGen become candidates on these terms.
+**8-Nov: building the MuLaCover and Demucs modules** (his "adelante con mulacover. adelante con demucs").
+Built: windows in Modules (`web/src/modulos/{mulacover,demucs}/ventana.ts`, shared `comun.ts`), pure recipes with tests
+(`src/modulos/{mulacover,demucs}/receta.ts`), GPU scripts `generar_mulacover.py` (pinned e27fa7f) and `separar_demucs.py` (demucs 4.0.1,
+torch 2.5.1), `entregarMidi` in the host. Windows checked headless to Review (licence and warranty shown). Real runs on the A10:
+Demucs htdemucs 2 min with install, htdemucs_ft 86 s, htdemucs_6s 81 s (6 stems), Ghosts Again original 68 s; MuLaCover from MIDI with
+drums 437 s. **Heard: Demucs on Ghosts Again original, PASS: "lo ha hecho muy bien para ghosts-orig-stems".** mc-ghosts-ft (htdemucs_ft on
+the MuLaCover cover): "cada pista hace lo suyo", PASS, and **"mc-ghosts-ft es más limpio que stems"** (htdemucs): ft is the better default; it took 86 s
+here, about the same as htdemucs, not the 4x its README warns of (one 3-min song). Proposed: make htdemucs_ft the window's default. **htdemucs_6s: "guitar y bass no sirven"** (on the cover, which has no real
+guitar): it invents them from the synths. Note agreed for the window ("ok"): "Six stems: only for songs with real guitar or piano;
+on synth music it invents them." **Applied 8-Nov on his word**: htdemucs_ft first and default, notes updated. GPU shut down after the
+tests (77 s, instance 11ffcde3…).
+MuLaCover from MIDI (Ghosts Again's transcribed melody+chords+drums, his lyrics, industrial style, seed 42), `mc-midi-drums`: "es
+completa, tiene muchos instrumentos, mucho más pop y comercial, también tiene voz". From MIDI it still goes pop, like from audio. `mc-midi-sin-drums` (no drum MIDI): "completa también, con batería": without a drum
+MIDI it writes its own drums; the drum MIDI is optional for real. `mc-desde-heartmula` (source: HeartMuLa's pop take hm-darkwave-1,
+same lyrics and industrial style): "no es un estilo que a mí me parezca ni dark, industrial, dark synth pop". **MuLaCover keeps the
+melody and sings the lyrics, but its style ignores the style text: 4 of 4 takes came out pop.** Outputs are always audio (Carlos: the
+mc-midi-* takes "no son midi": right, they are WAVs made *from* MIDI).
+
 **8-Nov: HeartMuLa researched for a module of its own (Carlos: "documéntate de heartmula para hacer su propio formulario").**
 Read from heartlib at `5858ca8` (8-Oct-2026, shallow clone, nothing run) and the HF cards. Nothing designed or built yet.
 - Licence: code and all weights Apache 2.0 (since 20-Jan-2026).
