@@ -1,11 +1,14 @@
 /**
- * The Stable Audio module's window (8-Nov-2026, Carlos: "desarrolla el módulo con todas las funcionalidades"). Four things
- * Stable Audio 3 does: text to audio (song, one instrument, sound effect), audio to audio, repaint a part, continue a clip.
- * Review shows the prompt exactly as it travels (the kind's tags included), the licence and the cost, before anything is spent.
+ * The Stable Audio module's window (8-Nov-2026, Carlos: "desarrolla el módulo con todas las funcionalidades"; after every task
+ * passed by ear, "ahora a programar el formulario con todos los detalles que se puedan"). What Stable Audio 3 (790793b) offers:
+ * text to audio (song, instrument, duo, sound effect), audio to audio, repaint one or several parts in one pass, continue; a
+ * prompt per take; the -base checkpoints with their sampler. Review shows each prompt exactly as it travels, the licence, the
+ * cost and what is worth knowing before spending.
  */
 
 import {
-  LICENCIA, MODELOS, POR_DEFECTO, SA3_COMMIT, TIPOS, componerPrompt, leerResultado, parametrosParaEnviar, validarParametros,
+  CAMBIOS, EJEMPLOS, LICENCIA, MODELOS, POR_DEFECTO, POR_DEFECTO_BASE, SA3_COMMIT, SAMPLERS_BASE, TIPOS, avisos, componerPrompt,
+  infoModelo, leerCompases, leerResultado, parametrosParaEnviar, promptsPorToma, regionesDeCompases, validarParametros,
   type Modelo, type Parametros, type Tarea, type Tipo,
 } from "../../../../src/modulos/stableaudio/receta.ts";
 import { nombreDeArchivo } from "../../../../src/modulos/ace-step/receta.ts";
@@ -19,9 +22,9 @@ import { areaDeTexto, causaDeFallo, ejecutarEnGpu, esc, fila, numero, prepararAu
 type Fuente = "pistas" | "archivo";
 
 const TAREAS: { id: Tarea; etiqueta: string; ayuda: string }[] = [
-  { id: "texto", etiqueta: "From text", ayuda: "A new piece from a description: a whole instrumental song, one instrument alone, or a sound effect." },
+  { id: "texto", etiqueta: "From text", ayuda: "A new piece from a description: a whole instrumental song, one or two instruments alone, or a sound effect." },
   { id: "audio", etiqueta: "Transform audio", ayuda: "Re-plays a source with your description. The change amount says how far it may go from it." },
-  { id: "repintar", etiqueta: "Repaint a part", ayuda: "Redoes the bars you choose and keeps the rest of the source." },
+  { id: "repintar", etiqueta: "Repaint parts", ayuda: "Redoes the bars you choose, one part or several in one pass, and keeps the rest of the source." },
   { id: "continuar", etiqueta: "Continue", ayuda: "Keeps the source and adds new music after it, up to the total duration." },
 ];
 
@@ -34,7 +37,24 @@ const COSTE =
 const AYUDA_TIEMPO = "On an A10, medium took about 25 s per take, plus the machine's boot if it is off.";
 
 /** Heard 8-Nov: these are what cfg 1 and 7 did; the defaults stay where the ear put them. */
-const AYUDA_CFG = "1 = its default, what sounded right. Higher follows the text harder but saturated by ear at 7.";
+const AYUDA_CFG = "1 = its default, what sounded right. Higher follows the text harder but saturated by ear at 7. Base models: 7.";
+
+/** The guide's advice for each kind (prompting.md, 790793b), shown under Description. */
+const AYUDA_DESCRIPCION: Record<Tipo, string> = {
+  cancion: "Genre, instruments and how each sounds, mood and energy, production. The more detail, the better (its guide).",
+  instrumento: "What plays, in what style, mood; technique, recording room and effects are in its data too.",
+  duo: "The two instruments, their style and mood.",
+  efecto: "The source (what makes the sound), the action (how it is triggered, how long it lasts), the recording and processing. Keep the duration short.",
+  libre: "Anything; nothing is added before it. English works best: it was trained on English.",
+};
+
+/** The form's values, as typed. */
+const INICIAL: Record<string, string> = {
+  modelo: "medium", tipo: "cancion", generos: "", instrumentos: "", descripcion: "", negativo: "",
+  duracion: String(POR_DEFECTO.duracion), unidad: "s", tomas: "1", variaciones: "", semilla: "",
+  steps: String(POR_DEFECTO.steps), cfg: String(POR_DEFECTO.cfg), apg: String(POR_DEFECTO.apg), sampler: "",
+  ruido: String(POR_DEFECTO.ruido), bpm: "", compases: "",
+};
 
 export class VentanaStableAudio {
   private readonly dialogo: HTMLDialogElement;
@@ -43,10 +63,8 @@ export class VentanaStableAudio {
   private fuente: Fuente = "archivo";
   private pistas = new Set<string>();
   private archivo: File | null = null;
-  private v: Record<string, string> = {
-    modelo: "medium", tipo: "cancion", descripcion: "", negativo: "", duracion: String(POR_DEFECTO.duracion), tomas: "1",
-    semilla: "", steps: String(POR_DEFECTO.steps), cfg: String(POR_DEFECTO.cfg), ruido: String(POR_DEFECTO.ruido), bpm: "",
-  };
+  private v: Record<string, string> = { ...INICIAL };
+  private avanzado = false;
   /** Ready on Review: the source and the prompt as composed (editable there). */
   private preparado: { audio: string | null; descripcion: string; carpeta: string; segundos: number | null } | null = null;
   private mensaje = "";
@@ -64,6 +82,10 @@ export class VentanaStableAudio {
     this.dialogo.addEventListener("input", (e) => this.alEscribir(e));
     this.dialogo.addEventListener("change", (e) => this.alCambiar(e));
     this.dialogo.addEventListener("click", (e) => void this.alPulsar(e));
+    this.dialogo.addEventListener("toggle", (e) => {
+      const el = e.target as HTMLElement;
+      if (el instanceof HTMLDetailsElement && el.dataset.avanzado !== undefined) this.avanzado = el.open;
+    }, true);
   }
 
   async abrir(): Promise<void> {
@@ -85,27 +107,46 @@ export class VentanaStableAudio {
     return (p ? beatsPerBar(p) : 4) * segundosPorTiempo(bpm);
   }
 
+  /** The duration field in seconds, whether typed in seconds or in bars. */
+  private segundosDeDuracion(): number {
+    const n = numero(this.v.duracion) ?? POR_DEFECTO.duracion;
+    return this.v.unidad === "compases" ? Math.round(n * this.segundosPorCompas() * 1000) / 1000 : n;
+  }
+
+  private lineasDeVariacion(): string[] {
+    return (this.v.variaciones ?? "").split("\n").map((x) => x.trim()).filter(Boolean);
+  }
+
   private parametros(): Parametros {
-    const compas = this.segundosPorCompas();
-    const desdeCompas = numero(this.v.desdeCompas);
-    const hastaCompas = numero(this.v.hastaCompas);
+    const variaciones = this.lineasDeVariacion();
+    const compases = this.tarea === "repintar" ? leerCompases(this.v.compases ?? "") : null;
+    const base = infoModelo(this.v.modelo as Modelo).base;
     return {
       nombre: this.v.nombre ?? "",
       modelo: (this.v.modelo ?? "medium") as Modelo,
       tarea: this.tarea,
-      prompt: this.v.prompt ?? componerPrompt(this.v.tipo as Tipo, this.v.descripcion ?? "", numero(this.v.bpm)),
+      prompt: this.v.prompt ?? this.promptCompuesto(),
+      variaciones,
       negativo: this.v.negativo ?? "",
-      duracion: numero(this.v.duracion) ?? POR_DEFECTO.duracion,
+      duracion: this.vista === "review" ? (numero(this.v.duracion) ?? POR_DEFECTO.duracion) : this.segundosDeDuracion(),
       steps: numero(this.v.steps) ?? POR_DEFECTO.steps,
       cfg: numero(this.v.cfg) ?? POR_DEFECTO.cfg,
+      apg: numero(this.v.apg) ?? POR_DEFECTO.apg,
+      sampler: base && this.v.sampler ? this.v.sampler : null,
       semilla: numero(this.v.semilla) ?? -1,
-      tomas: numero(this.v.tomas) ?? 1,
+      tomas: variaciones.length > 0 ? variaciones.length : (numero(this.v.tomas) ?? 1),
       audio: this.tarea === "texto" ? null : (this.preparado?.audio ?? null),
       ruido: this.tarea === "audio" ? numero(this.v.ruido) : null,
-      desde: this.tarea === "repintar" && desdeCompas !== null ? Math.round((desdeCompas - 1) * compas * 1000) / 1000 : null,
-      hasta: this.tarea === "repintar" && hastaCompas !== null ? Math.round(hastaCompas * compas * 1000) / 1000 : null,
-      largoFuente: this.tarea === "continuar" ? (this.preparado?.segundos ?? null) : null,
+      regiones: compases ? regionesDeCompases(compases, this.segundosPorCompas()) : [],
+      largoFuente: this.tarea === "continuar" || this.tarea === "repintar" ? (this.preparado?.segundos ?? null) : null,
     };
+  }
+
+  private promptCompuesto(): string {
+    return componerPrompt({
+      tipo: this.v.tipo as Tipo, generos: this.v.generos ?? "", instrumentos: this.v.instrumentos ?? "",
+      texto: this.v.descripcion ?? "", bpm: numero(this.v.bpm),
+    });
   }
 
   // ---------------------------------------------------------------- painting
@@ -137,9 +178,23 @@ export class VentanaStableAudio {
   private htmlFormulario(): string {
     const t = this.tarea;
     const tareas = TAREAS.map((x) => `<label class="ace-opcion"><input type="radio" name="tarea" value="${x.id}"${x.id === t ? " checked" : ""}> ${x.etiqueta}</label>`).join("");
-    const modelo = MODELOS.find((m) => m.nombre === this.v.modelo) ?? MODELOS[0]!;
+    const modelo = infoModelo(this.v.modelo as Modelo);
+    const tipo = this.v.tipo as Tipo;
     const tipos = TIPOS.map((x): [string, string] => [x.id, x.etiqueta]);
-    const ayudaDuracion = t === "continuar" ? "Total: the source plus what is added." : t === "texto" ? `Up to ${modelo.maxSegundos} s on ${modelo.nombre}.` : "Set to the source's length on Review.";
+    const ejemplos: [string, string][] = [["", "— start from one of its guide's examples —"], ...EJEMPLOS.filter((e) => tipo === "libre" || e.tipo === tipo).map((e): [string, string] => [String(EJEMPLOS.indexOf(e)), e.titulo])];
+    const cambios: [string, string][] = [["", "presets from its guide…"], ...CAMBIOS.map((c): [string, string] => [String(c.valor), c.etiqueta])];
+    const lineas = this.lineasDeVariacion().length;
+    const segundos = this.segundosDeDuracion();
+    const ayudaDuracion =
+      (t === "continuar" ? "Total: the source plus what is added. " : t === "texto" ? `Up to ${modelo.maxSegundos} s on ${modelo.nombre}. ` : "Set to the source's length on Review. ") +
+      (this.v.unidad === "compases" ? `= ${segundos.toFixed(2)} s at the project's tempo.` : "In bars, it lands on the grid.");
+    const ayudaCompases = (() => {
+      const c = leerCompases(this.v.compases ?? "");
+      if (!this.v.compases) return "Of the source, at the project's tempo. Several parts in one pass: 5-8, 13-16.";
+      if (!c) return "Write bars as 13-16, or several as 5-8, 13-16.";
+      return regionesDeCompases(c, this.segundosPorCompas()).map((r) => `${r.desde}–${r.hasta} s`).join(", ") + ". The guide: a short region may come back close to the original.";
+    })();
+    const base = modelo.base;
     return `
       <div class="dialogo-cabeza"><strong>Stable Audio 3</strong><button type="button" class="icon" data-accion="cerrar" title="Close">✕</button></div>
       <p class="ace-nota">Instrumental music, single instruments and sound effects from a description. Heard: an instrumental industrial song sounded right at the default settings; at high CFG it saturated. It does not sing intelligible words. Free for commercial use under US$1M a year.</p>
@@ -147,17 +202,30 @@ export class VentanaStableAudio {
         ${fila("What", tareas, esc(TAREAS.find((x) => x.id === t)!.ayuda))}
         ${fila("Name", this.campo("nombre", "the take's file and track"))}
         ${t !== "texto" ? this.htmlFuente() : ""}
-        ${t === "repintar" ? fila("Bars", `from ${this.campo("desdeCompas", "1", "number")} to ${this.campo("hastaCompas", "8", "number")}`, "Of the source, at the project's tempo.") : ""}
-        ${t === "audio" ? fila("Change amount", this.campo("ruido", String(POR_DEFECTO.ruido), "number"), "0 keeps the source, 1 ignores it. Its example uses 0.9.") : ""}
+        ${t === "repintar" ? fila("Bars", this.campo("compases", "13-16"), esc(ayudaCompases)) : ""}
+        ${t === "audio" ? fila("Change amount", `${this.campo("ruido", String(POR_DEFECTO.ruido), "number")} ${this.selector("cambioPreset", cambios)}`, "0 keeps the source, 1 ignores it. Higher filters out melody and rhythm first, keeping timbre and tonality longest (its guide).") : ""}
         ${fila("Kind", this.selector("tipo", tipos), "Opens the text with the tags its guide recommends. Review shows the whole text.")}
-        ${fila("Description", areaDeTexto('name="descripcion"', 4, this.v.descripcion ?? ""), "Genre, instruments, mood, production. For one instrument, e.g. “Instruments: Drums. Dry industrial kit, gated snare”. Say what you want: no negations here, use the negative prompt.")}
+        ${fila("Example", this.selector("ejemplo", ejemplos), "Fills the description; change it as you like.")}
+        ${tipo !== "efecto" ? fila("Genres", this.campo("generos", "e.g. Industrial, EBM"), "Become “Genre: …” tags; several, or unrelated ones, can be combined.") : ""}
+        ${tipo !== "efecto" ? fila("Instruments", this.campo("instrumentos", "e.g. Drums, Synth bass"), "Become an “Instruments: …” tag.") : ""}
+        ${fila("Description", areaDeTexto('name="descripcion"', 4, this.v.descripcion ?? ""), esc(AYUDA_DESCRIPCION[tipo] + " Say what you want: no negations here, use the negative prompt." + (t !== "texto" ? " For repaint and continue, the source counts more than the text; it can even be empty." : "")))}
         ${fila("BPM", this.campo("bpm", "e.g. 92", "number"), "Written into the text (“92 BPM”): the model has no tempo control of its own, and no key.")}
-        ${fila("Negative prompt", this.campo("negativo", "what to avoid, e.g. vocals, lo-fi"))}
-        ${fila("Duration", `${this.campo("duracion", "", "number")} s`, ayudaDuracion)}
+        ${fila("Negative prompt", this.campo("negativo", "what to avoid, e.g. vocals, lo-fi"), "Only read when cfg is not 1 (Advanced); at the default cfg 1 it does nothing.")}
+        ${fila("Duration", `${this.campo("duracion", "", "number")} ${this.selector("unidad", [["s", "seconds"], ["compases", "bars"]])}`, esc(ayudaDuracion))}
         ${fila("Model", this.selector("modelo", MODELOS.map((m): [string, string] => [m.nombre, m.nombre])), esc(modelo.nota))}
-        ${fila("Takes", this.campo("tomas", "1", "number"), "1 to 4, in one run.")}
-        ${fila("Seed", this.campo("semilla", "random", "number"))}
+        ${fila("Takes", lineas > 0 ? `<code>${lineas}</code> (one per variation line)` : this.campo("tomas", "1", "number"), "1 to 4, in one run.")}
+        ${fila("Variations", areaDeTexto('name="variaciones" placeholder="optional, one per take, e.g.\nwith a lead synth melody\nwith a memorable synth hook"', 3, this.v.variaciones ?? ""), "Each line is added to the text for one take: up to 4 different takes in one run.")}
+        ${fila("Seed", this.campo("semilla", "random", "number"), "The same seed and settings give the same take.")}
       </div>
+      <details class="ace-avanzado" data-avanzado${this.avanzado ? " open" : ""}>
+        <summary>Advanced</summary>
+        <div class="ace-cuerpo">
+          ${fila("Steps", this.campo("steps", String(base ? POR_DEFECTO_BASE.steps : POR_DEFECTO.steps), "number"), base ? "~50 for base models." : "8 is its default; more does not necessarily help (its docs).")}
+          ${fila("CFG", this.campo("cfg", String(base ? POR_DEFECTO_BASE.cfg : POR_DEFECTO.cfg), "number"), AYUDA_CFG)}
+          ${fila("APG", this.campo("apg", String(POR_DEFECTO.apg), "number"), "How the CFG is applied: 1 = Adaptive Projected Guidance (its default), 0 = plain CFG. Only acts when CFG is not 1.")}
+          ${base ? fila("Sampler", this.selector("sampler", [["", "its default"], ...SAMPLERS_BASE.map((s): [string, string] => [s, s])]), "Base models only; post-trained ones have a single sampler.") : ""}
+        </div>
+      </details>
       <p class="ace-error">${esc(this.mensaje)}</p>
       <div class="dialogo-acciones"><button type="button" class="primario" data-accion="revisar"${this.ocupada ? " disabled" : ""}>${this.ocupada ? "Preparing…" : "Review…"}</button></div>`;
   }
@@ -165,13 +233,19 @@ export class VentanaStableAudio {
   private htmlRevision(): string {
     const p = this.parametros();
     const motivo = validarParametros(p);
+    const notas = motivo ? [] : avisos(p);
     const n = (nombre: string): string => `<input type="number" name="${nombre}" value="${esc(this.v[nombre] ?? "")}" step="any">`;
     const region =
       p.tarea === "repintar"
-        ? fila("region (s)", `<code>${p.desde ?? "?"} – ${p.hasta ?? "?"}</code>`)
+        ? fila("regions (s)", p.regiones.length ? p.regiones.map((r) => `<code>${r.desde} – ${r.hasta}</code>`).join(" ") : "<code>?</code>", `bars ${esc(this.v.compases ?? "")}`)
         : p.tarea === "continuar"
           ? fila("new part (s)", `<code>${p.largoFuente?.toFixed(2) ?? "?"} – ${p.duracion}</code>`)
           : "";
+    const porToma =
+      p.variaciones.length > 0
+        ? fila("each take", `<ol class="ace-lista">${promptsPorToma(p).map((x) => `<li><code>${esc(x)}</code></li>`).join("")}</ol>`, "The prompt above plus that take's line.")
+        : "";
+    const base = infoModelo(p.modelo).base;
     return `
       <div class="dialogo-cabeza"><strong>Stable Audio 3 · Review before running</strong><button type="button" class="icon" data-accion="cerrar" title="Close">✕</button></div>
       <p class="ace-nota">This is exactly what will be sent. Anything you change here is what the model receives.</p>
@@ -180,16 +254,20 @@ export class VentanaStableAudio {
         ${fila("name", `<code>${esc(p.nombre)}</code>`)}
         ${p.tarea !== "texto" ? fila("source", `<code>${esc(this.preparado?.descripcion ?? "")}</code>`) : ""}
         ${region}
-        ${fila("prompt", areaDeTexto('name="prompt"', 4, p.prompt))}
+        ${fila("prompt", areaDeTexto('name="prompt"', 4, p.prompt), p.prompt.trim() ? "" : "empty: unconditional")}
+        ${porToma}
         ${fila("negative", `<input type="text" name="negativo" value="${esc(p.negativo)}">`)}
         ${fila("duration (s)", n("duracion"))}
         ${p.tarea === "audio" ? fila("change amount", n("ruido")) : ""}
-        ${fila("steps", n("steps"), "8 = its default for these models")}
+        ${fila("steps", n("steps"), base ? "~50 for base models" : "8 = its default for these models")}
         ${fila("cfg", n("cfg"), AYUDA_CFG)}
-        ${fila("takes", n("tomas"))}
+        ${fila("apg", n("apg"), "1 = its default; only acts when cfg is not 1")}
+        ${p.sampler ? fila("sampler", `<code>${esc(p.sampler)}</code>`) : ""}
+        ${fila("takes", p.variaciones.length > 0 ? `<code>${p.tomas}</code>` : n("tomas"))}
         ${fila("seed", n("semilla"), "empty or -1 = random; the one used is recorded")}
         ${fila("version", `<code>stable-audio-3 ${SA3_COMMIT}</code>`)}
       </div>
+      ${notas.length ? `<ul class="ace-nota">${notas.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
       <p class="ace-aviso-coste"><strong>Licence.</strong> ${esc(LICENCIA)}</p>
       <p class="ace-aviso-coste"><strong>No warranty.</strong> ${esc(COSTE)}</p>
       <p class="ace-nota">${esc(AYUDA_TIEMPO)} The Hugging Face token saved in Settings is copied to the GPU, never into the recipe.</p>
@@ -204,15 +282,37 @@ export class VentanaStableAudio {
 
   private alEscribir(evento: Event): void {
     const el = evento.target as HTMLInputElement | HTMLTextAreaElement;
-    if (!el.name || el.type === "radio" || el.type === "file") return;
+    if (!el.name || el.type === "radio" || el.type === "file" || el instanceof HTMLSelectElement) return;
     this.v[el.name] = el.value;
     if (this.vista === "review") {
-      const motivo = validarParametros(this.parametros());
-      const boton = this.dialogo.querySelector<HTMLButtonElement>('[data-accion="lanzar"]');
-      if (boton) boton.disabled = !!motivo || this.enMarcha;
-      const error = this.dialogo.querySelector<HTMLElement>(".ace-error");
-      if (error) error.textContent = motivo ?? "";
+      this.refrescarRevision();
+    } else if (el.name === "variaciones" || el.name === "compases" || el.name === "duracion") {
+      // Takes follow the variation lines, and the bars and durations show their seconds: repaint keeping the caret.
+      const inicio = el.selectionStart;
+      this.pintar();
+      const nuevo = this.dialogo.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[name="${el.name}"]`);
+      if (nuevo) {
+        nuevo.focus();
+        try {
+          if (inicio !== null) nuevo.setSelectionRange(inicio, inicio);
+        } catch {
+          // number inputs have no selection
+        }
+      }
     }
+  }
+
+  /** On Review, the Run button, the error and the notes follow what is typed, without repainting the fields. */
+  private refrescarRevision(): void {
+    const p = this.parametros();
+    const motivo = validarParametros(p);
+    const boton = this.dialogo.querySelector<HTMLButtonElement>('[data-accion="lanzar"]');
+    if (boton) boton.disabled = !!motivo || this.enMarcha;
+    const error = this.dialogo.querySelector<HTMLElement>(".ace-error");
+    if (error) error.textContent = motivo ?? "";
+    const lista = this.dialogo.querySelector<HTMLElement>("ul.ace-nota");
+    const notas = motivo ? [] : avisos(p);
+    if (lista) lista.innerHTML = notas.map((x) => `<li>${esc(x)}</li>`).join("");
   }
 
   private alCambiar(evento: Event): void {
@@ -224,8 +324,37 @@ export class VentanaStableAudio {
     } else if (el.name === "fuente") {
       this.fuente = el.value as Fuente;
       this.pintar();
-    } else if (el.name === "modelo" || el.name === "tipo") {
+    } else if (el.name === "modelo") {
+      const antes = infoModelo(this.v.modelo as Modelo).base;
+      this.v.modelo = el.value;
+      const ahora = infoModelo(el.value as Modelo).base;
+      // Steps and cfg follow the family, unless they were changed by hand.
+      if (antes !== ahora) {
+        const de = antes ? POR_DEFECTO_BASE : POR_DEFECTO;
+        const a = ahora ? POR_DEFECTO_BASE : POR_DEFECTO;
+        if (numero(this.v.steps) === de.steps) this.v.steps = String(a.steps);
+        if (numero(this.v.cfg) === de.cfg) this.v.cfg = String(a.cfg);
+        if (!ahora) this.v.sampler = "";
+      }
+      if (this.vista === "review") this.refrescarRevision();
+      else this.pintar();
+    } else if (el.name === "tipo" || el.name === "unidad" || el.name === "sampler") {
+      if (el.name === "unidad" && el.value !== this.v.unidad) {
+        // Keep the same length when switching the unit.
+        const s = this.segundosDeDuracion();
+        this.v.duracion = el.value === "compases" ? String(Math.max(1, Math.round(s / this.segundosPorCompas()))) : String(Math.round(s * 100) / 100);
+      }
       this.v[el.name] = el.value;
+      this.pintar();
+    } else if (el.name === "ejemplo") {
+      const e = EJEMPLOS[Number(el.value)];
+      if (el.value !== "" && e) {
+        this.v.descripcion = e.texto;
+        if (this.v.tipo !== "libre") this.v.tipo = e.tipo;
+      }
+      this.pintar();
+    } else if (el.name === "cambioPreset") {
+      if (el.value !== "") this.v.ruido = el.value;
       this.pintar();
     } else if (el instanceof HTMLInputElement && el.dataset.pista) {
       if (el.checked) this.pistas.add(el.dataset.pista);
@@ -240,8 +369,9 @@ export class VentanaStableAudio {
     const accion = (evento.target as HTMLElement).closest<HTMLElement>("[data-accion]")?.dataset.accion;
     if (accion === "cerrar") this.dialogo.close();
     else if (accion === "volver") {
-      // Back to the form: the composed prompt is rebuilt from the form's fields next time.
+      // Back to the form: the composed prompt is rebuilt from the form's fields next time; the duration in the form's unit.
       delete this.v.prompt;
+      if (this.v.unidad === "compases") this.v.duracion = String(Math.max(1, Math.round((numero(this.v.duracion) ?? 0) / this.segundosPorCompas())));
       this.vista = "form";
       this.pintar();
     } else if (accion === "revisar") await this.revisar();
@@ -255,6 +385,8 @@ export class VentanaStableAudio {
     try {
       const base = this.tarea === "texto" ? (this.v.descripcion ?? "").slice(0, 24) : (this.archivo?.name.replace(/\.[^.]+$/, "") ?? "pistas");
       this.v.nombre = nombreDeArchivo(this.v.nombre || base) || "stable-audio";
+      // Review works in seconds: the form's bars become seconds here.
+      let duracion = this.segundosDeDuracion();
       if (this.tarea === "texto") {
         const p = this.a.proyecto();
         this.preparado = { audio: null, descripcion: "", carpeta: p ? "" : await this.a.carpetaParaNuevo(this.v.nombre), segundos: null };
@@ -262,10 +394,11 @@ export class VentanaStableAudio {
         const r = await prepararAudio(this.a, { tipo: this.fuente, pistas: [...this.pistas], archivo: this.archivo, nombre: this.v.nombre, porDefecto: "stable-audio" });
         this.preparado = { audio: r.audio, descripcion: r.descripcion, carpeta: r.carpeta, segundos: r.segundos };
         // Transform and repaint give back the source's length (editable on Review); continue needs a longer total.
-        if (this.tarea !== "continuar") this.v.duracion = r.segundos.toFixed(2);
-        if (this.tarea === "continuar" && !(numero(this.v.duracion)! > r.segundos)) this.v.duracion = String(Math.ceil(r.segundos + 30));
+        if (this.tarea !== "continuar") duracion = Math.round(r.segundos * 100) / 100;
+        else if (!(duracion > r.segundos)) duracion = Math.ceil(r.segundos + 30);
       }
-      this.v.prompt = componerPrompt(this.v.tipo as Tipo, this.v.descripcion ?? "", numero(this.v.bpm));
+      this.v.duracion = String(duracion);
+      this.v.prompt = this.promptCompuesto();
       this.vista = "review";
     } catch (error) {
       this.mensaje = error instanceof Error ? error.message : String(error);
@@ -289,6 +422,7 @@ export class VentanaStableAudio {
     this.preparado = null;
     delete this.v.prompt;
     this.v.nombre = "";
+    if (this.v.unidad === "compases") this.v.duracion = String(Math.max(1, Math.round(p.duracion / this.segundosPorCompas())));
     this.gpu.fijarTarea(`${etiqueta}: starting…`, () => control.abort());
     try {
       const r = await ejecutarEnGpu({ script: "generar_stableaudio.py", nombre: p.nombre, receta, entradas: p.audio ? [p.audio] : [], carpeta, etiqueta, gpu: this.gpu, senal: control.signal });

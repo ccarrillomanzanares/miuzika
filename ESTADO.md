@@ -72,7 +72,16 @@ their LICENSE.md, github.com/Stability-AI/stable-audio-3 (README, inference and 
   expected: only bars 13-16 are new. Whether the change at those bars is audible was not said.
   `sa2-continuar`, `sa2-drums-x2-1`, `sa2-drums-x2-2` and `sa2-small`: "pegan juntas, y son lo que dicen, el estilo total no es el que
   más me gusta pero bueno pegan". PASS on doing what was asked and fitting together; style below `sa-song-cfg1`. `sa2-transformar`
-  (change 0.7 over `sa-song-cfg1`): "también es muy buena". Every task of the module passed by ear.
+  (change 0.7 over `sa-song-cfg1`): "también es muy buena". Every task of the module passed by ear. Committed dd3deff.
+- **Form with every detail** (Carlos: "stable audio es un buen candidato... ahora a programar el formulario con todos los detalles
+  que se puedan"; melody test not wanted). Read at 790793b (model.py, dit.py, prompting.md, inference.md, Gradio): several repaint
+  regions in one pass ("5-8, 13-16"), one prompt per take (variation lines), empty prompt allowed (the guide's unconditional and
+  no-prompt continuation), Genre/Instruments tags, Duo kind, the guide's example prompts, change-amount presets (0.1/0.4/0.6/0.7/0.9
+  from the guide and our run), duration in bars, Advanced (steps, cfg, APG, sampler), and the -base checkpoints (50 steps, cfg 7,
+  euler/rk4/dpmpp; not gated on HF; not run). **Found in dit.py: guidance only runs when cfg != 1, so at the default cfg 1 the
+  negative prompt does nothing**: the form and Review say so. small-sfx is gated too and was missing from the Settings check.
+  Checked headless on the simulated GPU (every task to Review, no page errors). **Not run on the GPU yet**: variations, several
+  regions, APG, base models.
 
 **8-Nov: HeartMuLa researched for a module of its own (Carlos: "documéntate de heartmula para hacer su propio formulario").**
 Read from heartlib at `5858ca8` (8-Oct-2026, shallow clone, nothing run) and the HF cards. Nothing designed or built yet.

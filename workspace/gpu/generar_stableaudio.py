@@ -78,18 +78,29 @@ def generar(receta, bootstrap_s):
     t0 = time.time()
     model = StableAudioModel.from_pretrained(p["modelo"])
     carga_s = time.time() - t0
-    args = dict(prompt=p["prompt"], duration=float(p["duracion"]), steps=int(p["steps"]), cfg_scale=float(p["cfg"]),
-                seed=semilla, batch_size=int(p["tomas"]))
+    tomas = int(p["tomas"])
+    # One prompt per take when the window sent variations (model.py broadcasts or takes a list of batch_size).
+    prompts = p.get("prompts")
+    if prompts is not None and len(prompts) != tomas:
+        sys.exit(f"{len(prompts)} prompts for {tomas} takes")
+    args = dict(prompt=prompts if prompts else p["prompt"], duration=float(p["duracion"]), steps=int(p["steps"]),
+                cfg_scale=float(p["cfg"]), seed=semilla, batch_size=tomas)
     if p.get("negativo"):
         args["negative_prompt"] = p["negativo"]
+    if "apg" in p:
+        args["apg_scale"] = float(p["apg"])
+    if p.get("sampler"):
+        args["sampler_type"] = p["sampler"]  # goes through **sampler_kwargs; only -base models have more than one
     tarea = p["tarea"]
     if tarea == "audio":
         args["init_audio"] = cargar(p["audio"])
         args["init_noise_level"] = float(p["ruido"])
     elif tarea in ("repintar", "continuar"):
         args["inpaint_audio"] = cargar(p["audio"])
-        args["inpaint_mask_start_seconds"] = float(p["desde"])
-        args["inpaint_mask_end_seconds"] = float(p["hasta"])
+        # Several regions in one pass go as lists (inference.md); recipes from before 9-Nov have desde/hasta.
+        regiones = p.get("regiones") or [[p["desde"], p["hasta"]]]
+        args["inpaint_mask_start_seconds"] = [float(a) for a, _ in regiones]
+        args["inpaint_mask_end_seconds"] = [float(b) for _, b in regiones]
     log(f"GPU: {torch.cuda.get_device_name(0)} · {p['modelo']} · {tarea} · seed {semilla} · model ready in {carga_s:.1f} s")
     torch.cuda.reset_peak_memory_stats()
     t1 = time.time()
@@ -107,7 +118,8 @@ def generar(receta, bootstrap_s):
     linaje = {
         "schema": "org.miuzika.lineage/0.1", "kind": "generated-audio", "task": tarea, "recipe": receta,
         "generator": {"name": "Stable Audio 3", "model": p["modelo"], "repo": REPO_URL, "commit": COMMIT, "license": LICENCIA},
-        "inputs": {"audio": p.get("audio")}, "outputs": [{"file": f, "seed": semilla, "batch_index": i} for i, f in enumerate(ficheros)],
+        "inputs": {"audio": p.get("audio")},
+        "outputs": [{"file": f, "seed": semilla, "batch_index": i, "prompt": prompts[i] if prompts else p["prompt"]} for i, f in enumerate(ficheros)],
         "sample_rate": sr, "bootstrap_s": round(bootstrap_s, 1), "load_s": round(carga_s, 1), "generate_s": round(generate_s, 1),
         "vram_peak_gb": round(vram, 2), "gpu": torch.cuda.get_device_name(0), "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
