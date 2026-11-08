@@ -1,9 +1,9 @@
 {
-  "name": "miuzika-new",
+  "name": "miuzika",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Browser DAW GUI with openDAW, separated from the miuzika agent",
+  "description": "Experimental browser music workstation on openDAW, with generative modules and no LLM between the interface and the models",
   "license": "AGPL-3.0-or-later",
   "engines": {
     "node": ">=24"
