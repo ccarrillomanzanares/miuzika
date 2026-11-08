@@ -49,24 +49,30 @@ const MARGEN_COMPASES = 2;
  * (ESTADO.md, "What ACE-Step can and cannot do"); change them when a verdict changes.
  */
 const EXPECTATIVAS: Record<Tarea, string> = {
-  text2music: "Makes a whole song: drums, bass, chords and voice together. Not for one instrument alone: asked for drums only, it still added synths and melody. Say what you want; “no X” tends to bring X.",
+  // One instrument alone: 6 of 8 takes on xl-sft + LM 4B (8-Nov, s01-s04); with 1.7B it always completed a song.
+  // Style words: dirty caption on cover, voice description, fewer layers barely moved it. Empty BPM: 125 dance, or rap.
+  text2music: "Makes a whole song. Also one instrument alone if the caption describes only that instrument (“isolated… playing alone… stem”), though some takes add others. Style words move it little; give the BPM, or it picks its own. Generate several takes and keep the best.",
   // Not offered since 7-Nov evening; kept because the type lists every task the script knows.
   lego: "Removed from this window: it could not be steered.",
-  complete: "Builds a band around one track. Tested from a voice: good result.",
-  cover: "Plays the source again with another sound; the caption changes the instruments. If there is a voice, paste the lyrics or the voice is lost.",
-  // Not run by us (ESTADO). Not stated to the user: it is our test log, not theirs.
-  "cover-nofsq": "A variant of cover that ACE-Step does not document.",
-  // The range was checked, the sound not judged by ear yet (ESTADO).
-  repaint: "Redoes the bars you choose and keeps the rest.",
-  extract: "Pulls one instrument out of a mix. Voice and bass: good, the bass with a little of the rest. Drums: comes out with leftovers; for clean stems use a dedicated separator.",
+  // From a voice: passed (5-Nov). From an extracted drum track: "pegote descomunal" (7-Nov, p07).
+  complete: "Builds a band around one track. From a voice: good result. From an extracted drum track it gave a jumble.",
+  // 7-Nov: a "harsh, dirty" caption gave harsh keys, not dirt (p01/p02, 0.6 and 0.3 nearly the same take).
+  cover: "Plays the source again with another sound. The caption barely changes its style. If there is a voice, paste the lyrics or the voice is lost.",
+  // 7-Nov: correlation with the source 0.66-0.72 against 0.32 for cover; strengths 0.3/0.6/0.8 gave 0.97-0.99 between them. 2 of 2 passed.
+  "cover-nofsq": "Like cover but stays much closer to the source. Strength changes almost nothing; change the seed for another version.",
+  // 7-Nov: bars outside the range identical to the source (correlation 1.00) on 4 and 8 bars; heard as a short orchestral turn.
+  repaint: "Redoes exactly the bars you choose and keeps the rest untouched. What it paints there is the model's choice.",
+  // Keyboard passed (p05), percussion took the rhythmic keyboard (p06), 7-Nov.
+  extract: "Pulls one instrument out of a mix. Voice, bass and keyboard: good, the bass with a little of the rest. Percussion gets confused with rhythmic keys. Drums: comes out with leftovers; for clean stems use a dedicated separator.",
 };
 /**
  * Before Run, where money is spent. Carlos, 7-Nov: a disclaimer of no guarantee and of the money a
  * rented GPU costs, "como todo el software libre": the AGPL-3.0 in LICENSE already says WITHOUT ANY
- * WARRANTY; this says what that means here.
+ * WARRANTY; this says what that means here. 8-Nov, Carlos: keep saying it is experimental and that rented
+ * GPU time may not be productive (the best recipe so far kept 2 takes of 4).
  */
 const SIN_GARANTIA =
-  "This is free software provided as is, without any warranty (AGPL-3.0). No result is guaranteed: the same request can give a good take, the wrong instrument or near silence. The GPU is rented from a provider with your account: it bills the machine's time whether the take is useful or not, failed and cancelled runs included, and keeps billing until you press Off. Every cost is yours.";
+  "Experimental: results vary from take to take, and many takes may be needed before one is useful. This is free software provided as is, without any warranty (AGPL-3.0). No result is guaranteed: the same request can give a good take, the wrong instrument or near silence. The GPU is rented from a provider with your account: it bills the machine's time whether the take is useful or not, failed and cancelled runs included, and keeps billing until you press Off. Every cost is yours.";
 /** Only the Track tab (complete): the short ending was measured on lego, its sibling over a context. */
 const conMargen = (tarea: Tarea): boolean => tarea === "complete";
 /**

@@ -23,7 +23,11 @@ export const PISTAS_MODELO = [
   "keyboard", "synth", "strings", "brass", "woodwinds", "fx",
 ] as const;
 
-export const LMS = ["none", "acestep-5Hz-lm-0.6B", "acestep-5Hz-lm-1.7B", "acestep-5Hz-lm-4B"] as const;
+/**
+ * 0.6B left out on Carlos's word (8-Nov: "no usar 0.6B"): upstream offers it for low VRAM and the A10 has room.
+ * `none` stays: text2music without the LM gave a good song by his ear (7-Nov, p08).
+ */
+export const LMS = ["acestep-5Hz-lm-4B", "acestep-5Hz-lm-1.7B", "none"] as const;
 
 type Familia = "base" | "sft" | "turbo";
 
@@ -127,7 +131,9 @@ export function valoresDeModelo(tarea: Tarea, modelo: string): Pick<Parametros, 
     pasos: familia === "turbo" ? 8 : 50,
     guia: familia === "turbo" ? 1 : 7,
     shift: familia === "turbo" ? 3 : 1,
-    lm: tarea === "text2music" ? "acestep-5Hz-lm-1.7B" : "none",
+    // 4B by default since 8-Nov. Heard, same recipe and seed: xl-sft + 4B (q01) "muy buena", the best take so far,
+    // against xl-sft + 1.7B (p10) "de baile, de rave"; 2 of 4 xl-sft + 4B takes passed. It fit the A10 (11.3 GB peak).
+    lm: tarea === "text2music" ? "acestep-5Hz-lm-4B" : "none",
     // Measured 5-Nov: normalised stems and covers all peaked at -1 dBFS whatever their source.
     normalizar: tarea === "text2music",
   };
