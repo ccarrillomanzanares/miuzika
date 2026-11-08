@@ -183,6 +183,14 @@ Playwright): two kicks in pass 1, two snares in pass 2, hats by repeat in pass 3
 measured against the live hit + one loop: 0 to +19 ms. Letters preset, remap, new drum track, Esc, 600 px width: right.
 **Not heard by Carlos, the touchpad not armed in the test, not committed.** Read in the code, not tried: long stems (streamed WAVs, outside openDAW) do not follow the loop.
 
+**8-Nov night: New asks for the name** (Carlos: "si aprieto new ha de preguntar el nombre del proyecto… y se abre… y a partir
+de ahí que se pueda ejecutar el pad"; the Pad does not open with no project, which is why "Pad" seemed to do nothing). New opens a
+window with the name; the folder comes from it, and a taken one is said before creating ("goes to proyectos/x-2/"); Create opens
+the project and writes it at once. In the Pad, an empty project shows "Choose a track…" (before, "+ New track" looked chosen and
+picking it did nothing), creating a track waits for the engine to load (headless, it was refused while loading), and the
+engine is loaded again after every change so the next key sounds at once. Headless: New → name → open and on disk, same name
+→ "-2" said, Cancel keeps the open one, Pad → new drum track + new synth track → Numpad1 peaks 0.60. Not tried by Carlos.
+
 **8-Nov: HeartMuLa researched for a module of its own (Carlos: "documéntate de heartmula para hacer su propio formulario").**
 Read from heartlib at `5858ca8` (8-Oct-2026, shallow clone, nothing run) and the HF cards. Nothing designed or built yet.
 - Licence: code and all weights Apache 2.0 (since 20-Jan-2026).

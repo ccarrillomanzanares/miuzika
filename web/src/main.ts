@@ -28,6 +28,7 @@ import { SelectorInstrumento } from "./selector-instrumento.ts";
 import { mostrarAviso } from "./aviso-unico.ts";
 import { VentanaAMidi } from "./a-midi.ts";
 import { PanelPad } from "./pad.ts";
+import { crearDialogoNuevo } from "./dialogo-nuevo.ts";
 import { etiquetaInstrumento } from "../../src/core/instrumentos.ts";
 import { VentanaAjustes } from "./ajustes.ts";
 import { crearAvisos } from "./avisos.ts";
@@ -319,10 +320,20 @@ stopButton.addEventListener("click", parar);
 undoButton.addEventListener("click", () => void sesion.undo());
 redoButton.addEventListener("click", () => void sesion.redo());
 
+// New asks for the name, creates the project and opens it (8-Nov, Carlos). Before, it only closed the open one.
+const dialogoNuevo = crearDialogoNuevo({
+  carpetaAbierta: () => (sesion.project ? carpetaDeProyecto(sesion.project) : null),
+  abrir: (proyecto) => {
+    sesion.setProject(proyecto, false);
+    // Written at once, so it is in Projects even before the first change.
+    sesion.guardarAhora();
+    avisos.info(`New project “${proyecto.name}” (proyectos/${carpetaDeProyecto(proyecto)}/).`);
+  },
+  avisar: (texto) => avisos.error(texto),
+});
 $("new-song").addEventListener("click", () => {
-  if (!sesion.ready) return;
-  if (sesion.project && sesion.project.tracks.length > 0 && !confirm("Close this project and start another one? The current one stays saved on disk.")) return;
-  sesion.setProject(null);
+  if (!sesion.ready || sesion.busy) return;
+  void dialogoNuevo.abrir();
 });
 
 $("guardar").addEventListener("click", () => sesion.guardarAhora());

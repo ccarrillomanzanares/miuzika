@@ -1107,3 +1107,19 @@ small.ace-pasado {
 .ajustes-mensaje:empty {
   display: none;
 }
+
+/* New: the project's name (8-Nov). */
+.dialogo-nuevo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(420px, 86vw);
+}
+.dialogo-nuevo label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dialogo-nuevo input {
+  flex: 1;
+}

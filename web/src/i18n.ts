@@ -30,7 +30,7 @@ const ES: Diccionario = {
   "proyectos.dialogo": "Proyectos en disco",
   recargar: "↻ versión nueva",
   nueva: "Nueva",
-  "nueva.title": "Cerrar este proyecto y empezar otro",
+  "nueva.title": "Crear un proyecto: pide su nombre y lo abre",
   mute: "Mute",
   solo: "Solo",
   borrar: "Borrar",

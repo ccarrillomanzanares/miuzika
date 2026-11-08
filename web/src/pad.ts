@@ -257,7 +257,7 @@ export class PanelPad {
       if (!this.armado) void this.armar(true);
     });
     for (const fuente of ["pad", "teclas"] as const) {
-      this.selPista[fuente].addEventListener("change", () => this.alElegirPista(fuente));
+      this.selPista[fuente].addEventListener("change", () => void this.alElegirPista(fuente));
     }
     this.selModo.addEventListener("change", () => {
       this.configurar({ modo: this.selModo.value as ModoPad });
@@ -312,7 +312,10 @@ export class PanelPad {
       this.cerrar();
       return;
     }
-    if (!this.bucle) this.rellenarPistas(project);
+    if (this.bucle) return;
+    this.rellenarPistas(project);
+    // A change of tracks or instruments unloads the engine: loaded again now, so the next key sounds at once.
+    void this.asegurarMotor();
   }
 
   private cerrar(): void {
@@ -361,7 +364,14 @@ export class PanelPad {
         const otra = midi.find((t) => !this.esBateria(t));
         this.pista[fuente] = (fuente === "teclas" ? (bateria ?? otra) : (otra ?? bateria))?.id ?? "";
       }
-      sel.value = this.pista[fuente] || NUEVA;
+      // With no track yet (a new project), a placeholder: else "+ New track" would show as chosen and picking it
+      // would not fire a change.
+      if (!this.pista[fuente]) {
+        const ninguna = new Option("Choose a track…", "");
+        ninguna.disabled = true;
+        sel.prepend(ninguna);
+      }
+      sel.value = this.pista[fuente];
       const track = this.pistaDe(fuente);
       const boton = this.dialogo.querySelector<HTMLButtonElement>(`[data-instrumento="${fuente}"]`)!;
       boton.textContent = track ? `${etiquetaInstrumento(track.instrument)} ▾` : "";
@@ -372,7 +382,7 @@ export class PanelPad {
     this.pintarRejilla();
   }
 
-  private alElegirPista(fuente: Fuente): void {
+  private async alElegirPista(fuente: Fuente): Promise<void> {
     const sel = this.selPista[fuente];
     sel.blur();
     if (this.bucle) {
@@ -382,8 +392,16 @@ export class PanelPad {
       return;
     }
     if (sel.value === NUEVA || sel.value === NUEVA_BATERIA) {
-      const id = this.deps.nuevaPista(sel.value === NUEVA_BATERIA);
+      const bateria = sel.value === NUEVA_BATERIA;
+      // Opening the panel starts loading the engine, and the app takes no changes while it loads: seen headless on a
+      // new project, the track was not created. So it waits for the load first.
+      if (this.pidiendoMotor) {
+        this.estado("Getting the instruments ready…");
+        await this.pidiendoMotor.catch(() => null);
+      }
+      const id = this.deps.nuevaPista(bateria);
       if (id) this.pista[fuente] = id;
+      else this.estado("The track could not be created now; try again.");
     } else this.pista[fuente] = sel.value;
     this.soltarTodo();
     const project = this.deps.proyecto();
