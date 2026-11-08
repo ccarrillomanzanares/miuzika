@@ -2,6 +2,7 @@
 
 import type { Clip, Project, Track } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
+import { etiquetaInstrumento } from "../../src/core/instrumentos.ts";
 import { audioAssets } from "./audio-store.ts";
 
 const RULER = 26;
@@ -106,6 +107,8 @@ export class TimelineView {
   onSeek: (beat: number) => void = () => {};
   onToggleMute: (trackId: string) => void = () => {};
   onToggleSolo: (trackId: string) => void = () => {};
+  /** The instrument line of a MIDI track head was clicked (8-Nov: the instrument picker). */
+  onEditInstrument: (trackId: string) => void = () => {};
   onSelectionChange: (trackIds: string[]) => void = () => {};
   onEditClip: (trackId: string, clipId: string) => void = () => {};
   onClipSelectionChange: (clipIds: string[]) => void = () => {};
@@ -242,6 +245,10 @@ export class TimelineView {
       }
       if (element.closest(".solo")) {
         this.onToggleSolo(trackId);
+        return;
+      }
+      if (element.closest("[data-instrumento]")) {
+        this.onEditInstrument(trackId);
         return;
       }
       if (!this.project) return;
@@ -543,7 +550,11 @@ export class TimelineView {
           <span class="dot" style="background:${colorOf(track)}"></span>
           <span class="track-meta">
             <strong>${escapeHtml(track.name)}</strong>
-            <small>${track.instrument.type} · ${notes} n · ${track.devices.length} fx</small>
+            <small>${
+              track.kind === "midi"
+                ? `<button type="button" class="instrumento" data-instrumento title="Change the instrument">${escapeHtml(etiquetaInstrumento(track.instrument))} ▾</button> · ${notes} n`
+                : `audio`
+            } · ${track.devices.length} fx</small>
           </span>
           <span class="track-buttons">
             <span class="solo" title="Solo">S</span>

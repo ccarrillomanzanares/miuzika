@@ -114,7 +114,50 @@ Window: description, instruments, key, time signature, tempo in words and chords
 ("Set in the key of D minor with a 4/4 time signature… a chord progression of Dm, Bb, F, and C."), its README's examples, 1-8
 proposals, start bar, Advanced (length in tokens, temperature, top-p, seed). Delivery: `entregarMidi` now takes a start bar, names
 each proposal's tracks "<file> · <instrument>", mutes proposals after the first, and makes the project if none is open.
-Licence: Llama 3.2 Community ("Built with Llama"). Checked headless to Review. **Not run on the GPU yet.**
+Licence: Llama 3.2 Community ("Built with Llama"). Checked headless to Review. Committed c8383df.
+- **Real run, 8-Nov 18:50-18:59** (`midillm-prueba`, through the app's server; instance booted from off): industrial synth-pop
+  caption with synth bass, drums, synth strings, lead synth, D minor, 4/4, fast-paced, Dm-Bb-F-C, 4 proposals, seed 7111, 92 BPM.
+  Install 40 s, model load 116 s (first download), generation 32 s, VRAM 3.8 GB, none dropped. By measure it followed the text:
+  the four asked instruments in every proposal (GM 38/39, kit ch10, 50, 81, plus 30/84/53/54 of its own), 99-100 % in D minor
+  in two, 79 % and 61 % in the others, 92 BPM stamped. All four hit the 682-note cap (2046 tokens) and the drums take most notes:
+  only 4.7, 12.7, 8.4 and 11.7 bars of music. Imported by hand with Open.
+  **Heard by Carlos: "no valen para nada".** FAIL. Like Basic Pitch: the numbers said it followed the text; the ear says no.
+  **Module removed on his word** ("sí quítalo"); it stays in c8383df. `entregarMidi`'s start bar and per-proposal naming stay.
+
+**8-Nov: instrument picker for MIDI tracks** (Carlos: "¿y el selector de instrumentos para midi?"). Nothing in the GUI changed a
+track's instrument: an imported .mid without program played GM 0 (piano) for good. Now the instrument line of a MIDI track head
+("Synth bass 1 ▾", "Drums · Room ▾") opens a picker: search, the 128 GM programs by family, the 12 kits of GeneralUser GS's bank 128
+(read from its preset headers: Standard 1-3, Room, Power, Electronic, 808/909, Dance, Jazz, Brush, Orchestral, SFX), openDAW's 5
+synths. A click applies `set_instrument` live (undoable; a playing engine is mounted again); kits listed first on a drum track; a
+note warns that drum hits play as pitches on a melodic instrument. `src/core/instrumentos.ts` with tests. Checked headless: melody
+→ Synth bass 1, drums → Room, Ctrl+Z back to Standard 1, Play without errors. One bug found there and fixed: a search kept from
+another track hid the kits. **Not heard by Carlos yet.** GS variation banks (1-26, e.g. "Acid Bass", "808 Tom") are not offered:
+the engine only picks bank 0 and 128.
+
+**8-Nov: Export menu: MP3, WAV, MIDI** (Carlos: "¿los exports de midi y wav??"). The exporter already wrote all three (old agent's
+tools); only MP3 had a button. The header's MP3 button became an **Export** menu. Checked headless on MuLaCover's melody + drums
+(melody set to Synth bass 1, drums to 808/909): MIDI 2 tracks at 114.796 BPM, read back with midi_lector: melody program 38, drums
+channel 10 kit 25; WAV 3:55, peak +1.7 dBFS (the Log says CLIPPING: lower the master); MP3 320 kbps, 9.0 MB. No page errors.
+Then Carlos: "si selecciono un wav y pulso midi… ¿qué hará?". Read in the code: Export ignores the selection; a project of audio alone
+wrote an EMPTY .mid and the Log said "0 track(s)"; audio tracks were left out silently. Fixed: no MIDI tracks with notes → nothing
+written and it says why; mixed → the .mid plus a Log line naming the audio tracks left out. Both also open a notice window with
+"Don't show this again" (his "tiene que informar… y un check de no volver a aparecer"; `aviso-unico.ts`, localStorage); the Log
+line stays always. Checked headless: window, ticked, no window the second time, Log line still there.
+
+**8-Nov: Basic Pitch on CLEAN stems** (before building "To MIDI", which Carlos asked about: "transcribe to midi cómo se haría?").
+Demucs stems of Ghosts Again (original), CPU, 6-9 s each: **bass** (30-400 Hz) 1,423 notes, pitch classes E, D, C#, F# as pyin
+(pyin: E1, D1, C#1, F#1), but often doubled an octave up (polyphony median 2 on a one-note line): a "bass" mode that keeps the
+lowest note gives 590 notes (`bp-ghosts-bass-mono.mid`); **vocals** (80-1200 Hz) 341 notes, 68% silent (the gaps between lines),
+G#, A, C#, F#, B, E; **other** 1,994 notes, polyphony median 3. Files in `heartmula-prueba/generado/bp-ghosts-*.mid`.
+**Heard by Carlos: "está lejos de ser perfecta pero puede ayudar a componer".** PASS as a composing aid, on clean stems. Building
+"To MIDI" on it: kinds Bass (lowest note kept), Melody, Chords/pad, Other (raw); Drums refused (Basic Pitch is pitch only).
+- **Built, 8-Nov:** select ONE audio track → "To MIDI" in the selection bar → kind, sensitivity (thresholds 0.6/0.4, 0.5/0.3,
+  0.4/0.25), shortest note, snap (off, 1/8, 1/16). Each clip is transcribed for the part of its WAV it plays
+  (`workspace/herramientas/transcribir.py`) and its notes land where the clip is, in a new MIDI track "<name> (MIDI)" with an
+  instrument for the kind (bass → GM 38, melody → 81, chords → 89, other → 0); the .mid stays in generado/. Basic Pitch in its own
+  venv `.miuzika/basic-pitch/` (made on first use by `server/api/transcribir.ts`, --no-deps + the versions of the trial; 464 MB).
+  Headless on the Ghosts bass stem: first run 132 s (install included), transcription 7 s, 590 notes of 1,423 heard, C#1-E3 (the
+  same as the hand-made mono file Carlos heard). Drums: button off with the reason. **Not heard by Carlos in the app yet.**
 
 **8-Nov: HeartMuLa researched for a module of its own (Carlos: "documéntate de heartmula para hacer su propio formulario").**
 Read from heartlib at `5858ca8` (8-Oct-2026, shallow clone, nothing run) and the HF cards. Nothing designed or built yet.

@@ -12,6 +12,7 @@ import { rutasSistema } from "./api/sistema.ts";
 import { rutasGpu } from "./api/gpu.ts";
 import { rutasAceStep } from "./api/acestep.ts";
 import { rutasAjustes } from "./api/ajustes.ts";
+import { rutasTranscribir } from "./api/transcribir.ts";
 
 export function miuzikaApi(): Plugin {
   const ctx = crearContexto();
@@ -25,6 +26,7 @@ export function miuzikaApi(): Plugin {
       rutasGpu(server, ctx);
       rutasAceStep(server, ctx);
       rutasAjustes(server, ctx);
+      rutasTranscribir(server, ctx);
     },
   };
 }

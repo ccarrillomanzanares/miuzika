@@ -86,6 +86,16 @@ export class Seleccion {
     $<HTMLButtonElement>("clip-copy").disabled = !enabled || clips === 0;
     $<HTMLButtonElement>("clip-paste").disabled = !enabled || this.portapapeles.length === 0;
     $<HTMLButtonElement>("clip-dup").disabled = !enabled || clips === 0;
+    // To MIDI (8-Nov): one audio track at a time.
+    const aMidi = $<HTMLButtonElement>("sel-midi");
+    const unaDeAudio = elegidas.length === 1 && elegidas[0]!.kind === "audio";
+    aMidi.hidden = !unaDeAudio;
+    aMidi.disabled = !enabled || !unaDeAudio;
+  }
+
+  /** The selected tracks' ids, in the timeline's order of selection. */
+  pistasElegidas(): string[] {
+    return [...this.pistas];
   }
 
   copiar(): void {

@@ -317,6 +317,49 @@ main {
   text-overflow: ellipsis;
 }
 
+/* The instrument line of a MIDI track: a link-like button that opens the picker (8-Nov). */
+.track-meta small .instrumento {
+  all: unset;
+  cursor: pointer;
+  color: var(--text, #d6d9e0);
+  border-bottom: 1px dotted var(--muted);
+}
+.track-meta small .instrumento:hover {
+  color: #fff;
+  border-bottom-style: solid;
+}
+
+.selector-instrumento input[type="search"] {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 4px 0 8px;
+}
+.selector-instrumento .si-lista {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.selector-instrumento h4 {
+  margin: 10px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.selector-instrumento .si-botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.selector-instrumento .si-botones button {
+  font-size: 12px;
+  padding: 3px 8px;
+}
+.selector-instrumento .si-botones button.actual {
+  outline: 2px solid #e07a5f;
+  font-weight: 600;
+}
+
 .track-head .mute,
 .track-head .solo {
   width: 18px;

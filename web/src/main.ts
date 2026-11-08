@@ -24,7 +24,10 @@ import { VentanaMulaCover } from "./modulos/mulacover/ventana.ts";
 import { VentanaDemucs } from "./modulos/demucs/ventana.ts";
 import { VentanaStableAudio } from "./modulos/stableaudio/ventana.ts";
 import { VentanaStrudel } from "./modulos/strudel/ventana.ts";
-import { VentanaMidiLlm } from "./modulos/midillm/ventana.ts";
+import { SelectorInstrumento } from "./selector-instrumento.ts";
+import { mostrarAviso } from "./aviso-unico.ts";
+import { VentanaAMidi } from "./a-midi.ts";
+import { etiquetaInstrumento } from "../../src/core/instrumentos.ts";
 import { VentanaAjustes } from "./ajustes.ts";
 import { crearAvisos } from "./avisos.ts";
 import { crearDetectorDoble } from "./doble-pulsacion.ts";
@@ -163,7 +166,6 @@ const modulos: Record<string, { abrir(): Promise<void> }> = {
   demucs: new VentanaDemucs(anfitrion, gpu),
   stableaudio: new VentanaStableAudio(anfitrion, gpu),
   strudel: new VentanaStrudel(anfitrion),
-  midillm: new VentanaMidiLlm(anfitrion, gpu),
 };
 
 $("modulos").addEventListener("click", (event) => {
@@ -207,6 +209,34 @@ timeline.onEditClip = (trackId, clipId) => {
   });
 };
 
+// The instrument of a MIDI track (8-Nov): applied live, like a moved clip, so a playing engine is mounted again.
+const selectorInstrumento = new SelectorInstrumento({
+  proyecto: () => sesion.project,
+  aplicar(trackId, instrumento) {
+    const view = sesion.project;
+    if (!view || sesion.busy) return;
+    try {
+      sesion.commitLive(applyOps(view, [{ op: "set_instrument", trackId, instrument: instrumento }]).project, true);
+      const pista = sesion.project?.tracks.find((t) => t.id === trackId);
+      if (pista) avisos.info(`“${pista.name}” now plays ${etiquetaInstrumento(pista.instrument)}.`);
+    } catch (error) {
+      avisos.error(`Could not change the instrument: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+});
+timeline.onEditInstrument = (trackId) => selectorInstrumento.abrir(trackId);
+
+// To MIDI (8-Nov): the selected audio track's notes as a new MIDI track, with Basic Pitch on this machine.
+const ventanaAMidi = new VentanaAMidi({
+  proyecto: () => sesion.project,
+  aplicar: (next) => sesion.commitLive(next, true),
+  avisos,
+});
+$("sel-midi").addEventListener("click", () => {
+  const id = seleccion.pistasElegidas()[0];
+  if (id) void ventanaAMidi.abrir(id);
+});
+
 // --- Buttons ---------------------------------------------------------------
 
 function reproducirOPausar(): void {
@@ -238,19 +268,31 @@ $("new-song").addEventListener("click", () => {
 
 $("guardar").addEventListener("click", () => sesion.guardarAhora());
 
-$<HTMLButtonElement>("exportar-mp3").addEventListener("click", async () => {
-  const boton = $<HTMLButtonElement>("exportar-mp3");
-  if (boton.disabled) return;
-  boton.disabled = true;
-  setStatus(t("mp3.renderizando", "Rendering the mix to MP3…"));
+// Export menu (8-Nov: Carlos asked for MIDI and WAV; only MP3 had a button, the other two were the old agent's).
+let exportando = false;
+$("exportar").addEventListener("click", async (event) => {
+  const formato = (event.target as HTMLElement).closest<HTMLElement>("[data-formato]")?.dataset.formato as "mp3" | "wav" | "midi" | undefined;
+  if (!formato) return;
+  $<HTMLDetailsElement>("exportar").open = false;
+  if (exportando) return;
+  exportando = true;
+  const nombre = formato.toUpperCase();
+  setStatus(formato === "midi" ? "Writing the MIDI…" : formato === "mp3" ? t("mp3.renderizando", "Rendering the mix to MP3…") : "Rendering the mix to WAV…");
   try {
-    const r = await exportador.exportar({ midi: false, wav: false, mp3: true });
+    const r = await exportador.exportar({ midi: formato === "midi", wav: formato === "wav", mp3: formato === "mp3" });
     setStatus(r.texto.split("\n").pop() ?? r.texto);
     if (!r.ok) avisos.error(r.texto);
-    else avisos.info(r.texto.split("\n").filter((linea) => linea.startsWith("MP3:")).join(" ") || r.texto);
-    for (const aviso of r.avisos) avisos.error(aviso);
+    else avisos.info(r.texto.split("\n").filter((linea) => linea.startsWith(`${nombre}:`)).join(" ") || r.texto);
+    // Audio tracks left out of a MIDI is information, not a failure.
+    for (const aviso of r.avisos) (aviso.startsWith("MIDI export left out") ? avisos.info : avisos.error).call(avisos, aviso);
+    // Carlos, 8-Nov: the MIDI export "tiene que informar… y un check de no volver a aparecer". The Log line stays always.
+    if (formato === "midi") {
+      if (!r.ok && r.texto.startsWith("There are no MIDI tracks")) await mostrarAviso("midi-sin-pistas", "Nothing to export as MIDI", r.texto);
+      const fuera = r.avisos.find((a) => a.startsWith("MIDI export left out"));
+      if (fuera) await mostrarAviso("midi-audio-fuera", "Audio tracks left out of the MIDI", `${fuera} The .mid has the MIDI tracks only.`);
+    }
   } finally {
-    boton.disabled = false;
+    exportando = false;
   }
 });
 

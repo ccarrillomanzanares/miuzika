@@ -137,11 +137,24 @@ export function crearExportador(d: DependenciasRender): {
     try {
       if (senal?.aborted) return cancelado();
       if (formatos.midi) {
+        // Read in the code on 8-Nov (Carlos: "si selecciono un wav y pulso midi… ¿qué hará?"): a project of audio alone
+        // wrote an empty .mid and the Log said "0 track(s)" as if it were done; audio tracks were left out silently.
+        const conNotas = view.tracks.filter((t) => t.kind === "midi" && t.clips.some((c) => c.notes.length > 0));
+        const deAudio = view.tracks.filter((t) => t.kind === "audio" && t.clips.length > 0);
+        if (conNotas.length === 0) {
+          return {
+            ok: false,
+            texto: "There are no MIDI tracks with notes to export: audio tracks are sound, not notes. To turn one into notes, select it and use To MIDI.",
+            avisos,
+          };
+        }
         const bytes = midiDeProyecto(view);
         const fichero = new File([bytes as unknown as BlobPart], `${slug}.mid`, { type: "audio/midi" });
         const { path } = await subirAudio(fichero, slug, "salida");
-        const pistas = view.tracks.filter((t) => t.kind === "midi").length;
-        hechos.push(`MIDI: proyectos/${slug}/${path} (${pistas} track(s), ${view.bpm} BPM).`);
+        hechos.push(`MIDI: proyectos/${slug}/${path} (${conNotas.length} track(s), ${view.bpm} BPM).`);
+        if (deAudio.length > 0) {
+          avisos.push(`MIDI export left out ${deAudio.length} audio track(s), which are sound, not notes: ${deAudio.map((t) => `“${t.name}”`).join(", ")}.`);
+        }
       }
       if (formatos.wav || formatos.mp3) {
         if (senal?.aborted) return cancelado();
