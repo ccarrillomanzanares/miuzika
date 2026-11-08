@@ -522,7 +522,8 @@ Done 7-Nov: Settings filled and Test connection passes. The API key in `../miuzi
 
 ## Undecided: do not assume any of this
 
-1. **Where the project lives on GitHub**: a new repository, or replacing miuzika's content with its history behind it. Local commits only, no remote.
+1. DECIDED 8-Nov: Carlos deleted and recreated github.com/ccarrillomanzanares/miuzika; this repo was pushed there (`master` →
+   `main`, 18 commits, d69bd2e). History checked for keys before pushing: none. The old miuzika folder is gone; this one is `miuzika`.
 2. **What cannot be missing before he stops using miuzika.** Asked, not answered. Candidates: faders, effects and buses;
    WAV and MIDI export; Sounds; Strudel; Pad; the agent as an optional piece.
 
