@@ -255,17 +255,42 @@ panelPad = new PanelPad({
   },
   parar: () => transporte.detener(),
   cursor: () => timeline.currentBeat,
-  guardarClip: (trackId, startBeat, notas) => {
+  guardarBucle: (inicioBeat, longitud, porPista) => {
     const view = sesion.project;
     if (!view) return;
     try {
       const ahora = new Date();
       const hora = `${String(ahora.getHours()).padStart(2, "0")}:${String(ahora.getMinutes()).padStart(2, "0")}`;
-      sesion.setProject(applyOps(view, [{ op: "add_notes", trackId, startBar: Math.round(startBeat / beatsPerBar(view)), name: `Pad ${hora}`, notes: notas }]).project);
+      const startBar = Math.round(inicioBeat / beatsPerBar(view));
+      // Every track of the loop in one change, so one Ctrl+Z takes the whole loop away.
+      let proyecto = view;
+      for (const { trackId, notas } of porPista) {
+        proyecto = applyOps(proyecto, [{ op: "add_notes", trackId, startBar, name: `Pad ${hora}`, notes: notas }]).project;
+        const clip = proyecto.tracks.find((t) => t.id === trackId)?.clips.at(-1);
+        // The clip lasts the whole loop, even when its last bars are empty: copied along the song it keeps the beat.
+        if (clip && longitud !== null && clip.length !== longitud) {
+          proyecto = applyOps(proyecto, [{ op: "set_clip_length", trackId, clipId: clip.id, lengthBeats: longitud }]).project;
+        }
+      }
+      sesion.setProject(proyecto);
     } catch (error) {
       avisos.error(`Could not save the recording: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
+  nuevaPista: (bateria) => {
+    const view = sesion.project;
+    if (!view || sesion.busy) return null;
+    try {
+      const nombre = bateria ? "Pad drums" : "Pad synth";
+      const resultado = applyOps(view, [{ op: "add_track", name: nombre, kind: "midi", ...(bateria ? { instrument: { type: "drumkit" } } : {}) }]);
+      sesion.setProject(resultado.project);
+      return resultado.project.tracks.at(-1)?.id ?? null;
+    } catch (error) {
+      avisos.error(`Could not create the track: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  },
+  elegirInstrumento: (trackId) => selectorInstrumento.abrir(trackId),
   avisar: (texto) => avisos.info(texto),
   dibujar: (beat) => timeline.draw(beat),
 });

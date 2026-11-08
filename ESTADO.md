@@ -169,6 +169,20 @@ engine so the next note picks up the new instruments. Checked headless with the 
 and says ready, tracks and modes listed (drums → Pads), closing stops the capture, a foreign Origin gets 403. **Not armed and not
 played** (arming freezes the cursor): to be tried by Carlos.
 
+**8-Nov evening: Pad redesigned with loop recording** (Carlos: "quiero hacerlo con pad y el teclado numérico… hay que darle
+una vuelta a la interfaz"; the numpad "no sólo batería sino cualquier instrumento", the touchpad too; keys changeable if there is
+no numpad; on stop, ONE clip per track with every layer: his "a"). Two sources, each with its own track and instrument (and
+"+ New track / + New drum track" in the panel): touchpad, and nine keys (numpad 1-9; on a drum track nine GM pieces, on any
+other nine steps of the project scale). Loop of 1/2/4/8/16 bars or one free take, via the engine's loop area so the project
+plays along; count-in of one bar when recording; each pass a layer heard from the next pass on; quantize Off (default) / 1/8 /
+1/16; numpad keys: Enter record/punch, 0 loop on/off (stop saves), . undo pass, −/+ octave of the keys, * metronome, hold / note
+repeat, hold Del + note = erase as it goes by. Presets Numpad and Letters (ZXC/ASD/QWE), every key remappable, kept in
+localStorage. Pure part `src/core/bucle.ts` with 9 tests. Headless run (drum MIDI at 100 BPM, 1-bar loop, keys sent by
+Playwright): two kicks in pass 1, two snares in pass 2, hats by repeat in pass 3 every 0.15 s (= 1/16 at 100), "." removed the
+6 hats, Del+1 removed the kick on the downbeat only, stop saved 3 notes in one 1-bar clip, Ctrl+Z removed it. Layer replay
+measured against the live hit + one loop: 0 to +19 ms. Letters preset, remap, new drum track, Esc, 600 px width: right.
+**Not heard by Carlos, the touchpad not armed in the test, not committed.** Read in the code, not tried: long stems (streamed WAVs, outside openDAW) do not follow the loop.
+
 **8-Nov: HeartMuLa researched for a module of its own (Carlos: "documéntate de heartmula para hacer su propio formulario").**
 Read from heartlib at `5858ca8` (8-Oct-2026, shallow clone, nothing run) and the HF cards. Nothing designed or built yet.
 - Licence: code and all weights Apache 2.0 (since 20-Jan-2026).

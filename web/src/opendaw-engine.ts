@@ -29,6 +29,11 @@ export interface OpenDawPlaybackHandle {
    */
   /** `pista`: the track id (its name still works, for older callers). */
   nota: (pista: string, pitch: number, velocidad: number) => void;
+  /**
+   * The engine's loop area (the Pad's loop recording): from `desde` to `hasta` in beats, or `null` to switch it off.
+   * The transport then repeats that stretch of the project by itself.
+   */
+  bucle: (desde: number | null, hasta?: number) => void;
 }
 
 export interface OpcionesOpenDaw {
@@ -421,6 +426,18 @@ export async function playWithOpenDaw(
           ? { type: "note-on", uuid: unit.uuid, pitch: nota, velocity: Math.min(1, velocidad / 127) }
           : { type: "note-off", uuid: unit.uuid, pitch: nota },
       );
+    },
+    bucle: (desde, hasta) => {
+      const { loopArea } = project.timelineBox;
+      project.editing.modify(() => {
+        if (desde === null || hasta === undefined || !(hasta > desde)) {
+          loopArea.enabled.setValue(false);
+          return;
+        }
+        loopArea.from.setValue(Math.round(Math.max(0, desde) * 960));
+        loopArea.to.setValue(Math.round(hasta * 960));
+        loopArea.enabled.setValue(true);
+      });
     },
     stop: () => {
       project.engine.stop(true);

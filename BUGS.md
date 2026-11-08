@@ -84,3 +84,10 @@ The 14 listed on 6-Nov-2026 when the GUI was separated from miuzika, and how eac
   (`sa2-drums-x2`: two takes generated, "the outputs could not be listed (ssh exit 1)", nothing brought back; the files were there).
   Measured right after: five ssh connections at 1.3-1.4 s, and the same listing by hand answered at once. The cause is still unknown
   (same as 5-Nov: 3 of 16). FIXED 8-Nov: `sshControl` tries three times instead of two, each still capped at 20 s.
+- **29. The Pad plays into silence when its track is muted or another track is soloed, and says nothing.** Seen by Carlos on
+  8-Nov in `chord`: "no se oye nada del touchpad ni del numpad". In that project the four MIDI tracks are muted and the audio
+  track `ghosts-orig-stems-bass` is on Solo; the engine applies mute/solo to live notes too (`syncMix`), so whatever track the
+  Pad picks is silent. Read in the project file and the code. Measured the same evening on a copy of `chord` as he left it
+  ("Pad drums" unmuted, no solo), tapping the engine's output headless: numpad peaks 0.49-0.50 stopped, in the loop and
+  during Play; the loop's replay 0.18. Also measured: right after Play the engine reloads (~3 s on this project) and keys
+  played meanwhile are silent. Not confirmed by ear. Listed, not fixed: Carlos is still deciding how it should behave.

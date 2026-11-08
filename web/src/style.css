@@ -317,34 +317,134 @@ main {
   text-overflow: ellipsis;
 }
 
-/* Pad: the touchpad as an instrument (brought from old miuzika, 8-Nov). Not modal: the timeline stays in view. */
+/* Pad: the touchpad and the keys as instruments, with loop recording (redesigned 8-Nov). Not modal: the timeline
+   stays in view. Big phase text and the keys always shown, because with the touchpad armed the mouse is frozen. */
 .dialogo-pad {
-  width: min(720px, 92vw);
+  width: min(960px, 96vw);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
 }
 .dialogo-pad[open] {
   position: fixed;
   inset: auto 16px 16px auto;
   margin: 0;
 }
-.pad-mandos {
+.pad-transporte {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.pad-fase {
+  min-width: 170px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.pad-fase.cuenta {
+  color: var(--blue);
+}
+.pad-fase.sonando {
+  color: var(--text);
+}
+.pad-fase.grabando {
+  color: var(--accent);
+}
+.pad-barra {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+.pad-progreso {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+}
+.pad-posicion {
+  min-width: 220px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.pad-bucle,
+.pad-fuente-cabeza,
+.pad-fuente-mandos {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  margin-bottom: 10px;
   font-size: 12px;
   color: var(--muted);
 }
-.pad-mandos select {
+.pad-bucle select {
   margin-left: 4px;
 }
-.pad-octava button {
-  min-width: 24px;
-  margin: 0 4px;
+.pad-botones {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
 }
 .pad-grabar.grabando {
   border-color: var(--accent);
   color: var(--accent);
+}
+.pad-chuleta {
+  margin: 8px 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.9;
+}
+.pad-chuleta kbd,
+.pad-tecla kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  font: 11px ui-monospace, monospace;
+}
+.pad-fuentes {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 14px;
+}
+@media (max-width: 700px) {
+  .pad-fuentes {
+    grid-template-columns: 1fr;
+  }
+  .pad-transporte {
+    flex-wrap: wrap;
+  }
+  .pad-posicion {
+    min-width: 0;
+    text-align: left;
+  }
+}
+.pad-fuente {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.pad-fuente-cabeza strong {
+  color: var(--text);
+  font-size: 13px;
+}
+.pad-fuente-cabeza select {
+  max-width: 180px;
+}
+.pad-instrumento {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pad-octava button {
+  min-width: 24px;
+  margin: 0 4px;
 }
 .pad-lienzo {
   display: block;
@@ -357,6 +457,55 @@ main {
 .dialogo-pad.armado .pad-lienzo {
   border-color: var(--accent);
   cursor: none;
+}
+.pad-rejilla {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.pad-rejilla.sin-pista {
+  opacity: 0.4;
+}
+.pad-tecla {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 52px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #111319;
+  font-size: 12px;
+}
+.pad-tecla.activa {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.pad-tecla-nota {
+  color: var(--text);
+}
+.pad-atajos {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.pad-atajos summary {
+  cursor: pointer;
+}
+.pad-tabla-teclas {
+  margin-top: 6px;
+  border-collapse: collapse;
+}
+.pad-tabla-teclas td {
+  padding: 2px 10px 2px 0;
+}
+.pad-tabla-teclas button {
+  min-width: 72px;
+}
+.pad-tabla-teclas button.capturando {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .pad-estado {
   display: block;
