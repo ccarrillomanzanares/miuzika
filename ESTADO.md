@@ -81,7 +81,30 @@ their LICENSE.md, github.com/Stability-AI/stable-audio-3 (README, inference and 
   euler/rk4/dpmpp; not gated on HF; not run). **Found in dit.py: guidance only runs when cfg != 1, so at the default cfg 1 the
   negative prompt does nothing**: the form and Review say so. small-sfx is gated too and was missing from the Settings check.
   Checked headless on the simulated GPU (every task to Review, no page errors). **Not run on the GPU yet**: variations, several
-  regions, APG, base models.
+  regions, APG, base models. Committed 58cb11d.
+
+**8-Nov: Basic Pitch (audio → MIDI) tried, locally, no GPU** (Carlos: "probemos basic pitch... prueba con alguna canción que hayamos
+creado que me haya gustado"). spotify/basic-pitch 0.4.0 (PyPI, Aug-2024; repo at fa5997a, Nov-2025), **Apache 2.0**. On Windows with
+Python 3.12 its pip metadata asks for tensorflow<2.15.1 (no 3.12 wheels): installed `--no-deps` plus onnxruntime 1.31.1, librosa,
+pretty-midi, resampy, `setuptools<81` (resampy needs pkg_resources); it then runs the bundled `nmp.onnx` on CPU. Knobs (inference.py):
+onset threshold (0.5), frame threshold (0.3), minimum note length (127.7 ms), min/max frequency, multiple pitch bends, melodia trick, MIDI tempo.
+- `sa-bass-cfg1` (30 s): 1.8 s on CPU; default 13 notes, all D1, long. **pyin agrees: 99% of frames are D1**: the bass is a drone, so
+  this is right. Lower thresholds 0.3/0.2: 39 notes, still D1; 0.2/0.1: 902 notes of junk (E6, E7...).
+- `sa-song-cfg1` (full distorted mix, 115 s): 3.4 s; default only 47 notes, 90% silent. 0.3/0.2: 513 notes, mostly C#2, B2, G#2, D#2
+  (a consistent set); 0.2/0.1: 9693 notes of junk. On a full mix it needs a separation first (Demucs), as expected.
+- Files in `stableaudio-prueba/generado/`: `bp-sa-bass-cfg1.mid`, `bp-sa-song-cfg1.mid` (default), `bp-*-sensible.mid` (0.3/0.2).
+  **Heard by Carlos: "no valen nada"** (the four MIDI). Basic Pitch on Stable Audio's distorted material: FAIL. No module built.
+
+**8-Nov: Strudel module brought from old miuzika** (Carlos: "hay que añadir el módulo de strudel que estaba en la versión antigua").
+In Modules: a pattern rendered to WAV in the browser with the real engine (`web/src/modulos/strudel/`, the old strudel-audio.ts and
+strudel-source.ts), heard in the window, then added as an audio track at a chosen bar, clip = the bars asked. No GPU. Packages as old:
+@strudel/* 1.2.6 / webaudio, soundfonts, superdough 1.3.0 (latest). Patterns kept per project folder in localStorage. Five examples.
+Two bugs of the old code found in the headless run (it had never been run, per the old ESTADO): (1) the effects controller came from a
+second copy of superdough (`superdoughoutput.mjs` vs the bundled dist) with no context set: room/delay/distort failed with "different
+audio context" and the delay arpeggio was silent; (2) superdough's private node pools reuse filters etc. from the previous render's
+dead OfflineAudioContext. Fixed: the library builds its own controller, and stale pooled nodes read as collected during a render.
+Measured after: the 5 examples, then three again, all sound with no warnings. Renders peaked up to +6.6 dBFS (909 kit): turned down to
+-1 dBFS before the WAV. Added one as a track headless: 4 bars on the grid, waveform drawn. **Not heard by Carlos yet.**
 
 **8-Nov: HeartMuLa researched for a module of its own (Carlos: "documéntate de heartmula para hacer su propio formulario").**
 Read from heartlib at `5858ca8` (8-Oct-2026, shallow clone, nothing run) and the HF cards. Nothing designed or built yet.
