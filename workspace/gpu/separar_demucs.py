@@ -1,6 +1,6 @@
 """Demucs on the Lambda GPU: separates a mix into stems (drums, bass, other, vocals; six with htdemucs_6s).
 
-Built 8-Nov-2026 (Carlos: "adelante con demucs"): ACE-Step's extract failed on drums ("pegote con restos").
+Built 8-Nov-2026 (the user: "adelante con demucs"): ACE-Step's extract failed on drums ("pegote con restos").
 Same contract as generar_audio.py: cwd is the project folder, `--parametros <file>`, outputs under generado/.
 
 Licence: MIT (code and pretrained models). Pinned: demucs 4.0.1 with torch/torchaudio 2.5.1 in its own venv,

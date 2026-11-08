@@ -1,5 +1,5 @@
 /**
- * The Demucs module's window (8-Nov-2026, Carlos: "adelante con demucs"): separates a mix (tracks of the project
+ * The Demucs module's window (8-Nov-2026, the user: "adelante con demucs"): separates a mix (tracks of the project
  * or a file) into stems, each delivered as a track. Proposed on 7-Nov for drums, where ACE-Step's extract failed.
  */
 
@@ -19,7 +19,7 @@ const COSTE =
 export class VentanaDemucs {
   private readonly dialogo: HTMLDialogElement;
   private vista: "form" | "review" = "form";
-  // htdemucs_ft by default since 8-Nov. Carlos, on the same cover: "mc-ghosts-ft es más limpio que stems" (htdemucs); 86 s, about the same.
+  // htdemucs_ft by default since 8-Nov. The user, on the same cover: "mc-ghosts-ft es más limpio que stems" (htdemucs); 86 s, about the same.
   private v: Record<string, string> = { modelo: "htdemucs_ft", shifts: "1" };
   private fuente: Fuente = "archivo";
   private pistas = new Set<string>();

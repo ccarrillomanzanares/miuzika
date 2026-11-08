@@ -361,7 +361,7 @@ export class TimelineView {
     this.pruneSelection();
     this.renderHeads();
     // A track added to the open project landed below the canvas, so it had a head and no waveform
-    // until something else resized it (Carlos, 7-Nov; reproduced: canvas row empty, BUGS 19).
+    // until something else resized it (the user, 7-Nov; reproduced: canvas row empty, BUGS 19).
     this.resize();
     this.renderStatic();
     this.draw(this.beat);

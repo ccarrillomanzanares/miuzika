@@ -1,5 +1,5 @@
 /**
- * A notice in a small window with "Don't show this again" (8-Nov-2026, Carlos on the MIDI export that leaves audio tracks
+ * A notice in a small window with "Don't show this again" (8-Nov-2026, the user on the MIDI export that leaves audio tracks
  * out: "tiene que informar… y un check de no volver a aparecer"). Ticked, the window does not open again for that notice in
  * this browser; the caller still writes the Log line, so nothing goes unsaid.
  */

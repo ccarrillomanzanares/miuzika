@@ -1,5 +1,5 @@
 /**
- * What a MIDI track can sound with, for the instrument picker (8-Nov-2026, Carlos: "¿y el selector de instrumentos para
+ * What a MIDI track can sound with, for the instrument picker (8-Nov-2026, the user: "¿y el selector de instrumentos para
  * midi?"). Before it, nothing in the GUI changed a track's instrument: an imported .mid with no program sounded as a piano
  * (GM 0) for good. The `set_instrument` op already existed (the agent's, in old miuzika).
  *

@@ -1,5 +1,5 @@
 /**
- * "To MIDI": the selected audio track's clips become a new MIDI track, with Basic Pitch on this machine (8-Nov-2026, Carlos:
+ * "To MIDI": the selected audio track's clips become a new MIDI track, with Basic Pitch on this machine (8-Nov-2026, the user:
  * "transcribe to midi cómo se haría?"; heard on Demucs stems: "está lejos de ser perfecta pero puede ayudar a componer").
  * Each clip is transcribed for the part of its WAV it plays, and its notes land where the clip is.
  */

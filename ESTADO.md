@@ -2,16 +2,16 @@
 
 ## START HERE
 
-Carlos, 7-Nov: **"hay que evitar tener que pasar de nuevo por dónde ya hemos pasado"**. Before proposing a test or a feature, read
+The user, 7-Nov: **"hay que evitar tener que pasar de nuevo por dónde ya hemos pasado"**. Before proposing a test or a feature, read
 "What ACE-Step can and cannot do" below: it holds every verdict by ear so far. When a new verdict or conclusion arrives, write it there
 in the same session, not at the end.
 
-**8-Nov: ACE-Step test phase CLOSED.** Carlos: "esas pruebas ya no las haremos, dejaremos que sean los intentos reales de los
+**8-Nov: ACE-Step test phase CLOSED.** The user: "esas pruebas ya no las haremos, dejaremos que sean los intentos reales de los
 usuarios". Do not propose more ACE-Step tests (shared chords for stems, more structure seeds, more solo instruments, repaint of
 glitches, MIDI dressed by cover): they stay as ideas below, for users to find. Recipe that came out best: text2music on xl-sft + LM 4B
 with the `vein` caption at a given BPM; stems by describing one instrument alone; bass/drums by extract. GPU shut down after it (89 s).
 
-**8-Nov, decided by Carlos: non-commercial models are allowed, with disclaimers.** "Este proyecto es experimental, y como tal y
+**8-Nov, decided by the user: non-commercial models are allowed, with disclaimers.** "Este proyecto es experimental, y como tal y
 poniendo los disclaimers podemos usar modelos como MuLaCover". Conditions agreed: each such module states its licence before Run;
 each take's lineage records the licence; the notice also reminds that a third-party source (a known song) has its own rights; if
 miuzika ever becomes a paid service, these modules are reviewed. YuE2 and MusicGen become candidates on these terms.
@@ -31,7 +31,7 @@ MuLaCover from MIDI (Ghosts Again's transcribed melody+chords+drums, his lyrics,
 completa, tiene muchos instrumentos, mucho más pop y comercial, también tiene voz". From MIDI it still goes pop, like from audio. `mc-midi-sin-drums` (no drum MIDI): "completa también, con batería": without a drum
 MIDI it writes its own drums; the drum MIDI is optional for real. `mc-desde-heartmula` (source: HeartMuLa's pop take hm-darkwave-1,
 same lyrics and industrial style): "no es un estilo que a mí me parezca ni dark, industrial, dark synth pop". **MuLaCover keeps the
-melody and sings the lyrics, but its style ignores the style text: 4 of 4 takes came out pop.** Outputs are always audio (Carlos: the
+melody and sings the lyrics, but its style ignores the style text: 4 of 4 takes came out pop.** Outputs are always audio (the user: the
 mc-midi-* takes "no son midi": right, they are WAVs made *from* MIDI).
 
 **8-Nov: Stable Audio researched (his "adelante con ese… lanza un test").** Read: HF cards of stable-audio-3-medium and -small-music,
@@ -44,7 +44,7 @@ their LICENSE.md, github.com/Stability-AI/stable-audio-3 (README, inference and 
   revenue (commercial use asks for registration at stability.ai/community-license); **outputs are the user's**; no use to train
   another foundation model; also the Gemma Terms (text encoder T5Gemma), not read.
 - **Blocker: the weights are gated.** Downloading needs a Hugging Face account that accepted the terms, and its token. None found
-  here (no HF key in .env, no local token). Carlos must create/accept and give a token (to keep server-side, like the Lambda key).
+  here (no HF key in .env, no local token). The user must create/accept and give a token (to keep server-side, like the Lambda key).
   **Solved 8-Nov:** his token from `info.txt` on his VPS, copied (never printed) to `miuzika-new/.miuzika/hf_token.txt` (git-ignored);
   he accepted the medium terms and gave the token gated read access. For the trial Claude copied it by ssh to
   `~/.cache/huggingface/token` on the instance; the app never carried it.
@@ -52,7 +52,7 @@ their LICENSE.md, github.com/Stability-AI/stable-audio-3 (README, inference and 
   2.6.3 wheel cu126/torch2.7): drums, synth bass (30 s) and an instrumental song (120 s), 92 BPM, seed 7111, each at cfg 1 and 7.
   Install + download only ~13 s of script time beyond boot; each take ~24 s with the model reloaded every time. Output 44.1 kHz.
   Measured: cfg 7 takes are much louder (RMS -6.7 to -9.8 dB against -16 to -18 at cfg 1, peaks at 0 dBFS): likely distorted.
-  **Heard by Carlos: `sa-song-cfg1` "es super industrial... wow!!!" — the first model that lands his style.** bass cfg1 "suena a bajo"
+  **Heard by the user: `sa-song-cfg1` "es super industrial... wow!!!" — the first model that lands his style.** bass cfg1 "suena a bajo"
   (PASS), bass cfg7 "una mezcla de cosas, no es sólo bajo, es también synth"; drums cfg1 "percusión, puede pasar", drums cfg7 "también
   es percusión industrial". cfg 1 (the default) is the better setting; song cfg7 "está super saturada" (as measured: RMS -7.3 dB). **Use cfg 1.**
   Second listen, same day: drums cfg1 "es batería", drums cfg7 "también, pero sobresaturada"; bass cfg1 "es un bajo", bass cfg7 "parece
@@ -68,12 +68,12 @@ their LICENSE.md, github.com/Stability-AI/stable-audio-3 (README, inference and 
   of generation; model load 46 s the first time, 18 s after); transform `sa-song-cfg1` at change 0.7 (65 s; correlation with the
   source 0.05: a new piece); repaint bars 13-16 (106 s; correlation with the source 0.995 before, 0.87 inside, 0.97 after: outside
   is kept, only through the codec); continue the 30 s bass to 60 s (81 s; first 30 s at 0.998); small-music song (76 s). Not heard yet.
-  Heard by Carlos: `sa2-repintar` "es super parecida a la última que escuché que me gustó tanto" (`sa-song-cfg1`, its source), as
+  Heard by the user: `sa2-repintar` "es super parecida a la última que escuché que me gustó tanto" (`sa-song-cfg1`, its source), as
   expected: only bars 13-16 are new. Whether the change at those bars is audible was not said.
   `sa2-continuar`, `sa2-drums-x2-1`, `sa2-drums-x2-2` and `sa2-small`: "pegan juntas, y son lo que dicen, el estilo total no es el que
   más me gusta pero bueno pegan". PASS on doing what was asked and fitting together; style below `sa-song-cfg1`. `sa2-transformar`
   (change 0.7 over `sa-song-cfg1`): "también es muy buena". Every task of the module passed by ear. Committed dd3deff.
-- **Form with every detail** (Carlos: "stable audio es un buen candidato... ahora a programar el formulario con todos los detalles
+- **Form with every detail** (the user: "stable audio es un buen candidato... ahora a programar el formulario con todos los detalles
   que se puedan"; melody test not wanted). Read at 790793b (model.py, dit.py, prompting.md, inference.md, Gradio): several repaint
   regions in one pass ("5-8, 13-16"), one prompt per take (variation lines), empty prompt allowed (the guide's unconditional and
   no-prompt continuation), Genre/Instruments tags, Duo kind, the guide's example prompts, change-amount presets (0.1/0.4/0.6/0.7/0.9
@@ -83,7 +83,7 @@ their LICENSE.md, github.com/Stability-AI/stable-audio-3 (README, inference and 
   Checked headless on the simulated GPU (every task to Review, no page errors). **Not run on the GPU yet**: variations, several
   regions, APG, base models. Committed 58cb11d.
 
-**8-Nov: Basic Pitch (audio → MIDI) tried, locally, no GPU** (Carlos: "probemos basic pitch... prueba con alguna canción que hayamos
+**8-Nov: Basic Pitch (audio → MIDI) tried, locally, no GPU** (the user: "probemos basic pitch... prueba con alguna canción que hayamos
 creado que me haya gustado"). spotify/basic-pitch 0.4.0 (PyPI, Aug-2024; repo at fa5997a, Nov-2025), **Apache 2.0**. On Windows with
 Python 3.12 its pip metadata asks for tensorflow<2.15.1 (no 3.12 wheels): installed `--no-deps` plus onnxruntime 1.31.1, librosa,
 pretty-midi, resampy, `setuptools<81` (resampy needs pkg_resources); it then runs the bundled `nmp.onnx` on CPU. Knobs (inference.py):
@@ -93,9 +93,9 @@ onset threshold (0.5), frame threshold (0.3), minimum note length (127.7 ms), mi
 - `sa-song-cfg1` (full distorted mix, 115 s): 3.4 s; default only 47 notes, 90% silent. 0.3/0.2: 513 notes, mostly C#2, B2, G#2, D#2
   (a consistent set); 0.2/0.1: 9693 notes of junk. On a full mix it needs a separation first (Demucs), as expected.
 - Files in `stableaudio-prueba/generado/`: `bp-sa-bass-cfg1.mid`, `bp-sa-song-cfg1.mid` (default), `bp-*-sensible.mid` (0.3/0.2).
-  **Heard by Carlos: "no valen nada"** (the four MIDI). Basic Pitch on Stable Audio's distorted material: FAIL. No module built.
+  **Heard by the user: "no valen nada"** (the four MIDI). Basic Pitch on Stable Audio's distorted material: FAIL. No module built.
 
-**8-Nov: Strudel module brought from old miuzika** (Carlos: "hay que añadir el módulo de strudel que estaba en la versión antigua").
+**8-Nov: Strudel module brought from old miuzika** (the user: "hay que añadir el módulo de strudel que estaba en la versión antigua").
 In Modules: a pattern rendered to WAV in the browser with the real engine (`web/src/modulos/strudel/`, the old strudel-audio.ts and
 strudel-source.ts), heard in the window, then added as an audio track at a chosen bar, clip = the bars asked. No GPU. Packages as old:
 @strudel/* 1.2.6 / webaudio, soundfonts, superdough 1.3.0 (latest). Patterns kept per project folder in localStorage. Five examples.
@@ -104,9 +104,9 @@ second copy of superdough (`superdoughoutput.mjs` vs the bundled dist) with no c
 audio context" and the delay arpeggio was silent; (2) superdough's private node pools reuse filters etc. from the previous render's
 dead OfflineAudioContext. Fixed: the library builds its own controller, and stale pooled nodes read as collected during a render.
 Measured after: the 5 examples, then three again, all sound with no warnings. Renders peaked up to +6.6 dBFS (909 kit): turned down to
--1 dBFS before the WAV. Added one as a track headless: 4 bars on the grid, waveform drawn. **Not heard by Carlos yet.** Committed 6ee39da.
+-1 dBFS before the WAV. Added one as a track headless: 4 bars on the grid, waveform drawn. **Not heard by the user yet.** Committed 6ee39da.
 
-**8-Nov: MIDI-LLM module** (Carlos reviewed what old miuzika had: "vamos primero con proponer_midi", named "MIDI-LLM", import
+**8-Nov: MIDI-LLM module** (the user reviewed what old miuzika had: "vamos primero con proponer_midi", named "MIDI-LLM", import
 path approved). Old `proponer_midi.py` ported to `generar_midillm.py`: repo pinned 93c660c, weights revision 8b82ab9 (not gated),
 packages pinned to its requirements.txt without vllm, torch 2.8.0 cu128; the generation driven through the repo's own
 `generate_from_prompts_hf` so the seed is set and recorded (its script has none); tempo stamped on each .mid (ticks unchanged).
@@ -121,35 +121,35 @@ Licence: Llama 3.2 Community ("Built with Llama"). Checked headless to Review. C
   the four asked instruments in every proposal (GM 38/39, kit ch10, 50, 81, plus 30/84/53/54 of its own), 99-100 % in D minor
   in two, 79 % and 61 % in the others, 92 BPM stamped. All four hit the 682-note cap (2046 tokens) and the drums take most notes:
   only 4.7, 12.7, 8.4 and 11.7 bars of music. Imported by hand with Open.
-  **Heard by Carlos: "no valen para nada".** FAIL. Like Basic Pitch: the numbers said it followed the text; the ear says no.
+  **Heard by the user: "no valen para nada".** FAIL. Like Basic Pitch: the numbers said it followed the text; the ear says no.
   **Module removed on his word** ("sí quítalo"); it stays in c8383df. `entregarMidi`'s start bar and per-proposal naming stay.
 
-**8-Nov: instrument picker for MIDI tracks** (Carlos: "¿y el selector de instrumentos para midi?"). Nothing in the GUI changed a
+**8-Nov: instrument picker for MIDI tracks** (the user: "¿y el selector de instrumentos para midi?"). Nothing in the GUI changed a
 track's instrument: an imported .mid without program played GM 0 (piano) for good. Now the instrument line of a MIDI track head
 ("Synth bass 1 ▾", "Drums · Room ▾") opens a picker: search, the 128 GM programs by family, the 12 kits of GeneralUser GS's bank 128
 (read from its preset headers: Standard 1-3, Room, Power, Electronic, 808/909, Dance, Jazz, Brush, Orchestral, SFX), openDAW's 5
 synths. A click applies `set_instrument` live (undoable; a playing engine is mounted again); kits listed first on a drum track; a
 note warns that drum hits play as pitches on a melodic instrument. `src/core/instrumentos.ts` with tests. Checked headless: melody
 → Synth bass 1, drums → Room, Ctrl+Z back to Standard 1, Play without errors. One bug found there and fixed: a search kept from
-another track hid the kits. **Not heard by Carlos yet.** GS variation banks (1-26, e.g. "Acid Bass", "808 Tom") are not offered:
+another track hid the kits. **Not heard by the user yet.** GS variation banks (1-26, e.g. "Acid Bass", "808 Tom") are not offered:
 the engine only picks bank 0 and 128.
 
-**8-Nov: Export menu: MP3, WAV, MIDI** (Carlos: "¿los exports de midi y wav??"). The exporter already wrote all three (old agent's
+**8-Nov: Export menu: MP3, WAV, MIDI** (the user: "¿los exports de midi y wav??"). The exporter already wrote all three (old agent's
 tools); only MP3 had a button. The header's MP3 button became an **Export** menu. Checked headless on MuLaCover's melody + drums
 (melody set to Synth bass 1, drums to 808/909): MIDI 2 tracks at 114.796 BPM, read back with midi_lector: melody program 38, drums
 channel 10 kit 25; WAV 3:55, peak +1.7 dBFS (the Log says CLIPPING: lower the master); MP3 320 kbps, 9.0 MB. No page errors.
-Then Carlos: "si selecciono un wav y pulso midi… ¿qué hará?". Read in the code: Export ignores the selection; a project of audio alone
+Then the user: "si selecciono un wav y pulso midi… ¿qué hará?". Read in the code: Export ignores the selection; a project of audio alone
 wrote an EMPTY .mid and the Log said "0 track(s)"; audio tracks were left out silently. Fixed: no MIDI tracks with notes → nothing
 written and it says why; mixed → the .mid plus a Log line naming the audio tracks left out. Both also open a notice window with
 "Don't show this again" (his "tiene que informar… y un check de no volver a aparecer"; `aviso-unico.ts`, localStorage); the Log
 line stays always. Checked headless: window, ticked, no window the second time, Log line still there.
 
-**8-Nov: Basic Pitch on CLEAN stems** (before building "To MIDI", which Carlos asked about: "transcribe to midi cómo se haría?").
+**8-Nov: Basic Pitch on CLEAN stems** (before building "To MIDI", which the user asked about: "transcribe to midi cómo se haría?").
 Demucs stems of Ghosts Again (original), CPU, 6-9 s each: **bass** (30-400 Hz) 1,423 notes, pitch classes E, D, C#, F# as pyin
 (pyin: E1, D1, C#1, F#1), but often doubled an octave up (polyphony median 2 on a one-note line): a "bass" mode that keeps the
 lowest note gives 590 notes (`bp-ghosts-bass-mono.mid`); **vocals** (80-1200 Hz) 341 notes, 68% silent (the gaps between lines),
 G#, A, C#, F#, B, E; **other** 1,994 notes, polyphony median 3. Files in `heartmula-prueba/generado/bp-ghosts-*.mid`.
-**Heard by Carlos: "está lejos de ser perfecta pero puede ayudar a componer".** PASS as a composing aid, on clean stems. Building
+**Heard by the user: "está lejos de ser perfecta pero puede ayudar a componer".** PASS as a composing aid, on clean stems. Building
 "To MIDI" on it: kinds Bass (lowest note kept), Melody, Chords/pad, Other (raw); Drums refused (Basic Pitch is pitch only).
 - **Built, 8-Nov:** select ONE audio track → "To MIDI" in the selection bar → kind, sensitivity (thresholds 0.6/0.4, 0.5/0.3,
   0.4/0.25), shortest note, snap (off, 1/8, 1/16). Each clip is transcribed for the part of its WAV it plays
@@ -157,19 +157,19 @@ G#, A, C#, F#, B, E; **other** 1,994 notes, polyphony median 3. Files in `heartm
   instrument for the kind (bass → GM 38, melody → 81, chords → 89, other → 0); the .mid stays in generado/. Basic Pitch in its own
   venv `.miuzika/basic-pitch/` (made on first use by `server/api/transcribir.ts`, --no-deps + the versions of the trial; 464 MB).
   Headless on the Ghosts bass stem: first run 132 s (install included), transcription 7 s, 590 notes of 1,423 heard, C#1-E3 (the
-  same as the hand-made mono file Carlos heard). Drums: button off with the reason. **Not heard by Carlos in the app yet.**
+  same as the hand-made mono file the user heard). Drums: button off with the reason. **Not heard by the user in the app yet.**
   Committed 7902f74.
 
-**8-Nov: Pad (the touchpad as an instrument) brought from old miuzika** (Carlos: "antes de eso traéte el código de touchpad",
+**8-Nov: Pad (the touchpad as an instrument) brought from old miuzika** (the user: "antes de eso traéte el código de touchpad",
 before renaming this folder to miuzika and deleting the old one). There it came from humseed and was never exercised. Brought as
 it was: `workspace/herramientas/touchpad/` (Raw Input capture, Windows Precision Touchpad), `server/api/pad.ts` (now also refuses
 other origins, bug 16), `src/core/pad.ts` with its tests (drum pad names now in English), `web/src/pad.ts`, a Pad button in the
 header. The transport gained `prepararMotor` (the engine loaded, stopped) for the live notes; a structural change unloads that
 engine so the next note picks up the new instruments. Checked headless with the real touchpad: the panel opens, the capture starts
 and says ready, tracks and modes listed (drums → Pads), closing stops the capture, a foreign Origin gets 403. **Not armed and not
-played** (arming freezes the cursor): to be tried by Carlos.
+played** (arming freezes the cursor): to be tried by the user.
 
-**8-Nov evening: Pad redesigned with loop recording** (Carlos: "quiero hacerlo con pad y el teclado numérico… hay que darle
+**8-Nov evening: Pad redesigned with loop recording** (the user: "quiero hacerlo con pad y el teclado numérico… hay que darle
 una vuelta a la interfaz"; the numpad "no sólo batería sino cualquier instrumento", the touchpad too; keys changeable if there is
 no numpad; on stop, ONE clip per track with every layer: his "a"). Two sources, each with its own track and instrument (and
 "+ New track / + New drum track" in the panel): touchpad, and nine keys (numpad 1-9; on a drum track nine GM pieces, on any
@@ -181,17 +181,17 @@ localStorage. Pure part `src/core/bucle.ts` with 9 tests. Headless run (drum MID
 Playwright): two kicks in pass 1, two snares in pass 2, hats by repeat in pass 3 every 0.15 s (= 1/16 at 100), "." removed the
 6 hats, Del+1 removed the kick on the downbeat only, stop saved 3 notes in one 1-bar clip, Ctrl+Z removed it. Layer replay
 measured against the live hit + one loop: 0 to +19 ms. Letters preset, remap, new drum track, Esc, 600 px width: right.
-**Not heard by Carlos, the touchpad not armed in the test, not committed.** Read in the code, not tried: long stems (streamed WAVs, outside openDAW) do not follow the loop.
+**Not heard by the user, the touchpad not armed in the test, not committed.** Read in the code, not tried: long stems (streamed WAVs, outside openDAW) do not follow the loop.
 
-**8-Nov night: New asks for the name** (Carlos: "si aprieto new ha de preguntar el nombre del proyecto… y se abre… y a partir
+**8-Nov night: New asks for the name** (the user: "si aprieto new ha de preguntar el nombre del proyecto… y se abre… y a partir
 de ahí que se pueda ejecutar el pad"; the Pad does not open with no project, which is why "Pad" seemed to do nothing). New opens a
 window with the name; the folder comes from it, and a taken one is said before creating ("goes to proyectos/x-2/"); Create opens
 the project and writes it at once. In the Pad, an empty project shows "Choose a track…" (before, "+ New track" looked chosen and
 picking it did nothing), creating a track waits for the engine to load (headless, it was refused while loading), and the
 engine is loaded again after every change so the next key sounds at once. Headless: New → name → open and on disk, same name
-→ "-2" said, Cancel keeps the open one, Pad → new drum track + new synth track → Numpad1 peaks 0.60. Not tried by Carlos.
+→ "-2" said, Cancel keeps the open one, Pad → new drum track + new synth track → Numpad1 peaks 0.60. Not tried by the user.
 
-**8-Nov: HeartMuLa researched for a module of its own (Carlos: "documéntate de heartmula para hacer su propio formulario").**
+**8-Nov: HeartMuLa researched for a module of its own (the user: "documéntate de heartmula para hacer su propio formulario").**
 Read from heartlib at `5858ca8` (8-Oct-2026, shallow clone, nothing run) and the HF cards. Nothing designed or built yet.
 - Licence: code and all weights Apache 2.0 (since 20-Jan-2026).
 - Models: HeartMuLa-oss-3B (14-Jan), HeartMuLa-RL-oss-3B-20260123 ("more precise control over styles and tags"),
@@ -212,7 +212,7 @@ Read from heartlib at `5858ca8` (8-Oct-2026, shallow clone, nothing run) and the
 instance: `pyarrow<18` (torchtune 0.4.0 -> old datasets uses pa.PyExtensionType), and torchaudio.save wants torchcodec, so our script
 writes the WAV with soundfile (16-bit, 48 kHz). Measured: HeartMuLa 12.7 GB and codec 6.2 GB of VRAM (loaded in turn, peak 13.7 GB);
 take 1 (cfg 1.5) 153 s of audio in 136 s, peak 0.0 dBFS; take 2 (cfg 3.0) 102 s in 81 s: **both stopped before the 180 s asked**
-(the model ends on its own). Boot 260 s; install + 22 GB download ~5 min. **Heard (quickly): FAIL. Carlos: "no tienen casi nada de
+(the model ends on its own). Boot 260 s; install + 22 GB download ~5 min. **Heard (quickly): FAIL. The user: "no tienen casi nada de
 los tag, son canciones pop románticas".** Same failure as ACE-Step's voice (pop by default), and worse on style. One prompt, two takes.
 **8-Nov: MuLaCover trial** (his "sí pruébalo", as a private experiment: its weights and outputs are **CC BY-NC 4.0**, commercial use
 forbidden by its LICENSING.md, so it cannot enter the app as is). Temporary script `workspace/gpu/probar_mulacover.py` (untracked, to
@@ -221,7 +221,7 @@ delete), MuLaCover `e27fa7f`. Source: Ghosts Again MP3 (his file, now "DM" in Do
 (no CUDA 13 needed) + `pyarrow<18`; install + 16 GB of models in <30 s on an instance already on. It transcribed the source to
 melody/chord/drum MIDI (bpm.txt 114.8) and generated 195.6 s in 397 s, peak 14.7 GB VRAM. First try cut at 320 s by our launcher
 (Node fetch aborts after 300 s without data; the server took it as Cancel): any client of /api/gpu/ejecutar must tolerate long silences.
-MIDI kept in `heartmula-prueba/generado/mc-ghosts-midi/`. **Heard: PASS-ish. Carlos: "el cover está bien, con la letra y todo, es
+MIDI kept in `heartmula-prueba/generado/mc-ghosts-midi/`. **Heard: PASS-ish. The user: "el cover está bien, con la letra y todo, es
 más pop y la voz no es tan sugerente como la de DM, es más convencional, pero saber que se puede hacer esto vale la pena... aunque eso sí
 habría que indicar que no se puede usar para comercial".** First model that sang his lyrics over a known song's melody and chords.
 If it ever enters the app: say plainly, before Run, that MuLaCover's outputs are non-commercial (CC BY-NC 4.0). Nothing decided.
@@ -240,9 +240,9 @@ If it ever enters the app: say plainly, before Run, that MuLaCover's outputs are
 - **Tests left (proposed 7-Nov night, his choice; recommended first: 1):**
   1. DONE 7-Nov 21:20, `vein-voz`: good music, but other songs than vein-1 and a mainstream pop voice (see the verdict table).
      Then `vein-voz-b`, the voice described in the caption: "no se acerca". The caption does not steer the voice.
-     **Voice closed, Carlos 7-Nov night: "de voz nada más... sabemos que la voz se puede solicitar para canciones completas y ya
+     **Voice closed, the user 7-Nov night: "de voz nada más... sabemos que la voz se puede solicitar para canciones completas y ya
      está".** Do not propose more voice tests (cover with lyrics, complete from his voice): voice = text2music full songs, as is.
-  **7-Nov night, Carlos: "crea un proyecto nuevo tú, y haz las pruebas, al terminar cargaré los wavs" ("no has de cambiar el
+  **7-Nov night, the user: "crea un proyecto nuevo tú, y haz las pruebas, al terminar cargaré los wavs" ("no has de cambiar el
   código, sólo probar").** Project `pruebas` (no tracks; he imports the WAVs). Run by Claude through `/api/gpu/ejecutar`, one after
   another, same recipe shape as the window (script in the session scratchpad, not in the repo). p01-p02 cover with a dirty caption at
   0.6/0.3, p03 cover-nofsq, p04 repaint bars 9-12, p05-p06 extract keyboard/percussion, p07 complete over vein-drums, p08 text2music no
@@ -251,11 +251,11 @@ If it ever enters the app: say plainly, before Run, that MuLaCover's outputs are
   Run 22:00-22:19: p01-p11 done, a WAV each in `pruebas/generado/`, none heard yet. Times: covers 69-90 s, repaint 56 s, extracts 62-74 s,
   complete 70 s, t2m no LM 56 s, t2m no BPM/key 150 s, xl-sft 166 s, xl-base 213 s. At 22:19 Claude Code killed the launcher (machine
   low on memory), which the server took as Cancel of p12 about 32 s into the script: no file left. p12-p14 and p99 still to run.
-  **Heard by Carlos the same night, in short:** good songs from text2music on every model tried (xl-turbo with and without LM,
+  **Heard by the user the same night, in short:** good songs from text2music on every model tried (xl-turbo with and without LM,
   xl-sft, xl-base), none really industrial; no BPM -> the LM picks 125 (dance). Caption does not steer style in cover either (p01/p02).
   cover-nofsq stays close to the song and passed. Repaint obeys the range exactly. Extract keyboard passed, percussion confused with
   it. Complete over extracted drums: jumble. Pattern across tasks: **ACE-Step keeps structure well; style words barely move it.**
-  Carlos on the whole: **"tira hacia canción de baile"**: with this dark synth-pop/industrial caption it leans to dance (p09 at 125,
+  The user on the whole: **"tira hacia canción de baile"**: with this dark synth-pop/industrial caption it leans to dance (p09 at 125,
   p10 "rave", even at 92 BPM). Words that pull away from dance are the next thing to try, if any.
   **Second batch, 22:47-23:05 (new A10 `bcb2c8c3…`, boot+install+p12 in 7 min 47 s):** p12 turbo 467 s with the boot, p13 sft 131 s, p14
   base 149 s, p15 nofsq 0.3 66 s, p16 nofsq 0.8 60 s, p17 repaint bars 9-16 73 s, then p18 (caption without dance words: "slow, heavy,
@@ -266,7 +266,7 @@ If it ever enters the app: say plainly, before Run, that MuLaCover's outputs are
   source: 0.66 at 0.3, 0.71 at 0.6, 0.72 at 0.8: strength barely moves it, as in cover (p01/p02). GPU shut down at his request
   after he heard all 18 (Lambda confirmed in 88 s, instance bcb2c8c3…). Next session ("mañana probamos más"), proposed: repaint the
   glitches of p14 with base (he gives the bars), and the LM 0.6B and 4B on xl-sft.
-  **8-Nov: LM 0.6B discarded** (Carlos: "no hagamos pruebas con 0.6B, descartado"). Searched the web first: no user reports or A/B of
+  **8-Nov: LM 0.6B discarded** (the user: "no hagamos pruebas con 0.6B, descartado"). Searched the web first: no user reports or A/B of
   the LM sizes; upstream says same data, 0.6B = low-VRAM option, 4B "strong" for composition and understanding; their numbers are all
   with 1.7B. Running the 4B in project `pruebas-4b` (q01-q04: the `vein` recipe and seed on xl-sft, base, xl-turbo, sft, so each pairs
   with p10, p14, vein-1, p13). Risk noted: xl + 1.7B already used ~14 GB of the A10's 22.
@@ -274,7 +274,7 @@ If it ever enters the app: say plainly, before Run, that MuLaCover's outputs are
   q02 base 90 s, q04 sft 92 s, q03 xl-turbo 83 s (its first try failed on "ssh cut off after 20 s" at sync, as guitarra-f on 7-Nov;
   retried alone, fine). With the 4B the runs were faster than with 1.7B (base 90 s vs 149 s; why not known). GPU on.
   q05 (his "dale"): q01's recipe, 3 takes, random seed -> seeds 589740696/7/8 (lineage), 241 s, 8-Nov 08:15. Not heard yet.
-  Carlos 8-Nov: the 4B "funciona mejor que el 1.7B y ha de ser el modelo por defecto", choosable, 0.6B out. Planned in receta.ts
+  The user 8-Nov: the 4B "funciona mejor que el 1.7B y ha de ser el modelo por defecto", choosable, 0.6B out. Planned in receta.ts
   (LMS without 0.6B, text2music default 4B, `none` kept). **DONE 8-Nov ~08:43 on his "sí"**: LMS = 4B, 1.7B, none (4B first in the
   Review selector); typecheck and 178 unit tests green. **Seen by him in Review: "confirmado que se ve el 4b".**
   Two "ssh cut off after 20 s" on 8-Nov's instance (q03 at sync, r03 at upload), both retried; watch whether the 20 s cap is too tight.
@@ -287,7 +287,7 @@ If it ever enters the app: say plainly, before Run, that MuLaCover's outputs are
   text2music xl-sft + LM 4B, 60 s, 92 BPM, D minor, seed 4242, 2 takes each, one positive caption per instrument ("Isolated … track:
   a single … playing alone … Solo … recording … stem for mixing", no negations): s01 drums, s02 bass, s03 pad, s04 lead. Before (1.7B,
   2-5 Nov): text2music completed a song when asked for drums alone, and negations primed what they denied.
-  **Carlos's conclusion, 8-Nov: "4B funciona mejor que 1.7B, pero hay que seguir informando de que es algo experimental y podría
+  **The user's conclusion, 8-Nov: "4B funciona mejor que 1.7B, pero hay que seguir informando de que es algo experimental y podría
   causar gastos en alquiler de GPU que no fueran productivos".** The window's texts (EXPECTATIVAS, SIN_GARANTIA in ventana.ts) are
   stale against 7/8-Nov verdicts. **Updated 8-Nov on his "me parecen bien, haz el cambio"**: "Experimental: results vary…, many takes
   may be needed" opens the No-warranty notice; text2music (one instrument possible, style words weak, give BPM, several takes), cover
@@ -321,7 +321,7 @@ Where we were before (7-Nov morning and afternoon, partly superseded above):
   bugs 15, 16, 22, 23, 24 fixed (detail in the dated section below and in `BUGS.md`). typecheck and 177 unit tests green. Committed in
   `8996a73` (7-Nov afternoon, at his request; local only).
 - GPU: off at ~11:25 on 7-Nov; on again from 19:29 for the evening runs.
-- In the window since 7-Nov afternoon (Carlos: "no quiero quejas de usuarios de no sirve"): each tab and task says what it is good for
+- In the window since 7-Nov afternoon (the user: "no quiero quejas de usuarios de no sirve"): each tab and task says what it is good for
   and what fails (`EXPECTATIVAS` in `ventana.ts`, one sentence per verdict of the table below: change them together), and Review shows a
   framed **No warranty** notice before Run: free software as is (AGPL-3.0, as in LICENSE, "como todo el software libre"), no result
   guaranteed, the rented GPU bills every run, failed and cancelled ones included, until Off. Seen headless; not a lawyer's text.
@@ -335,7 +335,7 @@ Next, his choice (nothing decided):
   front, middle and back thirds (so a file of exactly 30 s is used whole and deterministically: cut it to 30 s on our side). Encoded by
   the VAE (no separate timbre encoder seen). Docs: "global reference for timbre or style", "mainly controls the acoustic features"
   (timbre, mixing, performance style), not melody or rhythm (a docs claim). Not read: the DiT forward, so whether lego really uses it is
-  unknown until heard. **REMOVED from the window the same evening.** Carlos: "sí la quitamos", after it failed in lego and in cover (see
+  unknown until heard. **REMOVED from the window the same evening.** The user: "sí la quitamos", after it failed in lego and in cover (see
   the verdict table). Takes made with a reference are not offered for Repeat; `generar_audio.py` keeps `--referencia`, and
   `Parametros.referencia` remains. What had been built:
   - "Reference" in Track and Transform, but not for extract: any file the browser decodes, MP3 included, plus "from N s".
@@ -349,7 +349,7 @@ Next, his choice (nothing decided):
     - Recipe: lego bass on base over bateria-1 bars 1-9 + 2 bars of margin, seed 4024297871. Caption "synth pop dark wave",
       without BPM or key.
     - Reference: Ghosts Again, a full mix, 0:00-0:30.
-    - Carlos by ear: "una mezcolanza de batería, pad y algo de bajo", not a clean bass.
+    - The user by ear: "una mezcolanza de batería, pad y algo de bajo", not a clean bass.
     - Measured: 91 % of the energy under 120 Hz, centroid 91 Hz, peak 0.0 dBFS. These numbers could not tell a mix from a bass.
     - Not separable: the caption also changed, to a genre with no instrument word. Hypothesis: a full-mix reference pulls lego
       towards a full mix (the docs say it steers "mixing").
@@ -361,17 +361,17 @@ Next, his choice (nothing decided):
       - **The reference steers lego hard**: the drum-pad-bass mix came from the full-mix reference, not from the caption.
       - `bass-dark` against `bajo-ref-1`, same inputs: correlation 0.9955, not byte-identical. With a reference, repeats are near
         but not exact.
-      - Carlos on `synth-pop-dark-wave`: "es un xilófono". bajo-1 was the same. Lego bass over bateria-1 without a reference gave
+      - The user on `synth-pop-dark-wave`: "es un xilófono". bajo-1 was the same. Lego bass over bateria-1 without a reference gave
         a xylophone twice, with two different captions.
       - Next: a bass-only reference. Proposed: extract bass from the 30 s Ghosts Again cut (extract on bass never tried), then
         use it as the reference. The other way: a CC bass-only loop.
       - **Extract on bass works**, `ghosts-bass`, 7-Nov 19:50: base, 50 steps, `[Instrumental]`, 41 s on a GPU already on.
-        - Carlos: "suena al bajo de la canción de ejemplo, está muy bien, aunque la extracción lleva algo de sonido del resto".
+        - The user: "suena al bajo de la canción de ejemplo, está muy bien, aunque la extracción lleva algo de sonido del resto".
         - Measured: centroid 164 -> 90 Hz, above 2 kHz 1.0 -> 0.0 %, correlation 0.70 with its source (not a copy).
         - The extract text in the window (EXPECTATIVAS) does not say this yet: change it when he is not using the app.
       - **`bass-ghostref`, 7-Nov 19:52:** lego with the extracted bass as the reference; source, seed and caption as above.
         - Measured: centroid 46 Hz, 97 % of the energy under 120 Hz, about -9 dB RMS, sounding without pause through the margin.
-        - Carlos: "se oye fatal, es otro de esos pegotes".
+        - The user: "se oye fatal, es otro de esos pegotes".
         - **Verdict: the reference changes lego's output a lot, but does not make a usable bass.** With a full mix it gave a mix;
           with a bass alone, a block of sub-bass. It seems to copy the sound's colour, not the playing.
         - Also, these three runs had no key or BPM, over a context of drums only: the bass had no harmony to follow.
@@ -394,7 +394,7 @@ Next, his choice (nothing decided):
     BPM/key databases such as Tunebat), and turns it into a caption under 512 chars. English, positive words only, tempo and key
     in their own fields.
   - Open points to settle with him before designing:
-    - It needs a search API and probably an LLM, keys kept server-side. Carlos, 7-Nov: the "no LLM" of 6-Nov meant the ACE-Step
+    - It needs a search API and probably an LLM, keys kept server-side. The user, 7-Nov: the "no LLM" of 6-Nov meant the ACE-Step
       path needs none, not that the app never has one.
     - What is gathered must be shown and editable before anything is sent, as Review does now.
     - Gathered descriptions can be wrong or invented: show the sources.
@@ -405,7 +405,7 @@ Next, his choice (nothing decided):
 
 Standing facts: he wants the Lambda credits spent ("en un año me los quitarán"), do not keep warning about cost (memory
 `creditos-lambda`), but say when a machine is left on. SSH key `~/.ssh/miuzika-lambda`, registered in Lambda and saved in Settings.
-Commits only when he asks (local only, no remote). Logs are UTC, Carlos reads local time (UTC+1): give local times.
+Commits only when he asks (local only, no remote). Logs are UTC, the user reads local time (UTC+1): give local times.
 
 ## 7-Nov afternoon: margin, instruction, context (built, checked on the simulated path, margin HEARD)
 
@@ -417,15 +417,15 @@ What was built and measured (headless Chrome on :5181, `MIUZIKA_GPU=simulado`: p
   beats, WAV 40; tracks bars 1-4 with the margin edited to 1 -> 10 s source, clip 16 beats, WAV 20; Repeat of it -> clip 16. Side effect:
   a tracks source asked past the project's end is now padded to the asked length (it used to be cut short). Each margin edit leaves the
   previous render in `entrada/` (`-fuente.wav`, `-fuente_2.wav`). **First A10 take with the margin, 7-Nov ~11:00**, project `bateria-1`
-  (lego drums over 8+2 bars of silence, `acestep-v15-base`, 170 BPM, instruction edited by Carlos to "Generate the DRUMS track"): bars 1-8 at
+  (lego drums over 8+2 bars of silence, `acestep-v15-base`, 170 BPM, instruction edited by the user to "Generate the DRUMS track"): bars 1-8 at
   rms ~-19 dB (bar 8 -17.8), bar 9 only a tail (rms -39), bar 10 silent (-62); sound ends 0.1 s into bar 9. Clip 32 beats, WAV 10 bars. One
-  take only. **HEARD**, Carlos: "llega hasta el 8 inclusive".
-  Then `bajo-1` (lego bass over `bateria-1`, base, D minor, caption "bajo eléctrico, estillo punk hardcore"): sounds to bar 8.04, but Carlos:
+  take only. **HEARD**, the user: "llega hasta el 8 inclusive".
+  Then `bajo-1` (lego bass over `bateria-1`, base, D minor, caption "bajo eléctrico, estillo punk hardcore"): sounds to bar 8.04, but the user:
   "se parece a un xilófono sintetizado". Measured over bars 1-8: 15 % of energy above 2 kHz, almost none at 500-2000 Hz, centroid 800 Hz
   (yesterday's `toma` basses: ~0 % above 2 kHz, centroid 66-137 Hz). `bajo-1-2` = Repeat with the same seed 4024297871 and source, only the
   caption changed to "electric bass guitar, distorted, fast punk hardcore, eighth notes locked to the kick": above 2 kHz 7.6 %, 120-500 Hz
-  52 %, centroid 447 Hz, 6 dB louder. Carlos: "está mejor pero no es hardcore punk". So here the caption did move the timbre (one seed, one
-  pair). Both clips are 9 bars: bug 24. Carlos stopped at ~11:25 and shut the GPU down himself. Carlos: "suena a batería clásica y rockera aunque no punk hardcore" (caption "batería real, estillo punk hardcore"). Peak
+  52 %, centroid 447 Hz, 6 dB louder. The user: "está mejor pero no es hardcore punk". So here the caption did move the timbre (one seed, one
+  pair). Both clips are 9 bars: bug 24. The user stopped at ~11:25 and shut the GPU down himself. The user: "suena a batería clásica y rockera aunque no punk hardcore" (caption "batería real, estillo punk hardcore"). Peak
   -0.0 dBFS in bar 1, normalize off: possible clipping, not heard as such.
 - **Instruction (2)**: `instruccionDe` and `generar_audio.py` now build it as upstream's `generate_instruction` (read at `ca1e85f` on 7-Nov:
   `track_name.upper()`, complete joins with " | "). The simulated script received "Generate the GUITAR track based on the audio context:".
@@ -435,7 +435,7 @@ typecheck and 175 unit tests green. Committed in 8996a73.
 
 ## Why this project exists
 
-On 6-Nov Carlos got tired of the indeterminism in miuzika: asking for one drum take took two attempts and gave nothing
+On 6-Nov the user got tired of the indeterminism in miuzika: asking for one drum take took two attempts and gave nothing
 valid. The agent refused an exact order because a tool description forbade what the code allowed, and the audio sent to
 the model depended on the mute state, which nobody saw before spending GPU. He decided to copy what he likes into a new
 project: first the GUI, then the code that runs ACE-Step on a GPU provider with no intermediary. The goal is to replace miuzika.
@@ -449,7 +449,7 @@ stayed in miuzika. Local git repository, **no remote**; first commit 7-Nov.
 All 14 bugs from the copy are in `BUGS.md`: 11 fixed and verified, 1 in part (long WAVs play without their effects, and the
 Log says so), 2 never reproduced.
 
-## What Carlos tested by ear (6-Nov, "así por encima")
+## What the user tested by ear (6-Nov, "así por encima")
 
 | check | result |
 |---|---|
@@ -467,7 +467,7 @@ Gates at that point: typecheck, 132 unit tests, openDAW contract and build green
 
 ## The ACE-Step module (built 6-Nov; run on a real A10 and heard since 7-Nov: see "First real run" and the verdict table)
 
-Decided with Carlos on 6-Nov: the app is modular and the GUI is where each module leaves its result. ACE-Step only for now, but
+Decided with the user on 6-Nov: the app is modular and the GUI is where each module leaves its result. ACE-Step only for now, but
 open to other models and GPU providers. No LLM touches what is sent; ACE-Step's own LM is accepted, as a visible option.
 **Text reaches the model byte for byte** and nothing empty is filled in hidden. The CPU/GPU selector and the ACE-Step box do not
 exist here; the GPU's cost and Off stay in the main bar with every module closed. Modules menu -> one window, three tabs:
@@ -495,20 +495,20 @@ the model's parameters identical; a muted track sounds in the source; tempo, und
 - Cancel while the DiT runs (the old `pkill` could not have matched; the new one is only unit-tested).
 - The cost estimate is built from the 4-5 Nov numbers: compare it with the first real runs.
 
-ACE-Step is **pinned to `ca1e85f`** (Carlos, 6-Nov): `REPO_COMMIT` in `generar_audio.py` and `ACESTEP_CONOCIDA` in `src/modulos/ace-step/version.ts`, tied by a
+ACE-Step is **pinned to `ca1e85f`** (the user, 6-Nov): `REPO_COMMIT` in `generar_audio.py` and `ACESTEP_CONOCIDA` in `src/modulos/ace-step/version.ts`, tied by a
 test. To move: change both once a new version has been tried by ear. The tell-tale compares upstream's `main` with it when the window opens, and each
 finished take's lineage with it too. The weights are not pinned (they download apart, last changed Feb and Apr at the two repositories checked).
 
 Known gaps: form fields are shared between tabs on purpose, so lyrics written in
 Song show up in Track: visible, but check them. Nobody has compared the upstream docs since 5-Nov, and there are parameters not exposed.
 
-## Settings (built 6-Nov, Carlos: "no queremos editar el .env")
+## Settings (built 6-Nov, the user: "no queremos editar el .env")
 
 The **Settings** button holds the accounts the app rents from; which model to use stays in each module. It paints what each provider declares in
 `src/core/proveedores-gpu.ts`, only Lambda so far. Keys go to `.miuzika/proveedores.json` (outside git and workspace) and only their last digits come
 back; `.env` is a fallback for empty fields. Test connection only reads: API key, key file, key name in Lambda, ssh program.
 
-## First real run (7-Nov, A10, HEARD by Carlos)
+## First real run (7-Nov, A10, HEARD by the user)
 
 `lego` drums over 8 bars of silence at 116 BPM, `acestep-v15-xl-base`, no LM, seed 1097560858, ACE-Step `ca1e85f`, project folder `ace-step`, take `toma`.
 His ear: "suena a batería electrónica, sólo batería", no distortion heard unless it is the kit's own effects. So lego over silence gave the asked instrument this
@@ -518,7 +518,7 @@ Measured: 5 min 37 s in all against ~7 min 24 s estimated (boot 241 s, install 1
 Worked for the first time on a real GPU: new SSH key, pinned commit, recipe file, silence on the instance, `lm none` in lego. Cancel on a real GPU, 7-Nov, about 12 s after the script started (probably still loading the model): no process left on the instance, 0 MiB of GPU memory in use, no output there, no track in the project. Same fixed seed, same machine: identical audio byte for byte (`toma-2`, `toma-2-2`, lego with xl-base), but a random seed recorded a false number (BUGS 20, fixed). Other models and another instance not measured. Still not run: Cancel during the generation itself (7 s here, little margin),
 `lm none` in text2music, empty BPM or key.
 
-**Lego over a sounding track, 7-Nov, HEARD:** bass over the drums `toma` (E minor, 116, 2 takes, 50 s). Carlos: "ambas son sólo bajo", on the kick "creo que sí", "me sirven las dos". Correlation with the drums -0.002 and -0.027: no copy, unlike the strings of 5-Nov over a full mix. Neither follows the caption's "driving eighth notes" by measure (`bajo-1` spaced hits, `bajo-2` a low drone); the ear passed them anyway.
+**Lego over a sounding track, 7-Nov, HEARD:** bass over the drums `toma` (E minor, 116, 2 takes, 50 s). The user: "ambas son sólo bajo", on the kick "creo que sí", "me sirven las dos". Correlation with the drums -0.002 and -0.027: no copy, unlike the strings of 5-Nov over a full mix. Neither follows the caption's "driving eighth notes" by measure (`bajo-1` spaced hits, `bajo-2` a low drone); the ear passed them anyway.
 
 **Guitar over drums, `bajo-1` and `synth-b-3`, 7-Nov, HEARD:** take 1 "no suena a guitarra, entre sinte y arpa electrónica"; take 2 "puede pasar por guitarra pero casi bajo"; take 3 "guitarra con efectos". None respects the caption. Pattern so far in lego: the instrument mostly holds, the caption does not.
 
@@ -538,13 +538,13 @@ Worked for the first time on a real GPU: new SSH key, pinned commit, recipe file
 
 **Synth over drums and two basses, 7-Nov, HEARD, did not pass:** `synth-1` "un pegote extraño como si se hubiese extraído de otra canción"; `synth-2` very low, "podría servir" but off style and with a touch of drums. By measure `synth-1` looked promising (E minor 0.83, no copy of the source, level fine): the numbers said nothing about whether it belongs. To try: a simpler caption over fewer tracks.
 
-## Needed from Carlos before the first run (all done 7-Nov)
+## Needed from the user before the first run (all done 7-Nov)
 
-Done 7-Nov: Settings filled and Test connection passes. The API key in `../miuzika/.env` is dead (401), and the SSH key `aios-agent-rag` no longer exists in Lambda: a new one, `~/.ssh/miuzika-lambda`, was created and registered, no passphrase because the server runs ssh with nobody to type it. The default name `aios-agent-rag` in `proveedores-gpu.ts` and `lambda.ts` is stale but overridden. Next: the first real run, whose go is Carlos's.
+Done 7-Nov: Settings filled and Test connection passes. The API key in `../miuzika/.env` is dead (401), and the SSH key `aios-agent-rag` no longer exists in Lambda: a new one, `~/.ssh/miuzika-lambda`, was created and registered, no passphrase because the server runs ssh with nobody to type it. The default name `aios-agent-rag` in `proveedores-gpu.ts` and `lambda.ts` is stale but overridden. Next: the first real run, whose go is the user's.
 
 ## Undecided: do not assume any of this
 
-1. DECIDED 8-Nov: Carlos deleted and recreated github.com/ccarrillomanzanares/miuzika; this repo was pushed there (`master` →
+1. DECIDED 8-Nov: the user deleted and recreated github.com/ccarrillomanzanares/miuzika; this repo was pushed there (`master` →
    `main`, 18 commits, d69bd2e). History checked for keys before pushing: none. The old miuzika folder is gone; this one is `miuzika`.
 2. **What cannot be missing before he stops using miuzika.** Asked, not answered. Candidates: faders, effects and buses;
    WAV and MIDI export; Sounds; Strudel; Pad; the agent as an optional piece.
@@ -552,21 +552,21 @@ Done 7-Nov: Settings filled and Test connection passes. The API key in `../miuzi
 Missing from the GUI because only the agent did it. He said "no añadas nada" for now, so **do not build these unasked**:
 change the key by hand, rename, gain and pan, effects, WAV and MIDI export.
 
-## Direction for the song (Carlos, 7-Nov)
+## Direction for the song (the user, 7-Nov)
 
 Rejected: a whole song from text2music, then separated: "quiero tener el control desde 0". After 13 lego takes with context, lego does not follow the caption at guidance 7 (11 run later, `guitarra-c`: no better) and fits unevenly. Proposed, not decided or tried: he writes the notes (MIDI), the app renders them and `cover` dresses each track. Evidence for: `cover` passed his ear on 5-Nov, aligned at lag 0 ms. Against: only on full material, never one instrument at a time. Gap: the GUI edits a clip's notes and imports .mid, but cannot create an empty MIDI track.
 
-## Improvements Carlos is noting while making a song (7-Nov), not built yet
+## Improvements the user is noting while making a song (7-Nov), not built yet
 
 - Deleting a track from the GUI should also ask whether to delete its file from disk.
-- Open and Audio should start in the project's folder if there is one, else the app's (Carlos, 7-Nov). A browser's file dialog cannot be given a folder by path, so proposed: a list inside the app of the project's files (generado/, entrada/), served by the server, with the system dialog as a second option.
+- Open and Audio should start in the project's folder if there is one, else the app's (the user, 7-Nov). A browser's file dialog cannot be given a folder by path, so proposed: a list inside the app of the project's files (generado/, entrada/), served by the server, with the system dialog as a second option.
 - BUILT 7-Nov: in a project with tracks, Context starts on Tracks, none ticked; in an empty one, on Silence.
 - Proposed: the form keeps its last values per project across reloads; a taken name refused on Review; a near-silent take flagged; a multi-track source lowered instead of clipped (BUGS 21).
 - A tab reload closes the project. It happened 7-Nov also with no change of ours (no file touched, last request 29 min before, cause unknown; a browser discarding an idle tab is a guess). Proposed: reopen the last project on load.
-- A taken name should be refused on Review, with Run disabled and the reason there. Today Run closes the window, the server answers 409, the reason only reaches the Log, and the form's edits are gone (Carlos, 7-Nov: "creo que no está haciendo nada").
+- A taken name should be refused on Review, with Run disabled and the reason there. Today Run closes the window, the server answers 409, the reason only reaches the Log, and the form's edits are gone (the user, 7-Nov: "creo que no está haciendo nada").
 - "From bar 1 to 8" should fill bar 8. Measured 7-Nov: files and sources do last 8 bars (16.52 s of 16.552 s), but the model ends before: `toma` at bar 6.94, `toma-2` at 7.08, `bajo-1` at 6.23, `synth-b-2` at 7.08. Bar arithmetic is right; the silence is in the generated audio. Why is not known (a written ending is a guess). BUILT and HEARD 7-Nov: 2 bars of margin, clip cut to the bars asked ("llega hasta el 8 inclusive", one take).
 
-## Idea to keep: continuing ACE-Step ourselves (noted at Carlos's request, 6-Nov; nothing decided or started)
+## Idea to keep: continuing ACE-Step ourselves (noted at the user's request, 6-Nov; nothing decided or started)
 
 Upstream has slowed down (last commit on `main` 29-Aug, last push anywhere 11-Oct), so he wants this written down. From its docs, nothing tried:
 keep our own copy of the code (MIT, 14 MB) and of the weights (Hugging Face, MIT); train a LoRA or LoKr on his own songs (16 GB VRAM minimum,
@@ -574,7 +574,7 @@ keep our own copy of the code (MIT, 14 MB) and of the weights (Hugging Face, MIT
 code changes: `docs/en/Large_Scale_SFT_Training_Guide.md`, whose Muse dataset has folders named `suno_*`, to clear up before using it). No guide
 seen for training from zero. A LoRA can lean the sound towards his; it adds no function and fixes no task.
 
-## What ACE-Step can and cannot do: the verdict so far (written 7-Nov afternoon, at Carlos's request)
+## What ACE-Step can and cannot do: the verdict so far (written 7-Nov afternoon, at the user's request)
 
 Only his ear counts as a verdict here; sources: `../miuzika/docs/PRUEBAS-ACESTEP-2026-11-04.md` (5-Nov) and the sections of this
 file from "First real run" (7-Nov). Update this table when a new verdict arrives, instead of letting it scatter again.
@@ -584,29 +584,29 @@ file from "First real run" (7-Nov). Update this table when a new verdict arrives
 | complete (voice -> band) | PASS, "está muy bien" | xl-base | 5-Nov test 7 |
 | cover 0.6 with lyrics | PASS: turbo "hay voz… piano con menos notas"; sft "muy industrial, me encanta" (preferred). Without lyrics: no voice | xl-turbo, xl-sft | 5-Nov tests 4, 4b, 8 |
 | extract vocals | PASS on the 2nd try, "se escucha sólo la voz" | xl-base | 5-Nov test 2b |
-| extract bass from `vein-1`, bars 1-24 | NOT GOOD, but the source is to blame: Carlos, "vein-1 no deja muy claro si hay un bajo". Measured like the good `ghosts-bass` (highs gone, centroid 286 -> 80 Hz, correlation 0.57). Extract needs a distinct line in the mix. xl-base (the window's default), 95 s | xl-base | 7-Nov 20:22 |
-| cover of `vein-1`, bars 1-24, strength 0.6, caption pushed to "harsher and dirtier" industrial | HALF. Carlos: "suena synth-pop, es chula, pero NO es más industrial y sucia". It keeps the song and sounds good, but the caption's push did not reach the sound, like the style in lego. Seed 7111, 70 s run. **Correction, 7-Nov night:** its recipe and lineage carry the plain `vein` caption, with no "harsher/dirtier" words: the push was never sent, so this says nothing about the caption steering a cover. Retested as `p01`/`p02` in project `pruebas` | xl-sft | 7-Nov 20:41 |
-| cover with reference: `vein-cover-ref`, the `vein-cover-1` recipe plus Ghosts Again 1:24-1:54 | FAIL. Carlos: "un pegote de instrumentos bastante estridente". Same source (sha 09df95507fff) and seed. Measured: 5.5 dB louder, stereo narrowed to the reference's (-5.0 -> -9.1 dB side), correlation 0.61 with the cover without reference. A full-mix reference pulls the mix and makes a jumble, as it did in lego. A first try went to a stray project at 120 BPM without the reference (bug 26) | xl-sft | 7-Nov 20:58 |
-| cover with a really dirty caption (`pruebas` p01 at 0.6, p02 at 0.3; "Harsh, dirty industrial dark wave… overdriven… bitcrushed… saturated… noise"), seed 7111, `vein-1` bars 1-24 | FAIL for the style. Carlos: "es un cover, pero no es sucio en el sentido de cómo puede ser sucia una canción industrial... tiene estridencia de teclados pero eso no es suciedad"; p02 "es igual". Measured: strength 0.6/0.3 both in the lineage, yet p01-p02 correlation 0.89 (strength barely moved the result; neither closer to the source: 0.36/0.38). Against `vein-cover-1` (same seed, plain caption) 0.78: the dirty words changed it a little, towards harsh keys, not dirt. The caption does not steer a cover's style either | xl-sft | 7-Nov 22:01 |
-| cover-nofsq 0.6 (`pruebas` p03), plain `vein` caption, seed 7111 | PASS-ish. Carlos: "está bien, un poco pop, pero a partir del compás 14 mejora hacia synth pop estilo depeche mode". Measured: correlation with its source 0.71, against 0.32 for `vein-cover-1` (cover, same inputs): nofsq stays much closer to the song | xl-sft | 7-Nov 22:03 |
-| repaint bars 9-12 of `vein-1` bars 1-24 (`pruebas` p04, plain caption, seed 7111, range 20.87-31.30 s) | Carlos: "está bien, la melodía a partir del compás 14 +/- está bien, es similar pero le da un toque chulo, se parece a un saxofón sintetizado". Measured per bar against the source: bars 1-8 and 13-24 identical (correlation 1.00, 0.0 dB), bars 9-12 new (0.00-0.33, +1 to +2 dB). The range is obeyed exactly. So what he heard from bar ~14 is vein-1's own material. Asked, he then heard the repainted part: "tiene un rollo orquestado muy corto en el compás 10 u 11 que lo hace muy diferente". Verdict: PASS for range control (exact, seamless enough to be noticed only as a short orchestral turn); what it paints is the model's choice | xl-turbo | 7-Nov 22:04 |
+| extract bass from `vein-1`, bars 1-24 | NOT GOOD, but the source is to blame: the user, "vein-1 no deja muy claro si hay un bajo". Measured like the good `ghosts-bass` (highs gone, centroid 286 -> 80 Hz, correlation 0.57). Extract needs a distinct line in the mix. xl-base (the window's default), 95 s | xl-base | 7-Nov 20:22 |
+| cover of `vein-1`, bars 1-24, strength 0.6, caption pushed to "harsher and dirtier" industrial | HALF. The user: "suena synth-pop, es chula, pero NO es más industrial y sucia". It keeps the song and sounds good, but the caption's push did not reach the sound, like the style in lego. Seed 7111, 70 s run. **Correction, 7-Nov night:** its recipe and lineage carry the plain `vein` caption, with no "harsher/dirtier" words: the push was never sent, so this says nothing about the caption steering a cover. Retested as `p01`/`p02` in project `pruebas` | xl-sft | 7-Nov 20:41 |
+| cover with reference: `vein-cover-ref`, the `vein-cover-1` recipe plus Ghosts Again 1:24-1:54 | FAIL. The user: "un pegote de instrumentos bastante estridente". Same source (sha 09df95507fff) and seed. Measured: 5.5 dB louder, stereo narrowed to the reference's (-5.0 -> -9.1 dB side), correlation 0.61 with the cover without reference. A full-mix reference pulls the mix and makes a jumble, as it did in lego. A first try went to a stray project at 120 BPM without the reference (bug 26) | xl-sft | 7-Nov 20:58 |
+| cover with a really dirty caption (`pruebas` p01 at 0.6, p02 at 0.3; "Harsh, dirty industrial dark wave… overdriven… bitcrushed… saturated… noise"), seed 7111, `vein-1` bars 1-24 | FAIL for the style. The user: "es un cover, pero no es sucio en el sentido de cómo puede ser sucia una canción industrial... tiene estridencia de teclados pero eso no es suciedad"; p02 "es igual". Measured: strength 0.6/0.3 both in the lineage, yet p01-p02 correlation 0.89 (strength barely moved the result; neither closer to the source: 0.36/0.38). Against `vein-cover-1` (same seed, plain caption) 0.78: the dirty words changed it a little, towards harsh keys, not dirt. The caption does not steer a cover's style either | xl-sft | 7-Nov 22:01 |
+| cover-nofsq 0.6 (`pruebas` p03), plain `vein` caption, seed 7111 | PASS-ish. The user: "está bien, un poco pop, pero a partir del compás 14 mejora hacia synth pop estilo depeche mode". Measured: correlation with its source 0.71, against 0.32 for `vein-cover-1` (cover, same inputs): nofsq stays much closer to the song | xl-sft | 7-Nov 22:03 |
+| repaint bars 9-12 of `vein-1` bars 1-24 (`pruebas` p04, plain caption, seed 7111, range 20.87-31.30 s) | The user: "está bien, la melodía a partir del compás 14 +/- está bien, es similar pero le da un toque chulo, se parece a un saxofón sintetizado". Measured per bar against the source: bars 1-8 and 13-24 identical (correlation 1.00, 0.0 dB), bars 9-12 new (0.00-0.33, +1 to +2 dB). The range is obeyed exactly. So what he heard from bar ~14 is vein-1's own material. Asked, he then heard the repainted part: "tiene un rollo orquestado muy corto en el compás 10 u 11 que lo hace muy diferente". Verdict: PASS for range control (exact, seamless enough to be noticed only as a short orchestral turn); what it paints is the model's choice | xl-turbo | 7-Nov 22:04 |
 | extract keyboard from `vein-1` bars 1-24 (`pruebas` p05) | PASS, "parece que ha funcionado" | base | 7-Nov 22:05 |
 | extract percussion, same source (p06) | FAIL: "se confunde con lo que se ha extraído en p05, por ese teclado es muy rítmico". A rhythmic keyboard reads as percussion | base | 7-Nov 22:06 |
 | complete over `vein-drums` (an extract) with BASS, SYNTH, KEYBOARD (p07) | FAIL, "fatal, pegote descomunal". Complete passed only from a voice (5-Nov); from an extracted drum track it made a jumble. One take | xl-base | 7-Nov 22:08 |
 | cover-nofsq 0.3 (`pruebas` p15), plain `vein` caption, seed 7111 | PASS: "dark synth pop, está bien, me gusta". Correlation with the source 0.66 | xl-sft | 7-Nov 23:00 |
 | cover-nofsq 0.8 (p16), same inputs | "es igual que p15". Measured between the three nofsq takes (0.3, 0.6, 0.8, same seed): 0.97-0.99. **In nofsq the strength does almost nothing** (in cover 0.6 vs 0.3 gave 0.89). To change a nofsq take, change the seed, not the strength | xl-sft | 7-Nov 23:01 |
-| repaint bars 9-16 (p17), plain caption, seed 7111 | PASS, the change is heard. Carlos: "sí ha hecho un cambio pero el cambio dura hasta el compás 18 creo". Measured: bars 17-23 identical to the source (correlation 1.00), so samples change only in 9-16; hearing it to 18 may be the source's own phrase sounding different after the new part, or the count. Range obeyed on 4 and 8 bars | xl-turbo | 7-Nov 23:03 |
-| extract synth / drums from `vein-1`, bars 1-24 | HALF. Carlos: "extract se puede usar pero a medias". Synth: vein-1 has several synths and it pulled the least present one. Drums: the opening came out as something that is not drums, then a kit quite like vein-1's. No vocals heard in vein-1 to extract | base | 7-Nov evening |
+| repaint bars 9-16 (p17), plain caption, seed 7111 | PASS, the change is heard. The user: "sí ha hecho un cambio pero el cambio dura hasta el compás 18 creo". Measured: bars 17-23 identical to the source (correlation 1.00), so samples change only in 9-16; hearing it to 18 may be the source's own phrase sounding different after the new part, or the count. Range obeyed on 4 and 8 bars | xl-turbo | 7-Nov 23:03 |
+| extract synth / drums from `vein-1`, bars 1-24 | HALF. The user: "extract se puede usar pero a medias". Synth: vein-1 has several synths and it pulled the least present one. Drums: the opening came out as something that is not drums, then a kit quite like vein-1's. No vocals heard in vein-1 to extract | base | 7-Nov evening |
 | extract drums | FAIL / partial ("pegote con restos"). A real separator (Demucs or similar) is the honest tool | xl-base | 5-Nov tests 3, 3b |
-| lego over silence or a few tracks | NOT STEERABLE. Carlos, 7-Nov evening: "todo lo que ha salido bien, no siguió casi el caption". The takes he kept were what the model chose, not what was asked. The instrument holds sometimes; bass over bateria-1 failed 5 of 5 (xylophone x2, pad mix, sub block, "not punk"). The reference changes it a lot without making it usable. Best case: drums over silence | base, xl-base | 7-Nov |
+| lego over silence or a few tracks | NOT STEERABLE. The user, 7-Nov evening: "todo lo que ha salido bien, no siguió casi el caption". The takes he kept were what the model chose, not what was asked. The instrument holds sometimes; bass over bateria-1 failed 5 of 5 (xylophone x2, pad mix, sub block, "not punk"). The reference changes it a lot without making it usable. Best case: drums over silence | base, xl-base | 7-Nov |
 | lego over a full mix | FAIL: strings came back as a track with voice and everything | xl-base | 5-Nov |
 | lego / repaint with a range | the rest came back as a copy of the source | — | 5-Nov |
-| text2music | good full songs ("muy industrial, muy bueno"), but not for one instrument: the LM completes a song, negations prime what they deny. **7-Nov 20:07, project `vein`:** a detailed English caption (483 chars: instruments, drums, production, no negations), 92 BPM, D minor, 4/4, 180 s, 2 takes. Carlos: "están muy bien, son buenos ejemplos para el prompt que le dimos". The LM kept the caption, BPM, key and duration. Seeds 782922162/3, 220 s run | xl-turbo + LM 1.7B | 2-Nov, 5-Nov evening, 7-Nov |
-| text2music with sung English lyrics: `vein-voz`, the `vein` recipe changing only lyrics (his imagery, `[Verse]`/`[Chorus]`/`[Bridge]`) and language `en`, seed 782922162 (vein-1's) | HALF. Carlos: "las dos son canciones enteras distintas de vein-1. Las voces no siguen el estilo del caption, son voces mainstream pop, con efectos de esos estilos... la música de esas dos canciones está muy bien, pero no es lo que buscábamos". Same seed with new lyrics gives another song, not vein-1 with a voice: the LM re-plans from the lyrics. The voice was not drowned by the caption's "wordless choir"; the caption never describes a lead voice, so the model sang its default pop. Recipe checked in the lineage: every value as asked. 152 s run | xl-turbo + LM 1.7B | 7-Nov 21:20 |
-| text2music, `vein-voz-b`: `vein-voz` by Repeat changing only the caption: choir phrase out, "Low baritone male lead vocal, detached and half-spoken, cold monotone delivery, dry and close with light distortion" in, near the front (493 chars, checked in the lineage) | FAIL for the voice. Carlos: "ambas son canciones enteras con instrumentos, la 1 se sale algo del pop, no es lo que tengo en mente", then "no se acerca"; take 2 the same. Two runs, four takes: describing the voice in the caption does not bring his voice. Do not retry caption wording for the voice without a new idea | xl-turbo + LM 1.7B | 7-Nov evening |
-| text2music without the LM (`pruebas` p08): the `vein` recipe and seed 782922162 with `lm none` | PASS as a song. Carlos: "ha salido bien… no suena a industrial pero la canción está bien, aunque roza el midi". 56 s run against ~150 s with the LM | xl-turbo | 7-Nov 22:09 |
-| text2music with BPM and key empty (p09), LM 1.7B, `vein` caption and seed | Carlos: "una música de baile casi, con algún toque oscuro pero de baile". The LM chose **125 BPM, E minor** (lineage): the tempo it picks for this caption is a dance tempo. Give the BPM when the feel matters | xl-turbo + LM 1.7B | 7-Nov 22:11 |
-| text2music on xl-sft (p10): `vein` recipe and seed, LM 1.7B, 50 steps, guidance 7 | Carlos: "es más industrial pero también es de baile, de rave y es muy parecida a vein". At 92 BPM (lineage), so the dance feel is not the tempo here. Sample correlation with vein-1 is 0.05: that measure cannot see musical likeness between two generations; the shared LM plan (same seed, caption, LM) is the likely reason it sounds alike, a hypothesis | xl-sft + LM 1.7B | 7-Nov 22:14 |
+| text2music | good full songs ("muy industrial, muy bueno"), but not for one instrument: the LM completes a song, negations prime what they deny. **7-Nov 20:07, project `vein`:** a detailed English caption (483 chars: instruments, drums, production, no negations), 92 BPM, D minor, 4/4, 180 s, 2 takes. The user: "están muy bien, son buenos ejemplos para el prompt que le dimos". The LM kept the caption, BPM, key and duration. Seeds 782922162/3, 220 s run | xl-turbo + LM 1.7B | 2-Nov, 5-Nov evening, 7-Nov |
+| text2music with sung English lyrics: `vein-voz`, the `vein` recipe changing only lyrics (his imagery, `[Verse]`/`[Chorus]`/`[Bridge]`) and language `en`, seed 782922162 (vein-1's) | HALF. The user: "las dos son canciones enteras distintas de vein-1. Las voces no siguen el estilo del caption, son voces mainstream pop, con efectos de esos estilos... la música de esas dos canciones está muy bien, pero no es lo que buscábamos". Same seed with new lyrics gives another song, not vein-1 with a voice: the LM re-plans from the lyrics. The voice was not drowned by the caption's "wordless choir"; the caption never describes a lead voice, so the model sang its default pop. Recipe checked in the lineage: every value as asked. 152 s run | xl-turbo + LM 1.7B | 7-Nov 21:20 |
+| text2music, `vein-voz-b`: `vein-voz` by Repeat changing only the caption: choir phrase out, "Low baritone male lead vocal, detached and half-spoken, cold monotone delivery, dry and close with light distortion" in, near the front (493 chars, checked in the lineage) | FAIL for the voice. The user: "ambas son canciones enteras con instrumentos, la 1 se sale algo del pop, no es lo que tengo en mente", then "no se acerca"; take 2 the same. Two runs, four takes: describing the voice in the caption does not bring his voice. Do not retry caption wording for the voice without a new idea | xl-turbo + LM 1.7B | 7-Nov evening |
+| text2music without the LM (`pruebas` p08): the `vein` recipe and seed 782922162 with `lm none` | PASS as a song. The user: "ha salido bien… no suena a industrial pero la canción está bien, aunque roza el midi". 56 s run against ~150 s with the LM | xl-turbo | 7-Nov 22:09 |
+| text2music with BPM and key empty (p09), LM 1.7B, `vein` caption and seed | The user: "una música de baile casi, con algún toque oscuro pero de baile". The LM chose **125 BPM, E minor** (lineage): the tempo it picks for this caption is a dance tempo. Give the BPM when the feel matters | xl-turbo + LM 1.7B | 7-Nov 22:11 |
+| text2music on xl-sft (p10): `vein` recipe and seed, LM 1.7B, 50 steps, guidance 7 | The user: "es más industrial pero también es de baile, de rave y es muy parecida a vein". At 92 BPM (lineage), so the dance feel is not the tempo here. Sample correlation with vein-1 is 0.05: that measure cannot see musical likeness between two generations; the shared LM plan (same seed, caption, LM) is the likely reason it sounds alike, a hypothesis | xl-sft + LM 1.7B | 7-Nov 22:14 |
 | text2music on xl-base (p11): `vein` recipe and seed, LM 1.7B, 50 steps, guidance 7 | PASS as a song, not the style: "está bien también, no es industrial pero está bien". 213 s run, the slowest | xl-base + LM 1.7B | 7-Nov 22:18 |
 | text2music on turbo (non-xl, p12): `vein` recipe and seed, LM 1.7B | PASS as a song, not his style: "bueno, no es de mi estilo, pero se puede escuchar" | turbo + LM 1.7B | 7-Nov 22:55 |
 | text2music on sft (non-xl, p13): `vein` recipe and seed, LM 1.7B | HALF: "más industrial, pero no está bien producida por segundos, de vez en cuando tiene pegotes". sft leans industrial on both sizes (p10 xl-sft too); the small one has glitches | sft + LM 1.7B | 7-Nov 22:57 |
@@ -631,7 +631,7 @@ punk), one pair only. Rough share of lego takes he kept: between one in three an
 **Tested 7-Nov evening:** the reference audio in lego. It steers the sound hard but not usefully (see "Built 7-Nov evening" above).
 **Extract bass: PASS** ("suena al bajo de la canción", a little bleed), base, 7-Nov.
 
-**Dropped 7-Nov evening. Carlos: "lo quitamos de la app". Done, committed the same evening:**
+**Dropped 7-Nov evening. The user: "lo quitamos de la app". Done, committed the same evening:**
 - Track is complete only. Silence went with lego.
 - Repeat lists no lego takes, though every take still counts for the names in use.
 - The script still runs lego, so old lineages stay readable.
@@ -642,7 +642,7 @@ one over a few finished tracks, English caption with positive words only, 2-3 ta
 
 ## Then: validate ACE-Step
 
-Carlos: validate "si ace-step crea correctamente canciones con todas sus funcionalidades y modelos". Tasks by models, same
+The user: validate "si ace-step crea correctamente canciones con todas sus funcionalidades y modelos". Tasks by models, same
 material, his ear as the verdict. Earlier results and measurements: `../miuzika/docs/PRUEBAS-ACESTEP-2026-11-04.md`.
 
 - Passed by his ear on 5-Nov: `complete` (voice -> band), `extract` vocals, `cover` (turbo 0.6 with lyrics; sft 0.6).

@@ -1,6 +1,6 @@
 """MuLaCover on the Lambda GPU: a cover from reference audio, or from melody/chord MIDI, with new lyrics and style.
 
-Built 8-Nov-2026 from the trial that Carlos heard ("el cover está bien, con la letra y todo, es más pop").
+Built 8-Nov-2026 from the trial that the user heard ("el cover está bien, con la letra y todo, es más pop").
 Same contract as generar_audio.py: cwd is the project folder, `--parametros <file>` holds the recipe written
 by the browser, and everything written under generado/ comes back.
 

@@ -1,6 +1,6 @@
 """Stable Audio 3 on the Lambda GPU: text to audio, audio to audio, repaint a region, continue a clip.
 
-Built 8-Nov-2026 after Carlos heard the trial: an instrumental song at cfg 1 "es super industrial... wow!!!".
+Built 8-Nov-2026 after the user heard the trial: an instrumental song at cfg 1 "es super industrial... wow!!!".
 Same contract as generar_audio.py: cwd is the project folder, `--parametros <file>`, outputs under generado/.
 
 Licence: code MIT; weights under the Stability AI Community License (outputs owned by the user; commercial use free

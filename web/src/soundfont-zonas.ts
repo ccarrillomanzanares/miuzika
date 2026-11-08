@@ -67,7 +67,7 @@ export function repartirZonasGlobales(soundfont: { presets: PresetSf2[]; instrum
  * GM kit 0, key 38: "Standard Snare 1" has scaleTuning 0 (do not transpose) and its
  * samples have root 60, so the engine played it 22 semitones down: the hit lasted
  * 2.35 s instead of 0.68 s and its main frequency was 60 Hz instead of ~206 Hz (the
- * "bomb" snare Carlos heard). The "1gate" layer, root 28, went 10 semitones up.
+ * "bomb" snare the user heard). The "1gate" layer, root 28, went 10 semitones up.
  *
  * The SF2 pitch of key k is (k - root) * scaleTuning/100 + coarseTune semitones. With
  * scaleTuning 100 that is the same for every key, so the root key just moves by

@@ -1,6 +1,6 @@
 """Generate audio with ACE-Step 1.5 on the Lambda GPU (never on the laptop).
 
-Chosen on 2-Nov-2026 as the first generation model (Carlos: "run the best music model
+Chosen on 2-Nov-2026 as the first generation model (the user: "run the best music model
 you found first"): MIT licence, whole songs with lyrics in 50+ languages, cover/repaint/
 extract tasks, and the only open one whose XL (4B) variant fits the A10 (24 GB).
 Stable Audio 3 Medium is the second candidate; a sibling script can follow this one.
@@ -12,7 +12,7 @@ brought back. The output is a WAV (48 kHz, what ACE-Step produces) plus a
 repo commit, prompt, lyrics, seed, metadata, GPU timings and, for the tasks that work
 from a source audio, the SHA-256 of that source (a cover or a stem is derived from it).
 
-Tasks (4-Nov-2026, Carlos: every checkpoint with every task it has). The strings are
+Tasks (4-Nov-2026, the user: every checkpoint with every task it has). The strings are
 ACE-Step's own (`acestep/constants.py`, `main`, read 4-Nov; only text2music has run here):
   text2music   caption (+ lyrics)                      -> 1-8 new takes
   cover        --audio + caption + --fuerza            -> the source regenerated (1.0 faithful, 0.2 style only)
@@ -30,7 +30,7 @@ then re-executes itself inside that environment. An instance that is terminated 
 all of it, so the first run after each power-on pays the install again (measured below,
 in the lineage file: `bootstrap_s`).
 
-Parameters (6-Nov-2026, Carlos: nothing may retouch what he asks for): `--parametros <file>` reads
+Parameters (6-Nov-2026, the user: nothing may retouch what he asks for): `--parametros <file>` reads
 a JSON recipe, and every value in its "parametros" object is used exactly as written. A file and
 not the command line because the text then crosses Windows, ssh and bash without being quoted
 three times; the lineage keeps the recipe verbatim. There is no default that changes the text:
@@ -59,7 +59,7 @@ from pathlib import Path
 import torch  # noqa: F401  (the server only powers the GPU on for scripts that import torch)
 
 REPO_URL = "https://github.com/ace-step/ACE-Step-1.5.git"
-# Pinned, Carlos 6-Nov: a machine switched off is lost, so each boot reinstalls, and following `main` let
+# Pinned, the user 6-Nov: a machine switched off is lost, so each boot reinstalls, and following `main` let
 # upstream change what makes the music between two takes being compared by ear. All lineages until now
 # say this commit. Move it by hand, with ACESTEP_CONOCIDA in src/modulos/ace-step/version.ts (a test ties them).
 REPO_COMMIT = "ca1e85fe9430179831e6bc6be790c332190a3866"
@@ -306,7 +306,7 @@ def generar(args):
     if args.tarea != "text2music":
         fuente = {"path": args.audio, "sha256": sha256_de(args.audio), "bytes": os.path.getsize(args.audio)}
         _log(f"source {args.audio} ({fuente['bytes']} bytes, sha256 {fuente['sha256'][:12]}…)")
-    # The reference (Carlos, 7-Nov: a punk bass that came out "not hardcore punk"). Upstream reads it for
+    # The reference (the user, 7-Nov: a punk bass that came out "not hardcore punk"). Upstream reads it for
     # every task (process_reference_audio, ca1e85f): 48 kHz stereo, 30 s, a longer file gives three random
     # 10 s pieces. The browser sends the 30 s the person chose, so it is used whole and the same each run.
     # ACE-Step's docs say it shapes timbre and style, not melody or rhythm; whether the DiT uses it for
@@ -318,7 +318,7 @@ def generar(args):
 
     # The lyrics arrive as they are. What was learned on 5-Nov now lives in the form, which fills
     # the value in sight: a vocal extract with "[Instrumental]" rebuilt the source (RMS flat at
-    # -19..-14 dBFS) and with "" came out voice-only (heard by Carlos, 11:55).
+    # -19..-14 dBFS) and with "" came out voice-only (heard by the user, 11:55).
     # `instrumental` only feeds the lineage: generate_music does not read it (inference.py, ca1e85f).
     letra = args.letra
     instrumental = letra.strip().lower() in ("", "[instrumental]")

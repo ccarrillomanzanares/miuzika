@@ -2,7 +2,7 @@
  * GPU providers: which ones exist, what each needs, and the settings in force. Copied from miuzika
  * (4-Nov) without its on/off switch: here a GPU only runs when a person presses Run.
  *
- * Why (Carlos, 6-Nov): nobody should have to edit a .env to use the app. Settings paints whatever a
+ * Why (the user, 6-Nov): nobody should have to edit a .env to use the app. Settings paints whatever a
  * provider declares here, so another one is another entry in this list. .env stays as a fallback.
  *
  * Pure: no files, no network. The server reads the file and the .env and calls this.

@@ -1,5 +1,5 @@
 /**
- * "New": asks for the project's name, creates it and opens it (Carlos, 8-Nov-2026: "si aprieto new ha de preguntar el
+ * "New": asks for the project's name, creates it and opens it (the user, 8-Nov-2026: "si aprieto new ha de preguntar el
  * nombre del proyecto… y se abre… y a partir de ahí que se pueda ejecutar el pad"). Before, New only closed the current
  * project and left the app empty, and the Pad cannot open without a project.
  *

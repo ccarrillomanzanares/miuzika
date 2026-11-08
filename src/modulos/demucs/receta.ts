@@ -2,7 +2,7 @@
  * What the Demucs module sends to `workspace/gpu/separar_demucs.py`. Pure, tested.
  *
  * Demucs (MIT, facebookresearch/demucs 4.0.1): separates a mix into stems. Proposed on 7-Nov for drums, where
- * ACE-Step's extract failed ("pegote con restos"); Carlos, 8-Nov: "adelante con demucs".
+ * ACE-Step's extract failed ("pegote con restos"); the user, 8-Nov: "adelante con demucs".
  */
 
 export const DEMUCS_VERSION = "4.0.1";

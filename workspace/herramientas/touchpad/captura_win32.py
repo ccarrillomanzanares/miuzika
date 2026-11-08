@@ -1,7 +1,7 @@
 """Capture backend for Windows: Raw Input API on a Precision Touchpad.
 
 Brought from humseed (cliente_touchpad/entrada_win32.py), where it was tested by actually
-playing on Carlos's laptop (HP 15s-fq, ELAN0712). It is started and stopped live
+playing on the user's laptop (HP 15s-fq, ELAN0712). It is started and stopped live
 (`iniciar()` / `parar()`).
 
 The report layout is verified against the HID report descriptor of the
@@ -212,7 +212,7 @@ class CapturaWin32:
         # raw mouse input does: the pad is identified by its name (ELAN). That way it
         # swallows ONLY the pad's movement and the USB mouse stays free.
         # On by default: while a finger is on the pad the pointer does not
-        # move (Carlos tested it and it works). When the finger is lifted it is released.
+        # move (the user tested it and it works). When the finger is lifted it is released.
         # In miuzika principal.py decides: it only freezes with the pad ARMED
         # (the person has pressed on the page's pad); outside, it is a normal mouse.
         self.bloquear_cursor = False

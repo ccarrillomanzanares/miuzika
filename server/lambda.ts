@@ -751,7 +751,7 @@ export async function ejecutarEnLambda(
  * Did the MODEL run out of time? True when the remote `timeout` killed the script (exit 124)
  * or the local ssh of the run itself was cut off. A cut-off during sync or upload is not a
  * model timeout: on 5-Nov the API labelled a 60 s ssh hang as "ran out of time (25 min)" and
- * the agent told Carlos that 25 minutes of GPU had been burnt (nothing had run).
+ * the agent told the user that 25 minutes of GPU had been burnt (nothing had run).
  */
 export function esTimeoutDelModelo(r: { codigo: number | null; errores: string; nota: string }): boolean {
   if (r.nota === "sync" || r.nota === "inputs") return false;

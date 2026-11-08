@@ -1,5 +1,5 @@
 /**
- * Settings: what the app rents, without editing a .env (Carlos, 6-Nov).
+ * Settings: what the app rents, without editing a .env (the user, 6-Nov).
  *
  *   GET  /api/ajustes/gpu          each provider's fields, values and origin, WITHOUT secrets
  *   POST /api/ajustes/gpu          {accion: guardar | borrarClave, id, campos}

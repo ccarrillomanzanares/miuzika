@@ -1,7 +1,7 @@
 /**
  * What the app needs from a rented GPU, whoever rents it.
  *
- * Why (Carlos, 4-Nov, docs/PLAN-PROVEEDORES-GPU.md): Lambda is the first GPU provider of
+ * Why (the user, 4-Nov, docs/PLAN-PROVEEDORES-GPU.md): Lambda is the first GPU provider of
  * several and must sit behind one interface, distinct from the LLM providers. The routes
  * (server/api/gpu.ts) talk only to this; Lambda's details stay in server/lambda.ts. Vast.ai
  * and RunPod were read the same day to keep the shape general: the machine may come from an

@@ -1,6 +1,6 @@
 """Audio to MIDI notes with Basic Pitch (spotify/basic-pitch 0.4.0, Apache 2.0), on the CPU. "To MIDI" in the app.
 
-8-Nov-2026: on Stable Audio's distorted takes Carlos heard "no valen nada"; on Demucs stems of a real song (Ghosts Again):
+8-Nov-2026: on Stable Audio's distorted takes the user heard "no valen nada"; on Demucs stems of a real song (Ghosts Again):
 "está lejos de ser perfecta pero puede ayudar a componer". Measured there: the bass came out with the right pitch classes
 (as pyin) but often doubled an octave up (polyphony median 2 on a one-note line), so "bass" keeps the lowest note.
 

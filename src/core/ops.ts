@@ -84,7 +84,7 @@ const SetSongOp = z.object({
 });
 
 /**
- * Changes the tempo of a project that may already hold audio. A WAV keeps its speed (Carlos,
+ * Changes the tempo of a project that may already hold audio. A WAV keeps its speed (the user,
  * 6-Nov: "un wav ya viene dado"), but clips are measured in beats: left alone, a 96 BPM take at
  * 120 BPM would be cut short, because the engine turns beats into seconds with the new tempo.
  * So each audio clip keeps its seconds, its place in time included, and audio tracks stay

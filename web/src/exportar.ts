@@ -137,7 +137,7 @@ export function crearExportador(d: DependenciasRender): {
     try {
       if (senal?.aborted) return cancelado();
       if (formatos.midi) {
-        // Read in the code on 8-Nov (Carlos: "si selecciono un wav y pulso midi… ¿qué hará?"): a project of audio alone
+        // Read in the code on 8-Nov (the user: "si selecciono un wav y pulso midi… ¿qué hará?"): a project of audio alone
         // wrote an empty .mid and the Log said "0 track(s)" as if it were done; audio tracks were left out silently.
         const conNotas = view.tracks.filter((t) => t.kind === "midi" && t.clips.some((c) => c.notes.length > 0));
         const deAudio = view.tracks.filter((t) => t.kind === "audio" && t.clips.length > 0);

@@ -1,5 +1,5 @@
 /**
- * The MuLaCover module's window (8-Nov-2026, Carlos: "adelante con mulacover"). A cover from an audio source (tracks
+ * The MuLaCover module's window (8-Nov-2026, the user: "adelante con mulacover"). A cover from an audio source (tracks
  * of the project or a file) or from his own melody/chord MIDI, with new lyrics and a style. Review shows exactly
  * what the script reads, the licence (non-commercial) and the cost notice, before anything is spent.
  */

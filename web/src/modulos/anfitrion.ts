@@ -1,6 +1,6 @@
 /**
  * What the main GUI offers a module, and all a module may do to the project: read it, render
- * some tracks and hand in audio. The GUI knows nothing of what a module generates. Carlos, 6-Nov:
+ * some tracks and hand in audio. The GUI knows nothing of what a module generates. The user, 6-Nov:
  * the app is modular and the GUI is the ground where each module leaves its result.
  */
 

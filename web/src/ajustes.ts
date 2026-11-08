@@ -1,5 +1,5 @@
 /**
- * Settings: the accounts the app rents from, so nobody has to edit a .env (Carlos, 6-Nov). It paints
+ * Settings: the accounts the app rents from, so nobody has to edit a .env (the user, 6-Nov). It paints
  * whatever each provider declares (src/core/proveedores-gpu.ts). Which model to use stays in each
  * module. A key is typed here, kept on the server and never comes back: only its last digits.
  */

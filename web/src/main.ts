@@ -320,7 +320,7 @@ stopButton.addEventListener("click", parar);
 undoButton.addEventListener("click", () => void sesion.undo());
 redoButton.addEventListener("click", () => void sesion.redo());
 
-// New asks for the name, creates the project and opens it (8-Nov, Carlos). Before, it only closed the open one.
+// New asks for the name, creates the project and opens it (8-Nov, the user). Before, it only closed the open one.
 const dialogoNuevo = crearDialogoNuevo({
   carpetaAbierta: () => (sesion.project ? carpetaDeProyecto(sesion.project) : null),
   abrir: (proyecto) => {
@@ -338,7 +338,7 @@ $("new-song").addEventListener("click", () => {
 
 $("guardar").addEventListener("click", () => sesion.guardarAhora());
 
-// Export menu (8-Nov: Carlos asked for MIDI and WAV; only MP3 had a button, the other two were the old agent's).
+// Export menu (8-Nov: the user asked for MIDI and WAV; only MP3 had a button, the other two were the old agent's).
 let exportando = false;
 $("exportar").addEventListener("click", async (event) => {
   const formato = (event.target as HTMLElement).closest<HTMLElement>("[data-formato]")?.dataset.formato as "mp3" | "wav" | "midi" | undefined;
@@ -355,7 +355,7 @@ $("exportar").addEventListener("click", async (event) => {
     else avisos.info(r.texto.split("\n").filter((linea) => linea.startsWith(`${nombre}:`)).join(" ") || r.texto);
     // Audio tracks left out of a MIDI is information, not a failure.
     for (const aviso of r.avisos) (aviso.startsWith("MIDI export left out") ? avisos.info : avisos.error).call(avisos, aviso);
-    // Carlos, 8-Nov: the MIDI export "tiene que informar… y un check de no volver a aparecer". The Log line stays always.
+    // The user, 8-Nov: the MIDI export "tiene que informar… y un check de no volver a aparecer". The Log line stays always.
     if (formato === "midi") {
       if (!r.ok && r.texto.startsWith("There are no MIDI tracks")) await mostrarAviso("midi-sin-pistas", "Nothing to export as MIDI", r.texto);
       const fuera = r.avisos.find((a) => a.startsWith("MIDI export left out"));

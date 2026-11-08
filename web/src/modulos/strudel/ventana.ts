@@ -1,5 +1,5 @@
 /**
- * The Strudel module's window (8-Nov-2026, Carlos: "hay que añadir el módulo de strudel que estaba en la versión antigua de
+ * The Strudel module's window (8-Nov-2026, the user: "hay que añadir el módulo de strudel que estaba en la versión antigua de
  * miuzika"). A pattern is rendered to WAV in the browser with the real Strudel engine (motor.ts, the old strudel-audio.ts),
  * heard here, and only then added to the project as an audio track. No GPU and no cost: the first render downloads Strudel's
  * sample packs from its CDN.

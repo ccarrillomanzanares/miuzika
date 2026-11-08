@@ -2,7 +2,7 @@
  * The ACE-Step module, pure part: which models and tasks exist, what the form proposes, and
  * what the Review screen checks before spending GPU.
  *
- * The rule (Carlos, 6-Nov): no LLM touches what is sent, and nothing retouches it. `Parametros`
+ * The rule (the user, 6-Nov): no LLM touches what is sent, and nothing retouches it. `Parametros`
  * is the literal content sent to `workspace/gpu/generar_audio.py`: text is never trimmed,
  * truncated or filled in behind the person's back. A value the model needs is proposed here, in
  * sight on the Review screen, where it can be changed. An invalid value is refused with a
@@ -24,7 +24,7 @@ export const PISTAS_MODELO = [
 ] as const;
 
 /**
- * 0.6B left out on Carlos's word (8-Nov: "no usar 0.6B"): upstream offers it for low VRAM and the A10 has room.
+ * 0.6B left out on the user's word (8-Nov: "no usar 0.6B"): upstream offers it for low VRAM and the A10 has room.
  * `none` stays: text2music without the LM gave a good song by his ear (7-Nov, p08).
  */
 export const LMS = ["acestep-5Hz-lm-4B", "acestep-5Hz-lm-1.7B", "none"] as const;
@@ -142,7 +142,7 @@ export function valoresDeModelo(tarea: Tarea, modelo: string): Pick<Parametros, 
 /** Which Review fields apply to a task: the others are not shown and not sent. */
 export function camposDe(tarea: Tarea): { duracion: boolean; fuerza: boolean; rango: boolean; pista: boolean; fuente: boolean; lm: boolean; referencia: boolean } {
   return {
-    // Upstream takes it for every task; offered where a style to aim for makes sense (Carlos, 7-Nov:
+    // Upstream takes it for every task; offered where a style to aim for makes sense (the user, 7-Nov:
     // the punk bass). Extract pulls out what is already there: a style has nothing to do.
     referencia: tarea !== "text2music" && tarea !== "extract",
     duracion: tarea === "text2music",

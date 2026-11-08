@@ -1,7 +1,7 @@
 /**
  * "Pad" panel: play the laptop touchpad AND the computer keyboard as instruments, and record them in a loop.
  *
- * Redesigned 8-Nov-2026 at Carlos's request ("quiero hacerlo con pad y el teclado numérico… hay que darle una vuelta a
+ * Redesigned 8-Nov-2026 at the user's request ("quiero hacerlo con pad y el teclado numérico… hay que darle una vuelta a
  * la interfaz"), after the MIDI keyboards with pads that record rhythms in a loop, layer over layer, on tempo:
  * - Two sources, each with its own track and instrument: the touchpad and nine keys (numpad, or letters if there is no
  *   numpad; every key can be changed). On a drum track the nine keys are nine pieces; on any other, nine steps of the

@@ -2,7 +2,7 @@
  * WAV → MP3 with ffmpeg (libmp3lame), and the measurement that the MP3 holds what the WAV
  * held.
  *
- * Decided by Carlos on 3-Nov: 320 kbps CBR (widest compatibility, ~2.4 MB per minute) and
+ * Decided by the user on 3-Nov: 320 kbps CBR (widest compatibility, ~2.4 MB per minute) and
  * the project title as the ID3 title. ffmpeg 9.0.2 "full_build" was already on the laptop's
  * PATH (it is used by analizar_referencia), so no new dependency.
  *

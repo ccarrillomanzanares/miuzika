@@ -1,5 +1,5 @@
 /**
- * The Stable Audio module's window (8-Nov-2026, Carlos: "desarrolla el módulo con todas las funcionalidades"; after every task
+ * The Stable Audio module's window (8-Nov-2026, the user: "desarrolla el módulo con todas las funcionalidades"; after every task
  * passed by ear, "ahora a programar el formulario con todos los detalles que se puedan"). What Stable Audio 3 (790793b) offers:
  * text to audio (song, instrument, duo, sound effect), audio to audio, repaint one or several parts in one pass, continue; a
  * prompt per take; the -base checkpoints with their sampler. Review shows each prompt exactly as it travels, the licence, the

@@ -2,9 +2,9 @@
  * What the MuLaCover module sends to `workspace/gpu/generar_mulacover.py`. Pure, tested.
  *
  * MuLaCover (HeartMuLa, read at e27fa7f on 8-Nov-2026): a cover from reference audio, or from melody/chord
- * MIDI, with new lyrics and a style text. Heard by Carlos on 8-Nov over Ghosts Again with his lyrics:
+ * MIDI, with new lyrics and a style text. Heard by the user on 8-Nov over Ghosts Again with his lyrics:
  * "el cover está bien, con la letra y todo, es más pop… la voz es más convencional". Its weights and
- * outputs are CC BY-NC 4.0 (its LICENSING.md); Carlos, 8-Nov: experimental project, allowed with disclaimers.
+ * outputs are CC BY-NC 4.0 (its LICENSING.md); the user, 8-Nov: experimental project, allowed with disclaimers.
  */
 
 /** Pinned like ACE-Step: a machine switched off reinstalls, and `main` must not change between two takes. */

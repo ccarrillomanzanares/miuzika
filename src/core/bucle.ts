@@ -1,5 +1,5 @@
 /**
- * Loop recording for the Pad panel (Carlos, 8-Nov-2026: "teclados midi que llevan pads… se usan para en bucle
+ * Loop recording for the Pad panel (the user, 8-Nov-2026: "teclados midi que llevan pads… se usan para en bucle
  * ir grabando ritmos o sonidos y que vayan quedando grabados y al tempo").
  *
  * A loop of N bars repeats; each pass adds what is played (overdub) and it sounds from the next pass on.

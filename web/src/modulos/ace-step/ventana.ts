@@ -1,7 +1,7 @@
 /**
  * The ACE-Step module's window: three tabs by what the person wants (Song, Track, Transform),
  * a Review screen where what will be sent can be read and changed, and the run. No LLM in the path
- * (Carlos, 6-Nov): what Review shows is exactly what the script reads.
+ * (the user, 6-Nov): what Review shows is exactly what the script reads.
  */
 
 import {
@@ -44,7 +44,7 @@ const SILENCIO_DBFS = -60;
  */
 const MARGEN_COMPASES = 2;
 /**
- * What each task is good for and what fails, shown before anything is spent. Carlos, 7-Nov: "no
+ * What each task is good for and what fails, shown before anything is spent. The user, 7-Nov: "no
  * quiero quejas de usuarios de no sirve". Every sentence comes from a take he judged by ear
  * (ESTADO.md, "What ACE-Step can and cannot do"); change them when a verdict changes.
  */
@@ -66,9 +66,9 @@ const EXPECTATIVAS: Record<Tarea, string> = {
   extract: "Pulls one instrument out of a mix. Voice, bass and keyboard: good, the bass with a little of the rest. Percussion gets confused with rhythmic keys. Drums: comes out with leftovers; for clean stems use a dedicated separator.",
 };
 /**
- * Before Run, where money is spent. Carlos, 7-Nov: a disclaimer of no guarantee and of the money a
+ * Before Run, where money is spent. The user, 7-Nov: a disclaimer of no guarantee and of the money a
  * rented GPU costs, "como todo el software libre": the AGPL-3.0 in LICENSE already says WITHOUT ANY
- * WARRANTY; this says what that means here. 8-Nov, Carlos: keep saying it is experimental and that rented
+ * WARRANTY; this says what that means here. 8-Nov, the user: keep saying it is experimental and that rented
  * GPU time may not be productive (the best recipe so far kept 2 takes of 4).
  */
 const SIN_GARANTIA =
@@ -76,7 +76,7 @@ const SIN_GARANTIA =
 /** Only the Track tab (complete): the short ending was measured on lego, its sibling over a context. */
 const conMargen = (tarea: Tarea): boolean => tarea === "complete";
 /**
- * Lego is gone from the window (Carlos, 7-Nov evening: "lo quitamos de la app"). Of every take he
+ * Lego is gone from the window (the user, 7-Nov evening: "lo quitamos de la app"). Of every take he
  * heard, the ones he kept were what the model chose, not what was asked ("todo lo que ha salido bien,
  * no siguió casi el caption"); bass over bateria-1 failed 5 of 5, with and without a reference.
  * Repeat does not offer its takes either. The script still runs it, so old lineages stay readable.

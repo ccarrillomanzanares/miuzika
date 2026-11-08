@@ -2,7 +2,7 @@
  * What the Stable Audio module sends to `workspace/gpu/generar_stableaudio.py`. Pure, tested.
  *
  * Stable Audio 3 (Stability AI, read at 790793b on 8-Nov-2026: model.py, docs/guides/prompting.md,
- * docs/workflows/inference.md, the Gradio interface). Heard by Carlos on 8-Nov: an instrumental song at cfg 1 "es super
+ * docs/workflows/inference.md, the Gradio interface). Heard by the user on 8-Nov: an instrumental song at cfg 1 "es super
  * industrial... wow!!!", the first model that landed his style; drums and bass at cfg 1 are what was asked; at cfg 7 the
  * song, the drums and the bass saturated. Every task (text, transform, repaint, continue, small-music) passed by ear.
  * Instrumental only: its docs say it "doesn't output intelligible vocals".

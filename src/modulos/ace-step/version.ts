@@ -1,6 +1,6 @@
 /**
  * The tell-tale for ACE-Step's version. Every boot installs the pinned commit, so a new version upstream
- * changes nothing by itself: this says it exists, and the person decides (Carlos, 6-Nov).
+ * changes nothing by itself: this says it exists, and the person decides (the user, 6-Nov).
  */
 
 /**

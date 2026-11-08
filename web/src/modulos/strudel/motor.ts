@@ -1,6 +1,6 @@
 /**
  * Offline rendering with the real Strudel engine (superdough + its sample packs), in the browser: no GPU, no server.
- * Brought from miuzika (web/src/strudel-audio.ts, built 21-Oct) on 8-Nov, Carlos: "hay que añadir el módulo de strudel
+ * Brought from miuzika (web/src/strudel-audio.ts, built 21-Oct) on 8-Nov, the user: "hay que añadir el módulo de strudel
  * que estaba en la versión antigua". The code is the same; only the WAV helper's path changed.
  */
 

@@ -2,7 +2,7 @@
 
 Playing the laptop touchpad like a keyboard or pads, with no MIDI hardware.
 It comes from humseed (spike 001 and `cliente_touchpad/`), where it was validated on
-Carlos's laptop (HP 15s-fq, ELAN0712 touchpad).
+The user's laptop (HP 15s-fq, ELAN0712 touchpad).
 
 ## Pieces
 

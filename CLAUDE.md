@@ -1,12 +1,12 @@
 # miuzika-new — instructions for Claude Code
 
-Browser DAW (openDAW in WASM). The user is Carlos: he writes in Spanish; the interface is in English.
+Browser DAW (openDAW in WASM). The user writes in Spanish; the interface is in English.
 **Goal, in his words (6-Nov-2026): this project is to replace miuzika.** What he likes is copied over from
 `../miuzika`, piece by piece and only when he says so.
 
 Read `ESTADO.md` first: where we are, what he has tested and **what is still undecided**.
 
-## How to work with Carlos
+## How to work with the user
 
 - He thinks one thing at a time and says when he wants to think: **do not assume a decision**. "No lo sé" means
   undecided. When he asks for an opinion ("no hagas nada, dime"), give it and touch nothing.
@@ -29,7 +29,7 @@ Read `ESTADO.md` first: where we are, what he has tested and **what is still und
 ## Commands
 
 ```
-npm run dev            # localhost:5180. Carlos runs it from his own terminal
+npm run dev            # localhost:5180. The user runs it from his own terminal
 npm run typecheck      # tsc --noEmit
 npm run test:unit      # node --test for src/, web/, server/
 npm test               # + openDAW contract (check.ts)

@@ -402,7 +402,7 @@ export async function projectToOpenDaw(
             : undefined;
         // A drumkit without program plays the GM standard kit (program 0), which has every named
         // piece; the 13-sample Playfield kit only stays for a setup without the GM SoundFont.
-        // Carlos, 4-Nov ("pasa el kit de batería"): before, floor tom, high tom, china, bell,
+        // The user, 4-Nov ("pasa el kit de batería"): before, floor tom, high tom, china, bell,
         // tambourine, splash and shaker were silent on those tracks (review 3-Nov, bug 6).
         const programa =
           track.instrument.program ?? (track.instrument.type === "drumkit" ? 0 : undefined);

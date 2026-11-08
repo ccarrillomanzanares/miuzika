@@ -1,18 +1,20 @@
 miuzika
-Copyright (C) 2026
+Copyright (C) 2026 the miuzika contributors
+Developed with AI assistance (Claude, Anthropic).
 
-Este programa es software libre: puedes redistribuirlo y/o modificarlo bajo
-los términos de la GNU Affero General Public License, versión 3 o posterior,
-publicada por la Free Software Foundation.
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-Este programa se distribuye con la esperanza de que sea útil, pero SIN NINGUNA
-GARANTÍA; ni siquiera la garantía implícita de COMERCIABILIDAD o IDONEIDAD
-PARA UN PROPÓSITO PARTICULAR. Consulta la GNU Affero General Public License
-para más detalles.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
 
-Deberías haber recibido una copia de la GNU Affero General Public License
-junto con este programa. Si no, consulta <https://www.gnu.org/licenses/agpl-3.0.html>.
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/agpl-3.0.html>.
 
-La elección de AGPL-3.0-or-later es coherente con openDAW, que se integra como
-motor de audio. Si en el futuro se usa la licencia comercial de openDAW, este
-fichero deberá revisarse.
+AGPL-3.0-or-later is chosen to match openDAW, which is integrated as the
+audio engine. If openDAW's commercial license is ever used instead, this
+file must be reviewed.

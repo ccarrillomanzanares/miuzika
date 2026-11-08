@@ -1,5 +1,5 @@
 /**
- * Space plays or pauses; twice in a row stops (Carlos, 6-Nov). The first press acts at once
+ * Space plays or pauses; twice in a row stops (the user, 6-Nov). The first press acts at once
  * instead of waiting to see whether a second one comes: a pause that lags 350 ms feels broken.
  * So a double press does both things, and stopping undoes the first one.
  */
