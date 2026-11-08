@@ -102,15 +102,25 @@ export class Transporte {
     }
   }
 
+  /**
+   * The engine loaded with the project but the transport stopped: what the Pad plays live through (8-Nov, brought from
+   * old miuzika). Play unloads it and starts again, as it does with any loaded engine.
+   */
+  async prepararMotor(view: Project): Promise<OpenDawPlaybackHandle | null> {
+    if (this.handle) return this.handle;
+    await this.reproducir(view, false);
+    return this.handle;
+  }
+
   /** From the cursor; from the start if the cursor is at the end, where the last Play stopped. */
-  async reproducir(view: Project): Promise<void> {
+  async reproducir(view: Project, sonar = true): Promise<void> {
     const endBeat = view.lengthBars * beatsPerBar(view);
     const cursor = this.beat;
     const desdeBeat = cursor >= endBeat - 0.05 ? 0 : cursor;
     if (this.handle) this.detener();
     this.timeline.draw(desdeBeat);
     const generation = ++this.generation;
-    this.sesion.setBusy(true, "Loading WAVs and starting openDAW…");
+    this.sesion.setBusy(true, sonar ? "Loading WAVs and starting openDAW…" : "Getting the instruments ready…");
     try {
       const { faltan } = await hidratarAssets(view, carpetaDeProyecto(view));
       this.avisarFaltan(faltan);
@@ -134,13 +144,14 @@ export class Transporte {
         paraEngine,
         soundfonts,
         gm,
-        { desdeBeat, cancelado: () => generation !== this.generation },
+        { desdeBeat, cancelado: () => generation !== this.generation, reproducir: sonar },
       );
       if (generation !== this.generation) {
         handle.stop();
         return;
       }
       this.handle = handle;
+      if (!sonar) return;
       this.pintarPlay(true);
       await this.stems.reproducir(desdeBeat);
     } catch (error) {

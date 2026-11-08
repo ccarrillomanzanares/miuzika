@@ -134,6 +134,8 @@ export function crearContexto() {
 
   return {
     carpetaTrabajo,
+    /** The Python the server runs its own scripts with (the touchpad capture, 8-Nov). */
+    interprete,
     gpuActual,
     envGpu,
     anotarGpu,

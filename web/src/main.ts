@@ -27,6 +27,7 @@ import { VentanaStrudel } from "./modulos/strudel/ventana.ts";
 import { SelectorInstrumento } from "./selector-instrumento.ts";
 import { mostrarAviso } from "./aviso-unico.ts";
 import { VentanaAMidi } from "./a-midi.ts";
+import { PanelPad } from "./pad.ts";
 import { etiquetaInstrumento } from "../../src/core/instrumentos.ts";
 import { VentanaAjustes } from "./ajustes.ts";
 import { crearAvisos } from "./avisos.ts";
@@ -107,6 +108,9 @@ function pintarBotones(): void {
   seleccion.pintarBarra();
 }
 
+/** The touchpad panel (created further down; the session tells it when the project changes). */
+let panelPad: PanelPad | null = null;
+
 // Read before the session exists: setting its first project would overwrite it.
 const ultimoAbierto = Sesion.ultimoAbierto();
 const sesion = new Sesion(avisos, {
@@ -121,6 +125,7 @@ const sesion = new Sesion(avisos, {
     // setProject changes the data and the heads, but does not repaint the canvas.
     timeline.relayout();
     transporte.sincronizarStems(next);
+    panelPad?.proyectoCambiado();
   },
   alEnVivo(next, estructura) {
     sincronizarDuraciones(next);
@@ -130,7 +135,10 @@ const sesion = new Sesion(avisos, {
     // The running engine only follows mute, solo, volume and pan. A clip that moved needs the
     // project mounted again, from where it was playing.
     if (estructura && transporte.sonando) void transporte.reproducir(next);
+    // The Pad's engine (loaded, stopped) would keep the old instruments: unloaded, the next note loads it again.
+    else if (estructura && transporte.motor) transporte.detener();
     else transporte.syncMix(next);
+    panelPad?.proyectoCambiado();
   },
   alCambiarEstado: () => pintarBotones(),
   estado: setStatus,
@@ -236,6 +244,32 @@ $("sel-midi").addEventListener("click", () => {
   const id = seleccion.pistasElegidas()[0];
   if (id) void ventanaAMidi.abrir(id);
 });
+
+// The touchpad as an instrument (8-Nov, brought from old miuzika, where it was built from humseed and never exercised).
+panelPad = new PanelPad({
+  proyecto: () => sesion.project,
+  motorActual: () => transporte.motor,
+  motor: async () => {
+    const view = sesion.project;
+    return view ? transporte.prepararMotor(view) : null;
+  },
+  parar: () => transporte.detener(),
+  cursor: () => timeline.currentBeat,
+  guardarClip: (trackId, startBeat, notas) => {
+    const view = sesion.project;
+    if (!view) return;
+    try {
+      const ahora = new Date();
+      const hora = `${String(ahora.getHours()).padStart(2, "0")}:${String(ahora.getMinutes()).padStart(2, "0")}`;
+      sesion.setProject(applyOps(view, [{ op: "add_notes", trackId, startBar: Math.round(startBeat / beatsPerBar(view)), name: `Pad ${hora}`, notes: notas }]).project);
+    } catch (error) {
+      avisos.error(`Could not save the recording: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+  avisar: (texto) => avisos.info(texto),
+  dibujar: (beat) => timeline.draw(beat),
+});
+$("pad").addEventListener("click", () => panelPad?.abrir());
 
 // --- Buttons ---------------------------------------------------------------
 

@@ -317,6 +317,54 @@ main {
   text-overflow: ellipsis;
 }
 
+/* Pad: the touchpad as an instrument (brought from old miuzika, 8-Nov). Not modal: the timeline stays in view. */
+.dialogo-pad {
+  width: min(720px, 92vw);
+}
+.dialogo-pad[open] {
+  position: fixed;
+  inset: auto 16px 16px auto;
+  margin: 0;
+}
+.pad-mandos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.pad-mandos select {
+  margin-left: 4px;
+}
+.pad-octava button {
+  min-width: 24px;
+  margin: 0 4px;
+}
+.pad-grabar.grabando {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pad-lienzo {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  touch-action: none;
+}
+.dialogo-pad.armado .pad-lienzo {
+  border-color: var(--accent);
+  cursor: none;
+}
+.pad-estado {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* The instrument line of a MIDI track: a link-like button that opens the picker (8-Nov). */
 .track-meta small .instrumento {
   all: unset;

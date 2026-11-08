@@ -158,6 +158,16 @@ G#, A, C#, F#, B, E; **other** 1,994 notes, polyphony median 3. Files in `heartm
   venv `.miuzika/basic-pitch/` (made on first use by `server/api/transcribir.ts`, --no-deps + the versions of the trial; 464 MB).
   Headless on the Ghosts bass stem: first run 132 s (install included), transcription 7 s, 590 notes of 1,423 heard, C#1-E3 (the
   same as the hand-made mono file Carlos heard). Drums: button off with the reason. **Not heard by Carlos in the app yet.**
+  Committed 7902f74.
+
+**8-Nov: Pad (the touchpad as an instrument) brought from old miuzika** (Carlos: "antes de eso traéte el código de touchpad",
+before renaming this folder to miuzika and deleting the old one). There it came from humseed and was never exercised. Brought as
+it was: `workspace/herramientas/touchpad/` (Raw Input capture, Windows Precision Touchpad), `server/api/pad.ts` (now also refuses
+other origins, bug 16), `src/core/pad.ts` with its tests (drum pad names now in English), `web/src/pad.ts`, a Pad button in the
+header. The transport gained `prepararMotor` (the engine loaded, stopped) for the live notes; a structural change unloads that
+engine so the next note picks up the new instruments. Checked headless with the real touchpad: the panel opens, the capture starts
+and says ready, tracks and modes listed (drums → Pads), closing stops the capture, a foreign Origin gets 403. **Not armed and not
+played** (arming freezes the cursor): to be tried by Carlos.
 
 **8-Nov: HeartMuLa researched for a module of its own (Carlos: "documéntate de heartmula para hacer su propio formulario").**
 Read from heartlib at `5858ca8` (8-Oct-2026, shallow clone, nothing run) and the HF cards. Nothing designed or built yet.
