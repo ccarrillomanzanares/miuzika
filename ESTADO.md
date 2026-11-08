@@ -6,6 +6,11 @@ Carlos, 7-Nov: **"hay que evitar tener que pasar de nuevo por dónde ya hemos pa
 "What ACE-Step can and cannot do" below: it holds every verdict by ear so far. When a new verdict or conclusion arrives, write it there
 in the same session, not at the end.
 
+**8-Nov: ACE-Step test phase CLOSED.** Carlos: "esas pruebas ya no las haremos, dejaremos que sean los intentos reales de los
+usuarios". Do not propose more ACE-Step tests (shared chords for stems, more structure seeds, more solo instruments, repaint of
+glitches, MIDI dressed by cover): they stay as ideas below, for users to find. Recipe that came out best: text2music on xl-sft + LM 4B
+with the `vein` caption at a given BPM; stems by describing one instrument alone; bass/drums by extract. GPU shut down after it (89 s).
+
 **7-Nov evening, in short (committed at his request):**
 - **Removed from the window:** lego ("lo quitamos de la app": not steerable) and the Reference field (it failed in lego and in cover).
 - **Works:** text2music with a detailed English caption (project `vein`: "están muy bien").
