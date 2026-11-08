@@ -11,6 +11,7 @@ import type { Contexto } from "../contexto.ts";
 import { esTimeoutDelModelo, planDeEntradas } from "../lambda.ts";
 import { Cancelado } from "../gpu/proveedor.ts";
 import { mensajeDe, rutaJson } from "../ruta.ts";
+import { leerTokenHf } from "../config-proveedores.ts";
 
 interface PeticionEjecutar {
   script?: string;
@@ -19,6 +20,9 @@ interface PeticionEjecutar {
   entradas?: unknown;
   timeout_segundos?: number;
 }
+
+/** Scripts that download gated Hugging Face weights. */
+const SCRIPTS_CON_HF = new Set(["generar_stableaudio.py"]);
 
 /** A file name, nothing that could leave the project folder. */
 const NOMBRE_VALIDO = /^[A-Za-z0-9._-]+$/;
@@ -155,6 +159,16 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       const ficheroReceta = resolve(carpetaEntrada, `${nombre}.receta.json`);
       writeFileSync(ficheroReceta, JSON.stringify(datos.receta, null, 2), "utf8");
       entradas.push(ficheroReceta);
+      // 8-Nov: a script whose weights are gated gets the Hugging Face token on the instance, never in the recipe.
+      let secretos: { remoto: string; contenido: string }[] | undefined;
+      if (SCRIPTS_CON_HF.has(script)) {
+        const token = leerTokenHf();
+        if (!token) {
+          responderJson(res, 400, { error: "This model's weights need a Hugging Face token: save one in Settings (and accept the model's terms on its page)." });
+          return;
+        }
+        secretos = [{ remoto: ".cache/huggingface/token", contenido: token }];
+      }
       const plan = planDeEntradas(carpeta, entradas);
       if ("error" in plan) {
         responderJson(res, 400, { error: plan.error });
@@ -180,6 +194,7 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
           carpetaTrabajo,
           slug,
           entradas,
+          secretos,
           aviso: (texto) => {
             anotarGpu({ tool: "gpu_aviso", texto });
             linea({ aviso: texto });

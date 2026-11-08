@@ -25,13 +25,54 @@ the MuLaCover cover): "cada pista hace lo suyo", PASS, and **"mc-ghosts-ft es m�
 here, about the same as htdemucs, not the 4x its README warns of (one 3-min song). Proposed: make htdemucs_ft the window's default. **htdemucs_6s: "guitar y bass no sirven"** (on the cover, which has no real
 guitar): it invents them from the synths. Note agreed for the window ("ok"): "Six stems: only for songs with real guitar or piano;
 on synth music it invents them." **Applied 8-Nov on his word**: htdemucs_ft first and default, notes updated. GPU shut down after the
-tests (77 s, instance 11ffcde3…).
+tests (77 s, instance 11ffcde3…). The temporary `probar_heartmula.py` and `probar_mulacover.py` were deleted on his word ("si no se
+usan se pueden borrar"); HeartMuLa's two install fixes are written above, if it is ever tried again.
 MuLaCover from MIDI (Ghosts Again's transcribed melody+chords+drums, his lyrics, industrial style, seed 42), `mc-midi-drums`: "es
 completa, tiene muchos instrumentos, mucho más pop y comercial, también tiene voz". From MIDI it still goes pop, like from audio. `mc-midi-sin-drums` (no drum MIDI): "completa también, con batería": without a drum
 MIDI it writes its own drums; the drum MIDI is optional for real. `mc-desde-heartmula` (source: HeartMuLa's pop take hm-darkwave-1,
 same lyrics and industrial style): "no es un estilo que a mí me parezca ni dark, industrial, dark synth pop". **MuLaCover keeps the
 melody and sings the lyrics, but its style ignores the style text: 4 of 4 takes came out pop.** Outputs are always audio (Carlos: the
 mc-midi-* takes "no son midi": right, they are WAVs made *from* MIDI).
+
+**8-Nov: Stable Audio researched (his "adelante con ese… lanza un test").** Read: HF cards of stable-audio-3-medium and -small-music,
+their LICENSE.md, github.com/Stability-AI/stable-audio-3 (README, inference and prompting docs). Not run yet.
+- Family (May 2026): `small-music` 433M (CPU-capable, 120 s), `small-sfx`, `medium` 1.4B (GPU + Flash Attention 2, up to 380 s,
+  ~6.5 GB VRAM), Large API-only. Stereo 44.1 kHz. Instrumental: "don't output intelligible vocals". Stems/solo instruments supported
+  (`TrackType: Instrument`). BPM only as text ("120 BPM"); no key, no melody conditioning. Audio-to-audio (`init_audio`,
+  `init_noise_level`), inpainting and continuation. Defaults: steps 8, cfg 1.0 (7.0 "for stronger prompt adherence"), duration 120.
+- Licence: code MIT; weights **Stability AI Community License**: free for research, personal and commercial use under US$1M annual
+  revenue (commercial use asks for registration at stability.ai/community-license); **outputs are the user's**; no use to train
+  another foundation model; also the Gemma Terms (text encoder T5Gemma), not read.
+- **Blocker: the weights are gated.** Downloading needs a Hugging Face account that accepted the terms, and its token. None found
+  here (no HF key in .env, no local token). Carlos must create/accept and give a token (to keep server-side, like the Lambda key).
+  **Solved 8-Nov:** his token from `info.txt` on his VPS, copied (never printed) to `miuzika-new/.miuzika/hf_token.txt` (git-ignored);
+  he accepted the medium terms and gave the token gated read access. For the trial Claude copied it by ssh to
+  `~/.cache/huggingface/token` on the instance; the app never carried it.
+- **First trial, 8-Nov 13:15**, project `stableaudio-prueba`, temporary `workspace/gpu/probar_stableaudio.py` (790793b, flash-attn
+  2.6.3 wheel cu126/torch2.7): drums, synth bass (30 s) and an instrumental song (120 s), 92 BPM, seed 7111, each at cfg 1 and 7.
+  Install + download only ~13 s of script time beyond boot; each take ~24 s with the model reloaded every time. Output 44.1 kHz.
+  Measured: cfg 7 takes are much louder (RMS -6.7 to -9.8 dB against -16 to -18 at cfg 1, peaks at 0 dBFS): likely distorted.
+  **Heard by Carlos: `sa-song-cfg1` "es super industrial... wow!!!" — the first model that lands his style.** bass cfg1 "suena a bajo"
+  (PASS), bass cfg7 "una mezcla de cosas, no es sólo bajo, es también synth"; drums cfg1 "percusión, puede pasar", drums cfg7 "también
+  es percusión industrial". cfg 1 (the default) is the better setting; song cfg7 "está super saturada" (as measured: RMS -7.3 dB). **Use cfg 1.**
+  Second listen, same day: drums cfg1 "es batería", drums cfg7 "también, pero sobresaturada"; bass cfg1 "es un bajo", bass cfg7 "parece
+  más bien un didgeridoo sobresaturado". So cfg 7 saturates on every kind (drums, bass, song), as the RMS said; cfg 1 gives the asked instrument.
+  `sa-song-cfg1` on second listen: "es muy industrial, me gusta muchísimo aunque le falta melodía". Ideas not tried yet: ask for a lead
+  in the text ("with a lead synth melody"), or put a melody on top from another module (ACE-Step track, MIDI by hand).
+- **8-Nov: Stable Audio module built** (his "párala pero desarrolla el módulo con todas las funcionalidades"): window in Modules
+  (from text: song / one instrument / sound effect / free; transform audio; repaint bars; continue), Review with the composed prompt
+  editable, licence and cost; `generar_stableaudio.py` (790793b, Python API, model loaded once, takes as one batch); the Hugging
+  Face token saved in **Settings** (`.miuzika/proveedores.json`, never returned) and copied by the server to the instance only for
+  this script (`secretos` in `ejecutarEnLambda`, scp of a temp file, mode 600). Windows checked headless for all four tasks.
+- **Real runs through the app's path, 8-Nov 14:17-14:36** (`stableaudio-prueba`, all cfg 1): two drum takes in one batch (1.6 s
+  of generation; model load 46 s the first time, 18 s after); transform `sa-song-cfg1` at change 0.7 (65 s; correlation with the
+  source 0.05: a new piece); repaint bars 13-16 (106 s; correlation with the source 0.995 before, 0.87 inside, 0.97 after: outside
+  is kept, only through the codec); continue the 30 s bass to 60 s (81 s; first 30 s at 0.998); small-music song (76 s). Not heard yet.
+  Heard by Carlos: `sa2-repintar` "es super parecida a la última que escuché que me gustó tanto" (`sa-song-cfg1`, its source), as
+  expected: only bars 13-16 are new. Whether the change at those bars is audible was not said.
+  `sa2-continuar`, `sa2-drums-x2-1`, `sa2-drums-x2-2` and `sa2-small`: "pegan juntas, y son lo que dicen, el estilo total no es el que
+  más me gusta pero bueno pegan". PASS on doing what was asked and fitting together; style below `sa-song-cfg1`. `sa2-transformar`
+  (change 0.7 over `sa-song-cfg1`): "también es muy buena". Every task of the module passed by ear.
 
 **8-Nov: HeartMuLa researched for a module of its own (Carlos: "documéntate de heartmula para hacer su propio formulario").**
 Read from heartlib at `5858ca8` (8-Oct-2026, shallow clone, nothing run) and the HF cards. Nothing designed or built yet.

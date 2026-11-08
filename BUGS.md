@@ -79,3 +79,8 @@ The 14 listed on 6-Nov-2026 when the GUI was separated from miuzika, and how eac
   program 0. (melody.mid and chord.mid sounding as piano is right: no program in a MIDI means GM 0, the piano.) FIXED 8-Nov: with no
   Program Change the channel is taken from the first note. Measured on the three files: drums ch9 (→ drumkit), melody and chord ch0.
   Already imported tracks stay as they are: import `drums.mid` again.
+- **28. Short ssh commands to the GPU hang now and then, and one retry is not enough.** 8-Nov, five times in one day: "ssh cut off
+  after 20 s" at sync or upload (q03, r03, r-ext-q01-keyboard, sa2-transformar), and once the outputs listing after a good run
+  (`sa2-drums-x2`: two takes generated, "the outputs could not be listed (ssh exit 1)", nothing brought back; the files were there).
+  Measured right after: five ssh connections at 1.3-1.4 s, and the same listing by hand answered at once. The cause is still unknown
+  (same as 5-Nov: 3 of 16). FIXED 8-Nov: `sshControl` tries three times instead of two, each still capped at 20 s.

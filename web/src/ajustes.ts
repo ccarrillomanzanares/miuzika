@@ -38,6 +38,8 @@ export class VentanaAjustes {
   private readonly dialogo: HTMLDialogElement;
   private readonly gpu: BarraGpu;
   private estado: Estado | null = null;
+  /** 8-Nov: the Hugging Face token, for models with gated weights (Stable Audio 3). Never the token itself. */
+  private hf: { tiene: boolean; oculta: string; origen: "ajustes" | "env" | "falta" } | null = null;
   private alCerrar: (() => void) | null = null;
 
   constructor(gpu: BarraGpu) {
@@ -58,6 +60,7 @@ export class VentanaAjustes {
   async abrir(): Promise<void> {
     const res = await fetch("/api/ajustes/gpu");
     this.estado = (await res.json()) as Estado;
+    await this.leerHf();
     this.pintar();
     this.dialogo.showModal();
     return new Promise((resolver) => {
@@ -104,10 +107,20 @@ export class VentanaAjustes {
         </section>`;
       })
       .join("");
+    const hf = this.hf;
+    const fichaHf = `<section class="ajustes-ficha">
+          <h3>Hugging Face</h3>
+          <p class="ace-nota">Some models' weights are gated (Stable Audio 3): accept the terms on the model's page with your account, and give a read token with access to gated repos. It is copied to the rented GPU for those runs only.</p>
+          <div class="ace-fila"><label>Token</label><div><input data-hf type="password" autocomplete="new-password" placeholder="${esc(hf?.tiene ? `saved: ${hf.oculta}. Paste another to replace it` : "hf_… paste it here")}"><small>${hf?.origen === "ajustes" ? "Saved here." : hf?.origen === "env" ? "From HF_TOKEN in the environment." : "Missing."}</small></div></div>
+          <div class="dialogo-acciones">${hf?.origen === "ajustes" ? `<button type="button" data-accion="hf-borrar">Remove token</button>` : ""}
+            <button type="button" data-accion="hf-probar" title="Asks Hugging Face who the token is and whether it reaches the gated models">Test token</button>
+            <button type="button" class="primario" data-accion="hf-guardar">Save</button>
+          </div>
+        </section>`;
     this.dialogo.innerHTML = `
       <div class="dialogo-cabeza"><strong>Settings · GPU</strong><button type="button" class="icon" data-accion="cerrar" title="Close">✕</button></div>
       <p class="ace-nota">Keys stay on this machine, in a file outside git and outside your projects. Which model to use is chosen in each module.</p>
-      <div class="ace-cuerpo">${fichas}</div>
+      <div class="ace-cuerpo">${fichas}${fichaHf}</div>
       <div class="ajustes-mensaje${error ? " mal" : ""}" data-mensaje>${esc(mensaje)}</div>
       <div class="dialogo-acciones"><button type="button" data-accion="cerrar">Close</button></div>`;
   }
@@ -171,6 +184,54 @@ export class VentanaAjustes {
       case "probar":
         await this.probar(id);
         return;
+      case "hf-guardar": {
+        const token = this.dialogo.querySelector<HTMLInputElement>("input[data-hf]")?.value.trim() ?? "";
+        if (!token) {
+          this.decir("Paste the token first.", true);
+          return;
+        }
+        if (await this.enviarHf({ accion: "guardar", token })) this.pintar("Token saved. Test token checks it reaches the gated models.");
+        return;
+      }
+      case "hf-borrar":
+        if (await this.enviarHf({ accion: "borrar" })) this.pintar("Token removed.");
+        return;
+      case "hf-probar":
+        await this.probarHf();
+        return;
+    }
+  }
+
+  private async leerHf(): Promise<void> {
+    try {
+      this.hf = (await (await fetch("/api/ajustes/hf")).json()) as typeof this.hf;
+    } catch {
+      this.hf = null;
+    }
+  }
+
+  private async enviarHf(cuerpo: { accion: string; token?: string }): Promise<boolean> {
+    try {
+      const res = await fetch("/api/ajustes/hf", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) });
+      const datos = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(datos.error ?? `HTTP ${res.status}`);
+      this.hf = datos as typeof this.hf;
+      return true;
+    } catch (error) {
+      this.decir(error instanceof Error ? error.message : String(error), true);
+      return false;
+    }
+  }
+
+  private async probarHf(): Promise<void> {
+    this.decir("Testing…");
+    try {
+      const res = await fetch("/api/ajustes/hf/probar", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const datos = (await res.json()) as { ok?: boolean; comprobaciones?: Comprobacion[]; error?: string };
+      if (!res.ok) throw new Error(datos.error ?? `HTTP ${res.status}`);
+      this.decir((datos.comprobaciones ?? []).map((c) => `${c.ok ? "✓" : "✗"} ${c.que}: ${c.detalle}`).join("\n"), datos.ok !== true);
+    } catch (error) {
+      this.decir(error instanceof Error ? error.message : String(error), true);
     }
   }
 

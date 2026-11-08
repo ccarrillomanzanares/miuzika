@@ -22,6 +22,7 @@ import { crearAnfitrion } from "./modulos/anfitrion.ts";
 import { VentanaAceStep } from "./modulos/ace-step/ventana.ts";
 import { VentanaMulaCover } from "./modulos/mulacover/ventana.ts";
 import { VentanaDemucs } from "./modulos/demucs/ventana.ts";
+import { VentanaStableAudio } from "./modulos/stableaudio/ventana.ts";
 import { VentanaAjustes } from "./ajustes.ts";
 import { crearAvisos } from "./avisos.ts";
 import { crearDetectorDoble } from "./doble-pulsacion.ts";
@@ -158,6 +159,7 @@ const modulos: Record<string, { abrir(): Promise<void> }> = {
   "ace-step": new VentanaAceStep(anfitrion, gpu),
   mulacover: new VentanaMulaCover(anfitrion, gpu),
   demucs: new VentanaDemucs(anfitrion, gpu),
+  stableaudio: new VentanaStableAudio(anfitrion, gpu),
 };
 
 $("modulos").addEventListener("click", (event) => {

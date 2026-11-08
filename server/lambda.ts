@@ -16,7 +16,8 @@
  */
 
 import { correrProceso } from "./proceso.ts";
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { dentroDe } from "./dentro.ts";
 
@@ -341,6 +342,8 @@ const opcionesSsh = (cfg: ConfigLambda): string[] => [
  * these hung 3 of 16 runs, authenticated on the server and never returning; a probe seconds later
  * answered in 1.7 s, and 75 runs of the same command from Node did not hang, so the cause is still
  * unknown. A hang used to cost 60 s and the whole run; now it costs 20 s.
+ * 8-Nov (bug 28): five hangs in one day, one of them losing a good run's outputs; ssh measured at 1.3 s
+ * right after. Three tries instead of two: the commands are idempotent (mkdir -p, touch, find).
  */
 export async function sshControl(
   cfg: ConfigLambda,
@@ -348,9 +351,11 @@ export async function sshControl(
   comando: string,
   senal?: AbortSignal,
 ): Promise<{ codigo: number | null; salida: string; errores: string }> {
-  const r = await ssh(cfg, ip, comando, 20, senal);
-  if (r.codigo === 0 || senal?.aborted) return r;
-  return ssh(cfg, ip, comando, 20, senal);
+  let r = await ssh(cfg, ip, comando, 20, senal);
+  for (let intento = 2; intento <= 3 && r.codigo !== 0 && !senal?.aborted; intento += 1) {
+    r = await ssh(cfg, ip, comando, 20, senal);
+  }
+  return r;
 }
 
 /**
@@ -620,6 +625,33 @@ export interface PeticionLambda {
   entradas?: string[];
   /** Aborted when the HTTP client goes away: no later step starts (3-Nov review, bug 3). */
   senal?: AbortSignal;
+  /**
+   * Secrets a script needs on the instance, written to `remoto` (relative to the remote home) with mode 600.
+   * 8-Nov: Stable Audio 3's weights are gated behind a Hugging Face token. The value never goes on a command
+   * line or into a log: it travels in a temporary local file by scp, which is deleted at once.
+   */
+  secretos?: { remoto: string; contenido: string }[];
+}
+
+/** Writes each secret on the instance. Returns an error text, or "" when all went well. */
+async function escribirSecretos(cfg: ConfigLambda, ip: string, secretos: { remoto: string; contenido: string }[], senal?: AbortSignal): Promise<string> {
+  for (const s of secretos) {
+    if (!/^[A-Za-z0-9._/-]+$/.test(s.remoto) || s.remoto.includes("..")) return `bad secret path ${s.remoto}`;
+    const dir = s.remoto.includes("/") ? s.remoto.slice(0, s.remoto.lastIndexOf("/")) : ".";
+    const mk = await sshControl(cfg, ip, `mkdir -p ~/${dir} && chmod 700 ~/${dir}`, senal);
+    if (mk.codigo !== 0) return `could not prepare ~/${dir}: ${mk.errores}`;
+    const temporal = mkdtempSync(join(tmpdir(), "miuzika-secreto-"));
+    const fichero = join(temporal, "s");
+    try {
+      writeFileSync(fichero, s.contenido, { mode: 0o600 });
+      const r = await scp(cfg, ip, [fichero], `~/${s.remoto}`, 60, senal);
+      if (r.codigo !== 0) return `could not copy a secret: ${r.errores}`;
+      await sshControl(cfg, ip, `chmod 600 ~/${s.remoto}`, senal);
+    } finally {
+      rmSync(temporal, { recursive: true, force: true });
+    }
+  }
+  return "";
 }
 
 export async function ejecutarEnLambda(
@@ -657,6 +689,16 @@ export async function ejecutarEnLambda(
         ok: false, id: arranque.id, ip: arranque.ip, codigo: subida.codigo, salida: "",
         errores: `could not upload the inputs: ${subida.errores}`, ms: Date.now() - t0, traidos: [],
         nota: "inputs", traidaFallo: "",
+      };
+    }
+  }
+  if (p.secretos && p.secretos.length > 0) {
+    const fallo = await escribirSecretos(cfg, arranque.ip, p.secretos, p.senal);
+    comprobarCancelado(p.senal);
+    if (fallo) {
+      return {
+        ok: false, id: arranque.id, ip: arranque.ip, codigo: 1, salida: "",
+        errores: fallo, ms: Date.now() - t0, traidos: [], nota: "inputs", traidaFallo: "",
       };
     }
   }

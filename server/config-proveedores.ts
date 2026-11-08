@@ -33,6 +33,22 @@ export function guardarFicheroProveedores(cambios: FicheroProveedores, fichero =
   writeFileSync(fichero, JSON.stringify({ ...actual, ...cambios }, null, 2), { encoding: "utf8", mode: 0o600 });
 }
 
+/**
+ * The Hugging Face token (8-Nov: Stable Audio 3's weights are gated). Saved in Settings; `HF_TOKEN` in the
+ * environment is the fallback. Never returned to the browser or logged.
+ */
+export function leerTokenHf(fichero = FICHERO_PROVEEDORES): string {
+  const hf = leerFicheroProveedores(fichero).huggingface as { token?: unknown } | undefined;
+  const guardado = hf && typeof hf.token === "string" ? hf.token.trim() : "";
+  return guardado || (process.env.HF_TOKEN ?? "").trim();
+}
+
+export function origenTokenHf(fichero = FICHERO_PROVEEDORES): "ajustes" | "env" | "falta" {
+  const hf = leerFicheroProveedores(fichero).huggingface as { token?: unknown } | undefined;
+  if (hf && typeof hf.token === "string" && hf.token.trim() !== "") return "ajustes";
+  return (process.env.HF_TOKEN ?? "").trim() !== "" ? "env" : "falta";
+}
+
 /** The GPU part, shape-checked. */
 export function leerConfigGpu(fichero = FICHERO_PROVEEDORES): ConfigGpu | undefined {
   const gpu = leerFicheroProveedores(fichero).gpu as Partial<ConfigGpu> | undefined;

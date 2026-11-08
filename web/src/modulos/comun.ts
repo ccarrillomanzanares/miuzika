@@ -50,6 +50,8 @@ export interface AudioPreparado {
   descripcion: string;
   bytes: number;
   carpeta: string;
+  /** Length of the source file. */
+  segundos: number;
 }
 
 /**
@@ -73,6 +75,7 @@ export async function prepararAudio(
       descripcion: `${nombres}: ${r.segundos.toFixed(1)} s, peak ${r.picoDb.toFixed(1)} dBFS, ${(r.bytes / 1048576).toFixed(1)} MB`,
       bytes: r.bytes,
       carpeta: carpetaDeProyecto(p),
+      segundos: r.segundos,
     };
   }
   if (!o.archivo) throw new Error("Choose the file to send.");
@@ -87,6 +90,7 @@ export async function prepararAudio(
     descripcion: `${o.archivo.name}: ${duracionSeg.toFixed(1)} s, peak ${picoDb.toFixed(1)} dBFS, ${(bytes / 1048576).toFixed(1)} MB`,
     bytes,
     carpeta,
+    segundos: duracionSeg,
   };
 }
 
