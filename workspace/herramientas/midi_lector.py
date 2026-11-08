@@ -47,6 +47,9 @@ def leer(path):
         nombre = ""
         prog = None
         canal = 0
+        # Bug 27 (8-Nov): the channel came only from a Program Change. MuLaCover's drums.mid has notes on
+        # channel 10 and no Program Change, so it was read as channel 1 and imported as a piano.
+        canal_de_notas = None
         activas = {}
         notas = []
 
@@ -91,6 +94,8 @@ def leer(path):
                 ch = estado & 0x0F
                 if tipo == 0x90 and b2 > 0:
                     activas[(ch, a)] = (t, b2)
+                    if canal_de_notas is None:
+                        canal_de_notas = ch
                 elif tipo == 0x80 or (tipo == 0x90 and b2 == 0):
                     clave = (ch, a)
                     if clave in activas:
@@ -108,7 +113,7 @@ def leer(path):
             {
                 "name": nombre or f"Track {len(pistas) + 1}",
                 "program": prog if prog is not None else 0,
-                "channel": canal,
+                "channel": canal if prog is not None or canal_de_notas is None else canal_de_notas,
                 "notes": [
                     {
                         "pitch": int(p),

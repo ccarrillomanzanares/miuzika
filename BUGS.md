@@ -74,3 +74,8 @@ The 14 listed on 6-Nov-2026 when the GUI was separated from miuzika, and how eac
   was already kept in localStorage but never read. `main.ts` reads it before the session exists and reopens it through the Projects
   path, so nothing is rewritten. A folder deleted since is skipped. Seen headless: open `vein`, reload, it comes back with
   "Opened from disk “vein”… 92 BPM".
+- **27. A drums .mid with no Program Change imports as a piano.** Seen by Carlos on 8-Nov importing MuLaCover's `drums.mid`: "los tres suenan
+  a piano". `midi_lector.py` took the channel only from a Program Change, so notes on channel 10 read as channel 1 and became `synth`
+  program 0. (melody.mid and chord.mid sounding as piano is right: no program in a MIDI means GM 0, the piano.) FIXED 8-Nov: with no
+  Program Change the channel is taken from the first note. Measured on the three files: drums ch9 (→ drumkit), melody and chord ch0.
+  Already imported tracks stay as they are: import `drums.mid` again.

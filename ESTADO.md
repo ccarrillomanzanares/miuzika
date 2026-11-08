@@ -11,6 +11,41 @@ usuarios". Do not propose more ACE-Step tests (shared chords for stems, more str
 glitches, MIDI dressed by cover): they stay as ideas below, for users to find. Recipe that came out best: text2music on xl-sft + LM 4B
 with the `vein` caption at a given BPM; stems by describing one instrument alone; bass/drums by extract. GPU shut down after it (89 s).
 
+**8-Nov: HeartMuLa researched for a module of its own (Carlos: "documéntate de heartmula para hacer su propio formulario").**
+Read from heartlib at `5858ca8` (8-Oct-2026, shallow clone, nothing run) and the HF cards. Nothing designed or built yet.
+- Licence: code and all weights Apache 2.0 (since 20-Jan-2026).
+- Models: HeartMuLa-oss-3B (14-Jan), HeartMuLa-RL-oss-3B-20260123 ("more precise control over styles and tags"),
+  **HeartMuLa-oss-3B-happy-new-year** (13-Feb, the one they recommend); HF metadata says "4B params" for the 3B cards. 7B: internal only,
+  "not released yet". HeartCodec-oss-20260123 (2B, decoder, 48 kHz stereo) + HeartCodec-oss-encoder. HeartTranscriptor-oss (0.8B, lyrics
+  ASR). HeartCLAP (text-audio embedding). **MuLaCover** (16-Sep, separate repo): cover/remix from reference audio *or melody/chord MIDI*,
+  genre and instruments by text: close to his "MIDI dressed by cover" idea, not read yet.
+- Inputs: `lyrics` (sections `[Intro] [Verse] [Prechorus] [Chorus] [Bridge] [Outro]`), `tags` (comma-separated, no spaces, e.g.
+  `piano,happy,wedding`); both **lower-cased by their own code** and tags wrapped in `<tag>…</tag>`. `max_audio_length_ms` (script default
+  240000, pipeline 120000), `topk` 50, `temperature` 1.0, `cfg_scale` (README and pipeline say 1.5, the example script 3.0: conflict).
+  No seed parameter, no BPM or key fields, no reference audio yet (TODO, a `muq_embed` slot exists). Output 48 kHz.
+- Speed "RTF ≈ 1.0" (a 3-min song ≈ 3 min). VRAM not stated; `--lazy_load` for one GPU. Python 3.10 recommended, torch <2.11,
+  transformers 4.57.0, torchtune 0.4.0.
+
+**8-Nov: first HeartMuLa trial on the A10** (his "ok" to the prompt), project `heartmula-prueba`, temporary script
+`workspace/gpu/probar_heartmula.py` (untracked, to delete). Tags `darkwave,deep,male,dark,synthesizer,night`, his lyrics with
+[Intro]…[Outro], happy-new-year 3B, 180 s asked, topk 50, temperature 1.0, seed 7111, cfg 1.5 and 3.0. Two install fixes needed on the
+instance: `pyarrow<18` (torchtune 0.4.0 -> old datasets uses pa.PyExtensionType), and torchaudio.save wants torchcodec, so our script
+writes the WAV with soundfile (16-bit, 48 kHz). Measured: HeartMuLa 12.7 GB and codec 6.2 GB of VRAM (loaded in turn, peak 13.7 GB);
+take 1 (cfg 1.5) 153 s of audio in 136 s, peak 0.0 dBFS; take 2 (cfg 3.0) 102 s in 81 s: **both stopped before the 180 s asked**
+(the model ends on its own). Boot 260 s; install + 22 GB download ~5 min. **Heard (quickly): FAIL. Carlos: "no tienen casi nada de
+los tag, son canciones pop románticas".** Same failure as ACE-Step's voice (pop by default), and worse on style. One prompt, two takes.
+**8-Nov: MuLaCover trial** (his "sí pruébalo", as a private experiment: its weights and outputs are **CC BY-NC 4.0**, commercial use
+forbidden by its LICENSING.md, so it cannot enter the app as is). Temporary script `workspace/gpu/probar_mulacover.py` (untracked, to
+delete), MuLaCover `e27fa7f`. Source: Ghosts Again MP3 (his file, now "DM" in Downloads), his lyrics, style
+`topic:[Isolation]; genre:[industrial]; instrument:[synthesizer,drum machine]; mood:[dark]`, seed 42. Worked with the default PyPI torch
+(no CUDA 13 needed) + `pyarrow<18`; install + 16 GB of models in <30 s on an instance already on. It transcribed the source to
+melody/chord/drum MIDI (bpm.txt 114.8) and generated 195.6 s in 397 s, peak 14.7 GB VRAM. First try cut at 320 s by our launcher
+(Node fetch aborts after 300 s without data; the server took it as Cancel): any client of /api/gpu/ejecutar must tolerate long silences.
+MIDI kept in `heartmula-prueba/generado/mc-ghosts-midi/`. **Heard: PASS-ish. Carlos: "el cover está bien, con la letra y todo, es
+más pop y la voz no es tan sugerente como la de DM, es más convencional, pero saber que se puede hacer esto vale la pena... aunque eso sí
+habría que indicar que no se puede usar para comercial".** First model that sang his lyrics over a known song's melody and chords.
+If it ever enters the app: say plainly, before Run, that MuLaCover's outputs are non-commercial (CC BY-NC 4.0). Nothing decided.
+
 **7-Nov evening, in short (committed at his request):**
 - **Removed from the window:** lego ("lo quitamos de la app": not steerable) and the Reference field (it failed in lego and in cover).
 - **Works:** text2music with a detailed English caption (project `vein`: "están muy bien").
