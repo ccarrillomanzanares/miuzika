@@ -221,10 +221,19 @@ export function parametrosParaEnviar(p: Parametros): Record<string, unknown> {
   return salida;
 }
 
-/** A free name for a repeated take: the name it had if free, or with -2, -3... */
+/**
+ * A free name for a take: the base if free, or with -2, -3... "Free" is the server's rule (server/nombres-toma.ts): no
+ * name in use equal to it, or starting with it plus "-", without case, because a run named `x` can write `x-1.wav`,
+ * `x-drums.wav`… Proposing a name the server then refuses would only move the error to Run.
+ */
 export function nombreLibre(base: string, ocupados: ReadonlySet<string>): string {
+  const usados = [...ocupados].map((o) => o.toLowerCase());
+  const ocupado = (nombre: string): boolean => {
+    const n = nombre.toLowerCase();
+    return usados.some((u) => u === n || u.startsWith(`${n}-`));
+  };
   let nombre = base;
-  for (let n = 2; ocupados.has(nombre); n += 1) nombre = `${base}-${n}`;
+  for (let n = 2; ocupado(nombre); n += 1) nombre = `${base}-${n}`;
   return nombre;
 }
 

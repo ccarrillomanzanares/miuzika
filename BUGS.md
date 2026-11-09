@@ -94,3 +94,37 @@ The 14 listed on 6-Nov-2026 when the GUI was separated from miuzika, and how eac
   track that cannot be heard says so in the panel, with "Unmute", or "Solo this track too" when another track is on Solo
   (adding it to Solo keeps what was being listened to). Headless: mute → warning → Unmute clears it; Solo on the other
   track → warning → both on Solo. The ~3 s reload after Play is still open.
+
+## From the code review of 6a165e7 (9-Nov, `/code-review high`, two runs; read in the code, not reproduced)
+
+- **30. The taken-name check of the module windows has several holes.** (a) Its answer is cached by name and never reset
+  when the project changes: a name taken in project A keeps Run disabled in project B. (b) Run now awaits the check before
+  marking the run as started, so a double click can launch two paid GPU runs with the same name. (c) A name edited while
+  the check is in flight, or an older answer arriving late, can leave the wrong verdict. (d) In MuLaCover and Demucs the
+  answer repaints the whole Review and takes the focus while typing. (e) The GET endpoint creates the project folder
+  (`carpetaProyecto` runs mkdir) and is asked on every keystroke in ACE-Step's name field. (f) The same block is copied
+  into four windows. Root cause, per the review: Run closes the window before the server has validated the request;
+  `/api/gpu/ejecutar` already answers 409 before the machine boots, so keeping the window open until that answer would
+  remove (a)-(f) and the endpoint.
+- **31. The server's name test misses real collisions.** (a) It compares file names case-sensitively, but NTFS is not:
+  a new take `toma` overwrites `Toma.wav`. (b) It checks only `<name>.wav` and `<name>.lineage.json`, while multi-take
+  runs write `<name>-1.wav`, `<name>-2.wav` (ACE-Step, Stable Audio) and Demucs writes `<name>-drums.wav`…: a run named
+  `bajo` with 2 takes overwrites an existing take `bajo-1`. Confirmed in the scripts' naming.
+- **32. Pad: Esc meant for the New or Projects dialog opened from the Pad closes the Pad** (its page-level Esc listener
+  does not look at where the key came from).
+- **33. Pad: New… inside the Pad skips the busy guard** of the header's New (it can open while a project is loading).
+- **34. Pad: every mute/solo/volume change now runs the whole panel setup** (canvas resize, track selects rebuilt, held
+  touchpad notes released, engine check). Only the warnings need repainting.
+- **35. Pad: small ones.** With no project the mapped keys are still swallowed (page shortcuts seem dead); "Unmute" /
+  "Solo this track too" do nothing, silently, while the session is busy; the no-project branch of `proyectoCambiado`
+  never runs (main returns before calling it on a null project).
+- **30-35 FIXED 9-Nov** (approved as proposed). 30: the endpoint, the cache and the four copies are gone; each window marks
+  the run as started at once (a second click does nothing), sends it and waits for the server's answer, which now arrives
+  before the boot (`flushHeaders`); only if it accepts does the window close, else the reason is shown on Review with the
+  form kept (any refusal, not only the name). 31: `server/nombres-toma.ts`, without case and with `<name>-…` (tests), and
+  ACE-Step's proposed names follow the same rule. 32: Esc is left to any modal open over the Pad. 33: New inside the Pad
+  goes through the header's button. 34: a mix change repaints only the warnings; tracks, instruments or key changed →
+  the selects are rebuilt. 35: no keys taken with no project; busy → a Log line; the dead branch removed. Headless on the
+  simulated GPU: refused "bajo" next to bajo-1.wav (window open, reason shown, 1 request); double click on Run → 1
+  request; Esc in New closes New only; mute keeps the selects. Stable Audio, MuLaCover and Demucs share the new code but
+  were not run one by one.

@@ -294,7 +294,12 @@ panelPad = new PanelPad({
   elegirInstrumento: (trackId) => selectorInstrumento.abrir(trackId),
   hacerOir: (trackId, como) => {
     const view = sesion.project;
-    if (!view || sesion.busy) return;
+    if (!view) return;
+    if (sesion.busy) {
+      // Said, not silent: a button that does nothing is what BUGS 29 was about.
+      avisos.info("The app is busy (loading or running something): try again in a moment.");
+      return;
+    }
     try {
       const op: Op = como === "quitarMute" ? { op: "set_track", trackId, muted: false } : { op: "set_track", trackId, solo: true };
       sesion.commitLive(applyOps(view, [op]).project);
@@ -302,7 +307,8 @@ panelPad = new PanelPad({
       avisos.error(`Could not change the track: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
-  nuevoProyecto: () => void dialogoNuevo.abrir(),
+  // Through the header's button, so it keeps its guard (disabled while busy).
+  nuevoProyecto: () => $("new-song").click(),
   abrirProyectos: () => $("proyectos").click(),
   avisar: (texto) => avisos.info(texto),
   dibujar: (beat) => timeline.draw(beat),

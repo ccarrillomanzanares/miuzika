@@ -102,19 +102,19 @@ export async function subirMidi(a: Anfitrion, archivo: File, nombre: string, por
 }
 
 /**
- * Runs a script of workspace/gpu/ and returns its result. Steps reach the GPU bar. The browser's fetch has no
- * body timeout, unlike Node's (8-Nov: Node cut a silent 5-min MuLaCover run, which the server took as Cancel).
+ * Sends a run of a script of workspace/gpu/ and waits only for the server's answer, which arrives before the machine
+ * boots: a refusal (a taken name, a missing input, no Hugging Face token…) throws with the server's reason, so the window
+ * can say it on Review and keep the form. Noted 7-Nov: Run closed the window first, the 409 only reached the Log and the
+ * form's edits were gone. The window closes only once this resolves; then `seguirEnGpu` reads the run.
  */
-export async function ejecutarEnGpu(o: {
+export async function iniciarEnGpu(o: {
   script: string;
   nombre: string;
   receta: unknown;
   entradas: string[];
   carpeta: string;
-  etiqueta: string;
-  gpu: BarraGpu;
   senal: AbortSignal;
-}): Promise<ResultadoRun> {
+}): Promise<ReadableStream<Uint8Array>> {
   const res = await fetch("/api/gpu/ejecutar", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...cabeceraDeProyecto(o.carpeta) },
@@ -125,7 +125,15 @@ export async function ejecutarEnGpu(o: {
     const datos = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(datos.error ?? `HTTP ${res.status}`);
   }
-  const lector = res.body.getReader();
+  return res.body;
+}
+
+/**
+ * Reads a run started by `iniciarEnGpu` and returns its result. Steps reach the GPU bar. The browser's fetch has no body
+ * timeout, unlike Node's (8-Nov: Node cut a silent 5-min MuLaCover run, which the server took as Cancel).
+ */
+export async function seguirEnGpu(cuerpo: ReadableStream<Uint8Array>, o: { etiqueta: string; gpu: BarraGpu }): Promise<ResultadoRun> {
+  const lector = cuerpo.getReader();
   const decodificador = new TextDecoder();
   let resto = "";
   let resultado: ResultadoRun | null = null;
@@ -147,61 +155,4 @@ export async function ejecutarEnGpu(o: {
   }
   if (!resultado) throw new Error("the server closed the connection without a result");
   return resultado;
-}
-
-/**
- * Why a take name cannot be used in the open project, or null. Asked when Review opens and again on Run, so a taken
- * name is said there, with the form kept (noted 7-Nov: Run closed the window, the server's 409 only reached the Log and
- * the form's edits were gone). With no project open the take goes to a new, empty folder: nothing to check.
- */
-export async function nombreTomado(a: Anfitrion, nombre: string): Promise<string | null> {
-  const p = a.proyecto();
-  if (!p || !nombre) return null;
-  try {
-    const res = await fetch(`/api/gpu/nombre?nombre=${encodeURIComponent(nombre)}`, { headers: cabeceraDeProyecto(carpetaDeProyecto(p)) });
-    const datos = (await res.json()) as { ocupado?: boolean };
-    return datos.ocupado ? `There is already a take named “${nombre}” in this project: change the name.` : null;
-  } catch {
-    return null; // the server says it again on Run
-  }
-}
-
-/**
- * Keeps the answer of `nombreTomado` for the name on Review: asked once per name, and `alCambiar` repaints the Run button
- * and the error when it arrives (Review is not repainted while typing, to keep the focus).
- */
-export class ComprobadorNombre {
-  private comprobado = "";
-  motivo: string | null = null;
-
-  private readonly a: Anfitrion;
-  private readonly alCambiar: () => void;
-
-  constructor(a: Anfitrion, alCambiar: () => void) {
-    this.a = a;
-    this.alCambiar = alCambiar;
-  }
-
-  revisar(nombre: string): void {
-    if (nombre === this.comprobado) return;
-    this.comprobado = nombre;
-    this.motivo = null;
-    void nombreTomado(this.a, nombre).then((motivo) => {
-      if (this.comprobado !== nombre || motivo === this.motivo) return;
-      this.motivo = motivo;
-      this.alCambiar();
-    });
-  }
-
-  /** The answer got some other way (Run asks again): shown at once. */
-  fijar(nombre: string, motivo: string | null): void {
-    this.comprobado = nombre;
-    this.motivo = motivo;
-  }
-
-  /** After a run, or when the project changes: the next Review asks again. */
-  olvidar(): void {
-    this.comprobado = "";
-    this.motivo = null;
-  }
 }

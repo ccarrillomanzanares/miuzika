@@ -7,7 +7,7 @@ import { DEMUCS_VERSION, MODELOS, leerResultado, parametrosParaEnviar, pistasDe,
 import { nombreDeArchivo } from "../../../../src/modulos/ace-step/receta.ts";
 import type { BarraGpu } from "../../gpu-barra.ts";
 import type { Anfitrion } from "../anfitrion.ts";
-import { causaDeFallo, ejecutarEnGpu, esc, fila, numero, prepararAudio, ComprobadorNombre, nombreTomado } from "../comun.ts";
+import { causaDeFallo, iniciarEnGpu, esc, fila, numero, prepararAudio, seguirEnGpu } from "../comun.ts";
 
 type Fuente = "pistas" | "archivo";
 
@@ -29,14 +29,10 @@ export class VentanaDemucs {
   private ocupada = false;
   private enMarcha = false;
   private readonly a: Anfitrion;
-  private nombre!: ComprobadorNombre;
   private readonly gpu: BarraGpu;
 
   constructor(anfitrion: Anfitrion, gpu: BarraGpu) {
     this.a = anfitrion;
-    this.nombre = new ComprobadorNombre(anfitrion, () => {
-      if (this.vista === "review") this.pintar();
-    });
     this.gpu = gpu;
     this.dialogo = document.createElement("dialog");
     this.dialogo.className = "dialogo dialogo-ancho acestep";
@@ -59,12 +55,6 @@ export class VentanaDemucs {
 
   private parametros(): Parametros {
     return { nombre: this.v.nombre ?? "", modelo: (this.v.modelo ?? "htdemucs_ft") as Modelo, audio: this.preparado?.audio ?? null, shifts: numero(this.v.shifts) ?? 1 };
-  }
-
-  /** A taken take name, said on Review (asked to the server once per name). */
-  private motivoNombre(nombre: string): string | null {
-    this.nombre.revisar(nombre);
-    return this.nombre.motivo;
   }
 
   private pintar(): void {
@@ -98,7 +88,7 @@ export class VentanaDemucs {
 
   private htmlRevision(): string {
     const p = this.parametros();
-    const motivo = validarParametros(p) ?? this.motivoNombre(p.nombre);
+    const motivo = validarParametros(p);
     return `
       <div class="dialogo-cabeza"><strong>Demucs · Review before running</strong><button type="button" class="icon" data-accion="cerrar" title="Close">✕</button></div>
       <div class="ace-cuerpo">
@@ -169,26 +159,30 @@ export class VentanaDemucs {
   private async lanzar(): Promise<void> {
     const p = this.parametros();
     if (validarParametros(p) || this.enMarcha || !this.preparado) return;
-    // Asked again here: a take may have been made since Review opened. Said on Review, the form kept.
-    const tomado = await nombreTomado(this.a, p.nombre);
-    if (tomado) {
-      this.nombre.fijar(p.nombre, tomado);
-      this.pintar();
-      return;
-    }
-    this.nombre.olvidar();
+    // Marked at once: a second click on Run while the server answers does nothing (a double click could pay two runs).
+    this.enMarcha = true;
+    this.mensaje = "";
     const carpeta = this.preparado.carpeta;
     const receta = { modulo: "demucs", parametros: parametrosParaEnviar(p), fuente: { descripcion: this.preparado.descripcion }, entrega: { inicioCompas: 1 } };
     const control = new AbortController();
     const etiqueta = `Demucs “${p.nombre}”`;
-    this.enMarcha = true;
+    // The window waits for the server's answer and closes only if it accepts: a refusal is said here, the form kept.
+    let cuerpo: ReadableStream<Uint8Array>;
+    try {
+      cuerpo = await iniciarEnGpu({ script: "separar_demucs.py", nombre: p.nombre, receta, entradas: [p.audio!], carpeta, senal: control.signal });
+    } catch (error) {
+      this.enMarcha = false;
+      this.mensaje = `The server did not start the run: ${error instanceof Error ? error.message : String(error)}`;
+      this.pintar();
+      return;
+    }
     this.dialogo.close();
     this.vista = "form";
     this.preparado = null;
     this.v.nombre = "";
     this.gpu.fijarTarea(`${etiqueta}: starting…`, () => control.abort());
     try {
-      const r = await ejecutarEnGpu({ script: "separar_demucs.py", nombre: p.nombre, receta, entradas: [p.audio!], carpeta, etiqueta, gpu: this.gpu, senal: control.signal });
+      const r = await seguirEnGpu(cuerpo, { etiqueta, gpu: this.gpu });
       const leido = leerResultado(r.salida);
       if (!r.ok || !leido) {
         this.a.avisos.error(`${etiqueta} failed: ${causaDeFallo(r)}`);

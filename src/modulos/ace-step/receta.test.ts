@@ -103,6 +103,9 @@ test("the instructions name the instrument as upstream does", () => {
 test("names for a file and free names for a repeat", () => {
   assert.equal(nombreDeArchivo("Canción  nº 1!"), "Cancion-n-1");
   assert.equal(nombreLibre("x", new Set(["x", "x-2"])), "x-3");
+  // The server's rule: a run "bajo" could write bajo-1.wav, and NTFS ignores case.
+  assert.equal(nombreLibre("bajo", new Set(["bajo-1"])), "bajo-2");
+  assert.equal(nombreLibre("toma", new Set(["Toma"])), "toma-2");
   assert.match(validarParametros(cancion({ nombre: "con espacio" })) ?? "", /becomes a file/);
 });
 

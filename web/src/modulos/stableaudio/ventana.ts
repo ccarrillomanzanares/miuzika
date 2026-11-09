@@ -17,7 +17,7 @@ import { carpetaDeProyecto } from "../../../../src/core/project.ts";
 import { segundosPorTiempo } from "../../../../src/core/tiempo.ts";
 import type { BarraGpu } from "../../gpu-barra.ts";
 import type { Anfitrion } from "../anfitrion.ts";
-import { areaDeTexto, causaDeFallo, ejecutarEnGpu, esc, fila, numero, prepararAudio, ComprobadorNombre, nombreTomado } from "../comun.ts";
+import { areaDeTexto, causaDeFallo, iniciarEnGpu, esc, fila, numero, prepararAudio, seguirEnGpu } from "../comun.ts";
 
 type Fuente = "pistas" | "archivo";
 
@@ -71,14 +71,10 @@ export class VentanaStableAudio {
   private ocupada = false;
   private enMarcha = false;
   private readonly a: Anfitrion;
-  private nombre!: ComprobadorNombre;
   private readonly gpu: BarraGpu;
 
   constructor(anfitrion: Anfitrion, gpu: BarraGpu) {
     this.a = anfitrion;
-    this.nombre = new ComprobadorNombre(anfitrion, () => {
-      if (this.vista === "review") this.refrescarRevision();
-    });
     this.gpu = gpu;
     this.dialogo = document.createElement("dialog");
     this.dialogo.className = "dialogo dialogo-ancho acestep";
@@ -154,12 +150,6 @@ export class VentanaStableAudio {
   }
 
   // ---------------------------------------------------------------- painting
-
-  /** A taken take name, said on Review (asked to the server once per name). */
-  private motivoNombre(nombre: string): string | null {
-    this.nombre.revisar(nombre);
-    return this.nombre.motivo;
-  }
 
   private pintar(): void {
     this.dialogo.innerHTML = this.vista === "form" ? this.htmlFormulario() : this.htmlRevision();
@@ -242,7 +232,7 @@ export class VentanaStableAudio {
 
   private htmlRevision(): string {
     const p = this.parametros();
-    const motivo = validarParametros(p) ?? this.motivoNombre(p.nombre);
+    const motivo = validarParametros(p);
     const notas = motivo ? [] : avisos(p);
     const n = (nombre: string): string => `<input type="number" name="${nombre}" value="${esc(this.v[nombre] ?? "")}" step="any">`;
     const region =
@@ -315,7 +305,7 @@ export class VentanaStableAudio {
   /** On Review, the Run button, the error and the notes follow what is typed, without repainting the fields. */
   private refrescarRevision(): void {
     const p = this.parametros();
-    const motivo = validarParametros(p) ?? this.motivoNombre(p.nombre);
+    const motivo = validarParametros(p);
     const boton = this.dialogo.querySelector<HTMLButtonElement>('[data-accion="lanzar"]');
     if (boton) boton.disabled = !!motivo || this.enMarcha;
     const error = this.dialogo.querySelector<HTMLElement>(".ace-error");
@@ -421,20 +411,24 @@ export class VentanaStableAudio {
   private async lanzar(): Promise<void> {
     const p = this.parametros();
     if (validarParametros(p) || this.enMarcha || !this.preparado) return;
-    // Asked again here: a take may have been made since Review opened. Said on Review, the form kept.
-    const tomado = await nombreTomado(this.a, p.nombre);
-    if (tomado) {
-      this.nombre.fijar(p.nombre, tomado);
-      this.pintar();
-      return;
-    }
-    this.nombre.olvidar();
+    // Marked at once: a second click on Run while the server answers does nothing (a double click could pay two runs).
+    this.enMarcha = true;
+    this.mensaje = "";
     const proyecto = this.a.proyecto();
     const carpeta = proyecto ? carpetaDeProyecto(proyecto) : this.preparado.carpeta || (await this.a.carpetaParaNuevo(p.nombre));
     const receta = { modulo: "stableaudio", parametros: parametrosParaEnviar(p), fuente: { descripcion: this.preparado.descripcion }, entrega: { inicioCompas: 1 } };
     const control = new AbortController();
     const etiqueta = `Stable Audio “${p.nombre}”`;
-    this.enMarcha = true;
+    // The window waits for the server's answer and closes only if it accepts: a refusal is said here, the form kept.
+    let cuerpo: ReadableStream<Uint8Array>;
+    try {
+      cuerpo = await iniciarEnGpu({ script: "generar_stableaudio.py", nombre: p.nombre, receta, entradas: p.audio ? [p.audio] : [], carpeta, senal: control.signal });
+    } catch (error) {
+      this.enMarcha = false;
+      this.mensaje = `The server did not start the run: ${error instanceof Error ? error.message : String(error)}`;
+      this.pintar();
+      return;
+    }
     this.dialogo.close();
     this.vista = "form";
     this.preparado = null;
@@ -443,7 +437,7 @@ export class VentanaStableAudio {
     if (this.v.unidad === "compases") this.v.duracion = String(Math.max(1, Math.round(p.duracion / this.segundosPorCompas())));
     this.gpu.fijarTarea(`${etiqueta}: starting…`, () => control.abort());
     try {
-      const r = await ejecutarEnGpu({ script: "generar_stableaudio.py", nombre: p.nombre, receta, entradas: p.audio ? [p.audio] : [], carpeta, etiqueta, gpu: this.gpu, senal: control.signal });
+      const r = await seguirEnGpu(cuerpo, { etiqueta, gpu: this.gpu });
       const leido = leerResultado(r.salida);
       if (!r.ok || !leido) {
         this.a.avisos.error(`${etiqueta} failed: ${causaDeFallo(r)}`);

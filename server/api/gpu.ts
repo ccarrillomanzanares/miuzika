@@ -12,6 +12,7 @@ import { esTimeoutDelModelo, planDeEntradas } from "../lambda.ts";
 import { Cancelado } from "../gpu/proveedor.ts";
 import { mensajeDe, rutaJson } from "../ruta.ts";
 import { leerTokenHf } from "../config-proveedores.ts";
+import { choqueDeNombre } from "../nombres-toma.ts";
 
 interface PeticionEjecutar {
   script?: string;
@@ -27,10 +28,9 @@ const SCRIPTS_CON_HF = new Set(["generar_stableaudio.py"]);
 /** A file name, nothing that could leave the project folder. */
 const NOMBRE_VALIDO = /^[A-Za-z0-9._-]+$/;
 
-/** A take is its lineage and its WAV in generado/: either one means the name is in use. */
-function nombreOcupado(carpetaDelProyecto: string, nombre: string): boolean {
+function nombreOcupado(carpetaDelProyecto: string, nombre: string): string | null {
   const generado = resolve(carpetaDelProyecto, "generado");
-  return existsSync(generado) && readdirSync(generado).some((n) => n === `${nombre}.lineage.json` || n === `${nombre}.wav`);
+  return existsSync(generado) ? choqueDeNombre(readdirSync(generado), nombre) : null;
 }
 
 export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
@@ -78,18 +78,6 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       const hechas = await Promise.all(nuestras.map(async (i) => ({ id: i.id, ...(await gpu.apagar(i.id)) })));
       for (const h of hechas) anotarGpu({ tool: "gpu_apagar", id: h.id, apagada: h.apagada, segundos: h.segundos });
       responderJson(res, 200, { ok: hechas.every((h) => h.apagada), apagadas: hechas });
-    }),
-  );
-
-  // Whether a take name is taken, so the module windows say it on Review instead of closing on Run and losing the form
-  // (noted 7-Nov: the 409 only reached the Log). The same test as /api/gpu/ejecutar.
-  server.middlewares.use(
-    "/api/gpu/nombre",
-    rutaJson({ metodo: "GET" }, ({ req, res }) => {
-      const url = new URL(req.url ?? "/", "http://localhost");
-      const nombre = url.searchParams.get("nombre") ?? "";
-      const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
-      responderJson(res, 200, { ocupado: NOMBRE_VALIDO.test(nombre) && nombreOcupado(carpetaProyecto(slug), nombre) });
     }),
   );
 
@@ -157,8 +145,9 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       }
       const carpeta = carpetaProyecto(slug);
       // A take with this name would be overwritten: refused before the machine boots.
-      if (nombreOcupado(carpeta, nombre)) {
-        responderJson(res, 409, { error: `there is already a take named “${nombre}” in this project` });
+      const choque = nombreOcupado(carpeta, nombre);
+      if (choque) {
+        responderJson(res, 409, { error: `“${nombre}” would overwrite generado/${choque} in this project: choose another name` });
         return;
       }
       const entradas: string[] = [];
@@ -194,6 +183,8 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
 
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+      // Sent now, not with the first step after the boot: the window waits for this answer before closing.
+      res.flushHeaders();
       const linea = (objeto: unknown): void => {
         if (!res.writableEnded) res.write(`${JSON.stringify(objeto)}\n`);
       };

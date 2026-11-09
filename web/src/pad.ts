@@ -155,6 +155,8 @@ export class PanelPad {
   private pidiendoMotor: Promise<OpenDawPlaybackHandle | null> | null = null;
   private bucle: Bucle | null = null;
   private arrancando = false;
+  /** `firmaDe` of the project the selects were filled from. */
+  private firma = "";
 
   constructor(private deps: DepsPad) {
     this.mapa = leerMapa(leer(CLAVE_TECLAS));
@@ -253,6 +255,9 @@ export class PanelPad {
     // listened for on the page. With the pad armed it releases it; while the loop runs, it stops it; else it closes.
     document.addEventListener("keydown", (evento) => {
       if (evento.key !== "Escape" || !this.dialogo.open) return;
+      // A modal opened from the Pad (New, Projects, the instrument picker) takes its own Esc: code review of 9-Nov,
+      // Esc in New's name field closed the Pad underneath.
+      if (document.querySelector("dialog:modal")) return;
       evento.preventDefault();
       if (this.capturando) {
         this.capturando = null;
@@ -335,18 +340,30 @@ export class PanelPad {
     void this.asegurarMotor();
   }
 
-  /** The project has changed (another track, another key, another instrument, mute or solo): the mapping is redone. */
+  /**
+   * The project has changed. A mute, solo, volume or pan change only repaints the warnings; the tracks, instruments or
+   * key are redone only when they changed (code review of 9-Nov: every mix change rebuilt the selects, resized the
+   * drawing and released the notes being held). Coming from the empty state, the panel is set up.
+   */
   proyectoCambiado(): void {
     if (!this.dialogo.open) return;
-    if (!this.deps.proyecto()) {
-      if (this.bucle) this.pararBucle();
-      this.soltarTodo();
+    const project = this.deps.proyecto();
+    if (!project) return; // the session only has no project at start-up, before any panel can be open
+    if (this.dialogo.querySelector<HTMLElement>("[data-contenido]")!.hidden) {
       this.prepararParaProyecto();
       return;
     }
     this.pintarAvisos();
     if (this.bucle) return;
-    this.prepararParaProyecto();
+    const firma = this.firmaDe(project);
+    if (firma !== this.firma) this.rellenarPistas(project);
+    // A change of tracks or instruments unloads the engine: loaded again now, so the next key sounds at once.
+    if (!this.deps.motorActual()) void this.asegurarMotor();
+  }
+
+  /** What the panel draws from the project: the MIDI tracks with their names and instruments, and the key. */
+  private firmaDe(project: Project): string {
+    return JSON.stringify([project.key, this.pistasMidi(project).map((t) => [t.id, t.name, t.instrument])]);
   }
 
   private cerrar(): void {
@@ -382,6 +399,7 @@ export class PanelPad {
   }
 
   private rellenarPistas(project: Project): void {
+    this.firma = this.firmaDe(project);
     const midi = this.pistasMidi(project);
     for (const fuente of ["pad", "teclas"] as const) {
       const sel = this.selPista[fuente];
@@ -599,6 +617,8 @@ export class PanelPad {
     if (destino && (destino.tagName === "TEXTAREA" || (destino.tagName === "INPUT" && (destino as HTMLInputElement).type !== "checkbox"))) return;
     if (destino?.isContentEditable) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // With no project nothing can play: the page keeps its own shortcuts.
+    if (!this.deps.proyecto()) return;
     const accion = accionDeTecla(this.mapa, e.code);
     if (!accion) return;
     e.preventDefault();
