@@ -6,10 +6,15 @@ MIDI, audio and generated material, in a timeline you control.
 There is **no language model between the interface and the music models**: a form's text goes to the model byte for byte,
 and the same request does the same thing every time.
 
+![The Pad: drums recorded layer by layer on the numpad in a 2-bar loop, then a melody over them](docs/pad.gif)
+
+*The Pad: a drum loop built pass by pass on the numpad (kick, snare, hats with note repeat, crash), then a melody on a
+synth track over it. Each track ends up with one clip.*
+
 ## What it does
 
 **The workstation**
-- A timeline of MIDI and audio tracks, with a piano roll, copy/paste/duplicate, mute/solo/gain/pan, undo/redo and autosave.
+- A timeline of MIDI and audio tracks, with a piano roll, copy/paste/duplicate, mute and solo, undo/redo and autosave.
 - Import WAV, MP3, FLAC and OGG (converted to 24-bit WAV on arrival) and `.mid` files. A new project takes its tempo from the file.
 - An instrument picker for MIDI tracks: the 128 General MIDI programs, 12 drum kits (GeneralUser GS) and openDAW's synths.
 - Export the mix to MP3 or WAV with the same engine as Play, and the MIDI tracks to a `.mid`.
@@ -97,6 +102,8 @@ This is an experiment and is changing quickly. `ESTADO.md` records where the pro
 each model can and cannot do according to listening tests. `BUGS.md` lists known bugs and how each one ended.
 
 ## Licence
+
+Copyright (C) 2026 the miuzika contributors. Developed with AI assistance (Claude, Anthropic).
 
 miuzika is free software under the **GNU Affero General Public License v3.0 or later** (`LICENSE`). It is a combined work
 with openDAW (AGPL-3.0 or commercial) and uses Strudel (AGPL-3.0). If you run it as a public service, you must publish its

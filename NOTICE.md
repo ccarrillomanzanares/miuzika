@@ -1,3 +1,17 @@
+# miuzika
+
+Copyright (C) 2026 the miuzika contributors.
+Developed with AI assistance (Claude, Anthropic).
+
+This program is free software: you can redistribute it and/or modify it under the terms of the
+GNU Affero General Public License as published by the Free Software Foundation, either version 3
+of the License, or (at your option) any later version. It is distributed in the hope that it will
+be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE. The full text of the license is in `LICENSE`.
+
+AGPL-3.0-or-later is chosen to match openDAW, which is integrated as the audio engine. If
+openDAW's commercial license is ever used instead, this must be reviewed.
+
 # Third parties
 
 ## openDAW

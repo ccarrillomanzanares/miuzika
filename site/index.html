@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>miuzika — an open music workstation in your browser, with no chatbot in between</title>
+<meta name="description" content="miuzika: an experimental music workstation in your browser, built on openDAW. Generate parts with open music models, play them live with your touchpad and keyboard, and arrange them in a timeline you control.">
+<link rel="canonical" href="https://ccmai.org/miuzika/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="CCMAI">
+<meta property="og:title" content="miuzika — an open music workstation in your browser">
+<meta property="og:description" content="Open music models, live loop recording and a timeline you control. No chatbot in between.">
+<meta property="og:url" content="https://ccmai.org/miuzika/">
+<meta property="og:image" content="https://ccmai.org/miuzika/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="miuzika: the Pad panel recording a drum loop on the numpad, over the timeline">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314121c'/%3E%3Crect x='6' y='18' width='4' height='8' rx='1' fill='%23ff8a5c'/%3E%3Crect x='12' y='10' width='4' height='16' rx='1' fill='%23ffc15c'/%3E%3Crect x='18' y='14' width='4' height='12' rx='1' fill='%23a98bff'/%3E%3Crect x='24' y='6' width='4' height='20' rx='1' fill='%235ce1c6'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0e15;
+    --bg-2: #17151f;
+    --panel: #1d1a27;
+    --line: #2c2839;
+    --text: #ece9f3;
+    --muted: #9b95ad;
+    --a1: #ff8a5c;
+    --a2: #ffc15c;
+    --a3: #a98bff;
+    --a4: #5ce1c6;
+    --radius: 14px;
+    --max: 1080px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.6 "Space Grotesk", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--a4); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .88em; }
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 16px; }
+
+  header.top {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; color: var(--text); letter-spacing: -.02em; }
+  .logo:hover { text-decoration: none; }
+  .logo svg { width: 28px; height: 28px; }
+  nav a { color: var(--muted); margin-left: 22px; font-size: 15px; }
+  nav a:hover { color: var(--text); text-decoration: none; }
+
+  .hero { padding: 88px 0 56px; position: relative; overflow: hidden; }
+  .hero h1 {
+    font-size: clamp(40px, 7vw, 76px); line-height: 1.02; letter-spacing: -.035em;
+    margin: 0 0 22px; max-width: 14ch;
+  }
+  .hero h1 em {
+    font-style: normal;
+    background: linear-gradient(90deg, var(--a1), var(--a2) 35%, var(--a3) 70%, var(--a4));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero p.lead { font-size: clamp(18px, 2.2vw, 21px); color: var(--muted); max-width: 60ch; margin: 0 0 32px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 20px; border-radius: 999px; font-weight: 500; font-size: 15px;
+    border: 1px solid var(--line); color: var(--text); background: var(--panel);
+  }
+  .btn:hover { text-decoration: none; border-color: var(--muted); }
+  .btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .btn.primary:hover { background: #fff; }
+
+  .demo {
+    margin: 56px 0 0; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--bg-2); overflow: hidden;
+  }
+  .demo .bar {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted);
+  }
+  .demo .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+  .demo video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #0c0e13; }
+  .demo figcaption { padding: 12px 16px; font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); }
+
+  section { padding: 72px 0; border-top: 1px solid var(--line); }
+  section h2 { font-size: clamp(28px, 4vw, 40px); letter-spacing: -.025em; margin: 0 0 12px; line-height: 1.1; }
+  section .sub { color: var(--muted); max-width: 60ch; margin: 0 0 40px; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .card {
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 22px; min-width: 0;
+  }
+  .card h3 { margin: 12px 0 6px; font-size: 19px; letter-spacing: -.01em; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .chip { display: inline-block; width: 34px; height: 6px; border-radius: 3px; }
+
+  .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; counter-reset: paso; }
+  .step { padding: 0 20px 0 0; position: relative; min-width: 0; }
+  .step::before {
+    counter-increment: paso; content: counter(paso, decimal-leading-zero);
+    display: block; font-family: "JetBrains Mono", monospace; font-size: 13px; color: var(--muted);
+    border-top: 2px solid var(--line); padding-top: 14px; margin-bottom: 8px;
+  }
+  .step:nth-child(1)::before { border-color: var(--a1); }
+  .step:nth-child(2)::before { border-color: var(--a2); }
+  .step:nth-child(3)::before { border-color: var(--a3); }
+  .step:nth-child(4)::before { border-color: var(--a4); }
+  .step h3 { margin: 0 0 6px; font-size: 18px; }
+  .step p { margin: 0; color: var(--muted); font-size: 15px; }
+  .keynote { margin: 0 0 40px; border-color: color-mix(in srgb, var(--a2) 45%, var(--line)); }
+  .keynote h3 { margin-top: 0; color: var(--a2); }
+  .cmd {
+    margin: 12px 0 0; padding: 10px 12px; border-radius: 8px; overflow-x: auto;
+    background: var(--bg-2); border: 1px solid var(--line); color: var(--a4);
+    font: 12.5px/1.6 "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  .stack { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .stack .row { display: grid; grid-template-columns: 220px 1fr; gap: 16px; padding: 16px 22px; border-top: 1px solid var(--line); }
+  .stack .row:first-child { border-top: 0; }
+  .stack .row b { font-weight: 500; }
+  .stack .row span { color: var(--muted); font-size: 15px; }
+  .stack .row .nc { color: var(--a1); }
+
+  .status { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .status ul { margin: 0; padding-left: 20px; color: var(--muted); font-size: 15px; }
+  .status li { margin: 6px 0; }
+  .status h3 { margin: 0 0 10px; font-size: 18px; }
+  .pill {
+    display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--a2) 50%, transparent); color: var(--a2);
+    margin-bottom: 16px; font-family: "JetBrains Mono", monospace;
+  }
+
+  footer { border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 14px; }
+  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+
+  @media (max-width: 860px) {
+    .cards { grid-template-columns: 1fr; }
+    .flow { grid-template-columns: 1fr 1fr; row-gap: 28px; }
+    .status { grid-template-columns: 1fr; }
+    .stack .row { grid-template-columns: 1fr; gap: 2px; }
+  }
+  @media (max-width: 760px) {
+    nav a:nth-child(-n+2) { display: none; }
+  }
+  @media (max-width: 520px) {
+    nav a:not(:last-child) { display: none; }
+    .hero { padding-top: 56px; }
+    .flow { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="#">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#1d1a27"/><rect x="6" y="18" width="4" height="8" rx="1" fill="#ff8a5c"/><rect x="12" y="10" width="4" height="16" rx="1" fill="#ffc15c"/><rect x="18" y="14" width="4" height="12" rx="1" fill="#a98bff"/><rect x="24" y="6" width="4" height="20" rx="1" fill="#5ce1c6"/></svg>
+      miuzika
+    </a>
+    <nav>
+      <a href="#que">Features</a>
+      <a href="#como">How it works</a>
+      <a href="#empezar">Get started</a>
+      <a href="#estado">Status</a>
+      <a href="https://github.com/ccarrillomanzanares/miuzika">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="wrap">
+      <h1>Your timeline. <em>Your call.</em></h1>
+      <p class="lead">miuzika is an experimental music workstation in your browser, built on openDAW. Generate parts with open music models, play them live with your touchpad and keyboard, and arrange everything in a timeline you control. There is no chatbot in between: what you type goes to the model as it is, and the same request does the same thing every time.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/ccarrillomanzanares/miuzika">View the code</a>
+        <a class="btn" href="#empezar">Get started</a>
+      </div>
+
+      <figure class="demo">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="margin-left:8px">demo · 120 bpm · 2-bar loop</span></div>
+        <video src="pad.mp4" poster="pad.jpg" autoplay muted loop playsinline preload="metadata" aria-label="The Pad recording a drum loop pass by pass on the numpad, then a melody over it"></video>
+        <figcaption>The Pad: a drum loop built pass by pass on the numpad (kick, snare, hats with note repeat, crash), then a melody on a synth track over it. Each track ends up with one clip. Silent recording.</figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <section id="que">
+    <div class="wrap">
+      <h2>What it does</h2>
+      <p class="sub">A studio in a browser tab, where the models are instruments you play, not assistants you talk to.</p>
+      <div class="cards">
+        <div class="card"><span class="chip" style="background:var(--a2)"></span><h3>A real DAW</h3><p>Timeline, piano roll, the 128 General MIDI instruments and 12 drum kits, on openDAW's audio engine compiled to WebAssembly. Export to MP3, WAV or MIDI.</p></div>
+        <div class="card"><span class="chip" style="background:var(--a1)"></span><h3>Play it live</h3><p>Your touchpad and your keyboard become instruments. Record in a loop, layer over layer, with note repeat, erase and undo for each pass.</p></div>
+        <div class="card"><span class="chip" style="background:var(--a3)"></span><h3>Generate with open models</h3><p>Songs, single instruments and sound effects from text with ACE-Step and Stable Audio. Then cover, repaint a few bars or continue what you have.</p></div>
+        <div class="card"><span class="chip" style="background:var(--a4)"></span><h3>Split and transcribe</h3><p>Separate a song into stems with Demucs, and turn an audio track into MIDI with Basic Pitch, on your own computer.</p></div>
+        <div class="card"><span class="chip" style="background:var(--a2)"></span><h3>Generative patterns</h3><p>Write a Strudel pattern, hear it, and add it to the project as an audio track at the bar you choose.</p></div>
+        <div class="card"><span class="chip" style="background:var(--a3)"></span><h3>Licences in plain sight</h3><p>Every GPU module states its model's licence before you run it, and every generated take records which model, commit, parameters and seed made it.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="como">
+    <div class="wrap">
+      <h2>How it works</h2>
+      <p class="sub">Each model has its own form with every control it really has. Nothing rewrites your request on the way.</p>
+      <div class="flow">
+        <div class="step"><h3>You fill the form</h3><p>Text, lyrics, tempo, key, the bars to change, the tracks to use as a source. It is sent exactly as written.</p></div>
+        <div class="step"><h3>You review it</h3><p>The full request, the model's licence and what the GPU will bill, before anything runs.</p></div>
+        <div class="step"><h3>It runs on a GPU</h3><p>A cloud GPU on your own account starts, runs the model and stops. You see each step, and Off is one click away.</p></div>
+        <div class="step"><h3>It lands in the timeline</h3><p>As a new track at the bar you chose, ready to play, cut and arrange. Repeat runs it again with the same seed.</p></div>
+      </div>
+
+      <div class="stack" style="margin-top:48px">
+        <div class="row"><b>Interface + openDAW</b><span>timeline, piano roll, instruments, playback and export (WASM)</span></div>
+        <div class="row"><b>Modules</b><span>one folder per model: it reads the project and hands back audio or MIDI</span></div>
+        <div class="row"><b>Rented GPU</b><span>Lambda, with your account; keys stay on the server and never reach the browser</span></div>
+        <div class="row"><b>Local tools</b><span>Python: waveforms, MIDI reading, Basic Pitch, touchpad capture</span></div>
+        <div class="row"><b>Disk</b><span>each project is a folder: <code>proyecto.json</code> plus its WAVs and MIDI</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="modelos">
+    <div class="wrap">
+      <h2>Models and their licences</h2>
+      <p class="sub">They are not bundled: each module installs its model at a pinned version when it runs.</p>
+      <div class="stack">
+        <div class="row"><b>ACE-Step</b><span>songs and parts from text; cover, repaint, extract, complete · MIT</span></div>
+        <div class="row"><b>Stable Audio</b><span>songs, instruments, sound effects; transform, repaint, continue · Stability AI Community License (free under US$1M yearly revenue)</span></div>
+        <div class="row"><b>MuLaCover</b><span>a cover of a song with your lyrics and style · <span class="nc">CC BY-NC 4.0, non-commercial only</span></span></div>
+        <div class="row"><b>Demucs</b><span>stem separation · MIT</span></div>
+        <div class="row"><b>Basic Pitch</b><span>audio to MIDI, on your computer · Apache-2.0</span></div>
+        <div class="row"><b>Strudel</b><span>generative patterns, in your browser · AGPL-3.0</span></div>
+      </div>
+      <p class="sub" style="margin:24px 0 0">A take made from a known song keeps that song's rights, whatever the model's licence.</p>
+    </div>
+  </section>
+
+  <section id="empezar">
+    <div class="wrap">
+      <h2>Getting started</h2>
+      <p class="sub">miuzika runs on your own computer. You need <b>Node 24</b>, <b>Python 3 with numpy</b> and <b>ffmpeg</b>.</p>
+      <div class="card keynote">
+        <h3>The generative modules need a GPU account</h3>
+        <p>They run on a <a href="https://lambda.ai">Lambda</a> cloud GPU with your own account and SSH key, which bills by the hour while it is on. Stable Audio also needs a Hugging Face token that has accepted its terms. Without them you still have the whole workstation, the Pad, Strudel and To MIDI.</p>
+      </div>
+      <div class="flow">
+        <div class="step"><h3>Install</h3><p>Clone the repository and install its dependencies.</p><pre class="cmd">git clone https://github.com/ccarrillomanzanares/miuzika.git
+cd miuzika
+npm install</pre></div>
+        <div class="step"><h3>Add the instruments</h3><p>Download the <a href="https://github.com/mrbumpy409/GeneralUser-GS">GeneralUser GS</a> SoundFont and put its <code>.sf2</code> in <code>workspace/catalogo/gm/</code>.</p></div>
+        <div class="step"><h3>Start it</h3><p>Then open <code>http://localhost:5180</code>.</p><pre class="cmd">npm run dev</pre></div>
+        <div class="step"><h3>Make music</h3><p>Click <b>New</b> and name the project. Open the <b>Pad</b> and play, or pick a model in <b>Modules</b>. GPU accounts go in <b>Settings</b>.</p></div>
+      </div>
+      <p class="sub" style="margin:36px 0 0">Projects are saved to <code>workspace/proyectos/</code> as you work. More detail in the <a href="https://github.com/ccarrillomanzanares/miuzika#readme">README</a>.</p>
+    </div>
+  </section>
+
+  <section id="estado">
+    <div class="wrap">
+      <span class="pill">experimental</span>
+      <h2>Where it stands</h2>
+      <p class="sub">miuzika runs locally, on your own computer, and changes quickly. There is no online version or user accounts yet.</p>
+      <div class="status">
+        <div class="card">
+          <h3>Working now</h3>
+          <ul>
+            <li>Projects with autosave; drop in WAV, MP3, FLAC, OGG and MIDI</li>
+            <li>Instrument picker: General MIDI, drum kits, openDAW synths</li>
+            <li>The Pad: touchpad and keyboard, loop recording</li>
+            <li>ACE-Step, Stable Audio, MuLaCover, Demucs and Strudel modules</li>
+            <li>Audio to MIDI; export to MP3, WAV and MIDI</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Not yet</h3>
+          <ul>
+            <li>A hosted version: it starts with <code>npm run dev</code></li>
+            <li>Volume, pan and effects controls in the interface</li>
+            <li>Touchpad capture outside Windows</li>
+            <li>Long audio stems following the Pad's loop</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>miuzika · AGPL-3.0-or-later · built on <a href="https://opendaw.org">openDAW</a> and <a href="https://strudel.cc">Strudel</a> · developed with AI assistance (Claude)</span>
+    <span>Part of <a href="https://ccmai.org/">CCMAI</a> · <a href="/osyr/">osyr</a> · <a href="/kai/">kai</a> · <a href="/falken/">falken</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
