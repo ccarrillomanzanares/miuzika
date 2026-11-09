@@ -183,6 +183,14 @@ Playwright): two kicks in pass 1, two snares in pass 2, hats by repeat in pass 3
 measured against the live hit + one loop: 0 to +19 ms. Letters preset, remap, new drum track, Esc, 600 px width: right.
 **Not heard by the user, the touchpad not armed in the test, not committed.** Read in the code, not tried: long stems (streamed WAVs, outside openDAW) do not follow the loop.
 
+**9-Nov: Pad warnings and taken names on Review** (the recommended order, approved). The Pad opens with no project and
+offers New… and Projects… (before, it only wrote a Log line and seemed to do nothing). A source whose track cannot be heard
+says so, with "Unmute" or "Solo this track too" (BUGS 29). The four GPU windows ask the server (`/api/gpu/nombre`, the
+same test as Run) whether the take name is taken: said on Review with Run disabled, and asked again on Run so the window
+does not close and the form is kept. Headless on the simulated GPU: all three paths as described. Not tried by the user.
+Also 9-Nov: repository public with full AGPL text, About, README GIF; landing rewritten and uploaded; CLAUDE.md updated
+for this being the only miuzika; no personal names in the repo.
+
 **8-Nov night: New asks for the name** (the user: "si aprieto new ha de preguntar el nombre del proyecto… y se abre… y a partir
 de ahí que se pueda ejecutar el pad"; the Pad does not open with no project, which is why "Pad" seemed to do nothing). New opens a
 window with the name; the folder comes from it, and a taken one is said before creating ("goes to proyectos/x-2/"); Create opens
@@ -546,11 +554,11 @@ Done 7-Nov: Settings filled and Test connection passes. The API key in `../miuzi
 
 1. DECIDED 8-Nov: the user deleted and recreated github.com/ccarrillomanzanares/miuzika; this repo was pushed there (`master` →
    `main`, 18 commits, d69bd2e). History checked for keys before pushing: none. The old miuzika folder is gone; this one is `miuzika`.
-2. **What cannot be missing before he stops using miuzika.** Asked, not answered. Candidates: faders, effects and buses;
-   WAV and MIDI export; Sounds; Strudel; Pad; the agent as an optional piece.
+2. **What else cannot be missing, now that the old version is gone.** Asked, not answered. Since then WAV/MIDI export,
+   Strudel and the Pad were brought over. Still candidates: faders, effects and buses; Sounds; the agent as an optional piece.
 
-Missing from the GUI because only the agent did it. He said "no añadas nada" for now, so **do not build these unasked**:
-change the key by hand, rename, gain and pan, effects, WAV and MIDI export.
+Missing from the GUI because only the old agent did it; extra features are proposed, not built, so **do not build these
+unasked**: change the key by hand, rename, gain and pan, effects.
 
 ## Direction for the song (the user, 7-Nov)
 
@@ -562,8 +570,9 @@ Rejected: a whole song from text2music, then separated: "quiero tener el control
 - Open and Audio should start in the project's folder if there is one, else the app's (the user, 7-Nov). A browser's file dialog cannot be given a folder by path, so proposed: a list inside the app of the project's files (generado/, entrada/), served by the server, with the system dialog as a second option.
 - BUILT 7-Nov: in a project with tracks, Context starts on Tracks, none ticked; in an empty one, on Silence.
 - Proposed: the form keeps its last values per project across reloads; a taken name refused on Review; a near-silent take flagged; a multi-track source lowered instead of clipped (BUGS 21).
-- A tab reload closes the project. It happened 7-Nov also with no change of ours (no file touched, last request 29 min before, cause unknown; a browser discarding an idle tab is a guess). Proposed: reopen the last project on load.
-- A taken name should be refused on Review, with Run disabled and the reason there. Today Run closes the window, the server answers 409, the reason only reaches the Log, and the form's edits are gone (the user, 7-Nov: "creo que no está haciendo nada").
+- BUILT 7-Nov (bug 26): a reload reopens the last project. Was: a tab reload closes the project. It happened 7-Nov also with no change of ours (no file touched, last request 29 min before, cause unknown; a browser discarding an idle tab is a guess). Proposed: reopen the last project on load.
+- BUILT 9-Nov: a taken name is refused on Review, with Run disabled and the reason there (all four GPU windows; asked
+  again on Run, so the window stays open with the form). Was: Today Run closes the window, the server answers 409, the reason only reaches the Log, and the form's edits are gone (the user, 7-Nov: "creo que no está haciendo nada").
 - "From bar 1 to 8" should fill bar 8. Measured 7-Nov: files and sources do last 8 bars (16.52 s of 16.552 s), but the model ends before: `toma` at bar 6.94, `toma-2` at 7.08, `bajo-1` at 6.23, `synth-b-2` at 7.08. Bar arithmetic is right; the silence is in the generated audio. Why is not known (a written ending is a guess). BUILT and HEARD 7-Nov: 2 bars of margin, clip cut to the bars asked ("llega hasta el 8 inclusive", one take).
 
 ## Idea to keep: continuing ACE-Step ourselves (noted at the user's request, 6-Nov; nothing decided or started)

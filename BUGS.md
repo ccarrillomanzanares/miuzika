@@ -90,4 +90,7 @@ The 14 listed on 6-Nov-2026 when the GUI was separated from miuzika, and how eac
   Pad picks is silent. Read in the project file and the code. Measured the same evening on a copy of `chord` as he left it
   ("Pad drums" unmuted, no solo), tapping the engine's output headless: numpad peaks 0.49-0.50 stopped, in the loop and
   during Play; the loop's replay 0.18. Also measured: right after Play the engine reloads (~3 s on this project) and keys
-  played meanwhile are silent. Not confirmed by ear. Listed, not fixed: the user is still deciding how it should behave.
+  played meanwhile are silent. Not confirmed by ear. FIXED 9-Nov (the user chose the recommendation): each source's
+  track that cannot be heard says so in the panel, with "Unmute", or "Solo this track too" when another track is on Solo
+  (adding it to Solo keeps what was being listened to). Headless: mute → warning → Unmute clears it; Solo on the other
+  track → warning → both on Solo. The ~3 s reload after Play is still open.

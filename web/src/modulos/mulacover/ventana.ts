@@ -8,7 +8,7 @@ import { ESTILO_EJEMPLO, LETRA_EJEMPLO, LICENCIA, MULACOVER_COMMIT, POR_DEFECTO,
 import { nombreDeArchivo } from "../../../../src/modulos/ace-step/receta.ts";
 import type { BarraGpu } from "../../gpu-barra.ts";
 import type { Anfitrion } from "../anfitrion.ts";
-import { areaDeTexto, causaDeFallo, ejecutarEnGpu, esc, fila, numero, prepararAudio, subirMidi } from "../comun.ts";
+import { areaDeTexto, causaDeFallo, ejecutarEnGpu, esc, fila, numero, prepararAudio, subirMidi, ComprobadorNombre, nombreTomado } from "../comun.ts";
 
 type Fuente = "pistas" | "archivo" | "midi";
 type Midi = "melodia" | "acordes" | "bateria";
@@ -36,10 +36,14 @@ export class VentanaMulaCover {
   private ocupada = false;
   private enMarcha = false;
   private readonly a: Anfitrion;
+  private nombre!: ComprobadorNombre;
   private readonly gpu: BarraGpu;
 
   constructor(anfitrion: Anfitrion, gpu: BarraGpu) {
     this.a = anfitrion;
+    this.nombre = new ComprobadorNombre(anfitrion, () => {
+      if (this.vista === "review") this.pintar();
+    });
     this.gpu = gpu;
     this.dialogo = document.createElement("dialog");
     this.dialogo.className = "dialogo dialogo-ancho acestep";
@@ -80,6 +84,12 @@ export class VentanaMulaCover {
   }
 
   // ---------------------------------------------------------------- painting
+
+  /** A taken take name, said on Review (asked to the server once per name). */
+  private motivoNombre(nombre: string): string | null {
+    this.nombre.revisar(nombre);
+    return this.nombre.motivo;
+  }
 
   private pintar(): void {
     this.dialogo.innerHTML = this.vista === "form" ? this.htmlFormulario() : this.htmlRevision();
@@ -128,7 +138,7 @@ export class VentanaMulaCover {
 
   private htmlRevision(): string {
     const p = this.parametros();
-    const motivo = validarParametros(p);
+    const motivo = validarParametros(p) ?? this.motivoNombre(p.nombre);
     const n = (nombre: string): string => `<input type="number" name="${nombre}" value="${esc(this.v[nombre] ?? "")}" step="any">`;
     return `
       <div class="dialogo-cabeza"><strong>MuLaCover · Review before running</strong><button type="button" class="icon" data-accion="cerrar" title="Close">✕</button></div>
@@ -163,7 +173,7 @@ export class VentanaMulaCover {
     this.v[el.name] = el.value;
     // Review's Run follows the edits without repainting (that would take the focus).
     if (this.vista === "review") {
-      const motivo = validarParametros(this.parametros());
+      const motivo = validarParametros(this.parametros()) ?? this.motivoNombre(this.parametros().nombre);
       const boton = this.dialogo.querySelector<HTMLButtonElement>('[data-accion="lanzar"]');
       if (boton) boton.disabled = !!motivo || this.enMarcha;
       const error = this.dialogo.querySelector<HTMLElement>(".ace-error");
@@ -236,6 +246,14 @@ export class VentanaMulaCover {
   private async lanzar(): Promise<void> {
     const p = this.parametros();
     if (validarParametros(p) || this.enMarcha || !this.preparado) return;
+    // Asked again here: a take may have been made since Review opened. Said on Review, the form kept.
+    const tomado = await nombreTomado(this.a, p.nombre);
+    if (tomado) {
+      this.nombre.fijar(p.nombre, tomado);
+      this.pintar();
+      return;
+    }
+    this.nombre.olvidar();
     const carpeta = this.preparado.carpeta;
     const receta = { modulo: "mulacover", parametros: parametrosParaEnviar(p), fuente: { descripcion: this.preparado.descripcion }, entrega: { inicioCompas: 1 } };
     const control = new AbortController();

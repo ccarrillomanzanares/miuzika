@@ -17,7 +17,7 @@ import { carpetaDeProyecto } from "../../../../src/core/project.ts";
 import { segundosPorTiempo } from "../../../../src/core/tiempo.ts";
 import type { BarraGpu } from "../../gpu-barra.ts";
 import type { Anfitrion } from "../anfitrion.ts";
-import { areaDeTexto, causaDeFallo, ejecutarEnGpu, esc, fila, numero, prepararAudio } from "../comun.ts";
+import { areaDeTexto, causaDeFallo, ejecutarEnGpu, esc, fila, numero, prepararAudio, ComprobadorNombre, nombreTomado } from "../comun.ts";
 
 type Fuente = "pistas" | "archivo";
 
@@ -71,10 +71,14 @@ export class VentanaStableAudio {
   private ocupada = false;
   private enMarcha = false;
   private readonly a: Anfitrion;
+  private nombre!: ComprobadorNombre;
   private readonly gpu: BarraGpu;
 
   constructor(anfitrion: Anfitrion, gpu: BarraGpu) {
     this.a = anfitrion;
+    this.nombre = new ComprobadorNombre(anfitrion, () => {
+      if (this.vista === "review") this.refrescarRevision();
+    });
     this.gpu = gpu;
     this.dialogo = document.createElement("dialog");
     this.dialogo.className = "dialogo dialogo-ancho acestep";
@@ -150,6 +154,12 @@ export class VentanaStableAudio {
   }
 
   // ---------------------------------------------------------------- painting
+
+  /** A taken take name, said on Review (asked to the server once per name). */
+  private motivoNombre(nombre: string): string | null {
+    this.nombre.revisar(nombre);
+    return this.nombre.motivo;
+  }
 
   private pintar(): void {
     this.dialogo.innerHTML = this.vista === "form" ? this.htmlFormulario() : this.htmlRevision();
@@ -232,7 +242,7 @@ export class VentanaStableAudio {
 
   private htmlRevision(): string {
     const p = this.parametros();
-    const motivo = validarParametros(p);
+    const motivo = validarParametros(p) ?? this.motivoNombre(p.nombre);
     const notas = motivo ? [] : avisos(p);
     const n = (nombre: string): string => `<input type="number" name="${nombre}" value="${esc(this.v[nombre] ?? "")}" step="any">`;
     const region =
@@ -305,7 +315,7 @@ export class VentanaStableAudio {
   /** On Review, the Run button, the error and the notes follow what is typed, without repainting the fields. */
   private refrescarRevision(): void {
     const p = this.parametros();
-    const motivo = validarParametros(p);
+    const motivo = validarParametros(p) ?? this.motivoNombre(p.nombre);
     const boton = this.dialogo.querySelector<HTMLButtonElement>('[data-accion="lanzar"]');
     if (boton) boton.disabled = !!motivo || this.enMarcha;
     const error = this.dialogo.querySelector<HTMLElement>(".ace-error");
@@ -411,6 +421,14 @@ export class VentanaStableAudio {
   private async lanzar(): Promise<void> {
     const p = this.parametros();
     if (validarParametros(p) || this.enMarcha || !this.preparado) return;
+    // Asked again here: a take may have been made since Review opened. Said on Review, the form kept.
+    const tomado = await nombreTomado(this.a, p.nombre);
+    if (tomado) {
+      this.nombre.fijar(p.nombre, tomado);
+      this.pintar();
+      return;
+    }
+    this.nombre.olvidar();
     const proyecto = this.a.proyecto();
     const carpeta = proyecto ? carpetaDeProyecto(proyecto) : this.preparado.carpeta || (await this.a.carpetaParaNuevo(p.nombre));
     const receta = { modulo: "stableaudio", parametros: parametrosParaEnviar(p), fuente: { descripcion: this.preparado.descripcion }, entrega: { inicioCompas: 1 } };

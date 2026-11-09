@@ -27,6 +27,12 @@ const SCRIPTS_CON_HF = new Set(["generar_stableaudio.py"]);
 /** A file name, nothing that could leave the project folder. */
 const NOMBRE_VALIDO = /^[A-Za-z0-9._-]+$/;
 
+/** A take is its lineage and its WAV in generado/: either one means the name is in use. */
+function nombreOcupado(carpetaDelProyecto: string, nombre: string): boolean {
+  const generado = resolve(carpetaDelProyecto, "generado");
+  return existsSync(generado) && readdirSync(generado).some((n) => n === `${nombre}.lineage.json` || n === `${nombre}.wav`);
+}
+
 export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
   const { gpuActual, anotarGpu, carpetaTrabajo, responderJson, slugProyecto, carpetaProyecto, resolverEnTrabajo } = ctx;
 
@@ -72,6 +78,18 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       const hechas = await Promise.all(nuestras.map(async (i) => ({ id: i.id, ...(await gpu.apagar(i.id)) })));
       for (const h of hechas) anotarGpu({ tool: "gpu_apagar", id: h.id, apagada: h.apagada, segundos: h.segundos });
       responderJson(res, 200, { ok: hechas.every((h) => h.apagada), apagadas: hechas });
+    }),
+  );
+
+  // Whether a take name is taken, so the module windows say it on Review instead of closing on Run and losing the form
+  // (noted 7-Nov: the 409 only reached the Log). The same test as /api/gpu/ejecutar.
+  server.middlewares.use(
+    "/api/gpu/nombre",
+    rutaJson({ metodo: "GET" }, ({ req, res }) => {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      const nombre = url.searchParams.get("nombre") ?? "";
+      const slug = slugProyecto(req.headers["x-miuzika-proyecto"]);
+      responderJson(res, 200, { ocupado: NOMBRE_VALIDO.test(nombre) && nombreOcupado(carpetaProyecto(slug), nombre) });
     }),
   );
 
@@ -139,8 +157,7 @@ export function rutasGpu(server: ViteDevServer, ctx: Contexto): void {
       }
       const carpeta = carpetaProyecto(slug);
       // A take with this name would be overwritten: refused before the machine boots.
-      const generado = resolve(carpeta, "generado");
-      if (existsSync(generado) && readdirSync(generado).some((n) => n === `${nombre}.lineage.json` || n === `${nombre}.wav`)) {
+      if (nombreOcupado(carpeta, nombre)) {
         responderJson(res, 409, { error: `there is already a take named “${nombre}” in this project` });
         return;
       }

@@ -15,7 +15,7 @@
 import type { Project } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
 import { carpetaDeProyecto, createProject, projectStats } from "../../src/core/project.ts";
-import { applyOps } from "../../src/core/ops.ts";
+import { applyOps, type Op } from "../../src/core/ops.ts";
 import { audioAssets, liberarAssetsNoUsados, sincronizarDuraciones } from "./audio-store.ts";
 import { BarraGpu } from "./gpu-barra.ts";
 import { crearAnfitrion } from "./modulos/anfitrion.ts";
@@ -292,6 +292,18 @@ panelPad = new PanelPad({
     }
   },
   elegirInstrumento: (trackId) => selectorInstrumento.abrir(trackId),
+  hacerOir: (trackId, como) => {
+    const view = sesion.project;
+    if (!view || sesion.busy) return;
+    try {
+      const op: Op = como === "quitarMute" ? { op: "set_track", trackId, muted: false } : { op: "set_track", trackId, solo: true };
+      sesion.commitLive(applyOps(view, [op]).project);
+    } catch (error) {
+      avisos.error(`Could not change the track: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+  nuevoProyecto: () => void dialogoNuevo.abrir(),
+  abrirProyectos: () => $("proyectos").click(),
   avisar: (texto) => avisos.info(texto),
   dibujar: (beat) => timeline.draw(beat),
 });

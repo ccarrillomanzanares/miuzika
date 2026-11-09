@@ -7,7 +7,7 @@ import { DEMUCS_VERSION, MODELOS, leerResultado, parametrosParaEnviar, pistasDe,
 import { nombreDeArchivo } from "../../../../src/modulos/ace-step/receta.ts";
 import type { BarraGpu } from "../../gpu-barra.ts";
 import type { Anfitrion } from "../anfitrion.ts";
-import { causaDeFallo, ejecutarEnGpu, esc, fila, numero, prepararAudio } from "../comun.ts";
+import { causaDeFallo, ejecutarEnGpu, esc, fila, numero, prepararAudio, ComprobadorNombre, nombreTomado } from "../comun.ts";
 
 type Fuente = "pistas" | "archivo";
 
@@ -29,10 +29,14 @@ export class VentanaDemucs {
   private ocupada = false;
   private enMarcha = false;
   private readonly a: Anfitrion;
+  private nombre!: ComprobadorNombre;
   private readonly gpu: BarraGpu;
 
   constructor(anfitrion: Anfitrion, gpu: BarraGpu) {
     this.a = anfitrion;
+    this.nombre = new ComprobadorNombre(anfitrion, () => {
+      if (this.vista === "review") this.pintar();
+    });
     this.gpu = gpu;
     this.dialogo = document.createElement("dialog");
     this.dialogo.className = "dialogo dialogo-ancho acestep";
@@ -55,6 +59,12 @@ export class VentanaDemucs {
 
   private parametros(): Parametros {
     return { nombre: this.v.nombre ?? "", modelo: (this.v.modelo ?? "htdemucs_ft") as Modelo, audio: this.preparado?.audio ?? null, shifts: numero(this.v.shifts) ?? 1 };
+  }
+
+  /** A taken take name, said on Review (asked to the server once per name). */
+  private motivoNombre(nombre: string): string | null {
+    this.nombre.revisar(nombre);
+    return this.nombre.motivo;
   }
 
   private pintar(): void {
@@ -88,7 +98,7 @@ export class VentanaDemucs {
 
   private htmlRevision(): string {
     const p = this.parametros();
-    const motivo = validarParametros(p);
+    const motivo = validarParametros(p) ?? this.motivoNombre(p.nombre);
     return `
       <div class="dialogo-cabeza"><strong>Demucs · Review before running</strong><button type="button" class="icon" data-accion="cerrar" title="Close">✕</button></div>
       <div class="ace-cuerpo">
@@ -159,6 +169,14 @@ export class VentanaDemucs {
   private async lanzar(): Promise<void> {
     const p = this.parametros();
     if (validarParametros(p) || this.enMarcha || !this.preparado) return;
+    // Asked again here: a take may have been made since Review opened. Said on Review, the form kept.
+    const tomado = await nombreTomado(this.a, p.nombre);
+    if (tomado) {
+      this.nombre.fijar(p.nombre, tomado);
+      this.pintar();
+      return;
+    }
+    this.nombre.olvidar();
     const carpeta = this.preparado.carpeta;
     const receta = { modulo: "demucs", parametros: parametrosParaEnviar(p), fuente: { descripcion: this.preparado.descripcion }, entrega: { inicioCompas: 1 } };
     const control = new AbortController();

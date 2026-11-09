@@ -1123,3 +1123,20 @@ small.ace-pasado {
 .dialogo-nuevo input {
   flex: 1;
 }
+
+/* Pad: a track that cannot be heard says so (BUGS 29), and the panel with no project open. */
+.pad-aviso {
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 6px;
+  background: var(--accent-soft);
+  font-size: 12px;
+  color: var(--text);
+}
+.pad-aviso button {
+  margin-left: 6px;
+}
+.pad-sin-proyecto p {
+  margin: 8px 0 14px;
+}

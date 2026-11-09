@@ -62,6 +62,11 @@ export interface DepsPad {
   nuevaPista(bateria: boolean): string | null;
   /** Opens the instrument picker of a track. */
   elegirInstrumento(trackId: string): void;
+  /** Makes a silent track heard: `quitarMute` unmutes it, `solo` adds it to the tracks on Solo. */
+  hacerOir(trackId: string, como: "quitarMute" | "solo"): void;
+  /** With no project open: New and Projects, from inside the panel. */
+  nuevoProyecto(): void;
+  abrirProyectos(): void;
   avisar(texto: string): void;
   /** Moves the timeline playhead during recording. */
   dibujar(beat: number): void;
@@ -160,6 +165,11 @@ export class PanelPad {
         <strong>Pad</strong>
         <button class="icon" data-cerrar title="Close">✕</button>
       </div>
+      <div class="pad-sin-proyecto" data-sin-proyecto hidden>
+        <p>Open or create a project to play with the Pad.</p>
+        <div class="dialogo-acciones"><button data-nuevo>New…</button><button data-proyectos>Projects…</button></div>
+      </div>
+      <div data-contenido>
       <div class="pad-transporte">
         <span class="pad-fase" data-fase>Stopped</span>
         <div class="pad-barra"><div class="pad-progreso" data-progreso></div></div>
@@ -191,6 +201,7 @@ export class PanelPad {
             <select data-pista="pad"></select>
             <button data-instrumento="pad" class="pad-instrumento"></button>
           </div>
+          <p class="pad-aviso" data-aviso="pad" hidden><span></span> <button></button></p>
           <div class="pad-fuente-mandos">
             <label>Mode <select data-modo></select></label>
             <span class="pad-octava">Octave <button data-oct="pad:-1">−</button><span data-octava="pad">4</span><button data-oct="pad:1">+</button></span>
@@ -203,6 +214,7 @@ export class PanelPad {
             <select data-pista="teclas"></select>
             <button data-instrumento="teclas" class="pad-instrumento"></button>
           </div>
+          <p class="pad-aviso" data-aviso="teclas" hidden><span></span> <button></button></p>
           <div class="pad-fuente-mandos">
             <span class="pad-octava">Octave <button data-oct="teclas:-1">−</button><span data-octava="teclas">4</span><button data-oct="teclas:1">+</button></span>
           </div>
@@ -213,7 +225,8 @@ export class PanelPad {
         <summary>Keys…</summary>
         <div data-atajos></div>
       </details>
-      <span class="pad-estado" data-estado>Starting touchpad capture…</span>`;
+      <span class="pad-estado" data-estado>Starting touchpad capture…</span>
+      </div>`;
     document.body.append(this.dialogo);
     const q = <T extends Element>(sel: string): T => this.dialogo.querySelector(sel) as T;
     this.lienzo = q("canvas");
@@ -276,6 +289,16 @@ export class PanelPad {
       }),
     );
     for (const sel of [this.selLongitud, this.selCuantizar, this.selRepeticion]) sel.addEventListener("change", () => sel.blur());
+    q<HTMLButtonElement>("[data-nuevo]").addEventListener("click", () => this.deps.nuevoProyecto());
+    q<HTMLButtonElement>("[data-proyectos]").addEventListener("click", () => this.deps.abrirProyectos());
+    this.dialogo.querySelectorAll<HTMLButtonElement>("[data-aviso] button").forEach((boton) =>
+      boton.addEventListener("click", () => {
+        const fuente = boton.closest<HTMLElement>("[data-aviso]")!.dataset.aviso as Fuente;
+        const como = boton.dataset.como as "quitarMute" | "solo" | undefined;
+        if (this.pista[fuente] && como) this.deps.hacerOir(this.pista[fuente], como);
+        boton.blur();
+      }),
+    );
     this.botonGrabar.addEventListener("click", () => this.accion("grabar", true));
     this.botonReproducir.addEventListener("click", () => this.accion("reproducir", true));
     q<HTMLButtonElement>("[data-deshacer]").addEventListener("click", () => this.accion("deshacer", true));
@@ -290,32 +313,40 @@ export class PanelPad {
     this.pintarFase();
   }
 
+  /**
+   * With no project the panel still opens, saying so, with New and Projects: before, Pad only wrote a line in the Log
+   * and seemed to do nothing.
+   */
   abrir(): void {
-    const project = this.deps.proyecto();
-    if (!project) {
-      this.deps.avisar("Open or create a project to play with the pad.");
-      return;
-    }
-    this.rellenarPistas(project);
     this.dialogo.show();
+    this.prepararParaProyecto();
+  }
+
+  /** Shows what fits: the empty state with no project; with one, the tracks, the touchpad capture and the engine. */
+  private prepararParaProyecto(): void {
+    const project = this.deps.proyecto();
+    this.dialogo.querySelector<HTMLElement>("[data-sin-proyecto]")!.hidden = Boolean(project);
+    this.dialogo.querySelector<HTMLElement>("[data-contenido]")!.hidden = !project;
+    if (!project) return;
+    this.rellenarPistas(project);
     this.ajustarLienzo();
-    void this.conectar();
+    if (!this.eventos) void this.conectar();
     // The keys sound at once, without waiting for the first note to load the instruments.
     void this.asegurarMotor();
   }
 
-  /** The project has changed (another track, another key, another instrument): the mapping is redone. */
+  /** The project has changed (another track, another key, another instrument, mute or solo): the mapping is redone. */
   proyectoCambiado(): void {
     if (!this.dialogo.open) return;
-    const project = this.deps.proyecto();
-    if (!project) {
-      this.cerrar();
+    if (!this.deps.proyecto()) {
+      if (this.bucle) this.pararBucle();
+      this.soltarTodo();
+      this.prepararParaProyecto();
       return;
     }
+    this.pintarAvisos();
     if (this.bucle) return;
-    this.rellenarPistas(project);
-    // A change of tracks or instruments unloads the engine: loaded again now, so the next key sounds at once.
-    void this.asegurarMotor();
+    this.prepararParaProyecto();
   }
 
   private cerrar(): void {
@@ -380,6 +411,37 @@ export class PanelPad {
     }
     this.alCambiarPistaPad();
     this.pintarRejilla();
+    this.pintarAvisos();
+  }
+
+  /**
+   * A track that cannot be heard says so, with the way out. Seen 8-Nov: every MIDI track muted and an audio track on
+   * Solo, and both sources played into silence without a word (BUGS 29). Adding the track to Solo, instead of clearing
+   * it, keeps whatever was being listened to.
+   */
+  private pintarAvisos(): void {
+    const project = this.deps.proyecto();
+    for (const fuente of ["pad", "teclas"] as const) {
+      const aviso = this.dialogo.querySelector<HTMLElement>(`[data-aviso="${fuente}"]`)!;
+      const texto = aviso.querySelector("span")!;
+      const boton = aviso.querySelector("button")!;
+      const track = this.pistaDe(fuente);
+      const enSolo = project?.tracks.filter((t) => t.solo) ?? [];
+      if (track?.muted) {
+        texto.textContent = "This track is muted: you will not hear it.";
+        boton.textContent = "Unmute";
+        boton.dataset.como = "quitarMute";
+      } else if (track && enSolo.length > 0 && !track.solo) {
+        const nombres = enSolo.map((t) => `“${t.name}”`).join(", ");
+        texto.textContent = `${nombres} ${enSolo.length > 1 ? "are" : "is"} on Solo: you will not hear this track.`;
+        boton.textContent = "Solo this track too";
+        boton.dataset.como = "solo";
+      } else {
+        aviso.hidden = true;
+        continue;
+      }
+      aviso.hidden = false;
+    }
   }
 
   private async alElegirPista(fuente: Fuente): Promise<void> {

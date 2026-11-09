@@ -30,6 +30,7 @@ import { metadatosWav, rutaEnProyecto } from "../../audio-store.ts";
 import { cabeceraDeProyecto, subirAudio } from "../../proyecto-disco.ts";
 import type { BarraGpu } from "../../gpu-barra.ts";
 import type { Anfitrion } from "../anfitrion.ts";
+import { ComprobadorNombre, nombreTomado } from "../comun.ts";
 
 type Pestana = "song" | "track" | "transform";
 
@@ -151,11 +152,15 @@ export class VentanaAceStep {
   private enMarcha = false;
   private proyectoVisto: string | null = null;
   private readonly a: Anfitrion;
+  private nombre!: ComprobadorNombre;
   private readonly gpu: BarraGpu;
 
   constructor(anfitrion: Anfitrion, gpu: BarraGpu) {
     this.a = anfitrion;
     this.gpu = gpu;
+    this.nombre = new ComprobadorNombre(anfitrion, () => {
+      if (this.vista === "review") this.pintarEstimacion();
+    });
     this.dialogo = document.createElement("dialog");
     this.dialogo.className = "dialogo dialogo-ancho acestep";
     document.body.append(this.dialogo);
@@ -587,6 +592,8 @@ export class VentanaAceStep {
     const rate = e?.configurado ? `${e.tipo} on ${e.proveedor}, ${e.precio_hora} $/h` : "no GPU configured";
     zona.textContent = `Run on: ${rate} · Estimated ~${formatoDuracion(est.segundos)}${est.coste === null ? "" : `, ~${est.coste.toFixed(2)} $`} (${est.detalle.join(", ")}). Based on runs on an A10: a guide, not a promise. The machine stays on after the run until you press Off.`;
     let motivo = validarParametros(p);
+    this.nombre.revisar(p.nombre);
+    if (!motivo) motivo = this.nombre.motivo;
     if (!motivo && !e?.configurado) motivo = `The GPU is not configured. Missing in Settings: ${(e?.faltan ?? ["its keys"]).join(", ")}.`;
     const ajustes = this.dialogo.querySelector<HTMLButtonElement>('[data-accion="ajustes"]');
     if (ajustes) ajustes.hidden = e?.configurado === true;
@@ -850,6 +857,14 @@ export class VentanaAceStep {
     const p = this.parametros();
     const motivo = validarParametros(p);
     if (motivo || this.enMarcha) return;
+    // Asked again here: a take may have been made since Review opened. Said on Review, the form kept.
+    const tomado = await nombreTomado(this.a, p.nombre);
+    if (tomado) {
+      this.nombre.fijar(p.nombre, tomado);
+      this.pintarEstimacion();
+      return;
+    }
+    this.nombre.olvidar();
     const proyecto = this.a.proyecto();
     // A new project follows the name as it leaves Review (bug 23), unless a file was already
     // uploaded into the folder chosen earlier: then that folder holds the source and stays.
