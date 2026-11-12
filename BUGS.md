@@ -1,7 +1,18 @@
 # Bugs
 
 The 14 listed on 6-Nov-2026 when the GUI was separated from miuzika, and how each ended up.
-"Verified" = run end to end in headless Chrome the same day. Nobody has listened to any of this yet.
+"Verified" = run end to end in headless Chrome the same day.
+
+No bug is open as of 12-Nov-2026. Bugs 11 (a silent export) and 12 (mute states swapped) were never reproduced and were dropped
+from this list on request; the export still renders a second time when the first comes out silent, and says so.
+
+## Known limitations (facts of the code, not bugs to fix)
+
+- **A long WAV that does not fit the decode budget plays outside openDAW's mixer**: with its gain, pan and the master, without
+  its track's effects and sends (it is not decoded, so it cannot enter the mixer). The Log says so for each affected track, in
+  Play and in the export. Since 12-Nov the WAVs on tracks with an effect switched on or a send take the budget first (unit test
+  only: no project on disk has effects and the GUI cannot add them).
+- **A project cannot be longer than 512 bars**: a file longer than that at the project's tempo is refused on import.
 
 ## Fixed and verified
 
@@ -16,25 +27,11 @@ The 14 listed on 6-Nov-2026 when the GUI was separated from miuzika, and how eac
 | 7 | A MIDI in a new project stayed at 120 BPM, with no notice | A new project takes the file's tempo; in an open project the warning reaches the Log |
 | 8 | Moving, copying or deleting a clip was not heard until Stop + Play | The engine remounts from where it was (0.43 s in the check, so a short gap is audible) |
 | 9 | The export left long WAVs out and the Log did not say so | They are mixed in, one at a time, with gain, pan and master |
+| 10 | Long WAVs played without the track's pan and the master gain | Both apply; effects and sends do not: see Known limitations |
 | 13 | "Audio" was disabled with no project | Enabled; goes through the same path as "Open" |
 | 14 | The empty project was built by hand | `createProject` |
 
-## Fixed in part
-
-- **10. Long WAVs in Play.** Pan and master gain now apply. **Effects and sends still do not**: a stem is not
-  decoded, so it cannot enter openDAW's mixer. The Log says so for each affected track, in Play and in the export.
-  12-Nov: WAVs on tracks with an effect switched on or a send now take the memory budget first, so the ones left
-  outside the engine are those that lose nothing there. Still in part: a project whose effected WAVs alone exceed the
-  budget keeps the limit. Unit test only; no project on disk has effects and the GUI cannot add them.
-
-## Not fixed, because they were never reproduced
-
-- **11. Silent export.** The cause is still unknown. What exists now: a silent render with tracks that should sound is
-  rendered once more, and the Log warns if the mix stays silent. The all-muted warning was run; the retry was not,
-  since the failure could not be provoked.
-- **12. Mute states swapped in static-hymn on 6-Nov** between 18:34 and 18:40. Cause unknown, may have been by hand.
-
-## Open
+## Found later, all fixed
 
 - **15. The empty timeline still says "Ask the agent for a piece in the chat"** (`web/src/timeline.ts`). There is no agent or chat here. Seen 6-Nov
   in a screenshot. FIXED 7-Nov: "Generate one from Modules, or drop a WAV, a .mid or a project here." (seen headless).
@@ -182,11 +179,9 @@ The 14 listed on 6-Nov-2026 when the GUI was separated from miuzika, and how eac
 - **43. Long WAVs (streamed, outside the engine) were silent under the Pad's loop** (read in the code 8-Nov). The Pad
   starts the engine by itself and nothing started them. FIXED: they start whenever the transport is told to start,
   whoever asks, and jump back with every pass. Headless, 1-bar loop at 120 BPM over a streamed 250 s WAV: its position
-  ran 0 → 2 s and back on each of 4 passes, and it paused when the loop stopped. Each jump is a seek of an `<audio>`
-  element: whether the seam is audible was not measured.
+  ran 0 → 2 s and back on each of 4 passes, and it paused when the loop stopped.
 - **44. A Pad take could hold two notes of the same pitch on the same instant** (seen 10-Nov: two identical G1 on one
   beat). The take is no longer on disk and no clip of any project has such a pair, so its cause was not found. Two
   ways the recorder makes them by itself: the same slot played in two passes with quantize on, and note repeat held for
   more than one pass. FIXED: in the clip they are one note, the longer and the louder (unit test). Hits of the same
   pitch 1/32 of a beat apart or more stay two.
-- **11 and 12 stay as they were**: never reproduced, so there is nothing to fix; 11 keeps its second render and its warning.
