@@ -29,8 +29,11 @@ export async function cargarSoundfontsDelProyecto(view: Project): Promise<Map<st
 let gmEnMemoria: { ruta: string; sf: SoundfontCargado } | null = null;
 
 /**
- * The GM SoundFont from `workspace/catalogo/gm/`, if any track uses it (a MIDI track with
- * `instrument.program`). Without the file, those tracks sound with openDAW's instruments.
+ * The GM SoundFont from `workspace/catalogo/gm/`, if any track uses it: a MIDI track with
+ * `instrument.program`, or any drum track (without program it plays the GM standard kit). Without
+ * the file, melodic tracks sound with openDAW's synths and drum tracks are silent.
+ * Bug 36 (10-Nov): a drum track without program did not count, so a project whose only drums
+ * were the Pad's never loaded the GM and fell back to a 13-sample kit with no high tom (heard: silent).
  */
 export async function cargarGm(
   view: Project,
@@ -38,13 +41,16 @@ export async function cargarGm(
   estado: (texto: string) => void,
 ): Promise<SoundfontCargado | null> {
   const loUsa = view.tracks.some(
-    (t) => t.kind === "midi" && t.instrument.program !== undefined && !(t.instrument.type === "soundfont" && t.instrument.archivo),
+    (t) =>
+      t.kind === "midi" &&
+      (t.instrument.program !== undefined || t.instrument.type === "drumkit") &&
+      !(t.instrument.type === "soundfont" && t.instrument.archivo),
   );
   if (!loUsa) return null;
   try {
     const info = (await (await fetch("/api/gm")).json()) as { ruta?: string | null; nombre?: string };
     if (!info.ruta) {
-      avisarSinGm("Some tracks use a General MIDI instrument but there is no GM SoundFont in workspace/catalogo/gm/: they play with openDAW's synths.");
+      avisarSinGm("Some tracks use a General MIDI instrument but there is no GM SoundFont in workspace/catalogo/gm/: they play with openDAW's synths, and drum tracks are silent.");
       return null;
     }
     if (gmEnMemoria?.ruta === info.ruta) return gmEnMemoria.sf;

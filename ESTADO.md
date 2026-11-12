@@ -6,6 +6,21 @@ The user, 7-Nov: **"hay que evitar tener que pasar de nuevo por dónde ya hemos 
 "What ACE-Step can and cannot do" below: it holds every verdict by ear so far. When a new verdict or conclusion arrives, write it there
 in the same session, not at the end.
 
+**10/11-Nov, hands-on test of the Pad and the piano roll .** Decided by the user: drums play **only the GM
+SoundFont's kit** (GeneralUser GS); Freepats was looked at and rejected (no clap/cowbell/rim, non-GM notes, 209 MB); the 13 WAVs of
+unknown source were removed (they remain in git history: rewriting it is undecided). Fixed: bugs 36-39 (see BUGS.md); the Pad is
+centred horizontally at the bottom (requested; bottom vs middle was not answered). Built on request: the piano roll with its own undo/redo, length from the note end, audition, piano keys (GM piece names on a drum track),
+playback of the pending notes, box/shift/Ctrl+A selection, arrows, grid 1/4-1/32 with triplets and Quantize, velocity lane, zoom,
+key shading (notes outside it red), Transpose/Invert/Reverse/x2/÷2/Duplicate, Ctrl-drag copy. All measured headless, **none heard**.
+Still open from that session: the synth take had two identical G1 notes at beat 4 (played twice, or a doubled event?).
+
+**12-Nov: the open bugs fixed.** 21 (a source over full scale is turned down, said on Review), the rest of
+29 (Pause and Stop keep the engine loaded; Play is immediate), long WAVs under the Pad's loop, doubled notes in a Pad take, and
+WAVs with effects first in the memory budget (10, still in part). Detail and measurements in BUGS.md (21, 10, 42-44). All measured
+headless, none heard. Also that day: everything listed as "not heard" or "not tried" up to here is taken as good, on the user's
+word; do not ask for those listens again. Noticed, not changed: a project cannot be longer than 512 bars, so one WAV of 20 minutes
+at 120 BPM is refused on import with "lengthBars: Integer between 1 and 512".
+
 **8-Nov: ACE-Step test phase CLOSED.** The user: "esas pruebas ya no las haremos, dejaremos que sean los intentos reales de los
 usuarios". Do not propose more ACE-Step tests (shared chords for stems, more structure seeds, more solo instruments, repaint of
 glitches, MIDI dressed by cover): they stay as ideas below, for users to find. Recipe that came out best: text2music on xl-sft + LM 4B

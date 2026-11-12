@@ -62,10 +62,16 @@ export interface FuenteRenderizada {
   segundos: number;
   /** The asked part alone, without the margin. */
   segundosPedidos: number;
+  /** Of the file as written. */
   picoDb: number;
+  /** The level as Review says it: the peak, and how much the source was turned down if it would have clipped. */
+  nivel: string;
   bytes: number;
   avisos: string[];
 }
+
+/** -0.1 dBFS: where a source over full scale is brought down to. */
+const TECHO_FUENTE = 10 ** (-0.1 / 20);
 
 function picoDe(canales: readonly Float32Array[]): number {
   let pico = 0;
@@ -263,16 +269,31 @@ export function crearExportador(d: DependenciasRender): {
     const trozos: [Float32Array<ArrayBuffer>, Float32Array<ArrayBuffer>] = [new Float32Array(total), new Float32Array(total)];
     trozos[0].set(mezcla[0].subarray(desde, Math.min(hasta, desde + total)));
     trozos[1].set(mezcla[1].subarray(desde, Math.min(hasta, desde + total)));
+    // Bug 21, measured 7-Nov: three tracks summed to +3.5 dBFS, the WAV cut them at full scale (0.052 % of samples)
+    // and Review showed the +3.5 without a word. Over full scale the whole source comes down to just under it; the
+    // tracks are not touched, and a source that fits is sent at its own level (a repaint comes back at the level sent).
+    const picoMedido = picoDe(trozos);
+    let pico = picoMedido;
+    if (picoMedido > 1) {
+      const g = TECHO_FUENTE / picoMedido;
+      for (const datos of trozos) for (let i = 0; i < datos.length; i += 1) datos[i]! *= g;
+      pico = TECHO_FUENTE;
+    }
+    const db = (x: number): number => (x > 0 ? 20 * Math.log10(x) : -Infinity);
+    const nivel =
+      picoMedido > 1
+        ? `peak +${db(picoMedido).toFixed(1)} dBFS, turned down ${(db(picoMedido) - db(pico)).toFixed(1)} dB so it does not clip`
+        : `peak ${db(pico).toFixed(1)} dBFS`;
     const buffer = new AudioBuffer({ length: total, numberOfChannels: 2, sampleRate: motor.sampleRate });
     trozos.forEach((datos, i) => buffer.copyToChannel(datos, i));
-    const pico = picoDe(trozos);
     const fichero = new File([audioBufferToWav(buffer)], `${o.nombre}.wav`, { type: "audio/wav" });
     const { path, bytes } = await subirAudio(fichero, slug);
     return {
       ruta: path,
       segundos: total / motor.sampleRate,
       segundosPedidos: pedidas / motor.sampleRate,
-      picoDb: pico > 0 ? 20 * Math.log10(pico) : -Infinity,
+      picoDb: db(pico),
+      nivel,
       bytes,
       avisos,
     };

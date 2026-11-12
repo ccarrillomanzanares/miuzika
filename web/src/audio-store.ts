@@ -297,18 +297,35 @@ export async function hidratarAssets(
 
   // Four at a time: serially, 21 tracks with 11 WAVs took 38 s to open (measured,
   // one trip to the server per asset). More than four saturates Python's `spawn`.
-  const cola = [...idsDeAssets(project)];
   const A_LA_VEZ = 4;
-  await Promise.all(
-    Array.from({ length: Math.min(A_LA_VEZ, cola.length) }, async () => {
-      for (;;) {
-        const id = cola.shift();
-        if (id === undefined) return;
-        await uno(id);
-      }
-    }),
-  );
+  const cargar = async (cola: string[]): Promise<void> => {
+    await Promise.all(
+      Array.from({ length: Math.min(A_LA_VEZ, cola.length) }, async () => {
+        for (;;) {
+          const id = cola.shift();
+          if (id === undefined) return;
+          await uno(id);
+        }
+      }),
+    );
+  };
+  // Bug 10: a WAV left to streaming plays without its track's effects and sends. The ones on such tracks take their
+  // share of the memory budget first, so the WAVs that end up outside the engine are the ones that lose nothing there.
+  const conEfectos = idsConEfectos(project);
+  const ids = idsDeAssets(project);
+  await cargar(ids.filter((id) => conEfectos.has(id)));
+  await cargar(ids.filter((id) => !conEfectos.has(id)));
   return { cargados, faltan };
+}
+
+/** The assets on tracks with an effect switched on or a send: what a WAV loses when it does not enter the engine. */
+export function idsConEfectos(project: Project): Set<string> {
+  const ids = new Set<string>();
+  for (const track of project.tracks) {
+    if (!track.devices.some((d) => d.enabled) && (track.sends?.length ?? 0) === 0) continue;
+    for (const clip of track.clips) if (clip.audio) ids.add(clip.audio.assetId);
+  }
+  return ids;
 }
 
 /** Frees from memory what the current project no longer uses (when switching projects). */

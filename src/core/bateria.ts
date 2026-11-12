@@ -44,40 +44,11 @@ const PIEZAS: Record<number, string[]> = {
   70: ["shaker", "maracas"],
 };
 
-/**
- * The kit a `drumkit` track WITHOUT `programa` plays: openDAW's Playfield with these 13
- * samples (web/public/drums/). With `programa` the track plays the GM bank-128 kit, which
- * has every piece above. Moved here from opendaw-engine.ts on 3-Nov so the engine and the
- * warning below read one table (review 3-Nov, bug 6).
+/*
+ * Every drum track plays the GM bank-128 kit of the installation's SoundFont (program 0, the standard
+ * kit, when the track has none), which has every piece above. The 13-sample Playfield kit that
+ * played before was removed on 10-Nov: requested, and its WAVs had no recorded source.
  */
-export const KIT_POR_DEFECTO: ReadonlyArray<{ note: number; file: string; name: string }> = [
-  { note: 36, file: "kick-hard.wav", name: "Kick" },
-  { note: 38, file: "snare-hard.wav", name: "Snare" },
-  { note: 39, file: "clap-hard.wav", name: "Clap" },
-  { note: 42, file: "hat-hard.wav", name: "Hat" },
-  { note: 44, file: "hat-hard.wav", name: "Hat pedal" },
-  { note: 46, file: "hat-open.wav", name: "Open hat" },
-  { note: 45, file: "tom-low.wav", name: "Tom low" },
-  { note: 47, file: "tom-mid.wav", name: "Tom mid" },
-  { note: 48, file: "tom-high.wav", name: "Tom high" },
-  { note: 49, file: "crash.wav", name: "Crash" },
-  { note: 51, file: "ride.wav", name: "Ride" },
-  { note: 37, file: "rim.wav", name: "Rim" },
-  { note: 56, file: "cowbell.wav", name: "Cowbell" },
-];
-
-/**
- * Pieces of a pattern that the default kit cannot play: they are written but silent.
- * Measured by reading on 3-Nov: floortom (41), hightom (50: GM's high tom; the kit's high
- * tom sample sits on 48), china, bell, tambourine, splash, shaker, plus 35 and 40.
- */
-export function piezasSinSonido(piezas: readonly string[]): { pieza: string; nota: number }[] {
-  const conSample = new Set(KIT_POR_DEFECTO.map((k) => k.note));
-  return piezas.flatMap((pieza) => {
-    const nota = notaDePieza(pieza);
-    return conSample.has(nota) ? [] : [{ pieza, nota }];
-  });
-}
 
 const POR_NOMBRE = new Map<string, number>(
   Object.entries(PIEZAS).flatMap(([nota, nombres]) => nombres.map((n) => [n, Number(nota)] as const)),

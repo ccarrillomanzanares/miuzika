@@ -72,7 +72,7 @@ export async function prepararAudio(
     const nombres = p.tracks.filter((t) => o.pistas.includes(t.id)).map((t) => t.name).join(", ");
     return {
       audio: r.ruta,
-      descripcion: `${nombres}: ${r.segundos.toFixed(1)} s, peak ${r.picoDb.toFixed(1)} dBFS, ${(r.bytes / 1048576).toFixed(1)} MB`,
+      descripcion: `${nombres}: ${r.segundos.toFixed(1)} s, ${r.nivel}, ${(r.bytes / 1048576).toFixed(1)} MB`,
       bytes: r.bytes,
       carpeta: carpetaDeProyecto(p),
       segundos: r.segundos,

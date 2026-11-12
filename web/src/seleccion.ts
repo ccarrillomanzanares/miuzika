@@ -133,7 +133,8 @@ export class Seleccion {
     this.aplicarOpsClips(ops, `Duplicated ${ops.length} clip(s) right after.`, true);
   }
 
-  private alternar(ids: string[], flag: "muted" | "solo"): void {
+  /** Also used by the piano roll's M and S (11-Nov). */
+  alternar(ids: string[], flag: "muted" | "solo"): void {
     const { project, busy } = this.sesion;
     if (!project || busy) return;
     const tracks = project.tracks.filter((track) => ids.includes(track.id));

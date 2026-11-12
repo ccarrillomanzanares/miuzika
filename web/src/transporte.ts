@@ -19,6 +19,10 @@ export class Transporte {
   readonly stems = new StemPlayer();
   private handle: OpenDawPlaybackHandle | null = null;
   private generation = 0;
+  /** Where the project ends, in beats: the engine stops there. Of the last Play, since a loaded engine is reused. */
+  private finBeat = 0;
+  /** The transport was told to start and not to stop since. */
+  private enMarcha = false;
   /** Tracks already warned about, so that each Play does not repeat it. */
   private avisadosSinEfectos = new Set<string>();
   private readonly sesion: Sesion;
@@ -69,7 +73,21 @@ export class Transporte {
     this.pintarPlay(false);
   }
 
+  /**
+   * Pause and Stop: the transport stops and the engine stays loaded with the project. Unloading it here (`detener`)
+   * made the next Play, the Pad's next key and the piano roll's next audition wait for the whole project to be
+   * mounted again (~3 s measured 8-Nov, the keys silent meanwhile: the rest of bug 29).
+   */
+  pausar(): void {
+    this.enMarcha = false;
+    this.stems.detener();
+    if (this.handle?.isPlaying) this.handle.pausa();
+    this.pintarPlay(false);
+  }
+
+  /** Unloads the engine: for a project that changed under it, since it holds the old one. */
   detener(): void {
+    this.enMarcha = false;
     this.stems.detener();
     this.generation++;
     const handle = this.handle;
@@ -117,6 +135,21 @@ export class Transporte {
     const endBeat = view.lengthBars * beatsPerBar(view);
     const cursor = this.beat;
     const desdeBeat = cursor >= endBeat - 0.05 ? 0 : cursor;
+    this.finBeat = endBeat;
+    // The rest of bug 29, measured 8-Nov: with the Pad open, Play unloaded the engine the Pad had loaded and mounted
+    // the project again (~3 s), and the keys played meanwhile were silent. An engine that is loaded and stopped already
+    // holds this project (any change of structure unloads it), so it only has to start.
+    if (sonar && this.handle && !this.handle.isPlaying) {
+      const handle = this.handle;
+      this.timeline.draw(desdeBeat);
+      handle.bucle(null);
+      handle.seek(desdeBeat);
+      await handle.play();
+      if (this.handle !== handle) return;
+      this.pintarPlay(true);
+      await this.stems.reproducir(desdeBeat);
+      return;
+    }
     if (this.handle) this.detener();
     this.timeline.draw(desdeBeat);
     const generation = ++this.generation;
@@ -138,13 +171,24 @@ export class Transporte {
           // An engine that was stopped while starting has no say over the cursor.
           if (generation !== this.generation) return;
           this.timeline.draw(beat);
+          // The Pad starts this engine by itself for its loop: the long WAVs, which play outside it, start here then.
+          // Read in the code on 8-Nov: they stayed silent under the loop. On every pass `sincronizar` sees the beat
+          // jump back and moves them with it.
+          if (this.enMarcha && !this.stems.activo) void this.stems.reproducir(beat);
           this.stems.sincronizar(beat);
-          if (this.handle && beat >= endBeat - 0.05) this.detener();
+          if (this.enMarcha && beat >= this.finBeat - 0.05) this.pausar();
         },
         paraEngine,
         soundfonts,
         gm,
-        { desdeBeat, cancelado: () => generation !== this.generation, reproducir: sonar },
+        {
+          desdeBeat,
+          cancelado: () => generation !== this.generation,
+          reproducir: sonar,
+          alArrancar: () => {
+            if (generation === this.generation) this.enMarcha = true;
+          },
+        },
       );
       if (generation !== this.generation) {
         handle.stop();

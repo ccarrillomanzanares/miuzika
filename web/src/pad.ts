@@ -445,7 +445,13 @@ export class PanelPad {
       const boton = aviso.querySelector("button")!;
       const track = this.pistaDe(fuente);
       const enSolo = project?.tracks.filter((t) => t.solo) ?? [];
-      if (track?.muted) {
+      boton.hidden = false;
+      // Bug 37 (10-Nov): with no track chosen both sources played into silence; only the keys said so, in the
+      // status line, and it went unseen.
+      if (!track) {
+        texto.textContent = `No track chosen: pick one to hear the ${fuente === "pad" ? "touchpad" : "keys"}.`;
+        boton.hidden = true;
+      } else if (track.muted) {
         texto.textContent = "This track is muted: you will not hear it.";
         boton.textContent = "Unmute";
         boton.dataset.como = "quitarMute";
@@ -815,7 +821,7 @@ export class PanelPad {
       motor.bucle(Number.isFinite(longitud) ? inicioBeat : null, inicioBeat + longitud);
       motor.seek(inicioBeat);
       this.programar(0, () => {
-        if (this.bucle && this.deps.motorActual() === motor) motor.play();
+        if (this.bucle && this.deps.motorActual() === motor) void motor.play();
       }, 20);
       this.bucle.intervalo = window.setInterval(() => this.tic(), 10);
       this.tic();

@@ -815,7 +815,7 @@ export class VentanaAceStep {
         clave,
         audio: r.ruta,
         silencio: null,
-        descripcion: `${nombres}: bars ${repaint ? "all" : `${desdeCompas}-${hasta}${hastaCompas === null ? " (end)" : ""}`}${textoMargen}, ${r.segundos.toFixed(1)} s, peak ${r.picoDb.toFixed(1)} dBFS, ${(r.bytes / 1048576).toFixed(1)} MB`,
+        descripcion: `${nombres}: bars ${repaint ? "all" : `${desdeCompas}-${hasta}${hastaCompas === null ? " (end)" : ""}`}${textoMargen}, ${r.segundos.toFixed(1)} s, ${r.nivel}, ${(r.bytes / 1048576).toFixed(1)} MB`,
         bytes: r.bytes,
         inicioCompas,
         carpeta: carpetaDeProyecto(p!),

@@ -55,14 +55,6 @@ interface OpenDawImport {
   stats: { tracks: number; regions: number; notes: number };
 }
 
-export interface OpenDawDrumSample {
-  note: number;
-  uuid: Uint8Array;
-  name: string;
-  durationInSeconds: number;
-  exclude: boolean;
-}
-
 interface OpenDawAudioChunk {
   uuid: Uint8Array;
   name: string;
@@ -90,8 +82,6 @@ export interface OpenDawAudioAsset {
 }
 
 interface OpenDawBuildOptions {
-  /** Kit samples for Playfield tracks. */
-  drumSamples?: OpenDawDrumSample[];
   /** WAVs of the audio tracks, by IR asset id. */
   audioAssets?: ReadonlyMap<string, OpenDawAudioAsset>;
   /** SoundFonts by file path (`instrumento.archivo`). */
@@ -401,7 +391,8 @@ export async function projectToOpenDaw(
             ? options.soundfonts?.get(track.instrument.archivo)
             : undefined;
         // A drumkit without program plays the GM standard kit (program 0), which has every named
-        // piece; the 13-sample Playfield kit only stays for a setup without the GM SoundFont.
+        // piece. Without the GM SoundFont it is an empty Playfield, silent and with a warning: the
+        // 13-sample fallback kit was removed on 10-Nov (requested: only the GM kit; no recorded source).
         // The user, 4-Nov ("pasa el kit de batería"): before, floor tom, high tom, china, bell,
         // tambourine, splash and shaker were silent on those tracks (review 3-Nov, bug 6).
         const programa =
@@ -426,13 +417,14 @@ export async function projectToOpenDaw(
         } else {
           const instrument = mapInstrument(track.instrument.type);
           if (instrument.warning) warnings.push(`"${track.name}": ${instrument.warning}`);
+          if (instrument.factory === "Playfield") warnings.push(`"${track.name}": no GM SoundFont, the drums are silent`);
           const factory =
             instrument.factory === "Playfield"
               ? adapters.InstrumentFactories.Playfield
               : adapters.InstrumentFactories.Vaporisateur;
           product = project.api.createInstrument(factory as never, {
             name: track.name,
-            ...(instrument.factory === "Playfield" ? { attachment: options.drumSamples ?? [] } : {}),
+            ...(instrument.factory === "Playfield" ? { attachment: [] } : {}),
           } as never) as unknown as typeof product;
         }
 

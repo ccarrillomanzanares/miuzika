@@ -324,10 +324,11 @@ main {
   max-height: calc(100vh - 32px);
   overflow: auto;
 }
+/* Centred horizontally (requested 10-Nov) but kept at the bottom, so the timeline above stays in view. */
 .dialogo-pad[open] {
   position: fixed;
-  inset: auto 16px 16px auto;
-  margin: 0;
+  inset: auto 0 16px 0;
+  margin: 0 auto;
 }
 .pad-transporte {
   display: flex;
@@ -679,15 +680,75 @@ body.arrastrando .canvas-wrap::after {
   font-size: 16px;
 }
 
-.modal-scroll {
-  overflow: auto;
-  padding: 12px;
+/* Piano roll (11-Nov): toolbar, piano keys + note grid that scroll together, velocity lane under the grid. */
+.pr-card {
+  width: min(1400px, 97vw);
+  height: 92vh;
+  max-height: 92vh;
 }
-
-.pr-canvas {
+.pr-barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+.pr-grupo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pr-grupo[hidden] {
+  display: none;
+}
+.pr-barra button {
+  min-width: 30px;
+  padding: 3px 8px;
+}
+.pr-cuerpo {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: 1fr auto;
+}
+.pr-teclas {
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+}
+.pr-scroll {
+  overflow: auto;
+}
+.pr-vel-etiqueta {
+  align-self: center;
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 10px;
+  border-right: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+.pr-vel {
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+}
+.pr-cuerpo canvas {
   display: block;
-  border-radius: 6px;
-  cursor: crosshair;
+}
+.pr-teclas canvas {
+  cursor: pointer;
+}
+.pr-vel canvas {
+  cursor: ns-resize;
+}
+.pr-aviso {
+  color: #e5a46b;
+  font-size: 11px;
 }
 
 .modal-card footer {

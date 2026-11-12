@@ -180,12 +180,30 @@ export class CapasBucle {
     return [...new Set(this.notas.map((n) => n.pista))];
   }
 
-  /** The notes of one track for its clip, in order. */
+  /**
+   * The notes of one track for its clip, in order. Two notes of the same pitch starting at the same instant are one
+   * in the clip: the longer, at the louder velocity. Seen 10-Nov: a synth take with two identical G1 notes on the
+   * same beat (its cause was not found; the take is gone). It happens by itself when the same slot is played in two
+   * passes with quantize on, or when note repeat is held for more than one pass; a doubled note only retriggers.
+   */
   notasDe(pista: string): Note[] {
-    return this.notas
+    const notas = this.notas
       .filter((n) => n.pista === pista)
       .map((n) => ({ pitch: n.pitch, start: n.start, duration: n.duration, velocity: n.velocity }))
       .sort((a, b) => a.start - b.start || a.pitch - b.pitch);
+    const unicas: Note[] = [];
+    const ultimaDe = new Map<number, Note>();
+    for (const n of notas) {
+      const previa = ultimaDe.get(n.pitch);
+      if (previa && n.start - previa.start < DURACION_MIN) {
+        previa.duration = Math.max(previa.duration, n.duration);
+        previa.velocity = Math.max(previa.velocity, n.velocity);
+        continue;
+      }
+      ultimaDe.set(n.pitch, n);
+      unicas.push(n);
+    }
+    return unicas;
   }
 }
 

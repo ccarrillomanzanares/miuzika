@@ -58,6 +58,11 @@ export class StemPlayer {
     return this.ctx;
   }
 
+  /** Started and not stopped: the stems follow the beat they are given. */
+  get activo(): boolean {
+    return this.sonando;
+  }
+
   get vocesActivas(): number {
     return this.voces.size;
   }

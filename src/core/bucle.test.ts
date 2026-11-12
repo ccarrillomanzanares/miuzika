@@ -117,3 +117,17 @@ test("keys: presets, reassigning and reading back", () => {
   assert.equal(nombreTecla("NumpadEnter"), "Enter");
   assert.equal(nombreTecla("KeyQ"), "Q");
 });
+
+test("the same pitch at the same instant is one note in the clip; close hits stay two", () => {
+  // Quantize on: the same slot played in two passes lands on the same start.
+  const capas = new CapasBucle(4, 0.25);
+  capas.anotar("p", 31, 90, 2.02, 2.3);
+  capas.anotar("p", 31, 110, 4 + 1.98, 4 + 2.6);
+  capas.anotar("p", 31, 100, 4 + 2.27, 4 + 2.4);
+  capas.anotar("p", 43, 100, 4 + 2.01, 4 + 2.2);
+  assert.deepEqual(capas.notasDe("p"), [
+    { pitch: 31, start: 2, duration: 0.62, velocity: 110 },
+    { pitch: 43, start: 2, duration: 0.19, velocity: 100 },
+    { pitch: 31, start: 2.25, duration: 0.13, velocity: 100 },
+  ]);
+});

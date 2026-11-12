@@ -1,13 +1,12 @@
 /**
  * Playback with the real openDAW engine (WASM if available).
- * The only playback path: MIDI, Playfield drums and WAV tracks.
+ * The only playback path: MIDI (drums through the GM SoundFont) and WAV tracks.
  */
 
 import type { Project as MiuzikaProject } from "../../src/core/types.ts";
-import type { OpenDawAudioAsset, OpenDawDrumSample } from "../../src/host/opendaw/adapter.ts";
+import type { OpenDawAudioAsset } from "../../src/host/opendaw/adapter.ts";
 import { projectToOpenDaw } from "../../src/host/opendaw/adapter.ts";
 import { afinarZonas, repartirZonasGlobales } from "./soundfont-zonas.ts";
-import { KIT_POR_DEFECTO } from "../../src/core/bateria.ts";
 import workletsUrl from "@opendaw/studio-core/processors.js?url";
 import workersUrl from "@opendaw/studio-core/workers-main.js?worker&url";
 import wasmProcessorUrl from "@opendaw/studio-core-wasm/wasm-processor.js?url";
@@ -21,8 +20,10 @@ export interface OpenDawPlaybackHandle {
   seek: (beat: number) => void;
   /** Applies mute/solo/volume/pan to the engine's live project. */
   syncMix: (source: MiuzikaProject) => void;
-  /** Starts the transport (if it was loaded with `reproducir: false`). */
-  play: () => void;
+  /** Starts the transport (if it was loaded with `reproducir: false`). Resolves once the engine has taken the order. */
+  play: () => Promise<void>;
+  /** Stops the transport where it is and keeps the engine loaded: live notes still sound, `play` goes on from there. */
+  pausa: () => void;
   /**
    * Live note on a track's instrument (the touchpad): `velocidad` 1..127 starts it,
    * 0 releases it. It sounds with the transport stopped or running.
@@ -43,6 +44,11 @@ export interface OpcionesOpenDaw {
   desdeBeat?: number;
   /** Stop arrived while this was loading: the transport must not start at all. */
   cancelado?: () => boolean;
+  /**
+   * Called each time the transport is told to start, whoever asks (Play, or the Pad through `play`). `isPlaying`
+   * cannot tell this: it stays true for a moment after a stop (measured 12-Nov: it restarted what had just been paused).
+   */
+  alArrancar?: () => void;
 }
 
 interface EngineBoot {
@@ -110,24 +116,18 @@ async function bootEngine(): Promise<EngineBoot> {
   }
 }
 
-/** The default kit: one table with the escribir_bateria warning (src/core/bateria.ts). */
-const DRUM_FILES = KIT_POR_DEFECTO;
-
 interface OpenDawAudioInput {
   name: string;
   buffer: AudioBuffer;
 }
 
 async function prepareSamples(
-  context: AudioContext,
   bpm: number,
   UUID: typeof import("@opendaw/lib-std").UUID,
   Option: typeof import("@opendaw/lib-std").Option,
   AudioData: typeof import("@opendaw/lib-dsp").AudioData,
-  hasDrums: boolean,
   audioAssets: ReadonlyMap<string, OpenDawAudioInput>,
 ): Promise<{
-  attachments: OpenDawDrumSample[];
   audioFiles: Map<string, OpenDawAudioAsset>;
   sampleManager: unknown;
 }> {
@@ -138,41 +138,7 @@ async function prepareSamples(
       meta: { name: string; bpm: number; duration: number; sample_rate: number; origin: "import" };
     }
   >();
-  const attachments: OpenDawDrumSample[] = [];
   const audioFiles = new Map<string, OpenDawAudioAsset>();
-  if (hasDrums) {
-    for (const entry of DRUM_FILES) {
-      try {
-        const response = await fetch(`/drums/${entry.file}`);
-        if (!response.ok) throw new Error(String(response.status));
-        const buffer = await context.decodeAudioData(await response.arrayBuffer());
-        const data = AudioData.create(buffer.sampleRate, buffer.length, buffer.numberOfChannels);
-        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-          data.frames[channel]!.set(buffer.getChannelData(channel));
-        }
-        const uuid = UUID.generate();
-        samples.set(UUID.toString(uuid), {
-          data,
-          meta: {
-            name: entry.name,
-            bpm,
-            duration: buffer.duration,
-            sample_rate: buffer.sampleRate,
-            origin: "import",
-          },
-        });
-        attachments.push({
-          note: entry.note,
-          uuid,
-          name: entry.name,
-          durationInSeconds: buffer.duration,
-          exclude: false,
-        });
-      } catch (error) {
-        console.warn(`[openDAW] could not load ${entry.file}`, error);
-      }
-    }
-  }
   for (const [id, asset] of audioAssets) {
     const buffer = asset.buffer;
     const chunks: OpenDawAudioAsset["chunks"][number][] = [];
@@ -245,7 +211,7 @@ async function prepareSamples(
       return loader;
     },
   };
-  return { attachments, audioFiles, sampleManager: manager };
+  return { audioFiles, sampleManager: manager };
 }
 
 /**
@@ -265,14 +231,11 @@ async function montarProyecto(
   gm: SoundfontEntrada | null,
 ) {
   const { context, core, UUID, Option, AudioData } = await bootEngine();
-  const hasDrums = source.tracks.some((track) => track.instrument.type === "drumkit");
   const prepared = await prepareSamples(
-    context,
     source.bpm,
     UUID,
     Option,
     AudioData,
-    hasDrums,
     audioAssets,
   );
   // They are parsed BEFORE exporting and building the project: `getOrCreate` is
@@ -299,7 +262,6 @@ async function montarProyecto(
     : null;
 
   const exported = await projectToOpenDaw(source, {
-    drumSamples: prepared.attachments,
     audioAssets: prepared.audioFiles,
     soundfonts,
     ...(gm && gmParseado
@@ -394,6 +356,7 @@ export async function playWithOpenDaw(
   });
   // The first command can be lost while the processor finishes starting up.
   const arrancar = async (): Promise<void> => {
+    opciones.alArrancar?.();
     project.engine.play();
     await new Promise((resolve) => setTimeout(resolve, 150));
     if (!project.engine.isPlaying.getValue()) project.engine.play();
@@ -414,8 +377,9 @@ export async function playWithOpenDaw(
       project.engine.setPosition(Math.max(0, beat) * 960);
     },
     syncMix,
-    play: () => {
-      void arrancar();
+    play: () => arrancar(),
+    pausa: () => {
+      project.engine.stop(false);
     },
     nota: (pista, pitch, velocidad) => {
       const unit = (unidades[pista] !== undefined ? porUuid.get(unidades[pista]!) : undefined) ?? porNombre.get(pista);

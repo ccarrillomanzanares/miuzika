@@ -205,16 +205,42 @@ timeline.onSeek = (beat) => {
 
 timeline.onEditClip = (trackId, clipId) => {
   const project = sesion.project;
-  const clip = project?.tracks.find((track) => track.id === trackId)?.clips.find((candidate) => candidate.id === clipId);
-  if (!project || !clip) return;
-  openPianoRoll(clip, beatsPerBar(project), (notes) => {
-    if (!sesion.project) return;
-    try {
-      sesion.setProject(applyOps(sesion.project, [{ op: "replace_clip_notes", trackId, clipId, notes }]).project);
-      avisos.info(`Edited by hand: ${notes.length} notes in “${clip.name}”.`);
-    } catch (error) {
-      avisos.error(`Could not save the edit: ${error instanceof Error ? error.message : String(error)}`);
-    }
+  const track = project?.tracks.find((t) => t.id === trackId);
+  const clip = track?.clips.find((candidate) => candidate.id === clipId);
+  if (!project || !track || !clip) return;
+  openPianoRoll({
+    claveHistorial: `${project.id}:${trackId}:${clipId}`,
+    clip,
+    trackId,
+    tiemposPorCompas: beatsPerBar(project),
+    bpm: project.bpm,
+    key: project.key,
+    esBateria: track.instrument.type === "drumkit",
+    mezcla: {
+      estado: () => {
+        const actual = sesion.project?.tracks.find((t) => t.id === trackId);
+        const otraEnSolo = Boolean(sesion.project?.tracks.some((t) => t.solo && t.id !== trackId));
+        return { muted: Boolean(actual?.muted), solo: Boolean(actual?.solo), otraEnSolo };
+      },
+      alternar: (flag) => seleccion.alternar([trackId], flag),
+    },
+    // The editor plays through the engine loaded with the project, stopped: its notes are the pending ones, not the
+    // project's, so the song must not be running underneath.
+    motor: async () => {
+      const view = sesion.project;
+      if (!view) return null;
+      if (transporte.sonando) transporte.pausar();
+      return transporte.prepararMotor(view);
+    },
+    onApply: (notes) => {
+      if (!sesion.project) return;
+      try {
+        sesion.setProject(applyOps(sesion.project, [{ op: "replace_clip_notes", trackId, clipId, notes }]).project);
+        avisos.info(`Edited by hand: ${notes.length} notes in “${clip.name}”.`);
+      } catch (error) {
+        avisos.error(`Could not save the edit: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    },
   });
 };
 
@@ -254,7 +280,7 @@ panelPad = new PanelPad({
     const view = sesion.project;
     return view ? transporte.prepararMotor(view) : null;
   },
-  parar: () => transporte.detener(),
+  parar: () => transporte.pausar(),
   cursor: () => timeline.currentBeat,
   guardarBucle: (inicioBeat, longitud, porPista) => {
     const view = sesion.project;
@@ -321,14 +347,15 @@ function reproducirOPausar(): void {
   const view = sesion.project;
   if (!sesion.ready || sesion.busy || !view || view.tracks.length === 0) return;
   if (transporte.sonando) {
-    transporte.detener();
+    transporte.pausar();
     return;
   }
   void transporte.reproducir(view);
 }
 
 function parar(): void {
-  transporte.detener();
+  transporte.pausar();
+  transporte.seek(0);
   timeline.draw(0);
 }
 
@@ -466,6 +493,10 @@ window.addEventListener("keydown", (event) => {
   }
   if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
   if (target?.isContentEditable) return;
+  // Bug 38 (10-Nov): with the piano roll open, Ctrl+Z undid the project behind its pending edits, and Apply could then
+  // write them over a clip the undo had changed. Its edits are applied as one change: the page's keys wait until it
+  // closes. Only the modal: the Pad is not one and keeps Ctrl+Z to remove a take.
+  if (document.querySelector(".modal")) return;
   // With text selected on the page, Ctrl+C/X belong to the browser.
   const texto = window.getSelection();
   const hayTexto = Boolean(texto && !texto.isCollapsed && texto.toString().trim().length > 0);

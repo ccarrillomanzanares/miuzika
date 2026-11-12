@@ -89,15 +89,26 @@ export class Sesion {
   }
 
   async undo(): Promise<void> {
-    await this.viajar(this.history, this.future);
+    await this.viajar(this.history, this.future, "Undo");
   }
 
   async redo(): Promise<void> {
-    await this.viajar(this.future, this.history);
+    await this.viajar(this.future, this.history, "Redo");
   }
 
-  private async viajar(desde: Project[], hacia: Project[]): Promise<void> {
-    if (!this.ready || this.restoring || this.busy) return;
+  private async viajar(desde: Project[], hacia: Project[], que: "Undo" | "Redo"): Promise<void> {
+    if (!this.ready) return;
+    // Busy (loading, starting the engine, another undo): it is refused, as before, but now it says so. Seen headless
+    // 11-Nov: a Ctrl+Z pressed while the instruments loaded did nothing, and looked like a lost undo.
+    if (this.restoring || this.busy) {
+      if (desde.length > 0) {
+        // In the status line, where the eye is while the app is busy (the Log only counts an info); the busy end clears it.
+        const texto = `${que} waits: the app is busy. Try again in a moment.`;
+        this.ev.estado(texto);
+        this.avisos.info(texto);
+      }
+      return;
+    }
     const destino = desde.pop();
     if (!destino) return;
     if (this.project) {

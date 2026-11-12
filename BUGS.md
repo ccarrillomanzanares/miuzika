@@ -23,6 +23,9 @@ The 14 listed on 6-Nov-2026 when the GUI was separated from miuzika, and how eac
 
 - **10. Long WAVs in Play.** Pan and master gain now apply. **Effects and sends still do not**: a stem is not
   decoded, so it cannot enter openDAW's mixer. The Log says so for each affected track, in Play and in the export.
+  12-Nov: WAVs on tracks with an effect switched on or a send now take the memory budget first, so the ones left
+  outside the engine are those that lose nothing there. Still in part: a project whose effected WAVs alone exceed the
+  budget keeps the limit. Unit test only; no project on disk has effects and the GUI cannot add them.
 
 ## Not fixed, because they were never reproduced
 
@@ -45,7 +48,7 @@ The 14 listed on 6-Nov-2026 when the GUI was separated from miuzika, and how eac
 - **18. Under 980 px the lower half of the window stayed empty.** A grid row left over from the chat panel, which does not exist here. Seen in the same measurement on 7-Nov. FIXED the same day: rule removed.
 - **19. A take's track appeared without its waveform.** Seen by the user on 7-Nov with `toma-2`, the second real take in the open tab. On disk all is right (WAV, clip, asset) and the browser fetched audio and peaks with 200. Not reproduced: a second take with the simulated GPU draws, and a copy of the project opened with both real WAVs draws. After reloading the tab and reopening the project, both waveforms showed (the user, 7-Nov): so it was only that tab's drawing, the data was right. FIXED the same day. Cause: the canvas kept the height of the tracks there were when the project opened, and a track added to the open project was drawn below it, until something resized it. The simulated runs hid it: their lineage has no readable commit, so a red message opened the log, which resizes. Reproduced without that message (row empty), and drawn after the fix. Nothing to do with the CSS changes.
 - **20. With a random seed, the take recorded a seed that was not the one used.** ACE-Step `ca1e85f` draws one seed to report (`inference.py`, `prepare_seeds`) and, told "random", the handler draws another to generate. So Repeat could not repeat such a take: measured 7-Nov, `toma` (random, reported 1097560858) against `toma-2` (asked for 1097560858), 99.66 % of samples differ, while `toma-2` against `toma-2-2` (same fixed seed, same machine) are identical byte for byte. FIXED the same day in `generar_audio.py`: the script always draws the seed itself and asks for it fixed. Checked with the simulated GPU only; `toma` keeps its false number, the only take affected.
-- **21. A source made of several tracks can clip.** Measured 7-Nov: `toma`, `bajo-1` and `bajo-2` sum to +3.5 dBFS and the 16-bit WAV cuts it at full scale (0.052 % of samples), while Review shows the +3.5 without saying so. Should come down in level before sending, without touching the tracks. Listed, not fixed.
+- **21. A source made of several tracks can clip.** Measured 7-Nov: `toma`, `bajo-1` and `bajo-2` sum to +3.5 dBFS and the 16-bit WAV cuts it at full scale (0.052 % of samples), while Review shows the +3.5 without saying so. Should come down in level before sending, without touching the tracks. FIXED 12-Nov (requested: fix the open bugs): a source over full scale is turned down as a whole to -0.1 dBFS before the WAV is written, and Review says so ("peak +5.1 dBFS, turned down 5.2 dB so it does not clip"); a source that fits is sent at its own level. Headless: two tracks summing to +5.1 dBFS gave a file peaking at -0.10 dBFS with 0 samples at full scale; one track alone at -0.9 dBFS was left as it was.
 - **22. Repeat proposes a name that is taken.** Seen 7-Nov: Repeat of `guitarra-c` (3 takes) proposes `guitarra-c-2`, and the server refuses it because `guitarra-c-2.wav` exists. `nombreLibre` only looks at the names of the lineages, not at the files of each take. FIXED 7-Nov (afternoon): `/api/gpu/tomas`
   returns each take's WAV names (`outputs[].file` of the lineage) and both Repeat and the proposed name avoid them. Simulated path: Repeat of a
   3-take run `prueba-bugs` (files -1..-3) proposes `prueba-bugs-4`.
@@ -93,7 +96,7 @@ The 14 listed on 6-Nov-2026 when the GUI was separated from miuzika, and how eac
   played meanwhile are silent. Not confirmed by ear. FIXED 9-Nov (the user chose the recommendation): each source's
   track that cannot be heard says so in the panel, with "Unmute", or "Solo this track too" when another track is on Solo
   (adding it to Solo keeps what was being listened to). Headless: mute → warning → Unmute clears it; Solo on the other
-  track → warning → both on Solo. The ~3 s reload after Play is still open.
+  track → warning → both on Solo. The ~3 s reload after Play: FIXED 12-Nov, see 42.
 
 ## From the code review of 6a165e7 (9-Nov, `/code-review high`, two runs; read in the code, not reproduced)
 
@@ -128,3 +131,62 @@ The 14 listed on 6-Nov-2026 when the GUI was separated from miuzika, and how eac
   simulated GPU: refused "bajo" next to bajo-1.wav (window open, reason shown, 1 request); double click on Run → 1
   request; Esc in New closes New only; mute keeps the selects. Stable Audio, MuLaCover and Demucs share the new code but
   were not run one by one.
+
+## From the hands-on test of 10-Nov (Pad and piano roll)
+
+- **36. A drum track without a program never loads the GM SoundFont.** The adapter plays a `drumkit` without program
+  through the GM standard kit (4-Nov), but `cargarGm` only fetches the SoundFont when some track has `instrument.program`
+  (`web/src/sonidos-proyecto.ts`). A project whose only drums are the Pad's ("Pad drums", no program) and no GM track
+  falls back to the 13-WAV Playfield kit, which has no note 50: heard, the Pad's High tom is silent. Those WAVs
+  (`web/public/drums/`) also have no recorded source or license in a public repo.
+- **37. Pad: with no track chosen it plays into silence without a visible word.** The keys say "Pick a track for the
+  keys." in the status line, easy to miss; the touchpad says nothing.
+- **38. Piano roll: the page's shortcuts act behind it.** Ctrl+Z / Ctrl+Y undo and redo the project while the editor's
+  own edits are pending; Ctrl+A/C/V/D and Delete also act on the timeline. If the undo removes or changes the clip being
+  edited, Apply writes the notes over it.
+- **39. Piano roll: it only shows C2–C6 (MIDI 36–84).** A take recorded with the Pad at G1–D2 is mostly invisible there.
+- **36-39 FIXED 10-Nov** (requested: fix what was found; only the GM kit for drums). 36: `cargarGm` also loads for any
+  drum track; the 13-WAV kit, its table and `web/public/drums/` are gone, and without the GM SoundFont a drum track is
+  silent with a warning. 37: each source with no track says so in the panel. 38: with the piano roll open the page's
+  keys wait (the Pad keeps its Ctrl+Z); the editor's Esc listener is also removed when it closes by a button. 39: the
+  piano roll covers 0-127 and opens scrolled to the clip's notes. Headless on :5181 (measured, not heard): a project
+  whose only drums have no program fetches the GM and its high tom (50) peaks 0.50, the clap (39) 0.54, an empty clip 0;
+  piano roll opened on G1-D2 notes with them in view, Ctrl+Z inside left the mute in place and undid it once closed;
+  Pad with no track shows both warnings.
+- **40. Piano roll: closing with ×, Esc or a click outside discards the edits without a word** (11-Nov, reported:
+  after closing and opening again the changes were gone). Only Apply kept them; with the new editor's tools,
+  losing a session of edits that way is easy.
+- **40 FIXED 11-Nov.** ×, Esc, a click outside and Apply all keep the edits, as one change; only Discard (was Cancel)
+  throws them away, after asking. Also built with it, requested: M and S in the editor's bar toggle the track's mute and
+  solo live, with the warning kept up to date ("muted" / "another track is on Solo"). Headless: Esc, × and a click
+  outside each kept the added note; closing without edits left the project untouched; Discard asked and kept nothing;
+  M/S set the track and lit up.
+  Then (reported: after closing and opening again undo was no longer available): each clip's undo/redo is kept in
+  memory for the tab and comes back when the clip is opened again, unless its notes changed elsewhere meanwhile (an undo
+  in the main window), in which case it starts fresh. Headless: two notes added, closed, reopened, Ctrl+Z → one, closed,
+  reopened, Ctrl+Y → both; after the main window's undo changed the clip, the editor opened with no undo.
+- **41. Undo/redo while the app is busy did nothing, silently** (seen headless 11-Nov: a Ctrl+Z pressed while the
+  instruments loaded looked like a lost undo). FIXED 11-Nov (requested: say so): still refused, but the status line
+  says "Undo waits: the app is busy. Try again in a moment." (also in the Log); the end of the busy state clears it.
+  Headless: busy → that line, Log (1), the mute kept; free → the same Ctrl+Z undid it; with nothing to undo, no line.
+
+## Fixed on 12-Nov (requested: fix the open bugs)
+
+- **42. Pause, Stop and the end of the song unloaded the engine** (the rest of 29). The next Play, the Pad's next key and
+  the piano roll's next audition waited for the whole project to be mounted again, and Play with the Pad open threw away
+  the engine the Pad had just loaded. FIXED: Pause and Stop stop the transport and keep the engine; Play starts the one
+  that is loaded. Only a change to the project's structure unloads it, as before. Headless, Pad open: Play sounding in
+  0.06-0.08 s on the same engine (was ~3 s), Pause keeps the beat, Play goes on from it, Stop leaves the cursor at 0,
+  the end of the project stops there and Play from the end starts at bar 1. Cost: the engine's copy of the decoded WAVs
+  stays in memory while paused (it was already there while playing).
+- **43. Long WAVs (streamed, outside the engine) were silent under the Pad's loop** (read in the code 8-Nov). The Pad
+  starts the engine by itself and nothing started them. FIXED: they start whenever the transport is told to start,
+  whoever asks, and jump back with every pass. Headless, 1-bar loop at 120 BPM over a streamed 250 s WAV: its position
+  ran 0 → 2 s and back on each of 4 passes, and it paused when the loop stopped. Each jump is a seek of an `<audio>`
+  element: whether the seam is audible was not measured.
+- **44. A Pad take could hold two notes of the same pitch on the same instant** (seen 10-Nov: two identical G1 on one
+  beat). The take is no longer on disk and no clip of any project has such a pair, so its cause was not found. Two
+  ways the recorder makes them by itself: the same slot played in two passes with quantize on, and note repeat held for
+  more than one pass. FIXED: in the clip they are one note, the longer and the louder (unit test). Hits of the same
+  pitch 1/32 of a beat apart or more stay two.
+- **11 and 12 stay as they were**: never reproduced, so there is nothing to fix; 11 keeps its second render and its warning.

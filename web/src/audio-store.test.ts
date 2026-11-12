@@ -102,3 +102,22 @@ test("opsDeAudio replaces a same-named track's clips only when asked", () => {
   const doble = applyOps(p, opsDeAudio(p, { ...datos, assetId: "b", reemplazar: false })).project;
   assert.equal(doble.tracks.filter((t) => t.name === "toma").length, 2);
 });
+
+test("the WAVs on tracks with an effect on or a send are the ones decoded first", async () => {
+  const { idsConEfectos } = await import("./audio-store.ts");
+  const pista = (id: string, cambios: object) => ({
+    id, name: id, kind: "audio", instrument: { type: "sampler" }, gainDb: 0, pan: 0, muted: false, solo: false, devices: [],
+    clips: [{ id: `c${id}`, name: id, start: 0, length: 8, notes: [], audio: { assetId: id, offset: 0, gainDb: 0 } }],
+    ...cambios,
+  });
+  const project = {
+    ...createProject({ name: "x" }),
+    tracks: [
+      pista("seca", {}),
+      pista("apagado", { devices: [{ enabled: false }] }),
+      pista("efecto", { devices: [{ enabled: true }] }),
+      pista("envio", { sends: [{}] }),
+    ],
+  } as unknown as Parameters<typeof idsConEfectos>[0];
+  assert.deepEqual([...idsConEfectos(project)], ["efecto", "envio"]);
+});
