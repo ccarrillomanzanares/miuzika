@@ -173,8 +173,8 @@ async function loadSdk() {
   return { core, adapters, boxes };
 }
 
-/** Sets a parameter, accepting nested paths like "lowShelf.gain". */
-function setParameter(root: Record<string, unknown>, path: string, value: number | boolean): void {
+/** Sets a parameter, accepting nested paths like "lowShelf.gain". Also used on the running engine's project. */
+export function setParameter(root: Record<string, unknown>, path: string, value: number | boolean): void {
   const parts = path.split(".");
   let target: unknown = root;
   for (let index = 0; index < parts.length - 1; index++) {
@@ -280,6 +280,8 @@ export async function projectToOpenDaw(
         });
         const unit = project.boxAdapters.adapterFor(unitBox as never, adapters.AudioUnitBoxAdapter);
         unit.namedParameter.volume.setValue(bus.gainDb);
+        // Bus ids never collide with track ids (add_bus refuses it): one table serves both.
+        anotarUnidad(bus.id, unitBox);
         aplicarEfectos(unitBox, bus);
         entradaDeBus.set(bus.id, busBox.input);
         stats.buses++;

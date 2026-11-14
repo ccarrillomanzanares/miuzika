@@ -558,6 +558,79 @@ main {
   font-weight: 600;
 }
 
+/* The effects panel: not modal, at the right, so the transport and the track heads stay in reach. */
+.panel-efectos {
+  position: fixed;
+  inset: 64px 16px auto auto;
+  margin: 0;
+  z-index: 40;
+  width: min(440px, 92vw);
+  min-width: 0;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+}
+.panel-efectos .fx-cadena {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.panel-efectos .fx-efecto {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.panel-efectos .fx-efecto.apagado .fx-controles {
+  opacity: 0.45;
+}
+.panel-efectos .fx-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.panel-efectos .fx-botones {
+  display: flex;
+  gap: 4px;
+}
+.panel-efectos .fx-botones button {
+  padding: 1px 7px;
+  font-size: 12px;
+}
+.panel-efectos .fx-control {
+  display: grid;
+  grid-template-columns: 84px 1fr 68px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.panel-efectos .fx-control.fx-interruptor {
+  display: flex;
+  margin-top: 4px;
+}
+.panel-efectos .fx-control output {
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  text-align: right;
+}
+.panel-efectos .fx-control input[type="range"] {
+  width: 100%;
+}
+.panel-efectos .fx-anadir {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.panel-efectos .fx-anadir select {
+  flex: 1;
+}
+.panel-efectos .fx-aviso {
+  color: var(--accent);
+}
+
 .track-head .mute,
 .track-head .solo {
   width: 18px;
@@ -569,6 +642,24 @@ main {
   display: grid;
   place-items: center;
   cursor: pointer;
+}
+
+/* Next to S and M, not at the end of the instrument line: there the ellipsis cut it off (seen headless). */
+.track-head .fx {
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 9px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.track-head .fx.con {
+  border-color: var(--blue);
+  color: var(--blue);
 }
 
 .track-head.muted .mute {

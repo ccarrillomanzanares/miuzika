@@ -109,6 +109,7 @@ export class TimelineView {
   onToggleSolo: (trackId: string) => void = () => {};
   /** The instrument line of a MIDI track head was clicked (8-Nov: the instrument picker). */
   onEditInstrument: (trackId: string) => void = () => {};
+  onEditEffects: (trackId: string) => void = () => {};
   onSelectionChange: (trackIds: string[]) => void = () => {};
   onEditClip: (trackId: string, clipId: string) => void = () => {};
   onClipSelectionChange: (clipIds: string[]) => void = () => {};
@@ -249,6 +250,10 @@ export class TimelineView {
       }
       if (element.closest("[data-instrumento]")) {
         this.onEditInstrument(trackId);
+        return;
+      }
+      if (element.closest("[data-efectos]")) {
+        this.onEditEffects(trackId);
         return;
       }
       if (!this.project) return;
@@ -554,9 +559,10 @@ export class TimelineView {
               track.kind === "midi"
                 ? `<button type="button" class="instrumento" data-instrumento title="Change the instrument">${escapeHtml(etiquetaInstrumento(track.instrument))} ▾</button> · ${notes} n`
                 : `audio`
-            } · ${track.devices.length} fx</small>
+            }</small>
           </span>
           <span class="track-buttons">
+            <span class="fx${track.devices.length > 0 ? " con" : ""}" data-efectos title="Effects of this track (${track.devices.length})">FX${track.devices.length > 0 ? ` ${track.devices.length}` : ""}</span>
             <span class="solo" title="Solo">S</span>
             <span class="mute" title="Mute">M</span>
           </span>

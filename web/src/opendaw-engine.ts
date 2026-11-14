@@ -3,9 +3,10 @@
  * The only playback path: MIDI (drums through the GM SoundFont) and WAV tracks.
  */
 
-import type { Project as MiuzikaProject } from "../../src/core/types.ts";
+import type { Device, Project as MiuzikaProject } from "../../src/core/types.ts";
 import type { OpenDawAudioAsset } from "../../src/host/opendaw/adapter.ts";
-import { projectToOpenDaw } from "../../src/host/opendaw/adapter.ts";
+import { projectToOpenDaw, setParameter } from "../../src/host/opendaw/adapter.ts";
+import { mapDevice } from "../../src/host/opendaw/mapping.ts";
 import { afinarZonas, repartirZonasGlobales } from "./soundfont-zonas.ts";
 import workletsUrl from "@opendaw/studio-core/processors.js?url";
 import workersUrl from "@opendaw/studio-core/workers-main.js?worker&url";
@@ -18,7 +19,10 @@ export interface OpenDawPlaybackHandle {
   readonly isPlaying: boolean;
   stop: () => void;
   seek: (beat: number) => void;
-  /** Applies mute/solo/volume/pan to the engine's live project. */
+  /**
+   * Applies mute/solo/volume/pan to the engine's live project, and the parameters and on/off of the effects
+   * already in each chain. An effect added, removed or moved is a change of structure: the project is mounted again.
+   */
   syncMix: (source: MiuzikaProject) => void;
   /** Starts the transport (if it was loaded with `reproducir: false`). Resolves once the engine has taken the order. */
   play: () => Promise<void>;
@@ -325,6 +329,22 @@ export async function playWithOpenDaw(
     const uuid = unidades[track.id];
     return (uuid !== undefined ? porUuid.get(uuid) : undefined) ?? porNombre.get(track.name);
   };
+  // The effects of a chain, written on the running project: a slider is heard while it moves, with no remount
+  // (a remount is 0.43 s with an audible gap, bug 8). Only when the chain is the one that was mounted: same length.
+  const syncEfectos = (unit: (typeof todas)[number], devices: Device[]): void => {
+    const coleccion = unit.audioEffects;
+    if (coleccion.isEmpty()) return;
+    const vivos = coleccion.unwrap().adapters();
+    if (vivos.length !== devices.length) return;
+    devices.forEach((device, indice) => {
+      const vivo = vivos[indice] as unknown as {
+        namedParameter: Record<string, unknown>;
+        enabledField: { getValue(): boolean; setValue(valor: boolean): void };
+      };
+      for (const param of mapDevice(device).params) setParameter(vivo.namedParameter, param.name, param.value);
+      if (vivo.enabledField.getValue() !== device.enabled) vivo.enabledField.setValue(device.enabled);
+    });
+  };
   const syncMix = (source: MiuzikaProject): void => {
     project.editing.modify(() => {
       for (const track of source.tracks) {
@@ -334,6 +354,13 @@ export async function playWithOpenDaw(
         unit.namedParameter.solo.setValue(track.solo);
         unit.namedParameter.volume.setValue(track.gainDb);
         unit.namedParameter.panning.setValue(track.pan);
+        syncEfectos(unit, track.devices);
+      }
+      for (const bus of source.buses ?? []) {
+        const unit = unidadDe(bus);
+        if (!unit) continue;
+        unit.namedParameter.volume.setValue(bus.gainDb);
+        syncEfectos(unit, bus.devices);
       }
     });
   };

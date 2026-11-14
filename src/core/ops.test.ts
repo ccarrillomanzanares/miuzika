@@ -48,6 +48,51 @@ test("set_device validates parameters and lists the valid ones", () => {
   assert.equal(changed.tracks[0]!.devices[0]!.params.wet, 1, "clamped to the range");
 });
 
+test("set_device switches an effect off and on without touching its values", () => {
+  const project = applyOps(baseProject(), [
+    { op: "add_track", id: "trk_pad", name: "Pad" },
+    { op: "add_device", trackId: "trk_pad", device: { type: "reverb", wet: 0.7 } },
+    { op: "set_device", trackId: "trk_pad", deviceId: "reverb", enabled: false },
+  ]).project;
+  const device = project.tracks[0]!.devices[0]!;
+  assert.equal(device.enabled, false);
+  assert.equal(device.params.wet, 0.7);
+  const otraVez = applyOps(project, [
+    { op: "set_device", trackId: "trk_pad", deviceId: "reverb", enabled: true, params: { wet: 0.2 } },
+  ]).project;
+  assert.equal(otraVez.tracks[0]!.devices[0]!.enabled, true);
+  assert.equal(otraVez.tracks[0]!.devices[0]!.params.wet, 0.2);
+  assert.throws(
+    () => applyOps(project, [{ op: "set_device", trackId: "trk_pad", deviceId: "reverb" }]),
+    /needs at least one parameter, or enabled/,
+  );
+});
+
+test("move_device reorders a chain, on a track and on a bus", () => {
+  const project = applyOps(baseProject(), [
+    { op: "add_track", id: "trk_pad", name: "Pad" },
+    { op: "add_device", trackId: "trk_pad", device: "reverb" },
+    { op: "add_device", trackId: "trk_pad", device: "delay" },
+    { op: "add_device", trackId: "trk_pad", device: "distortion" },
+    { op: "add_bus", id: "bus_sala", name: "Sala", devices: ["reverb", "eq"] },
+  ]).project;
+  const tipos = (p: typeof project): string[] => p.tracks[0]!.devices.map((d) => d.type);
+  assert.deepEqual(tipos(applyOps(project, [{ op: "move_device", trackId: "trk_pad", deviceId: "distortion", index: 0 }]).project), [
+    "distortion",
+    "reverb",
+    "delay",
+  ]);
+  // Past the end: it goes last, it is not refused.
+  assert.deepEqual(tipos(applyOps(project, [{ op: "move_device", trackId: "trk_pad", deviceId: "reverb", index: 9 }]).project), [
+    "delay",
+    "distortion",
+    "reverb",
+  ]);
+  const bus = applyOps(project, [{ op: "move_device", trackId: "bus_sala", deviceId: "eq", index: 0 }]).project.buses![0]!;
+  assert.deepEqual(bus.devices.map((d) => d.type), ["eq", "reverb"]);
+  assert.deepEqual(tipos(project), ["reverb", "delay", "distortion"], "the project given is not changed");
+});
+
 test("a wrongly named clip is not replaced by the only one there is", () => {
   const project = applyOps(baseProject(), [
     { op: "add_track", id: "trk_a", name: "A" },

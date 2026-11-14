@@ -10,8 +10,8 @@ from this list on request; the export still renders a second time when the first
 
 - **A long WAV that does not fit the decode budget plays outside openDAW's mixer**: with its gain, pan and the master, without
   its track's effects and sends (it is not decoded, so it cannot enter the mixer). The Log says so for each affected track, in
-  Play and in the export. Since 12-Nov the WAVs on tracks with an effect switched on or a send take the budget first (unit test
-  only: no project on disk has effects and the GUI cannot add them).
+  Play and in the export, and so does the effects panel of that track. Since 12-Nov the WAVs on tracks with an effect switched on
+  or a send take the budget first (unit test only).
 - **A project cannot be longer than 512 bars**: a file longer than that at the project's tempo is refused on import.
 
 ## Fixed and verified

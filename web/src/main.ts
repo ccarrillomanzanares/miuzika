@@ -25,6 +25,7 @@ import { VentanaDemucs } from "./modulos/demucs/ventana.ts";
 import { VentanaStableAudio } from "./modulos/stableaudio/ventana.ts";
 import { VentanaStrudel } from "./modulos/strudel/ventana.ts";
 import { SelectorInstrumento } from "./selector-instrumento.ts";
+import { PanelEfectos } from "./panel-efectos.ts";
 import { mostrarAviso } from "./aviso-unico.ts";
 import { VentanaAMidi } from "./a-midi.ts";
 import { PanelPad } from "./pad.ts";
@@ -111,6 +112,8 @@ function pintarBotones(): void {
 
 /** The touchpad panel (created further down; the session tells it when the project changes). */
 let panelPad: PanelPad | null = null;
+/** The effects panel (created further down too): told when the project changes under the chain it shows. */
+let panelEfectos: PanelEfectos | null = null;
 
 // Read before the session exists: setting its first project would overwrite it.
 const ultimoAbierto = Sesion.ultimoAbierto();
@@ -122,6 +125,7 @@ const sesion = new Sesion(avisos, {
     liberarAssetsNoUsados(next);
     timeline.setProject(next ?? createProject({ name: "Untitled", bpm: 100, lengthBars: 16 }));
     pintarCancion(next);
+    panelEfectos?.proyectoCambiado();
     if (!next) return;
     // setProject changes the data and the heads, but does not repaint the canvas.
     timeline.relayout();
@@ -140,6 +144,7 @@ const sesion = new Sesion(avisos, {
     else if (estructura && transporte.motor) transporte.detener();
     else transporte.syncMix(next);
     panelPad?.proyectoCambiado();
+    panelEfectos?.proyectoCambiado();
   },
   alCambiarEstado: () => pintarBotones(),
   estado: setStatus,
@@ -260,6 +265,26 @@ const selectorInstrumento = new SelectorInstrumento({
   },
 });
 timeline.onEditInstrument = (trackId) => selectorInstrumento.abrir(trackId);
+
+// The effects of a track: the chain and its sliders. A slider goes to the running engine as it moves (`syncMix`, no
+// remount) and is committed on release; a chain that changes shape is a change of structure, like a moved clip.
+panelEfectos = new PanelEfectos({
+  proyecto: () => sesion.project,
+  oir: (vista) => transporte.syncMix(vista),
+  aplicar(ops, estructura) {
+    const view = sesion.project;
+    if (!view || sesion.busy) return false;
+    try {
+      sesion.commitLive(applyOps(view, ops).project, estructura);
+      return true;
+    } catch (error) {
+      avisos.error(`Could not change the effects: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  },
+  fueraDelMotor: (track) => track.clips.some((clip) => clip.audio !== undefined && audioAssets.get(clip.audio.assetId)?.streaming === true),
+});
+timeline.onEditEffects = (trackId) => panelEfectos?.abrir(trackId);
 
 // To MIDI (8-Nov): the selected audio track's notes as a new MIDI track, with Basic Pitch on this machine.
 const ventanaAMidi = new VentanaAMidi({

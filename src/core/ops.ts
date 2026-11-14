@@ -194,13 +194,23 @@ const SetDeviceOp = z.object({
   op: z.literal("set_device"),
   trackId: IdSchema.describe("Track or bus (id or name)"),
   deviceId: IdSchema.describe("Device id or type (e.g. 'reverb')"),
-  params: z.record(z.string(), ParamValueSchema).describe("Only the parameters to change"),
+  params: z.record(z.string(), ParamValueSchema).optional().describe("Only the parameters to change"),
+  /** The effect's bypass: off, it stays in the chain with its values and does not sound. */
+  enabled: z.boolean().optional(),
 });
 
 const RemoveDeviceOp = z.object({
   op: z.literal("remove_device"),
   trackId: IdSchema.describe("Track or bus (id or name)"),
   deviceId: IdSchema,
+});
+
+/** The order of a chain is the order the sound goes through it: a distortion before or after a reverb is not the same. */
+const MoveDeviceOp = z.object({
+  op: z.literal("move_device"),
+  trackId: IdSchema.describe("Track or bus (id or name)"),
+  deviceId: IdSchema,
+  index: z.number().int().min(0).max(63).describe("New 0-based position in the chain"),
 });
 
 /** Auxiliary bus with its effects ("reverb" or {type, params}); tracks send it signal with set_send. */
@@ -316,6 +326,7 @@ const OpSchema = z.discriminatedUnion("op", [
   AddDeviceOp,
   SetDeviceOp,
   RemoveDeviceOp,
+  MoveDeviceOp,
   RegisterAudioAssetOp,
   AddAudioClipOp,
   SetAudioClipOp,
@@ -803,10 +814,28 @@ function applyOne(project: Project, op: ParsedOp): string {
 
     case "set_device": {
       const track = resolveCadena(project, op.trackId);
-      if (Object.keys(op.params).length === 0) throw new OpError("set_device needs at least one parameter");
+      const params = op.params ?? {};
+      if (Object.keys(params).length === 0 && op.enabled === undefined) {
+        throw new OpError("set_device needs at least one parameter, or enabled");
+      }
       const device = resolveDevice(track, op.deviceId);
-      device.params = coerceParams(device.type, op.params, device.params);
-      return `Parameters of ${device.type} on ${track.name}: ${JSON.stringify(op.params)}`;
+      if (Object.keys(params).length > 0) device.params = coerceParams(device.type, params, device.params);
+      if (op.enabled !== undefined) device.enabled = op.enabled;
+      const partes = [
+        ...(Object.keys(params).length > 0 ? [JSON.stringify(params)] : []),
+        ...(op.enabled !== undefined ? [op.enabled ? "on" : "off"] : []),
+      ];
+      return `Parameters of ${device.type} on ${track.name}: ${partes.join(", ")}`;
+    }
+
+    case "move_device": {
+      const track = resolveCadena(project, op.trackId);
+      const device = resolveDevice(track, op.deviceId);
+      const resto = track.devices.filter((existing) => existing !== device);
+      const destino = Math.min(op.index, resto.length);
+      resto.splice(destino, 0, device);
+      track.poner(resto);
+      return `Device ${device.type} on ${track.name}: position ${destino + 1} of ${resto.length}`;
     }
 
     case "remove_device": {

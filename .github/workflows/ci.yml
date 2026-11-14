@@ -1,0 +1,22 @@
+# Types and unit tests on every push and pull request. Runs on Windows because that is where the suite is known
+# to pass (the app targets it: the Pad reads a Windows Precision Touchpad). The two SoundFont tests skip themselves
+# when the GM .sf2 is missing, as it is here (it is outside git).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:unit

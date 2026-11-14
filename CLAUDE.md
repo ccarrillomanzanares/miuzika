@@ -4,7 +4,7 @@ Browser music workstation (openDAW in WASM) with generative modules and no LLM b
 user writes in Spanish; the interface, code, comments and commits are in English. Since 6-Nov-2026 this is the only
 miuzika: the old agent version was retired and its folder deleted after the pieces the user wanted were brought over.
 
-Read `ESTADO.md` first: where we are, what has been tested by ear and **what is still undecided**.
+Read `ESTADO.md` first: where we are and **what has been tested by ear** (the verdicts). It keeps no list of pending items.
 
 ## How to work with the user
 
@@ -55,6 +55,8 @@ importing anything that is not a PCM WAV) and the GeneralUser GS `.sf2` in `work
   `comun.ts`; nothing specific to a model lives outside its folder. Text is sent byte for byte.
 - `web/src/pad.ts`, `server/api/pad.ts`, `workspace/herramientas/touchpad/` — the Pad: touchpad (Windows Precision
   Touchpad capture) and keyboard as instruments, with loop recording.
+- `web/src/panel-efectos.ts`, `src/core/efectos.ts` — the effects of a track: the chain and one slider per parameter, drawn from
+  `DEVICE_PARAMS`. A slider is written on the running engine as it moves (`syncMix` in `opendaw-engine.ts`) and committed on release.
 - `web/src/a-midi.ts`, `server/api/transcribir.ts`, `workspace/herramientas/transcribir.py` — To MIDI (Basic Pitch, local).
 - `web/src/gpu-barra.ts`, `server/api/gpu.ts`, `server/lambda.ts`, `server/gpu/`, `workspace/gpu/` — the rented GPU, for any module.
 - `web/src/ajustes.ts`, `server/api/ajustes.ts`, `server/config-proveedores.ts`, `src/core/proveedores-gpu.ts` — Settings: provider accounts, keys never
