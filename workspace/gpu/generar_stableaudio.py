@@ -91,6 +91,14 @@ def generar(receta, bootstrap_s):
         args["apg_scale"] = float(p["apg"])
     if p.get("sampler"):
         args["sampler_type"] = p["sampler"]  # goes through **sampler_kwargs; only -base models have more than one
+    # generate() clamps the length to `sample_size`, whose default is 5292032 samples = 120.0007 s at 44.1 kHz
+    # (model.py at 790793b, _adapt_sample_size: `min(target, sample_size)`), silently. Measured 14-Nov: 180 s asked ->
+    # 120.00 s back; continue to 151 s -> 120.00 s, 0.946 correlated with its source from end to end (the mask is
+    # clamped too, so nothing was generated). Above 120 s the cap is lifted past the target (duration + its 6 s of
+    # padding, which the model rounds up itself), so the min picks the target. Up to 120 s nothing changes.
+    duracion = float(p["duracion"])
+    if duracion > 120:
+        args["sample_size"] = int((duracion + 6.0 + 30.0) * model.model.sample_rate)
     tarea = p["tarea"]
     if tarea == "audio":
         args["init_audio"] = cargar(p["audio"])
@@ -108,6 +116,10 @@ def generar(receta, bootstrap_s):
         audio = model.generate(**args)
     generate_s = time.time() - t1
     sr = model.model.sample_rate
+    # A result shorter than asked used to pass unnoticed (bug 46): say it in the run's output.
+    largo_s = audio.shape[-1] / sr
+    if largo_s < duracion - 0.5:
+        log(f"WARNING: {duracion:.1f} s asked, {largo_s:.1f} s generated")
     Path("generado").mkdir(exist_ok=True)
     ficheros = []
     for i in range(audio.shape[0]):

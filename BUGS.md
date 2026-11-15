@@ -185,3 +185,33 @@ from this list on request; the export still renders a second time when the first
   ways the recorder makes them by itself: the same slot played in two passes with quantize on, and note repeat held for
   more than one pass. FIXED: in the clip they are one note, the longer and the louder (unit test). Hits of the same
   pitch 1/32 of a beat apart or more stay two.
+
+## Requested, not built
+
+- **45. Deleting a track leaves its audio on disk and in the project, without asking** (requested 14-Nov: on deleting a
+  track, also ask whether its files can be deleted from disk). Seen the same day in a project after seven generated takes
+  were discarded: their tracks were gone, their entries stayed in `audioAssets` and their WAVs in `generado/` and
+  `entrada/` (about 150 MB), and so did the source mixes uploaded for each run (`entrada/*-fuente.wav`, 23 MB each).
+
+## Found 14-Nov in a real session
+
+- **46. Stable Audio returned 120 s whatever was asked above that, and Continue past 120 s added nothing**, with no
+  notice. Measured: 180 s asked on `medium` → 120.00 s; continue a 120.25 s source to 151 s → 120.00 s, 0.946 correlated
+  with its source from end to end (a paid run for a copy through the codec). Cause, read in upstream `790793b`
+  (`model.py`, `_adapt_sample_size`): `generate()` clamps the length to its `sample_size` argument, default 5292032
+  samples = 120.0007 s, and clamps the inpaint mask with it; our script passed only `duration`. FIXED in
+  `workspace/gpu/generar_stableaudio.py`: above 120 s it passes a `sample_size` beyond the target, and a result shorter
+  than asked is said in the run's output. Run the same day through the app: four takes of 380 s asked on `medium` →
+  380.00 s each, level steady from start to end (RMS per 30 s within 3 dB), 26 s of generation, 6.68 GB of VRAM.
+  Continue past 120 s not run again yet. Measured, not heard.
+- **47. "Could not start the openDAW engine: Array buffer allocation failed"** (seen 14-Nov, twice in a row, right after
+  four 232 s takes were delivered into a new project, at the end of a four-hour session over four projects, the one
+  before with 380 s takes). OPEN, cause not confirmed. Read in the code: the decode budget (400 MB,
+  `web/src/audio-store.ts`) counts only the decoded `AudioBuffer`s; every engine mount copies each of them whole into a
+  new `SharedArrayBuffer` (`prepareSamples` in `web/src/opendaw-engine.ts`, `AudioData.create` in @opendaw/lib-dsp
+  0.0.96), so a project at the budget needs about twice that, and the copies of the previous mount and of the previous
+  project are only gone when the browser collects them. Four 232 s takes: 327 MB decoded + 327 MB for the engine.
+  Not reproduced headless yet. Reported the same night: after reloading the tab the same project played, so the
+  project fits a fresh tab and what failed was what the session had piled up. Also read: the engine receives every
+  decoded asset of the project, including those of deleted tracks (bug 45 keeps them in `audioAssets`), so deleting a
+  track frees no memory.

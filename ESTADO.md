@@ -1,4 +1,4 @@
-# STATUS — 14-Nov-2026
+# STATUS — 15-Nov-2026
 
 ## START HERE
 
@@ -36,7 +36,8 @@ and `move_device` reorders a chain.
   gap of bug 8). Ctrl+Z walked back six changes one at a time. The ten effects in one chain mounted and played (31 controls,
   every slider moved once while playing, no page errors).
 - A track whose WAV plays outside the engine says so in its panel (the first known limitation above).
-- **Measured, not heard.** Whether each effect sounds right, and whether a moving slider is free of zipper noise, is for the ear.
+- **Heard 15-Nov: PASS, the effects work fairly well; some of them do not seem to do much.** Which ones, and at which
+  settings, was not said. Zipper noise on a moving slider was not mentioned.
 - Facts of the model, not built: the master has no chain (`master` is only `gainDb`), and buses and sends have ops and an
   openDAW translation but no screen (the adapter now records each bus's unit, so the live path reaches them).
 - Also 14-Nov: the user's literal quotes, pronouns and machine details were taken out of this file (the repository is public);
