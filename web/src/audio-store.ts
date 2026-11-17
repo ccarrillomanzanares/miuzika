@@ -85,6 +85,8 @@ interface LoadedAsset {
   /** Path inside the project folder ("entrada/kick.wav"). */
   src: string;
   streaming: boolean;
+  /** The project folder it was read from. Bug 50: an id alone does not say whose audio this is. */
+  slug?: string;
 }
 
 export const audioAssets = new Map<string, LoadedAsset>();
@@ -132,8 +134,10 @@ export function registrarAssetStreaming(datos: {
   durationBeats: number;
   src: string;
   peaks: Float32Array;
+  slug?: string;
 }): void {
   audioAssets.set(datos.id, {
+    ...(datos.slug !== undefined ? { slug: datos.slug } : {}),
     id: datos.id,
     name: datos.name,
     buffer: null,
@@ -182,7 +186,7 @@ export async function cargarWavDeDisco(datos: {
   const peaks = Float32Array.from(picos);
   const soltar = reservarDecodificado(duracionSeg);
   if (!soltar) {
-    registrarAssetStreaming({ id: datos.id, name: datos.name, durationBeats, src: datos.ruta, peaks });
+    registrarAssetStreaming({ id: datos.id, name: datos.name, durationBeats, src: datos.ruta, peaks, slug: datos.slug });
     return audioAssets.get(datos.id)!;
   }
   try {
@@ -201,6 +205,7 @@ export async function cargarWavDeDisco(datos: {
       peaks: peaks.length > 0 ? peaks : computePeaks(buffer, 1024),
       src: datos.ruta,
       streaming: false,
+      slug: datos.slug,
     };
     audioAssets.set(asset.id, asset);
     return asset;
@@ -270,7 +275,10 @@ export async function hidratarAssets(
   const uno = async (id: string): Promise<void> => {
     const meta = project.audioAssets?.find((asset) => asset.id === id);
     const enMemoria = audioAssets.get(id);
-    if (enMemoria) {
+    // Bug 50 (15-Nov): taken by id alone, a project opened after another played the OTHER project's audio on every
+    // track whose asset id was the same in both (two projects written by hand; a Duplicate shares its ids too). This
+    // runs before the previous project's audio is freed, so the folder it came from has to match as well.
+    if (enMemoria && esDeEsteProyecto(enMemoria, slugProyecto)) {
       // Already decoded in this session: only the name is refreshed.
       if (meta) enMemoria.name = meta.name;
       return;
@@ -326,6 +334,28 @@ export function idsConEfectos(project: Project): Set<string> {
     for (const clip of track.clips) if (clip.audio) ids.add(clip.audio.assetId);
   }
   return ids;
+}
+
+/** Audio in memory is this project's when it was read from its folder (or carries no folder: nothing to compare). */
+export function esDeEsteProyecto(asset: { slug?: string }, slugProyecto: string): boolean {
+  return asset.slug === undefined || asset.slug === slugProyecto;
+}
+
+/**
+ * What the engine is handed at a mount: the decoded audio that a clip of THIS project plays, and nothing else.
+ * Bug 47: it used to get every decoded asset in memory, the ones of deleted tracks included, and the engine copies
+ * each one whole.
+ */
+export function audioParaMotor<B>(project: Project, assets: ReadonlyMap<string, { name: string; buffer: B | null }>): Map<string, { name: string; buffer: B }> {
+  const salida = new Map<string, { name: string; buffer: B }>();
+  for (const track of project.tracks) {
+    for (const clip of track.clips) {
+      const id = clip.audio?.assetId;
+      const asset = id !== undefined ? assets.get(id) : undefined;
+      if (id !== undefined && asset?.buffer) salida.set(id, { name: asset.name, buffer: asset.buffer });
+    }
+  }
+  return salida;
 }
 
 /** Frees from memory what the current project no longer uses (when switching projects). */

@@ -9,6 +9,7 @@
  *   exportar          mix to WAV/MP3, notes to MIDI
  *   gpu-barra         the rented GPU's cost and Off button, with every module closed
  *   ajustes           Settings: the accounts the app rents from
+ *   nota              the Note box: an impression of the moment, saved with what the app was showing
  *   modulos/          what generates material: each one only reads the project and hands in audio
  */
 
@@ -33,6 +34,7 @@ import { crearDialogoNuevo } from "./dialogo-nuevo.ts";
 import { etiquetaInstrumento } from "../../src/core/instrumentos.ts";
 import { VentanaAjustes } from "./ajustes.ts";
 import { crearAvisos } from "./avisos.ts";
+import { crearNota } from "./nota.ts";
 import { crearDetectorDoble } from "./doble-pulsacion.ts";
 import { vigilarVersion } from "./build.ts";
 import { initDialogoProyectos } from "./dialogo-proyectos.ts";
@@ -114,6 +116,42 @@ function pintarBotones(): void {
 let panelPad: PanelPad | null = null;
 /** The effects panel (created further down too): told when the project changes under the chain it shows. */
 let panelEfectos: PanelEfectos | null = null;
+
+// The Note box (F2). Created before the Pad and the piano roll exist: its keys have to be listened for before theirs.
+crearNota({
+  boton: $<HTMLButtonElement>("nota"),
+  avisos,
+  contexto() {
+    const view = sesion.project;
+    if (!view) return { resumen: "no project open", datos: { proyecto: null } };
+    const compas = Math.floor(transporte.beat / beatsPerBar(view)) + 1;
+    const pista = (track: Project["tracks"][number], conCadena: boolean): Record<string, unknown> => ({
+      nombre: track.name,
+      tipo: track.kind,
+      instrumento: etiquetaInstrumento(track.instrument),
+      muted: track.muted,
+      solo: track.solo,
+      gainDb: track.gainDb,
+      clips: track.clips.map((clip) => clip.name),
+      efectos: conCadena
+        ? track.devices.map((device) => ({ tipo: device.type, encendido: device.enabled, params: device.params }))
+        : track.devices.map((device) => device.type),
+    });
+    const elegidas = new Set(seleccion.pistasElegidas());
+    const conEfectos = view.tracks.find((t) => t.id === panelEfectos?.pistaAbierta);
+    return {
+      resumen: `${view.name} · bar ${compas} · ${transporte.sonando ? "playing" : "stopped"}`,
+      datos: {
+        proyecto: { nombre: view.name, carpeta: carpetaDeProyecto(view), bpm: view.bpm, pistas: view.tracks.length },
+        compas,
+        sonando: transporte.sonando,
+        pistasElegidas: view.tracks.filter((t) => elegidas.has(t.id)).map((t) => pista(t, false)),
+        // The chain as the project has it: a slider still held is not in it until it is released.
+        ...(conEfectos ? { panelEfectos: pista(conEfectos, true) } : {}),
+      },
+    };
+  },
+});
 
 // Read before the session exists: setting its first project would overwrite it.
 const ultimoAbierto = Sesion.ultimoAbierto();

@@ -65,44 +65,6 @@ export const TIPOS = [
 ] as const;
 export type Tipo = (typeof TIPOS)[number]["id"];
 
-/** The guide's example prompts (prompting.md, 790793b), to start from. Picking one fills the description. */
-export const EJEMPLOS: readonly { tipo: Tipo; titulo: string; texto: string }[] = [
-  {
-    tipo: "cancion",
-    titulo: "Tech-house, UK bass",
-    texto:
-      "A triumphant and stylish UK bass-flavoured tech-house tune that evokes feelings of the last tune played in a DJ set. The pumping four-to-the-floor kick is supported by an 808 bass that is syncopated. There are gliding emotional synth leads that build sections to their climax. Playful stabs and chops support the rhythm of the drums in sections. There is a beautiful gospel house piano that plays in the drop, giving the track a euphoric feeling.",
-  },
-  {
-    tipo: "cancion",
-    titulo: "Alternative pop ballad",
-    texto:
-      "A quirky alternative pop ballad instrumental with the vibe of a long car journey with friends. The catchy synth bass is infectious, the tightly tuned acoustic drums add a classy flair, and the dreamy colourful synths bring a fuzzy old VHS tape atmosphere. At the same time, subtle guitars play indie rock-style motifs. The track is deeply nostalgic with a 90s internet aesthetic and a sense of something lost to time — brooding, bold, youthful, and melancholic.",
-  },
-  {
-    tipo: "cancion",
-    titulo: "70s funky hip hop",
-    texto:
-      "A funky hip hop instrumental with live recorded instrumentation that has the vibe of a 70's TV show theme. The rhythm guitar strums lightly in the background, the lead guitar occasionally delivers jagged flanger-effected chords and phrases, and abstract sounds punctuate the beat with character. A close-mic'd electric piano plays hard with nostalgic supporting chords, flute glides over the beat adding an exciting texture, and the drums are full of swing and old school flavour. The production has a warm, textured sound associated with analogue gear and tape.",
-  },
-  { tipo: "instrumento", titulo: "Solo acoustic guitar", texto: "a sombre solo acoustic guitar track with cavernous reverb and delicate finger picking." },
-  { tipo: "instrumento", titulo: "Solo electric guitar", texto: "an epic solo electric guitar track, live-recorded in a vintage studio." },
-  { tipo: "duo", titulo: "Latin drums and percussion", texto: "a dynamic Latin drums and percussion track." },
-  {
-    tipo: "efecto",
-    titulo: "Drawer slam",
-    texto:
-      "A blunt, powerful \"thud\" made by slamming a wooden desk drawer shut. It has a pronounced low-mid body, making it feel heavy, and is given a touch of analog distortion for aggressive character.",
-  },
-  {
-    tipo: "efecto",
-    titulo: "Tape-stop sub bass",
-    texto:
-      "A massive sub-bass note that mimics a vinyl record or tape machine being turned off. The pitch and speed drop simultaneously, causing the high-end harmonics to \"smear\" and thicken as the sound grinds to a halt at a sub-sonic frequency.",
-  },
-  { tipo: "efecto", titulo: "Closed hi-hats", texto: "A classic, natural recording of 14-inch hi-hats played tightly closed. Zero ring and a very fast decay." },
-];
-
 /**
  * Change amount (init_noise_level) for Transform, from the guide: "as you increase the amount, more lower-level features
  * like melody and rhythm get filtered out, leaving higher-level features like timbre and tonality". 0.7 is what we ran

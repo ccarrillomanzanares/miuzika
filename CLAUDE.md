@@ -6,6 +6,12 @@ miuzika: the old agent version was retired and its folder deleted after the piec
 
 Read `ESTADO.md` first: where we are and **what has been tested by ear** (the verdicts). It keeps no list of pending items.
 
+Then run `npm run notas`: what the user wrote in the app's Note box (F2) since the last session, each with what the app was
+showing at that moment (`.miuzika/notas.log`, outside git: their words stay there). Say how many there were and what
+they say, write what follows from them in `ESTADO.md` as verdicts ("heard: PASS/FAIL" and the reason, never the literal
+words), and only then mark them with `npm run notas -- --leidas`. No word about notes at the start of a session means this
+step was skipped.
+
 ## How to work with the user
 
 - They think one thing at a time and say when they want to think: **do not assume a decision**. "No lo sé" means
@@ -59,6 +65,9 @@ importing anything that is not a PCM WAV) and the GeneralUser GS `.sf2` in `work
   `DEVICE_PARAMS`. A slider is written on the running engine as it moves (`syncMix` in `opendaw-engine.ts`) and committed on release.
 - `web/src/a-midi.ts`, `server/api/transcribir.ts`, `workspace/herramientas/transcribir.py` — To MIDI (Basic Pitch, local).
 - `web/src/gpu-barra.ts`, `server/api/gpu.ts`, `server/lambda.ts`, `server/gpu/`, `workspace/gpu/` — the rented GPU, for any module.
+- `web/src/nota.ts`, `server/api/notas.ts`, `server/notas.ts`, `scripts/notas.ts` — the Note box: an impression of the moment with its
+  context (project, bar, selected tracks, the open windows and their fields, the chain of the open effects panel). Password
+  fields are never read. `MIUZIKA_NOTAS=<file>` points a test server elsewhere, so a test never writes among the real notes.
 - `web/src/ajustes.ts`, `server/api/ajustes.ts`, `server/config-proveedores.ts`, `src/core/proveedores-gpu.ts` — Settings: provider accounts, keys never
   back to the browser. `MIUZIKA_PROVEEDORES=<file>` points a test server elsewhere, so a test never touches the real keys.
 - `server/` — the API as a Vite plugin: projects, audio, peaks, MIDI, GM SoundFont, GPU, Pad. It carries requests and decides nothing.
@@ -70,7 +79,7 @@ importing anything that is not a PCM WAV) and the GeneralUser GS `.sf2` in `work
 
 Python Playwright + the installed Chrome, headless, with a temp profile: it does not touch their Chrome.
 `p.chromium.launch_persistent_context(tempfile.mkdtemp(), channel="chrome", headless=True)`. Run a second server with
-`npx vite --port 5181 --strictPort`, with `MIUZIKA_GPU=simulado` to run a module's path for free (real script, stand-ins for torch and
+`npx vite --config vite.pruebas.config.ts` (port 5181 and its own dependency cache: a second server on the shared cache breaks the engine load of the app in use, bug 49), with `MIUZIKA_GPU=simulado` to run a module's path for free (real script, stand-ins for torch and
 the model: it proves the path, not the music), never on 5180 while they use it, and close it afterwards: stopping the task leaves the
 `node` child alive, so check the port. Test projects land in `workspace/proyectos/` and have to be removed by exact name,
 never with a wildcard. To measure sound, tap what connects to the AudioContext destination with an AnalyserNode

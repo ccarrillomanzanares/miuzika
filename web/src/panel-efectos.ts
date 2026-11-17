@@ -120,6 +120,11 @@ export class PanelEfectos {
     this.pintar();
   }
 
+  /** The track whose chain is on screen, or null with the panel closed (the Note box records it). */
+  get pistaAbierta(): string | null {
+    return this.dialogo.open ? this.pista : null;
+  }
+
   private actual(): Track | undefined {
     return this.d.proyecto()?.tracks.find((t) => t.id === this.pista);
   }

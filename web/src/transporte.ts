@@ -6,7 +6,7 @@
 import type { Project } from "../../src/core/types.ts";
 import { beatsPerBar } from "../../src/core/types.ts";
 import { carpetaDeProyecto } from "../../src/core/project.ts";
-import { audioAssets, hidratarAssets, rutaEnProyecto } from "./audio-store.ts";
+import { audioAssets, audioParaMotor, hidratarAssets, rutaEnProyecto } from "./audio-store.ts";
 import { cargarGm, cargarSoundfontsDelProyecto } from "./sonidos-proyecto.ts";
 import { StemPlayer } from "./stem-player.ts";
 import { stemsDeProyecto } from "./stems.ts";
@@ -159,10 +159,7 @@ export class Transporte {
       this.avisarFaltan(faltan);
       const { playWithOpenDaw } = await import("./opendaw-engine.ts");
       // openDAW only receives what is decoded; long stems are handled separately.
-      const paraEngine = new Map<string, { name: string; buffer: AudioBuffer }>();
-      for (const [id, asset] of audioAssets) {
-        if (asset.buffer) paraEngine.set(id, { name: asset.name, buffer: asset.buffer });
-      }
+      const paraEngine = audioParaMotor(view, audioAssets);
       const soundfonts = await cargarSoundfontsDelProyecto(view);
       const gm = await cargarGm(view, (t) => this.avisos.info(t), (t) => this.sesion.setBusy(true, t));
       const handle = await playWithOpenDaw(

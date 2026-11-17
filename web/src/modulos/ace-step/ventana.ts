@@ -52,8 +52,9 @@ const EXPECTATIVAS: Record<Tarea, string> = {
   // One instrument alone: 6 of 8 takes on xl-sft + LM 4B (8-Nov, s01-s04); with 1.7B it always completed a song.
   // Style words: dirty caption on cover, voice description, fewer layers barely moved it. Empty BPM: 125 dance, or rap.
   text2music: "Makes a whole song. Also one instrument alone if the caption describes only that instrument (“isolated… playing alone… stem”), though some takes add others. Style words move it little; give the BPM, or it picks its own. Generate several takes and keep the best.",
-  // Not offered since 7-Nov evening; kept because the type lists every task the script knows.
-  lego: "Removed from this window: it could not be steered.",
+  // Back on 15-Nov. Over one clean guitar at 122 BPM: bass and drums fit it in 2 of 3 takes each. Over a distorted guitar
+  // at 180 BPM: 0 of 6, "pegotes"; a voice over riff + bass + drums: little consistency. 7-Nov: the caption did not steer it.
+  lego: "Adds one instrument that listens to the tracks you send. Over one clean, simple track it gave a bass and drums that fit, in about 2 takes of 3. Over a distorted or dense source it gave clumps. The caption barely steers its style: ask for several takes and keep what fits.",
   // From a voice: passed (5-Nov). From an extracted drum track: "pegote descomunal" (7-Nov, p07).
   complete: "Builds a band around one track. From a voice: good result. From an extracted drum track it gave a jumble.",
   // 7-Nov: a "harsh, dirty" caption gave harsh keys, not dirt (p01/p02, 0.6 and 0.3 nearly the same take).
@@ -73,8 +74,8 @@ const EXPECTATIVAS: Record<Tarea, string> = {
  */
 const SIN_GARANTIA =
   "Experimental: results vary from take to take, and many takes may be needed before one is useful. This is free software provided as is, without any warranty (AGPL-3.0). No result is guaranteed: the same request can give a good take, the wrong instrument or near silence. The GPU is rented from a provider with your account: it bills the machine's time whether the take is useful or not, failed and cancelled runs included, and keeps billing until you press Off. Every cost is yours.";
-/** Only the Track tab (complete): the short ending was measured on lego, its sibling over a context. */
-const conMargen = (tarea: Tarea): boolean => tarea === "complete";
+/** Only the Track tab (lego and complete): the short ending was measured on lego. */
+const conMargen = (tarea: Tarea): boolean => tarea === "complete" || tarea === "lego";
 /**
  * Lego is gone from the window (the user, 7-Nov evening: "lo quitamos de la app"). Of every take he
  * heard, the ones he kept were what the model chose, not what was asked ("todo lo que ha salido bien,
@@ -84,7 +85,8 @@ const conMargen = (tarea: Tarea): boolean => tarea === "complete";
  * bass gave a sub block; with cover, "un pegote de instrumentos bastante estridente". Takes made with
  * a reference are not offered for Repeat either. The script keeps `--referencia`.
  */
-const OFRECIDA = (tarea: unknown): boolean => tarea !== "lego";
+// Lego came back on 15-Nov (requested, after it fit a clean source with shift 3 and ADG): its takes are offered again.
+const OFRECIDA = (_tarea: unknown): boolean => true;
 
 interface FuentePreparada {
   clave: string;
@@ -235,19 +237,22 @@ export class VentanaAceStep {
 
   private tareaDelFormulario(): Tarea {
     if (this.pestana === "song") return "text2music";
-    if (this.pestana === "track") return "complete";
+    if (this.pestana === "track") return this.v.modoPista === "complete" ? "complete" : "lego";
     return (this.v.transformar as Tarea | undefined) ?? "cover";
   }
 
   private pistaDelFormulario(tarea: Tarea): string | null {
     if (tarea === "extract") return this.v.instrumento ?? "vocals";
     if (tarea === "complete") return [...this.acompanamiento].join(", ") || null;
+    if (tarea === "lego") return this.v.instrumentoLego ?? "bass";
     return null;
   }
 
   private modeloDelFormulario(tarea: Tarea): string {
     const validos = modelosPara(tarea).map((m) => m.nombre);
     if (this.v.modelo && validos.includes(this.v.modelo)) return this.v.modelo;
+    // Lego: the small base model is the one whose takes were heard to fit (15-Nov; guitars on 7-Nov too).
+    if (tarea === "lego" && validos.includes("acestep-v15-base")) return "acestep-v15-base";
     return validos[0]!;
   }
 
@@ -438,12 +443,19 @@ export class VentanaAceStep {
     }
     if (this.pestana === "track") {
       const tarea = this.tareaDelFormulario();
-      const instrumento = this.fila(
+      const modo = this.fila(
+        "What",
+        this.selector("modoPista", [["lego", "One instrument (lego)"], ["complete", "Accompaniment (complete)"]], tarea),
+      );
+      const instrumento = tarea === "lego"
+        ? this.fila("Instrument", this.selector("instrumentoLego", PISTAS_MODELO.map((p): [string, string] => [p, p]), this.v.instrumentoLego ?? "bass"), "One per run. For a voice choose vocals and write the lyrics.")
+        : this.fila(
         "Instruments",
         `<div class="ace-lista">${PISTAS_MODELO.map((p) => `<label class="ace-opcion"><input type="checkbox" data-acomp="${p}"${this.acompanamiento.has(p) ? " checked" : ""}> ${p}</label>`).join("")}</div>`,
         "The result is one track with all of them together. None: the model chooses.",
       );
       return (
+        modo +
         espera(tarea) +
         nombre + instrumento + caption +
         letra("Only if it sings. Empty: [Instrumental] is sent.") +
@@ -531,6 +543,7 @@ export class VentanaAceStep {
         ${this.fila("steps", n("pasos", p.pasos))}
         ${this.fila("guidance", n("guia", p.guia), "The handler forces 1.0 on turbo.")}
         ${this.fila("shift", n("shift", p.shift))}
+        ${p.tarea === "lego" || p.tarea === "complete" ? this.fila("ADG", `<label class="ace-opcion"><input type="checkbox" data-param="adg" data-tipo="booleano"${p.adg ? " checked" : ""}> adaptive dual guidance</label>`, "Base models only.") : ""}
         ${c.lm ? this.fila("LM", s("lm", [...LMS], p.lm), "ACE-Step's own language model: it plans the song from the caption. “none” skips it.") : ""}
         ${this.fila("normalize", `<label class="ace-opcion"><input type="checkbox" data-param="normalizar" data-tipo="booleano"${p.normalizar ? " checked" : ""}> to -1 dBFS</label>`)}
         ${this.fila("instruction", t("instruccion", p.instruccion))}
@@ -661,7 +674,7 @@ export class VentanaAceStep {
     if (!el.name) return;
     this.v[el.name] = el.value;
     // These change which fields apply. The rest repaint nothing, so typing keeps its focus.
-    if (["tipoFuente", "modoPista", "transformar", "instrumento"].includes(el.name)) {
+    if (["tipoFuente", "modoPista", "transformar", "instrumento", "instrumentoLego"].includes(el.name)) {
       this.editados = {};
       this.pintar();
     }

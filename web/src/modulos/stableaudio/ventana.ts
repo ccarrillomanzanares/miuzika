@@ -7,7 +7,7 @@
  */
 
 import {
-  CAMBIOS, EJEMPLOS, LICENCIA, MODELOS, POR_DEFECTO, POR_DEFECTO_BASE, SA3_COMMIT, SAMPLERS_BASE, TIPOS, avisos, componerPrompt,
+  CAMBIOS, LICENCIA, MODELOS, POR_DEFECTO, POR_DEFECTO_BASE, SA3_COMMIT, SAMPLERS_BASE, TIPOS, avisos, componerPrompt,
   infoModelo, leerCompases, leerResultado, parametrosParaEnviar, promptsPorToma, regionesDeCompases, validarParametros,
   type Modelo, type Parametros, type Tarea, type Tipo,
 } from "../../../../src/modulos/stableaudio/receta.ts";
@@ -181,13 +181,9 @@ export class VentanaStableAudio {
     const modelo = infoModelo(this.v.modelo as Modelo);
     const tipo = this.v.tipo as Tipo;
     const tipos = TIPOS.map((x): [string, string] => [x.id, x.etiqueta]);
-    const ejemplos: [string, string][] = [["", "— start from one of its guide's examples —"], ...EJEMPLOS.filter((e) => tipo === "libre" || e.tipo === tipo).map((e): [string, string] => [String(EJEMPLOS.indexOf(e)), e.titulo])];
     const cambios: [string, string][] = [["", "presets from its guide…"], ...CAMBIOS.map((c): [string, string] => [String(c.valor), c.etiqueta])];
     const lineas = this.lineasDeVariacion().length;
-    const segundos = this.segundosDeDuracion();
-    const ayudaDuracion =
-      (t === "continuar" ? "Total: the source plus what is added. " : t === "texto" ? `Up to ${modelo.maxSegundos} s on ${modelo.nombre}. ` : "Set to the source's length on Review. ") +
-      (this.v.unidad === "compases" ? `= ${segundos.toFixed(2)} s at the project's tempo.` : "In bars, it lands on the grid.");
+    const ayudaDuracion = this.ayudaDuracion();
     const ayudaCompases = (() => {
       const c = leerCompases(this.v.compases ?? "");
       if (!this.v.compases) return "Of the source, at the project's tempo. Several parts in one pass: 5-8, 13-16.";
@@ -205,7 +201,6 @@ export class VentanaStableAudio {
         ${t === "repintar" ? fila("Bars", this.campo("compases", "13-16"), esc(ayudaCompases)) : ""}
         ${t === "audio" ? fila("Change amount", `${this.campo("ruido", String(POR_DEFECTO.ruido), "number")} ${this.selector("cambioPreset", cambios)}`, "0 keeps the source, 1 ignores it. Higher filters out melody and rhythm first, keeping timbre and tonality longest (its guide).") : ""}
         ${fila("Kind", this.selector("tipo", tipos), "Opens the text with the tags its guide recommends. Review shows the whole text.")}
-        ${fila("Example", this.selector("ejemplo", ejemplos), "Fills the description; change it as you like.")}
         ${tipo !== "efecto" ? fila("Genres", this.campo("generos", "e.g. Industrial, EBM"), "Become “Genre: …” tags; several, or unrelated ones, can be combined.") : ""}
         ${tipo !== "efecto" ? fila("Instruments", this.campo("instrumentos", "e.g. Drums, Synth bass"), "Become an “Instruments: …” tag.") : ""}
         ${fila("Description", areaDeTexto('name="descripcion"', 4, this.v.descripcion ?? ""), esc(AYUDA_DESCRIPCION[tipo] + " Say what you want: no negations here, use the negative prompt." + (t !== "texto" ? " For repaint and continue, the source counts more than the text; it can even be empty." : "")))}
@@ -280,14 +275,29 @@ export class VentanaStableAudio {
 
   // ---------------------------------------------------------------- events
 
+  /** The line under Duration: its limit, and in bars the seconds they come to. */
+  private ayudaDuracion(): string {
+    const t = this.tarea;
+    const modelo = MODELOS.find((m) => m.nombre === this.v.modelo) ?? MODELOS[0]!;
+    return (
+      (t === "continuar" ? "Total: the source plus what is added. " : t === "texto" ? `Up to ${modelo.maxSegundos} s on ${modelo.nombre}. ` : "Set to the source's length on Review. ") +
+      (this.v.unidad === "compases" ? `= ${this.segundosDeDuracion().toFixed(2)} s at the project's tempo.` : "In bars, it lands on the grid.")
+    );
+  }
+
   private alEscribir(evento: Event): void {
     const el = evento.target as HTMLInputElement | HTMLTextAreaElement;
     if (!el.name || el.type === "radio" || el.type === "file" || el instanceof HTMLSelectElement) return;
     this.v[el.name] = el.value;
     if (this.vista === "review") {
       this.refrescarRevision();
-    } else if (el.name === "variaciones" || el.name === "compases" || el.name === "duracion") {
-      // Takes follow the variation lines, and the bars and durations show their seconds: repaint keeping the caret.
+    } else if (el.name === "duracion") {
+      // Bug 51: this field is a number input, which has no caret to read or restore; repainting the form on each key
+      // left the caret at the start, so "280" typed came out as "082". Only its help line changes: that is rewritten.
+      const ayuda = el.closest(".ace-fila")?.querySelector("small");
+      if (ayuda) ayuda.textContent = this.ayudaDuracion();
+    } else if (el.name === "variaciones" || el.name === "compases") {
+      // Takes follow the variation lines, and the bars show their seconds: repaint keeping the caret.
       const inicio = el.selectionStart;
       this.pintar();
       const nuevo = this.dialogo.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[name="${el.name}"]`);
@@ -345,13 +355,6 @@ export class VentanaStableAudio {
         this.v.duracion = el.value === "compases" ? String(Math.max(1, Math.round(s / this.segundosPorCompas()))) : String(Math.round(s * 100) / 100);
       }
       this.v[el.name] = el.value;
-      this.pintar();
-    } else if (el.name === "ejemplo") {
-      const e = EJEMPLOS[Number(el.value)];
-      if (el.value !== "" && e) {
-        this.v.descripcion = e.texto;
-        if (this.v.tipo !== "libre") this.v.tipo = e.tipo;
-      }
       this.pintar();
     } else if (el.name === "cambioPreset") {
       if (el.value !== "") this.v.ruido = el.value;

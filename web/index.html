@@ -90,6 +90,11 @@
           <strong data-i18n="proyectos.dialogo">Projects on disk</strong>
           <button id="proyectos-cerrar" class="icon" data-i18n-title="cerrar" title="Close">✕</button>
         </div>
+        <div class="proyectos-acciones">
+          <span id="proyectos-elegidos"></span>
+          <button id="proyectos-duplicar" type="button" title="Copy the ticked projects, each with its whole folder (audio included), as “name (copy)”" disabled>Duplicate</button>
+          <button id="proyectos-borrar" type="button" title="Delete the ticked projects: asks first, and asks whether their folders and audio go too" disabled>Delete…</button>
+        </div>
         <div id="lista-proyectos" class="lista-proyectos"></div>
       </dialog>
 
@@ -107,6 +112,7 @@
 
       <footer class="status">
         <span id="status" data-i18n="estado.inicial">Space = play/pause · twice = stop · Double-click a clip = piano roll · Ctrl+wheel = zoom</span>
+        <button id="nota" class="avisos-toggle" type="button" title="Write down what you think of what you are using or hearing right now (F2). Saved on this computer with the project, the bar, the selected track and the open window">Note</button>
         <button id="avisos-toggle" class="avisos-toggle" type="button">Log</button>
       </footer>
     </div>

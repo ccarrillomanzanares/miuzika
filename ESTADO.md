@@ -21,6 +21,128 @@ measured and heard: the verdicts.
 - **A project cannot be longer than 512 bars**: a file longer than that at the project's tempo (17 minutes at 120 BPM) is refused
   on import with "lengthBars: Integer between 1 and 512".
 
+**15-Nov: the Note box (requested: a way to leave an impression at the moment, for any feature, that reaches the next
+session and never reaches git).** "Note" in the status bar or F2 from anywhere: a line of text and, optionally, PASS / So-so /
+FAIL; Enter saves, Esc closes and keeps the text. Saved with what the app was showing when the box opened: project, bar,
+playing or not, the selected tracks, every open window with its heading and named fields, and the whole chain with its values
+when the effects panel is open. One JSON line per note in `.miuzika/notas.log` (ignored by git; a unit test fails if it stops
+being ignored), a Log line in the app, and `npm run notas` for a session to read the new ones (CLAUDE.md orders it at the start).
+- Over a modal window the box opens as a modal too (everything outside a modal is inert); otherwise it is not modal and does
+  not stop or cover the transport.
+- Measured headless with the notes pointed at a temp file: saved with no project; saved with the effects panel open (context
+  held the reverb's four values); Esc closed only the box and kept the text; over Settings it was typed in and saved, Settings
+  stayed open and a value typed in a key field did not reach the file; an empty note was not sent; no page errors. 246 unit
+  tests green. **Not tried by the user yet.**
+- Limits: the file lives on this machine only and has no copy; a slider still held when the box opens is recorded at its
+  last released value.
+
+**15-Nov: lego and complete read again (requested: look once more at the function that generates a track from the others,
+in case something was missed). Nothing run.** Read: upstream's README, INFERENCE.md, API.md, GRADIO_GUIDE.md, Tutorial.md
+(its last 8k characters only as a summary), `constants.py` on `main`, and issues/PRs #1375, #1286, #1287, #1255; against
+our script and the verdicts below.
+- **What we do as upstream says:** base models only, the instruction with the track name, the 12 track names, no LM for
+  lego and complete (upstream made that its own default in PR #1287; its docs still say otherwise), duration locked to the
+  source.
+- **Three settings never tried in lego/complete.** `shift`: we send 1.0 on base models; upstream's Gradio and API default
+  to 3.0 and its Best Practices recommend 3.0. `use_adg` (base only, "enable for quality"): never sent. Steps: we used 50;
+  it recommends 32-64. Issue #1255 says lego gave noise from Python and worked in Gradio, for a "missing parameter" it does
+  not name; our Python path matches that description.
+- **Against expecting much from those:** issue #1375 (open, no maintainer answer), at our same commit `ca1e85f`, on base and
+  xl-base, reports lego usable in about 1 of 10 takes over a dense mix and 1 of 4 over a sparse one, not locked to the
+  source's rhythm, the seed deciding most of it, and CFG 7 / shift 3 / 32 steps among what was tried without success. It
+  also points at a lego-trained checkpoint in the code (`is_lego_sft`) that has not been released.
+- **What our own verdicts already said and the 14-Nov summary lost:** lego was dropped for not following the CAPTION, not
+  for not fitting. Fit was heard as good at times: bass over drums "only bass, usable" (7-Nov), and on `acestep-v15-base`
+  guitars that "fit the other instruments very well" (`guitarra-i`). The best case was few tracks as context on the small
+  base model.
+- **Complete:** upstream describes its source as ONE track ("e.g., a cappella vocals"), and measured it following harmony
+  (bass root match 56.9 % against a 32.5 % floor, PR #1287). Ours passed from a voice and failed from extracted drums:
+  drums carry no harmony to follow. Never tried: complete from one clean harmonic track (a riff, a bass line, or MIDI
+  played through the SoundFont).
+- Ideas only, nothing decided: lego back as an option with shift 3 and ADG; complete from a harmonic track.
+- **Run the same day on request** (project `psycho-desde-cero`, 122 BPM, all 31.5 s = 16 bars, seed 4242, sent straight
+  to `/api/gpu/ejecutar`; lego is still out of the window). Source: `riff-1`, a guitar alone from Stable Audio (stem,
+  cfg 1), chosen by measure among three (strongest pulse at 122; E and B on top, more G# than G, so the key sent was
+  E major). `generar_audio.py` gained `--adg` (`use_adg`, a field of GenerationParams at `ca1e85f`), only passed when asked.
+  - complete, xl-base, DRUMS | BASS, shift 1 (`comp-s1`, 2 takes) and shift 3 + ADG (`comp-s3`, 2 takes), 19 s each.
+    Measured: three of the four are the riff back, nearly unchanged (correlation with the source 0.74-0.83, same pitch
+    classes and centroid, 3-7 % of the energy under 150 Hz against the riff's 3 %): little or no bass and drums added.
+    `comp-s3-2` is something else: 81 % under 150 Hz, uncorrelated, D#/E/D on top.
+  - lego, `acestep-v15-base`, shift 3 + ADG, 3 takes each. Bass: `lego-bass-2` 98 % under 150 Hz, E and B on top (the
+    riff's two notes), no copy of the source (0.00); `lego-bass-1` a bass with the riff partly in it (0.35);
+    `lego-bass-3` quiet and mid-heavy, not a bass by measure. Drums: all uncorrelated with the source, pulse at 122 BPM
+    strong in takes 1 and 3 (0.42, 0.45; the riff itself 0.11), weaker in 2.
+  - These numbers cannot tell whether the takes sit on the riff's beat or sound like one band.
+  - **Heard 15-Nov: PASS for fit.** The takes 1 together (riff-1 + lego-bass-1 + lego-drums-1) fit quite well; the takes
+    2 with riff-1 fit too. The takes 3 are not good tracks, they are not heard well (as measured: `lego-bass-3` at
+    -21.5 dB RMS with no lows, `lego-drums-3` at -23.8 dB). **So lego over one harmonic track gave a bass and a drum kit
+    that go with it in 2 of 3 takes each**, on `acestep-v15-base` with shift 3 and ADG. Whether they follow the caption's
+    style was not said at first; then: **heard: the style is more rockabilly than psychobilly** (the texts sent asked for
+    it: "rockabilly boogie riff", "walking rockabilly boogie line", "primitive rockabilly drum kit", at 122 BPM, slow
+    for psychobilly). The complete takes were not commented on. Not separated: how much is due to shift 3 and ADG, since
+    no take with the old settings was made over this riff.
+
+**15-Nov: lego back in the window (asked: how to use lego from the app).** Modules -> ACE-Step -> Track now starts with
+"What": One instrument (lego) or Accompaniment (complete). Lego: one instrument per run, `acestep-v15-base` unless
+another base model is chosen, shift 3 and ADG by default (both on Review, editable; ADG is a new row there for lego and
+complete), 2 bars of margin as complete, takes offered for Repeat again. Its text in the window says what was heard:
+fits over one clean simple track in about 2 takes of 3, clumps over a distorted or dense source, the caption barely
+steers it. Checked headless on the simulated GPU: form, Review (model, shift 3, ADG on, the DRUMS instruction), Run,
+the take delivered as a track, the recipe file carrying `adg: true`; complete keeps shift 1 and no ADG. 260 unit tests
+green. **Not tried by the user on a real GPU through the window.** The two test projects of the day were deleted by
+the user from Projects.
+
+**15-Nov: the first two notes left from the app, and bugs 47, 50, 51, 52 fixed (requested: go on fixing the bugs).**
+- Notes read with `npm run notas` (2 new of 2), both on Stable Audio's form. Heard/seen: SO-SO, digits typed in
+  Duration came out reversed (bug 51, fixed). FAIL, with the Note box open the form could not be scrolled (bug 52,
+  fixed: the box is no longer modal and sits inside the window it is opened over). Also said: the Example field
+  of that form will probably not be used. Example removed from the form the same day, on request, with the table of
+  the guide's example prompts behind it.
+- Bug 50 (a project playing another project's audio) and bug 47 (the engine copying every WAV at every mount):
+  fixed, detail and measurements in BUGS.md. All measured headless, 259 unit tests green. **Not tried by the user.**
+- The Note box works end to end: both notes arrived with the form's values at that moment.
+
+**15-Nov: second lego batch, towards psychobilly and with a voice (requested: a new project, and see whether it can
+make a voice).** Project `psychobilly-180`, 180 BPM, E minor, 64 s = 48 bars, seed 4242, lego on shift 3 + ADG, 3 takes
+each. Riff from Stable Audio without the word rockabilly ("Psychobilly, Punk Rock, Horror Punk", a distorted guitar
+alone); `riff-3` chosen by measure (E, B, G on top). Lego bass and drums over the riff on `acestep-v15-base`. Then lego
+VOCALS with English lyrics (two verses and two choruses) over a mix of riff-3 + lego-bass-3 + lego-drums-1, on
+`acestep-v15-base` (`voz-base`) and `acestep-v15-xl-base` (`voz-xl`).
+- Measured, vocals: `voz-base-2` and `voz-xl-2` are uncorrelated with the context (0.00), with almost no lows (2 % and
+  16 % under 150 Hz) and a centroid near 1.1-1.2 kHz: the shape of a voice alone. `voz-base-1` and `-3` are mostly the
+  context back (correlation 0.78 and 0.83, 84-87 % under 150 Hz); `voz-xl-1` and `-3` carry part of it (0.35, 0.46).
+  So with a dense context lego returned the context in 4 of 6 takes, as upstream's issue #1375 describes.
+- Measured, bass: all three 75-94 % under 150 Hz and uncorrelated with the riff. Drums: `lego-drums-1` 90 % under
+  150 Hz (kick-heavy, or not a full kit), `-3` all highs with the strongest pulse, `-2` quiet.
+- Whether any take sings the words, and whether the style moved to psychobilly, is for the ear. **Not heard.**
+- **Heard 15-Nov, with the right audio: FAIL.** Only the riffs and the voice can be listened to; the basses and drums
+  are clumps. The voice has little consistency. The riffs are fine as riffs, nothing more. So lego passed over the
+  clean 122 BPM guitar (first batch, 2 of 3 takes) and failed over the distorted 180 BPM one (0 of 6), with the same
+  model and settings. What changed between the two: a distorted, dense source instead of a clean one, 180 BPM instead
+  of 122, 64 s instead of 31.5 s; which of the three did it is not known. It agrees with upstream's issue #1375
+  (a dense source: about 1 usable take in 10).
+- A first listen (some tracks clumps, others the same as the previous project) does not count: bug 50, the bass, drums
+  and `riff-1` tracks were playing the previous project's audio. The first project's verdict stands (it was opened first).
+
+**15-Nov: deleting tracks asks about their audio files (bug 45, requested 14-Nov; said again after Delete did not ask).**
+The browser's own "Delete?" became a window with one box, unticked: "Also delete its audio from disk", with the files
+and sizes. Detail and measurements in BUGS.md, 45. Measured headless, 255 unit tests green. **Not tried by the user yet.**
+
+**15-Nov: Projects can be ticked, duplicated and deleted (requested, with the delete asking apart whether the folder and
+its contents go too).** Each row has a tick box; a click on the row still opens it. **Duplicate** copies the whole folder
+(audio included) to a free `<folder>-copy` and gives the copy its own name ("… (copy)"), id and folder; the open project is
+saved first so the copy has its last change. **Delete…** always asks, listing each project with its files and size, and has
+one box, unticked by default: "Also delete its folder and everything inside". Unticked, only `proyecto.json` goes (the
+project leaves the list, its audio stays; a folder left empty goes too). The open project is closed without saving before
+it is deleted, so its autosave cannot write it back. Disk part in `server/proyectos-disco.ts` (6 unit tests); the routes
+take folder names only and check all of them before touching the first.
+- Measured headless on test projects made for it: duplicate carried the WAV and the new name; Cancel deleted nothing;
+  delete without the folder left the WAV and removed the project from the list; delete with folders of two projects, one of
+  them open with a tempo change still waiting for the autosave, left neither on disk 4 s later and no project open; `..` and
+  paths as names answered 400; the other 15 project folders (223 files) had the same files and sizes before and after; no
+  page errors. 252 unit tests green. **Not tried by the user yet.**
+- Not built: a way back. A deleted folder is deleted, not moved to a bin.
+
 **14-Nov: effects in the interface (requested).** The ten effects, their ops and their openDAW translation existed since
 the agent version; no screen reached them. Now each track head has an **FX** button (next to S and M, with the count) that opens
 the track's chain in a panel that is not modal, so Play, mute and solo stay in reach: add (the ten), remove, on/off, move up

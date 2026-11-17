@@ -297,6 +297,15 @@ export function apagablesDe(lista: Instancia[], nombre: string): Instancia[] {
   return lista.filter((i) => i.nombre === nombre && vivos.has(i.status));
 }
 
+/**
+ * The account's instances that are this app's: the ones carrying its name (LAMBDA_NOMBRE). Bug 48 (15-Nov): the
+ * header's "GPU on", its price and its spending were computed over every instance of the account, so a machine
+ * started by hand with no name showed as the app's own, while Run would not use it and Off would not stop it.
+ */
+export function deLaApp(lista: Instancia[], nombre: string): Instancia[] {
+  return lista.filter((i) => i.nombre === nombre);
+}
+
 /** Shuts down (terminates) the instance and confirms it disappears from the account. */
 export async function apagar(
   cfg: ConfigLambda,
@@ -785,7 +794,8 @@ export async function estado(cfg: ConfigLambda): Promise<{
     instancias(cfg).catch(() => [] as Instancia[]),
     comprobarSsh(),
   ]);
-  const vivas = lista.filter((i) => i.status !== "terminated");
+  // Only this app's instances (bug 48): what Run reuses and Off stops, and nothing else on the account.
+  const vivas = deLaApp(lista, cfg.nombre).filter((i) => i.status !== "terminated");
   // Only ACTIVE ones count: an instance stuck in "terminating"
   // for days keeps its first_healthy and added thousands of dollars to the counter.
   const activas = vivas.filter((i) => i.status === "active");

@@ -125,6 +125,15 @@ interface OpenDawAudioInput {
   buffer: AudioBuffer;
 }
 
+/**
+ * The engine's copy of each decoded WAV, kept for as long as the WAV itself is in memory. Bug 47 (14-Nov, "Array buffer
+ * allocation failed" after a long session): every mount copied every WAV whole into new SharedArrayBuffers, and a mount
+ * happens at each Play after a change of structure, so a project at the decode budget (400 MB) asked for 400 MB more
+ * each time and relied on the browser collecting the previous copies in time. The copy is only read by the engine, so
+ * one per WAV serves every mount; keyed weakly, it goes when the WAV is freed.
+ */
+const copiasParaMotor = new WeakMap<AudioBuffer, import("@opendaw/lib-dsp").AudioData[]>();
+
 async function prepareSamples(
   bpm: number,
   UUID: typeof import("@opendaw/lib-std").UUID,
@@ -150,16 +159,27 @@ async function prepareSamples(
     // into 2-minute chunks. It is still the same audio, with no recompression.
     const chunkFrames = Math.max(1, Math.floor(buffer.sampleRate * 120));
     const chunkCount = Math.ceil(buffer.length / chunkFrames);
+    let copias = copiasParaMotor.get(buffer);
+    if (!copias) {
+      copias = [];
+      for (let index = 0; index < chunkCount; index++) {
+        const startFrame = index * chunkFrames;
+        const frames = Math.min(chunkFrames, buffer.length - startFrame);
+        if (frames <= 0) continue;
+        const copia = AudioData.create(buffer.sampleRate, frames, buffer.numberOfChannels);
+        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+          copia.frames[channel]!.set(buffer.getChannelData(channel).subarray(startFrame, startFrame + frames));
+        }
+        copias.push(copia);
+      }
+      // Kept only once every chunk was made: a failed allocation leaves nothing half-done behind.
+      copiasParaMotor.set(buffer, copias);
+    }
     for (let index = 0; index < chunkCount; index++) {
       const startFrame = index * chunkFrames;
       const frames = Math.min(chunkFrames, buffer.length - startFrame);
       if (frames <= 0) continue;
-      const data = AudioData.create(buffer.sampleRate, frames, buffer.numberOfChannels);
-      for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-        data.frames[channel]!.set(
-          buffer.getChannelData(channel).subarray(startFrame, startFrame + frames),
-        );
-      }
+      const data = copias[index]!;
       const uuid = UUID.generate();
       const name = chunkCount > 1 ? `${asset.name} #${index + 1}` : asset.name;
       const durationInSeconds = frames / buffer.sampleRate;

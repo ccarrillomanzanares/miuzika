@@ -186,12 +186,25 @@ from this list on request; the export still renders a second time when the first
   more than one pass. FIXED: in the clip they are one note, the longer and the louder (unit test). Hits of the same
   pitch 1/32 of a beat apart or more stay two.
 
-## Requested, not built
+## Requested
 
 - **45. Deleting a track leaves its audio on disk and in the project, without asking** (requested 14-Nov: on deleting a
   track, also ask whether its files can be deleted from disk). Seen the same day in a project after seven generated takes
   were discarded: their tracks were gone, their entries stayed in `audioAssets` and their WAVs in `generado/` and
   `entrada/` (about 150 MB), and so did the source mixes uploaded for each run (`entrada/*-fuente.wav`, 23 MB each).
+  BUILT 15-Nov: Delete on tracks opens a question of its own with one box, unticked: "Also delete its audio from
+  disk", listing the files that belong to those tracks alone with their sizes (`src/core/ficheros-pista.ts`: a file
+  another track still plays is never offered). Unticked, as before: the files stay and Ctrl+Z brings the track back.
+  Ticked: the tracks and their `audioAssets` entries leave the project, the project is written, then the files are
+  deleted and the undo history is cleared (an older state would bring back tracks with no audio). Measured headless:
+  Esc deleted nothing; unticked kept the WAV and undo restored the track; ticked removed the WAV, its entry in the
+  master file and its decoded copy in memory, left the other track's WAV and it played; a MIDI track showed no box.
+  Also 15-Nov (requested: the .mid files have to go too): a clip made from a .mid records its file (`origin.archivo`,
+  set by the MIDI import, the modules' delivery and To MIDI), and the question offers the .mid when every track read
+  from it is being deleted. Measured headless: a .mid imported with Open, its track deleted with the box ticked, the
+  file gone from `entrada/`. Tracks imported BEFORE this record no file and offer none.
+  STILL THERE: the source mixes uploaded for a run (`entrada/*-fuente.wav`) belong to no track and are not offered,
+  and entries left by tracks deleted before this, or deleted with the box unticked, stay in `audioAssets`.
 
 ## Found 14-Nov in a real session
 
@@ -215,3 +228,47 @@ from this list on request; the export still renders a second time when the first
   project fits a fresh tab and what failed was what the session had piled up. Also read: the engine receives every
   decoded asset of the project, including those of deleted tracks (bug 45 keeps them in `audioAssets`), so deleting a
   track frees no memory.
+  FIXED 15-Nov, the two causes read in the code: (1) the engine's copy of each WAV is made once and kept for as
+  long as the WAV is in memory (`copiasParaMotor` in `web/src/opendaw-engine.ts`), instead of once per mount;
+  (2) the engine is handed only the audio a clip of the project plays (`audioParaMotor`, unit test), not every
+  decoded asset. Measured headless on an 11-track project with 127 MB decoded: the first mount asked for 126.8 MB
+  of SharedArrayBuffer, the second and third (after a moved clip) for 0.0 MB, and sound reached the output on all
+  three; no page errors. The failure itself was never reproduced, so this removes what was read as its cause,
+  not a failure seen to stop. Still as before: a deleted track's decoded audio stays in the browser's memory
+  while its entry is in `audioAssets` (that is what lets Ctrl+Z bring the track back).
+
+## Found 15-Nov
+
+- **48. The header showed an instance that is not the app's as "GPU on".** Seen with a machine started by hand on the
+  provider's site, with no name, before it even had an IP: the bar showed it with its price and spending. Cause: the
+  state for the bar (`estado` in `server/lambda.ts`) was computed over every instance of the account, while Run only
+  reuses, and Off only stops, the ones named like the app's (`LAMBDA_NOMBRE`, default `miuzika-gpu`). So the bar
+  promised a GPU that Run would not use (it would start a second one) and showed an Off that would not stop it.
+  FIXED: the state counts only the instances with the app's name (`deLaApp`, unit test). Another project's machine
+  on the same account is no longer shown, counted or priced. Not checked against the live account by the assistant.
+- **49. "Could not start the openDAW engine: Failed to fetch dynamically imported module …/.vite/deps/@opendaw_studio-adapters.js"**
+  (seen 15-Nov, on Play right after importing a WAV; a reload of the tab cured it). Cause, with the times: a second
+  Vite server had just been started on 5181 for a headless test, sharing `node_modules/.vite` with the app's; it
+  rewrote the pre-bundled dependencies at 09:58:53, the second the app asked for the previous build of that module.
+  Not a fault of the app: of the way the tests were run. FIXED: `vite.pruebas.config.ts` gives the test server its
+  own cache (`tmp/vite-pruebas`); started with it, the app's cache was not touched (same mtime before and after).
+- **50. A project opened after another one played the OTHER project's audio on the tracks whose asset ids matched.**
+  Seen 15-Nov: `psychobilly-180` (180 BPM, 64 s takes) played the 122 BPM, 31.5 s takes of `psycho-desde-cero` on
+  `lego-bass-*`, `lego-drums-*` and `riff-1`: heard as tracks "the same as the previous project" and as clumps. Cause:
+  `hidratarAssets` (`web/src/audio-store.ts`) takes an asset already in memory by its id alone ("already decoded in this
+  session"), and it runs before the previous project's audio is freed; both project files had been written by hand for
+  the tests with ids made from the take names, so nine ids were the same in both. The app's own ids carry a random
+  suffix, so two projects made in the app do not collide; a project copied with Duplicate does share its ids with its
+  source (same audio until one of the two changes a file). The test project was rewritten with ids that carry its
+  folder. FIXED: audio in memory records the project folder it was read from, and is reused only for that folder
+  (unit test). Measured headless: a copy of a project sharing every id, with one WAV replaced by a 64 s one, opened
+  right after its source: that asset was 64 s and tagged with the copy's folder (before, the source's 31.5 s).
+- **51. In Stable Audio's form, digits typed in Duration came out reversed** (a note left from the app, 15-Nov). Cause:
+  the form was repainted on every key in that field to refresh its help line, and the caret was put back from
+  `selectionStart`, which a number input does not have: the caret landed at the start each time. FIXED: typing there
+  only rewrites the help line. Measured headless: "280" typed gives "280", and in bars the seconds follow each key.
+- **52. With the Note box open over a module's window, that window could not be scrolled** (a note left from the app,
+  15-Nov). Cause: over a modal window the box opened as a second modal, which makes everything under it inert.
+  FIXED: the box is never modal; over a modal window it sits inside that window while open and is put back when
+  the window repaints. Measured headless: with the box open over Stable Audio's form, the form scrolled, a field of
+  it took typing and kept the box and its text through the repaint, and the note was saved.

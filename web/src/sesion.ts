@@ -193,6 +193,33 @@ export class Sesion {
     });
   }
 
+  /** Drops undo and redo: files were deleted from disk, and an older state would bring back tracks with no audio. */
+  olvidarHistorial(): void {
+    this.history = [];
+    this.future = [];
+    this.ev.alCambiarEstado();
+  }
+
+  /** Writes the open project and waits for it: before its folder is copied, so the copy has the last change. */
+  async guardarYEsperar(): Promise<void> {
+    if (this.guardadoTimer !== null) {
+      window.clearTimeout(this.guardadoTimer);
+      this.guardadoTimer = null;
+    }
+    await this.guardarEnDisco(true);
+  }
+
+  /**
+   * Closes the open project WITHOUT writing it: it is being deleted, and the autosave's pending write would put its
+   * file back on disk a moment after it was removed.
+   */
+  cerrarSinGuardar(): void {
+    if (this.guardadoTimer !== null) window.clearTimeout(this.guardadoTimer);
+    this.guardadoTimer = null;
+    this.guardadoPendiente = false;
+    this.setProject(null, false);
+  }
+
   /** The "Save" button and Ctrl+S: write now, without waiting for the autosave. */
   guardarAhora(): void {
     if (this.guardadoTimer !== null) {

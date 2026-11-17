@@ -1292,3 +1292,92 @@ small.ace-pasado {
 .pad-sin-proyecto p {
   margin: 8px 0 14px;
 }
+
+/* ── Note box ─────────────────────────────────────────────────────────────── */
+
+/* Bottom right, out of the way of what the note is about; above the piano roll's overlay (z-index 50). */
+.dialogo.nota {
+  position: fixed;
+  inset: auto 16px 44px auto;
+  margin: 0;
+  width: min(420px, 92vw);
+  min-width: 0;
+  z-index: 60;
+}
+/* Over a modal window it is modal too: the window underneath must stay readable. */
+.dialogo.nota::backdrop {
+  background: transparent;
+}
+.nota-resumen {
+  display: block;
+  margin: 6px 0;
+  color: var(--muted);
+}
+.nota textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.nota-acciones {
+  align-items: center;
+  margin-top: 8px;
+}
+.nota-acciones .spacer {
+  flex: 1;
+}
+#nota {
+  margin-right: 6px;
+}
+
+/* ── Projects: tick, duplicate, delete ────────────────────────────────────── */
+.proyectos-acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+.proyectos-acciones span {
+  flex: 1;
+  color: var(--muted);
+  font-size: 12px;
+}
+.proyecto-linea {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.proyecto-linea input[type="checkbox"] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.proyecto-linea.abierto .proyecto-fila strong::after {
+  content: " · open";
+  color: var(--blue);
+  font-weight: normal;
+}
+.proyectos-borrado p {
+  margin: 6px 0;
+  line-height: 1.5;
+}
+.proyectos-borrado ul {
+  margin: 6px 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.proyectos-borrado label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 10px 0;
+}
+.proyectos-borrado small {
+  display: block;
+  color: var(--muted);
+}

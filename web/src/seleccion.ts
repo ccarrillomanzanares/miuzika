@@ -3,6 +3,10 @@
 import { beatsPerBar } from "../../src/core/types.ts";
 import { applyOps } from "../../src/core/ops.ts";
 import type { Op } from "../../src/core/ops.ts";
+import { carpetaDeProyecto } from "../../src/core/project.ts";
+import { audioSoloDe, midiSoloDe, sinAssets } from "../../src/core/ficheros-pista.ts";
+import { ficherosDeProyecto } from "./proyecto-disco.ts";
+import { preguntarBorrarPistas } from "./dialogo-borrar-pistas.ts";
 import type { TimelineView } from "./timeline.ts";
 import type { Sesion } from "./sesion.ts";
 import type { Avisos } from "./avisos.ts";
@@ -51,7 +55,7 @@ export class Seleccion {
     $("clip-dup").addEventListener("click", () => this.duplicar());
     $("sel-mute").addEventListener("click", () => this.alternar(this.pistas, "muted"));
     $("sel-solo").addEventListener("click", () => this.alternar(this.pistas, "solo"));
-    $("sel-delete").addEventListener("click", () => this.borrarPistas());
+    $("sel-delete").addEventListener("click", () => void this.borrarPistas());
     $("sel-all").addEventListener("click", () => d.timeline.selectAll());
     $("sel-clear").addEventListener("click", () => d.timeline.clearSelection());
   }
@@ -63,7 +67,7 @@ export class Seleccion {
       return true;
     }
     if (this.pistas.length === 0) return false;
-    this.borrarPistas();
+    void this.borrarPistas();
     return true;
   }
 
@@ -183,19 +187,64 @@ export class Seleccion {
     if (ops.length > 0) this.aplicarOpsClips(ops, `Deleted ${ops.length} clip(s).`, false);
   }
 
-  private borrarPistas(): void {
+  /** The question is open: a second Delete must not stack another one. */
+  private preguntando = false;
+
+  /**
+   * Asks, and asks apart whether the audio that belongs to these tracks alone goes from disk too (bug 45). With the
+   * files: the tracks and their entries leave the project, the project is written, and only then the files are
+   * deleted, so a failure in between never leaves a saved project that names files already gone.
+   */
+  private async borrarPistas(): Promise<void> {
     const { project, busy } = this.sesion;
-    if (!project || busy) return;
+    if (!project || busy || this.preguntando) return;
     const tracks = project.tracks.filter((track) => this.pistas.includes(track.id));
     if (tracks.length === 0) return;
-    const label = tracks.length === 1 ? `“${tracks[0]!.name}”` : `${tracks.length} tracks`;
-    if (!confirm(`Delete ${label}?`)) return;
-    const ops: Op[] = tracks.map((track) => ({ op: "remove_track", trackId: track.id }));
+    const slug = carpetaDeProyecto(project);
+    const propios = audioSoloDe(project, tracks.map((track) => track.id));
+    // The .mid files the tracks' notes were read from (the ones that recorded it).
+    const midis = midiSoloDe(project, tracks.map((track) => track.id));
+    this.preguntando = true;
     try {
-      this.sesion.setProject(applyOps(project, ops).project);
-      this.avisos.info(`Deleted ${tracks.length} track(s): ${tracks.map((track) => `“${track.name}”`).join(", ")}.`);
+      // Only what is really in the project folder is offered: a file that is missing or lives in a shared folder is not.
+      let enDisco: { ruta: string; bytes: number }[] = [];
+      if (propios.length > 0 || midis.length > 0) {
+        try {
+          const medidos = await ficherosDeProyecto(slug, [...new Set([...propios.map((a) => a.ruta!), ...midis])], false);
+          enDisco = medidos.filter((f) => f.bytes !== null).map((f) => ({ ruta: f.ruta, bytes: f.bytes! }));
+        } catch (error) {
+          this.avisos.error(`Could not look at the tracks' files, so deleting them is not offered: ${mensajeDe(error)}`);
+        }
+      }
+      const respuesta = await preguntarBorrarPistas({ pistas: tracks.map((track) => track.name), ficheros: enDisco });
+      if (!respuesta || this.sesion.project !== project || this.sesion.busy) return;
+      const ops: Op[] = tracks.map((track) => ({ op: "remove_track", trackId: track.id }));
+      const nombres = tracks.map((track) => `“${track.name}”`).join(", ");
+      let siguiente = applyOps(project, ops).project;
+      if (!respuesta.conFicheros || enDisco.length === 0) {
+        this.sesion.setProject(siguiente);
+        this.avisos.info(`Deleted ${tracks.length} track(s): ${nombres}.${enDisco.length > 0 ? ` Their ${enDisco.length} file(s) stay in the project folder.` : ""}`);
+        return;
+      }
+      const rutas = new Set(enDisco.map((f) => f.ruta));
+      siguiente = sinAssets(siguiente, propios.filter((a) => rutas.has(a.ruta!)).map((a) => a.id));
+      this.sesion.setProject(siguiente);
+      this.sesion.olvidarHistorial();
+      await this.sesion.guardarYEsperar();
+      const borrados = await ficherosDeProyecto(slug, [...rutas], true);
+      const hechos = borrados.filter((f) => f.borrado);
+      this.avisos.info(
+        `Deleted ${tracks.length} track(s): ${nombres}, and ${hechos.length} file(s) from disk ` +
+          `(${(hechos.reduce((n, f) => n + (f.bytes ?? 0), 0) / (1024 * 1024)).toFixed(1)} MB). The undo history was cleared.`,
+      );
+      const fallidos = borrados.filter((f) => !f.borrado);
+      if (fallidos.length > 0) {
+        this.avisos.error(`${fallidos.length} file(s) could not be deleted and are still in the folder: ${fallidos.map((f) => `${f.ruta}${f.error ? ` (${f.error})` : ""}`).join(", ")}.`);
+      }
     } catch (error) {
       this.avisos.error(`Could not delete: ${mensajeDe(error)}`);
+    } finally {
+      this.preguntando = false;
     }
   }
 }

@@ -14,6 +14,7 @@ import { rutasAceStep } from "./api/acestep.ts";
 import { rutasAjustes } from "./api/ajustes.ts";
 import { rutasTranscribir } from "./api/transcribir.ts";
 import { rutasPad } from "./api/pad.ts";
+import { rutasNotas } from "./api/notas.ts";
 
 export function miuzikaApi(): Plugin {
   const ctx = crearContexto();
@@ -29,6 +30,7 @@ export function miuzikaApi(): Plugin {
       rutasAjustes(server, ctx);
       rutasTranscribir(server, ctx);
       rutasPad(server, ctx);
+      rutasNotas(server, ctx);
     },
   };
 }

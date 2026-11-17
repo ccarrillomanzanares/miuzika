@@ -38,6 +38,38 @@ export async function listarProyectos(): Promise<ProyectoListado[]> {
   return (datos.proyectos ?? []) as ProyectoListado[];
 }
 
+/** Files and bytes under each project's folder: what deleting the folder would take away. */
+export async function tamanoDeProyectos(slugs: string[]): Promise<{ slug: string; ficheros: number; bytes: number }[]> {
+  const datos = await pedirJson("/api/proyectos/tamano", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slugs }) });
+  return (datos.proyectos ?? []) as { slug: string; ficheros: number; bytes: number }[];
+}
+
+/** Copies the whole folder to a free `<slug>-copy`; the copy has its own name. */
+export async function duplicarProyecto(slug: string): Promise<{ slug: string; nombre: string; ficheros: number; bytes: number }> {
+  const datos = await pedirJson("/api/proyectos/duplicar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug }) });
+  return { slug: String(datos.slug), nombre: String(datos.nombre), ficheros: Number(datos.ficheros), bytes: Number(datos.bytes) };
+}
+
+/** `carpeta` false: only the project file goes and the audio stays. True: the folder and everything in it. */
+export async function borrarProyectos(slugs: string[], carpeta: boolean): Promise<{ slug: string; carpetaBorrada: boolean; quedan: number }[]> {
+  const datos = await pedirJson("/api/proyectos/borrar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slugs, carpeta }) });
+  return (datos.borrados ?? []) as { slug: string; carpetaBorrada: boolean; quedan: number }[];
+}
+
+export interface FicheroDeProyecto {
+  ruta: string;
+  /** null: not a file of this project (missing, or outside its folder). */
+  bytes: number | null;
+  borrado: boolean;
+  error?: string;
+}
+
+/** Sizes of a project's files, named as its master file names them; with `borrar` they are deleted from disk. */
+export async function ficherosDeProyecto(slug: string, rutas: string[], borrar: boolean): Promise<FicheroDeProyecto[]> {
+  const datos = await pedirJson("/api/proyectos/ficheros", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug, rutas, borrar }) });
+  return (datos.ficheros ?? []) as FicheroDeProyecto[];
+}
+
 /** Full contents of the master file (without the 20 KB truncation of /api/fs/read). */
 export async function leerProyectoDeDisco(ruta: string): Promise<string> {
   const datos = await pedirJson(`/api/proyectos?path=${encodeURIComponent(ruta)}`);

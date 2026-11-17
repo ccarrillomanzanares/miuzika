@@ -153,7 +153,7 @@ export class VentanaAMidi {
         let clipId: string | undefined;
         for (let i = 0; i < notas.length; i += 2000) {
           const trozo = notas.slice(i, i + 2000);
-          const op: Op = i === 0 ? { op: "add_notes", trackId: id, startBar: compas, name: clip.name.slice(0, 60), notes: trozo } : { op: "add_notes", trackId: id, clipId, notes: trozo };
+          const op: Op = i === 0 ? { op: "add_notes", trackId: id, startBar: compas, name: clip.name.slice(0, 60), notes: trozo, ...(r.mid ? { archivo: r.mid } : {}) } : { op: "add_notes", trackId: id, clipId, notes: trozo };
           actual = applyOps(actual, [op]).project;
           clipId = actual.tracks.find((x) => x.id === id)?.clips.at(-1)?.id;
         }

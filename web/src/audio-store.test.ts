@@ -121,3 +121,30 @@ test("the WAVs on tracks with an effect on or a send are the ones decoded first"
   } as unknown as Parameters<typeof idsConEfectos>[0];
   assert.deepEqual([...idsConEfectos(project)], ["efecto", "envio"]);
 });
+
+test("audio in memory belongs to a project only when it was read from its folder (bug 50)", async () => {
+  const { esDeEsteProyecto } = await import("./audio-store.ts");
+  assert.equal(esDeEsteProyecto({ slug: "uno" }, "uno"), true);
+  assert.equal(esDeEsteProyecto({ slug: "uno" }, "otro"), false);
+  assert.equal(esDeEsteProyecto({}, "otro"), true);
+});
+
+test("the engine is handed only the decoded audio a clip of the project plays (bug 47)", async () => {
+  const { audioParaMotor } = await import("./audio-store.ts");
+  const { createProject } = await import("../../src/core/project.ts");
+  const { applyOps } = await import("../../src/core/ops.ts");
+  const proyecto = applyOps(createProject({ name: "T", bpm: 120, lengthBars: 8 }), [
+    { op: "register_audio_asset", assetId: "aud_usado", name: "usado.wav", durationBeats: 8, ruta: "generado/usado.wav" },
+    { op: "register_audio_asset", assetId: "aud_largo", name: "largo.wav", durationBeats: 8, ruta: "generado/largo.wav" },
+    { op: "register_audio_asset", assetId: "aud_huerfano", name: "huerfano.wav", durationBeats: 8, ruta: "generado/huerfano.wav" },
+    { op: "add_audio_clip", track: { name: "A" }, assetId: "aud_usado", startBar: 0 },
+    { op: "add_audio_clip", track: { name: "B" }, assetId: "aud_largo", startBar: 0 },
+  ]).project;
+  const memoria = new Map([
+    ["aud_usado", { name: "usado.wav", buffer: "pcm-usado" }],
+    ["aud_largo", { name: "largo.wav", buffer: null }], // streamed: not decoded
+    ["aud_huerfano", { name: "huerfano.wav", buffer: "pcm-huerfano" }], // its track was deleted
+    ["aud_ajeno", { name: "ajeno.wav", buffer: "pcm-ajeno" }], // not in this project at all
+  ]);
+  assert.deepEqual([...audioParaMotor(proyecto, memoria)], [["aud_usado", { name: "usado.wav", buffer: "pcm-usado" }]]);
+});

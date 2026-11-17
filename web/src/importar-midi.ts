@@ -70,7 +70,7 @@ export async function pistasDesdeMidi(
       const clipId = i === 0 ? undefined : current.tracks.find((t) => t.id === id)?.clips.at(-1)?.id;
       current = applyOps(current, [
         i === 0
-          ? { op: "add_notes", trackId: id, startBar: inicio, name: nombre, notes: trozo }
+          ? { op: "add_notes", trackId: id, startBar: inicio, name: nombre, notes: trozo, archivo: ruta.replace(/^\/+/, "").replace(/^proyectos\/[^/]+\//, "") }
           : { op: "add_notes", trackId: id, clipId, notes: trozo },
       ]).project;
     }

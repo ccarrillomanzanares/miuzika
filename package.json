@@ -14,7 +14,8 @@
     "test:opendaw": "node scripts/bundle-run.mjs src/host/opendaw/check.ts tmp/opendaw-check.mjs",
     "typecheck": "tsc --noEmit",
     "dev": "vite",
-    "build:web": "vite build"
+    "build:web": "vite build",
+    "notas": "node scripts/notas.ts"
   },
   "dependencies": {
     "@opendaw/lib-dom": "^0.0.92",

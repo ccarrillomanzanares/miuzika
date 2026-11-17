@@ -85,6 +85,11 @@ export interface Parametros {
    * longer offers it (removed 7-Nov evening, see ventana.ts); kept so the script and old recipes agree.
    */
   referencia: string | null;
+  /**
+   * Adaptive Dual Guidance (`use_adg`, base models only). Sent only when true. On by default for lego since 15-Nov:
+   * the only lego takes heard to fit their source were made with it and shift 3.
+   */
+  adg?: boolean;
 }
 
 /**
@@ -125,12 +130,16 @@ export function letraPropuesta(tarea: Tarea, pista: string | null): string {
 }
 
 /** The values each family was run with on 5-Nov, shown and editable on the Review screen. */
-export function valoresDeModelo(tarea: Tarea, modelo: string): Pick<Parametros, "pasos" | "guia" | "shift" | "lm" | "normalizar"> {
+export function valoresDeModelo(tarea: Tarea, modelo: string): Pick<Parametros, "pasos" | "guia" | "shift" | "lm" | "normalizar" | "adg"> {
   const familia = MODELOS.find((m) => m.nombre === modelo)?.familia ?? "turbo";
   return {
     pasos: familia === "turbo" ? 8 : 50,
     guia: familia === "turbo" ? 1 : 7,
-    shift: familia === "turbo" ? 3 : 1,
+    // Lego: shift 3 and ADG, as upstream's own interface runs it (its default shift is 3, its guide recommends ADG on
+    // base models). Heard 15-Nov over one clean guitar at 122 BPM: bass and drums that fit it in 2 of 3 takes each.
+    // With shift 1 and no ADG (7-Nov) lego's takes were uneven; the two were not compared on the same source.
+    shift: familia === "turbo" || tarea === "lego" ? 3 : 1,
+    adg: tarea === "lego",
     // 4B by default since 8-Nov. Heard, same recipe and seed: xl-sft + 4B (q01) "muy buena", the best take so far,
     // against xl-sft + 1.7B (p10) "de baile, de rave"; 2 of 4 xl-sft + 4B takes passed. It fit the A10 (11.3 GB peak).
     lm: tarea === "text2music" ? "acestep-5Hz-lm-4B" : "none",
@@ -218,6 +227,7 @@ export function parametrosParaEnviar(p: Parametros): Record<string, unknown> {
   if (campos.fuente && p.silencio) salida.silencio = p.silencio;
   else if (campos.fuente && p.audio) salida.audio = p.audio;
   if (campos.referencia && p.referencia) salida.referencia = p.referencia;
+  if (p.adg) salida.adg = true;
   return salida;
 }
 

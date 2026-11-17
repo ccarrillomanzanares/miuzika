@@ -8,7 +8,7 @@ import { beatsPerBar } from "../../src/core/types.ts";
 import { carpetaDeProyecto } from "../../src/core/project.ts";
 import { midiDeProyecto } from "../../src/core/midi-export.ts";
 import { segundosPorTiempo } from "../../src/core/tiempo.ts";
-import { audioAssets, hidratarAssets, rutaEnProyecto } from "./audio-store.ts";
+import { audioAssets, audioParaMotor, hidratarAssets, rutaEnProyecto } from "./audio-store.ts";
 import { mezclarStem, motorDebeSonar, stemsDeProyecto } from "./stems.ts";
 import { convertirMp3, subirAudio } from "./proyecto-disco.ts";
 import { audioBufferToWav } from "./wav.ts";
@@ -226,10 +226,7 @@ export function crearExportador(d: DependenciasRender): {
   async function prepararRender(view: Project, slug: string) {
     const { faltan } = await hidratarAssets(view, slug);
     d.avisarFaltan(faltan);
-    const paraEngine = new Map<string, { name: string; buffer: AudioBuffer }>();
-    for (const [id, asset] of audioAssets) {
-      if (asset.buffer) paraEngine.set(id, { name: asset.name, buffer: asset.buffer });
-    }
+    const paraEngine = audioParaMotor(view, audioAssets);
     const soundfonts = await d.cargarSoundfonts(view);
     const gm = await d.cargarGm(view);
     const { renderizarMezcla } = await import("./opendaw-engine.ts");

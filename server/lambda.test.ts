@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { apagablesDe, Cancelado, encender, ejecutarEnLambda, esTimeoutDelModelo, listadoFallido, planDeEntradas, seSincroniza, type ConfigLambda, type Instancia } from "./lambda.ts";
+import { apagablesDe, deLaApp, Cancelado, encender, ejecutarEnLambda, esTimeoutDelModelo, listadoFallido, planDeEntradas, seSincroniza, type ConfigLambda, type Instancia } from "./lambda.ts";
 import { join } from "node:path";
 
 const cfg: ConfigLambda = {
@@ -144,4 +144,10 @@ test("a cut-off or failed listing of the outputs is a failed fetch, not \"0 new 
   assert.equal(listadoFallido({ codigo: 0, errores: "Warning: Permanently added host" }), false);
   assert.equal(listadoFallido({ codigo: null, errores: "\n[miuzika] ssh cut off after 120 s\n" }), true);
   assert.equal(listadoFallido({ codigo: 255, errores: "ssh: connect to host: Connection refused" }), true);
+});
+
+test("only the instances carrying the app's name are the app's (bug 48)", () => {
+  const una = (id: string, nombre: string): Instancia => ({ id, status: "active", ip: null, nombre, tipo: "gpu_1x_a10", desde: null, cambio: null, precioHora: 1.29, horas: 0, gastado: 0 });
+  const lista = [una("a", "miuzika-gpu"), una("b", ""), una("c", "otro-proyecto"), una("d", "miuzika-gpu-2"), una("e", "MIUZIKA-GPU")];
+  assert.deepEqual(deLaApp(lista, "miuzika-gpu").map((i) => i.id), ["a"]);
 });

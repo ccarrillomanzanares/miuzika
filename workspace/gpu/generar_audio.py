@@ -357,6 +357,8 @@ def generar(args):
         # new song is free to be loud.
         enable_normalization=args.normalizar if args.normalizar is not None else args.tarea == "text2music",
     )
+    if args.adg:
+        params.use_adg = True
     config = GenerationConfig(
         batch_size=args.variantes,
         use_random_seed=False,
@@ -433,6 +435,9 @@ def main():
     ap.add_argument("--pasos", type=int, default=None, help="Diffusion steps (default: 8 turbo, 50 base/sft)")
     ap.add_argument("--guia", type=float, default=None, help="Classifier-free guidance (default: 1.0 turbo, 7.0 base/sft; the handler forces 1.0 on turbo)")
     ap.add_argument("--shift", type=float, default=None, help="Default: 3.0 turbo, 1.0 base/sft")
+    # 15-Nov: never sent before. Upstream's INFERENCE.md lists it for base models ("enable for quality"); tried on
+    # lego and complete, whose takes were uneven with it off. Only passed when asked, so every other run is unchanged.
+    ap.add_argument("--adg", type=lambda t: str(t).lower() == "true", default=None, help="Adaptive Dual Guidance (use_adg), base models only")
     ap.add_argument("--normalizar", type=lambda t: t.lower() == "true", default=None, help="Normalise the output to -1 dBFS (default: only text2music)")
     ap.add_argument("--instruccion", default=None, help="The instruction sent to the model (default: ACE-Step's own for the task)")
     ap.add_argument("--silencio", type=float, default=None, help="Use this many seconds of digital silence as the source")

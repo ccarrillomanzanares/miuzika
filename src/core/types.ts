@@ -108,7 +108,8 @@ export interface Clip {
   notes: Note[];
   audio?: AudioRef;
   /** Traceability: which op and section generated it. */
-  origin?: { op: string; section?: string; seed?: number };
+  /** `archivo`: the file in the project folder its notes were read from ("generado/x.mid"), so deleting the track can offer it. */
+  origin?: { op: string; section?: string; seed?: number; archivo?: string };
 }
 
 export interface Track {

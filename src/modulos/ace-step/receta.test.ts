@@ -114,3 +114,19 @@ test("the script's result line, or null when it did not get there", () => {
   assert.deepEqual(leerResultado(salida), { ficheros: ["a-1.wav", "a-2.wav"], tiempos: { generate_s: 40.5 } });
   assert.equal(leerResultado("Traceback"), null);
 });
+
+test("lego runs with shift 3 and ADG by default; ADG travels only when on", () => {
+  assert.deepEqual(
+    (({ shift, adg }) => ({ shift, adg }))(valoresDeModelo("lego", "acestep-v15-base")),
+    { shift: 3, adg: true },
+  );
+  assert.deepEqual(
+    (({ shift, adg }) => ({ shift, adg }))(valoresDeModelo("complete", "acestep-v15-xl-base")),
+    { shift: 1, adg: false },
+  );
+  const lego = cancion({ tarea: "lego", modelo: "acestep-v15-base", pista: "bass", audio: "entrada/x.wav", duracion: null, ...valoresDeModelo("lego", "acestep-v15-base") });
+  assert.equal(validarParametros(lego), null);
+  assert.equal(parametrosParaEnviar(lego).adg, true);
+  assert.equal(parametrosParaEnviar(lego).shift, 3);
+  assert.equal("adg" in parametrosParaEnviar({ ...lego, adg: false }), false);
+});

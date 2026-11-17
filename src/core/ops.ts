@@ -134,6 +134,8 @@ const AddNotesOp = z.object({
   startBar: z.number().int().min(0).max(511).optional(),
   name: z.string().max(60).optional(),
   notes: z.array(NoteSchema).min(1).max(2000),
+  /** The .mid in the project folder these notes were read from; kept on the new clip. */
+  archivo: z.string().min(1).max(200).optional(),
 });
 
 const ReplaceClipNotesOp = z.object({
@@ -644,6 +646,7 @@ function applyOne(project: Project, op: ParsedOp): string {
           start: startBar * barBeats,
           length: Math.max(barBeats, Math.ceil(end / barBeats) * barBeats),
           notes,
+          ...(op.archivo ? { origin: { op: "import_midi", archivo: op.archivo } } : {}),
         });
         project.lengthBars = Math.max(project.lengthBars, startBar + Math.ceil(end / barBeats));
       }
